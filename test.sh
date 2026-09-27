@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 model=$(mktemp)
 out=$(dotnet run --project src/DocWizz -- scan fixture "$model")
 echo "$out"
-grep -q "Files  17" <<<"$out"  # tests/ excluded
+grep -q "Files  19" <<<"$out"  # tests/ excluded
 
 python3 - "$model" <<'PY'
 import json, sys
@@ -81,6 +81,15 @@ assert form["state"] == ["name", "valid (computed)", "watch name"], form
 sub = [e for e in m["edges"] if e["kind"] == "subscribes" and e["from"].endswith("MaterialTable.vue")]
 assert sub == [{"from": "vue:" + F + "components/MaterialTable.vue", "to": "vue:" + F + "components/MaterialForm.vue", "kind": "subscribes", "label": "created"}], sub
 assert nodes["ts:" + F + "stores/materialStore.ts#useMaterialStore"]["kind"] == "store"
+# lifecycle hooks and composables per component; TS classes (with methods), interfaces, types
+assert form["hooks"] == ["useMaterialStore()"] and nodes["vue:" + F + "components/MaterialTable.vue"]["hooks"] == ["onMounted"]
+S = "ts:" + F + "api/stockApi.ts#"
+assert [nodes[S + x]["kind"] for x in ["StockLevel", "Sku", "StockClient", "StockClient.level"]] == ["interface", "type", "class", "method"]
+assert ("contains", S + "StockClient", S + "StockClient.level") in edges
+# HTTP wrappers: an axios.create({ baseURL }) instance and a request() helper resolve to the endpoints
+assert ("http", S + "StockClient.level", API + "StockController.Get(string)") in edges
+assert ("http", S + "StockClient.material", API + "MaterialController.Get(int)") in edges
+assert not any(e[0] == "http" and "http.ts" in e[1] for e in edges), "the wrapper's own call is not a call site"
 
 assert ("accesses", I + "SqlMaterialRepository.AddAsync(Fixture.Domain.Material)", I + "AppDbContext") in edges  # primary-ctor dependency used
 assert not any(e[0] == "accesses" and e[2] == D + "Material" for e in edges), "member of another object counted as own dependency"
@@ -219,6 +228,7 @@ grep "MaterialService.CreateAsync" "$docs/quality.md" | grep -q "| ✓ |"  # tes
 grep "MaterialController.Create(" "$docs/quality.md" | grep -q "| — |"  # untested
 grep -q "/materials\` | \[MaterialTable\]" "$docs/frontend.md"
 grep "\[MaterialTable\]" "$docs/frontend.md" | grep -q "| MaterialForm @created |"
+grep "\[MaterialTable\]" "$docs/frontend.md" | grep -q "| onMounted | MaterialForm |"
 grep -q "n0 --> n1" "$docs/modules/backend-Application.md"
 grep "\`CreateAsync" "$docs/modules/backend-Application.md" | grep -q "side effects (inferred): db, event"
 grep -q "_Generated from .* profile \`default\`" "$docs/modules/backend-Application.md"

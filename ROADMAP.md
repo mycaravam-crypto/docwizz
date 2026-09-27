@@ -7,11 +7,6 @@ or human-written. AI runs on a self-hosted model only; code is never sent to a p
 
 ## Next
 
-- **Frontend depth.**
-  - Lifecycle hooks and composable usage per component.
-  - TS classes, interfaces and types.
-  - HTTP wrapper clients (`api.get(..)` on an axios instance, custom `request()` helpers), so calls resolve to
-    endpoints through the wrapper.
 - **C# depth.**
   - `UseMiddleware<T>` pipeline order.
   - `AddHostedService<T>`.

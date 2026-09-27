@@ -10,7 +10,7 @@ record Node(string Id, string Kind, string Name, string File, int Line,
     string? Visibility = null, string? Doc = null, int? Complexity = null,
     int? Params = null, string? Hash = null, List<string>? Tags = null, string? Route = null, int? EndLine = null,
     List<string>? Parameters = null, string? Returns = null, List<string>? Throws = null, List<string>? Events = null,
-    string? Language = null, List<string>? State = null);
+    string? Language = null, List<string>? State = null, List<string>? Hooks = null);
 
 // Label carries the detail a kind alone doesn't (e.g. the event name of a `subscribes` edge).
 record Edge(string From, string To, string Kind, string? Label = null);

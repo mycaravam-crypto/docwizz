@@ -86,8 +86,11 @@ The model separates what the code states from what DocWizz concludes:
   injection, `accesses`, events, controllers and minimal APIs (`MapGroup` prefixes, group authorization),
   DI registrations, EF `DbSet`, external-system calls and configuration reads.
 - **[scanner-vue](scanner-vue/index.mjs)** uses the TypeScript compiler and `@vue/compiler-sfc`, run by
-  [Frontend.cs](src/DocWizz/Frontend.cs) as a Node child process. It covers SFC props, emits, state and template
-  renders, exported functions, stores, imports and calls, `fetch`/`axios` calls, and router routes.
+  [Frontend.cs](src/DocWizz/Frontend.cs) as a Node child process. It covers SFC props, emits, state, lifecycle hooks,
+  composables and template renders, exported functions, stores, classes (with their methods), interfaces, types and
+  enums, imports and calls, and router routes. HTTP calls are `fetch`/`axios`, and calls through wrappers: an
+  `axios.create({ baseURL })` instance, or a helper that passes its parameters on as URL and method (`request('POST',
+  url)`). A pre-pass finds the wrappers in every file, so they resolve across imports.
 - **[Projects](src/DocWizz/Projects.cs)** reads `.csproj` (SDK, target frameworks, package and project references,
   role: executable, library or test from `OutputType`, the SDK and test packages), `package.json`, and the solution
   folders of `.sln`/`.slnx`. Files in a test project count as test code, whatever their path.
