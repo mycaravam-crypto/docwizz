@@ -9,10 +9,11 @@ partial class Generator
 {
     // A compose service or Kubernetes workload/Service.
     record DeployedUnit(string File, int Line, string Name, string? Image, string? Build, List<string> Ports, List<string> Env,
-        List<string> DependsOn, List<string> Volumes);
+        List<string> DependsOn, List<string> Volumes, List<string>? Networks = null);
 
     static readonly string[] DeploymentGlobs = ["Dockerfile*", "*.Dockerfile", "docker-compose*.yml", "docker-compose*.yaml",
-        "compose*.yml", "compose*.yaml", "*.bicep", "*.tf", "Chart.yaml", "azure-pipelines.yml", ".gitlab-ci.yml",
+        "compose*.yml", "compose*.yaml", "*.bicep", "*.tf", "Chart.yaml", "azure-pipelines.yml", ".gitlab-ci.yml", "Jenkinsfile",
+        "bitbucket-pipelines.yml", ".circleci/config.yml",
         ".github/workflows/*.yml", ".github/workflows/*.yaml", "Procfile", "fly.toml", "vercel.json", "netlify.toml"];
     static readonly string[] Workloads = ["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob", "Pod"];
 
@@ -93,10 +94,10 @@ partial class Generator
 
     void UnitTable(StringBuilder sb, IEnumerable<DeployedUnit> units, bool withBuild)
     {
-        sb.AppendLine($"| {(withBuild ? "Service" : "Workload")} | Image{(withBuild ? " / build" : "")} | Ports | Environment | Depends on | Volumes | Runs |\n|---|---|---|---|---|---|---|");
+        sb.AppendLine($"| {(withBuild ? "Service" : "Workload")} | Image{(withBuild ? " / build" : "")} | Ports | Environment | Depends on | Volumes |{(withBuild ? " Networks |" : "")} Runs |\n|---|---|---|---|---|---|{(withBuild ? "---|" : "")}---|");
         foreach (var u in units)
             sb.AppendLine($"| {SourceLink(u.File, u.Line, u.Name, sub: "views")} | {(u.Image is not null ? $"`{u.Image}`" : u.Build is not null ? $"build `{u.Build}`" : "—")} | " +
-                $"{Esc(string.Join(", ", u.Ports))} | {Esc(string.Join(", ", u.Env))} | {string.Join(", ", u.DependsOn)} | {Esc(string.Join(", ", u.Volumes))} | {Runs(u)} |");
+                $"{Esc(string.Join(", ", u.Ports))} | {Esc(string.Join(", ", u.Env))} | {string.Join(", ", u.DependsOn)} | {Esc(string.Join(", ", u.Volumes))} |{(withBuild ? $" {string.Join(", ", u.Networks ?? [])} |" : "")} {Runs(u)} |");
         sb.AppendLine();
     }
 
@@ -163,7 +164,8 @@ partial class Generator
             if (Get(doc.RootNode, "services") is YamlMappingNode services)
                 foreach (var (k, v) in services.Children)
                     yield return new(rel, (int)k.Start.Line, Str(k)!, Str(Get(v, "image")), Str(Get(v, "build")) ?? Str(Get(Get(v, "build"), "context")),
-                        Scalars(Get(v, "ports")), EnvNames(Get(v, "environment")), Scalars(Get(v, "depends_on")), Scalars(Get(v, "volumes")));
+                        Scalars(Get(v, "ports")), EnvNames(Get(v, "environment")), Scalars(Get(v, "depends_on")), Scalars(Get(v, "volumes")),
+                        Scalars(Get(v, "networks")));
     }
 
     IEnumerable<DeployedUnit> Kubernetes(string rel)

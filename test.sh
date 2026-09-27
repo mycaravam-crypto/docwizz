@@ -337,8 +337,10 @@ grep -q '| erp.example.com | http-api | detected | ErpClient |' "$docs/views/con
 grep -q 'c[0-9]* -->|reads/writes| c[0-9]*' "$docs/views/containers.md"
 D="$docs/views/deployment.md"
 # Deployment: compose services (env names only), what they run, Kubernetes, Dockerfiles, IaC
-grep -q '^| \[api\](.*) | build `../backend` | 8080:8080 | ConnectionStrings__Default, MATERIALS__BETA | db, cache |  | project `Fixture` |' "$D"
-grep -q '^| \[db\](.*) | `mcr.microsoft.com/mssql/server:2022-latest` | .* | db-data:/var/opt/mssql | SQL Server — used by the code (inferred) |' "$D"
+grep -q '^| \[api\](.*) | build `../backend` | 8080:8080 | ConnectionStrings__Default, MATERIALS__BETA | db, cache |  | backend | project `Fixture` |' "$D"
+grep -q '^| \[db\](.*) | .* | db-data:/var/opt/mssql | backend | SQL Server' "$D"                  # networks: list and map form
+grep -q 'deploy/Jenkinsfile' "$D"
+grep -q '^| \[db\](.*) | `mcr.microsoft.com/mssql/server:2022-latest` | .* | db-data:/var/opt/mssql | backend | SQL Server — used by the code (inferred) |' "$D"
 grep -q '^| \[mail\](.*) | .* | SMTP server — not referenced by the scanned code |' "$D"
 grep -q 'n[0-9] --> n[0-9]' "$D"                                                  # depends_on graph
 grep -q '^| \[Deployment/materials-api\](.*) | `registry.example.com/materials-api:1.4` | 8080 | Warehouse__BaseUrl |' "$D"

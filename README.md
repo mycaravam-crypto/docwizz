@@ -45,8 +45,8 @@ every key with its status: defined and read, set by the deployment (compose/Kube
 not defined in the repository (unknown), or defined but unread.
 
 `views/deployment.md` reads the descriptors themselves: compose services (image or build → the project it builds, ports,
-environment variable *names*, `depends_on`, volumes, and the known system an image runs), Kubernetes workloads and Services,
-Dockerfile base images and exposed ports, Terraform/Bicep resource types with the known system each provisions (also
+environment variable *names*, `depends_on`, volumes, networks, and the known system an image runs), Kubernetes workloads and Services,
+Dockerfile base images and exposed ports, Terraform/Bicep resource types with the known system each provisions, CI pipelines (GitHub Actions, GitLab, Azure Pipelines, Jenkins, Bitbucket, CircleCI) as descriptors (also
 shown as "provisioned by" in `views/context.md`) — and lists what none of them can tell.
 SQL scripts add stored procedures, functions, views and tables (with the tables each routine touches and the code that
 calls it) and schema migrations in order, shown in `views/data.md`.

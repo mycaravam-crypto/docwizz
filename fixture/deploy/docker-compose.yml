@@ -6,6 +6,7 @@ services:
       - ConnectionStrings__Default=Server=db;Password=not-a-real-secret
       - MATERIALS__BETA=true
     depends_on: [db, cache]
+    networks: [backend]
   web:
     build: ../frontend
     depends_on:
@@ -14,9 +15,14 @@ services:
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
     volumes: ["db-data:/var/opt/mssql"]
+    networks:
+      backend:
+        aliases: [sql]
   cache:
     image: redis:7
   mail:
     image: mailhog/mailhog
 volumes:
   db-data:
+networks:
+  backend:
