@@ -222,17 +222,19 @@ import json, sys
 d = sys.argv[1]
 nodes = {n["id"]: n for n in json.load(open(d + "/.docwizz/model.json"))["nodes"]}
 get = "cs:Fixture.Api.MaterialController.Get(int)"
-json.dump({f"{get}@{nodes[get]['hash']}": "Returns one material by id.",
+json.dump({f"{get}@{nodes[get]['hash']}": {"text": "Returns one material by id.", "sources": [get, "cs:Fixture.Application.IMaterialService.GetAsync(int)"]},
            "cs:Fixture.Api.MaterialController.Get(int)@stale": "outdated draft"}, open(d + "/.docwizz/ai-cache.json", "w"))
 PY
 dotnet run --project src/DocWizz -- generate fixture "$docs" >/dev/null 2>&1
 grep -q "| GET | \`/api/materials/{id}\` | 🤖 _Returns one material by id._ |" "$docs/api.md"
 grep -q "🤖 marks 1 AI-drafted" "$docs/index.md"
+grep -q '| `Fixture.Api.MaterialController.Get(int)` | Returns one material by id. | .*`Fixture.Application.IMaterialService.GetAsync(int)`' "$docs/quality.md"
 if grep -q "outdated draft" -r "$docs"/*.md; then echo "stale draft used"; exit 1; fi
 python3 - "$docs/.docwizz/documentation.json" <<'PY'
 import json, sys
 i = {i["id"]: i for i in json.load(open(sys.argv[1]))["items"]}["cs:Fixture.Api.MaterialController.Get(int)"]
 assert i["sections"]["summary"]["origin"] == "ai" and "summary" in i["missing"], i  # drafts never close a gap
+assert "cs:Fixture.Application.IMaterialService.GetAsync(int)" in i["sections"]["summary"]["from"], i  # provenance
 PY
 rm -rf "$docs"
 echo PASS

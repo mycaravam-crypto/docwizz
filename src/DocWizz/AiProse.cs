@@ -14,21 +14,25 @@ static class AiProse
     const string Instructions = """
         You write reference documentation for a codebase. You get facts about one symbol, produced by
         static analysis, plus its source. Write a 1-3 sentence summary of what it does and when a caller
-        would use it. Mention side effects (database writes, HTTP calls, events) when the facts show them.
+        would use it. Mention side effects (database writes, HTTP calls, events) when the facts show them;
+        `inferred` facts come from heuristics, so state them only when the source confirms them.
         Plain prose only: no headings, no lists, no code fences, don't restate the symbol's name, and
         don't guess at anything the facts and source don't support.
         """;
 
     record Target(Node Node, DocumentationItem Item);
 
+    // A draft and the symbols whose facts it was generated from (provenance).
+    public record Draft(string Text, List<string> Sources);
+
     // Returns node id → summary, from cache and (when allowed) fresh API calls.
-    public static async Task<Dictionary<string, string>> Summaries(
+    public static async Task<Dictionary<string, Draft>> Summaries(
         string root, CodeModel model, List<DocumentationItem> findings, string cacheFile, bool call)
     {
         var cache = Load(cacheFile);
         var targets = findings.Where(f => f.Missing.Contains("summary") && f.Node.Hash is not null)
             .Select(f => new Target(f.Node, f)).ToList();
-        var result = new Dictionary<string, string>();
+        var result = new Dictionary<string, Draft>();
         var misses = new List<Target>();
         foreach (var t in targets)
             if (cache.TryGetValue(Key(t.Node), out var text)) result[t.Node.Id] = text;
@@ -46,25 +50,26 @@ static class AiProse
                 await gate.WaitAsync();
                 try
                 {
-                    if (Volatile.Read(ref stopped) == 1) return (t.Node, Text: null);
-                    return (t.Node, Text: await Draft(client, facts.For(t.Node, t.Item)));
+                    if (Volatile.Read(ref stopped) == 1) return (t.Node, Draft: null);
+                    var (json, sources) = facts.For(t.Node, t.Item);
+                    return (t.Node, Draft: await Create(client, json) is { } text ? new Draft(text, sources) : null);
                 }
                 catch (Exception e) when (e is AnthropicUnauthorizedException or AnthropicForbiddenException)
                 {
                     // Every other call would fail the same way; say it once and stop.
                     if (Interlocked.Exchange(ref stopped, 1) == 0)
                         Console.Error.WriteLine("docwizz: AI summaries skipped — no valid credentials (set ANTHROPIC_API_KEY)");
-                    return (t.Node, Text: null);
+                    return (t.Node, Draft: null);
                 }
                 catch (Exception e)
                 {
                     Console.Error.WriteLine($"docwizz: AI summary failed for {t.Node.Id}: {e.Message}");
-                    return (t.Node, Text: null);
+                    return (t.Node, Draft: null);
                 }
                 finally { gate.Release(); }
             }));
-            foreach (var (node, text) in drafted.Where(d => d.Text is not null))
-                result[node.Id] = cache[Key(node)] = text!;
+            foreach (var (node, draft) in drafted.Where(d => d.Draft is not null))
+                result[node.Id] = cache[Key(node)] = draft!;
             Save(cacheFile, cache);
         }
         else if (misses.Count > 0)
@@ -73,7 +78,7 @@ static class AiProse
         return result;
     }
 
-    static async Task<string?> Draft(AnthropicClient client, string facts)
+    static async Task<string?> Create(AnthropicClient client, string facts)
     {
         var response = await client.Beta.Messages.Create(new MessageCreateParams
         {
@@ -92,16 +97,25 @@ static class AiProse
 
     static string Key(Node n) => $"{n.Id}@{n.Hash}";
 
-    static Dictionary<string, string> Load(string file)
+    // Cache: "<id>@<hash>" → { text, sources }. Entries from before provenance was recorded are plain strings.
+    static Dictionary<string, Draft> Load(string file)
     {
-        try { return File.Exists(file) ? JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(file)) ?? [] : []; }
+        try
+        {
+            if (!File.Exists(file)) return [];
+            var raw = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(File.ReadAllText(file)) ?? [];
+            return raw.ToDictionary(kv => kv.Key, kv => kv.Value.ValueKind == JsonValueKind.String
+                ? new Draft(kv.Value.GetString()!, [kv.Key.Split('@')[0]])
+                : kv.Value.Deserialize<Draft>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!);
+        }
         catch (JsonException) { return []; }
     }
 
-    static void Save(string file, Dictionary<string, string> cache)
+    static void Save(string file, Dictionary<string, Draft> cache)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
-        File.WriteAllText(file, JsonSerializer.Serialize(new SortedDictionary<string, string>(cache), new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(file, JsonSerializer.Serialize(new SortedDictionary<string, Draft>(cache),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
     }
 
     // Facts JSON for one symbol: what the graph knows, plus its own source lines.
@@ -113,12 +127,15 @@ static class AiProse
 
         string Name(string id) => nodes.TryGetValue(id, out var n) ? Generator.Display(n) : id.Replace("http:", "");
 
-        public string For(Node n, DocumentationItem f)
+        // The facts JSON and the symbols it mentions (the draft's provenance).
+        public (string Json, List<string> Sources) For(Node n, DocumentationItem f)
         {
-            IEnumerable<string> Out(params string[] kinds) => outgoing[n.Id].Where(e => kinds.Contains(e.Kind)).Select(e => Name(e.To)).Distinct();
-            IEnumerable<string> In(params string[] kinds) => incoming[n.Id].Where(e => kinds.Contains(e.Kind)).Select(e => Name(e.From)).Distinct();
+            var sources = new List<string> { n.Id };
+            IEnumerable<string> Pick(IEnumerable<string> ids) { var l = ids.Distinct().ToList(); sources.AddRange(l.Where(nodes.ContainsKey)); return l.Select(Name); }
+            IEnumerable<string> Out(params string[] kinds) => Pick(outgoing[n.Id].Where(e => kinds.Contains(e.Kind)).Select(e => e.To));
+            IEnumerable<string> In(params string[] kinds) => Pick(incoming[n.Id].Where(e => kinds.Contains(e.Kind)).Select(e => e.From));
 
-            return JsonSerializer.Serialize(new
+            var json = JsonSerializer.Serialize(new
             {
                 symbol = Generator.Display(n),
                 kind = n.Kind,
@@ -126,14 +143,20 @@ static class AiProse
                 route = n.Route is null ? null : $"{n.Tags?.ElementAtOrDefault(1)} {n.Route}".Trim(),
                 visibility = n.Visibility,
                 complexity = n.Complexity,
-                parameters = n.Params,
+                parameters = n.Parameters,
+                returns = n.Returns,
+                throws = n.Throws,
+                emits = n.Events,
                 existingDocs = n.Doc,
                 calls = Out("calls"),
                 httpCalls = Out("http"),
                 injects = Out("injects"),
                 renders = Out("renders"),
+                publishes = Out("publishes"),
                 calledBy = In("calls", "http"),
                 renderedBy = In("renders"),
+                derived = f.Sections.Where(kv => kv.Value.Origin is Origin.Fact or Origin.Inferred)
+                    .ToDictionary(kv => kv.Key, kv => $"{kv.Value.Text} ({kv.Value.Origin.ToString().ToLowerInvariant()})"),
                 whyItNeedsDocs = f.Reasons,
                 source = Source(n),
             }, new JsonSerializerOptions
@@ -142,6 +165,7 @@ static class AiProse
                 DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
                 Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping, // keep source readable: no \u003C
             });
+            return (json, sources.Concat(f.Sources).Distinct().ToList());
         }
 
         string? Source(Node n)

@@ -159,8 +159,8 @@ static async Task<int> Generate(string root, string outDir, Config config, bool 
     // Cached drafts are always used; new ones are only requested with --ai.
     var drafts = await AiProse.Summaries(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-cache.json"), ai);
     foreach (var f in findings)
-        if (drafts.TryGetValue(f.Node.Id, out var draft)) f.Sections["summary"] = new(Origin.Ai, draft);
-    var written = new Generator(root, outDir, model, findings, arch, config, drafts).Run();
+        if (drafts.TryGetValue(f.Node.Id, out var draft)) f.Sections["summary"] = new(Origin.Ai, draft.Text, draft.Sources);
+    var written = new Generator(root, outDir, model, findings, arch, config, drafts.ToDictionary(d => d.Key, d => d.Value.Text)).Run();
 
     // Fingerprint for `docwizz diff`: the model these docs were generated from.
     Directory.CreateDirectory(Path.Combine(outDir, ".docwizz"));

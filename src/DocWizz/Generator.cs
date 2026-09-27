@@ -179,6 +179,15 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         sb.AppendLine("| Level | Item | Status | Missing | Why it needs docs | Tested |\n|---|---|---|---|---|---|");
         foreach (var f in open)
             sb.AppendLine($"| {f.Level} | {SourceLink(f.Node.File, f.Node.Line, $"`{Esc(Display(f.Node))}`")} | {f.Status} | {string.Join(", ", f.Missing)} | {Esc(string.Join("; ", f.Reasons))} | {(f.Tested ? "✓" : "—")} |");
+        var ai = findings.Where(f => f.Sections.GetValueOrDefault("summary")?.Origin == Origin.Ai).ToList();
+        if (ai.Count > 0)
+        {
+            sb.AppendLine($"\n## AI drafts ({ai.Count})\n\nDrafted from these facts only; review, then move into the code.\n");
+            sb.AppendLine("| Item | Draft | Generated from |\n|---|---|---|");
+            foreach (var f in ai)
+                sb.AppendLine($"| `{Esc(Display(f.Node))}` | {Esc(f.Sections["summary"].Text)} | " +
+                    $"{string.Join(", ", (f.Sections["summary"].From ?? []).Select(id => $"`{Esc(nodes.TryGetValue(id, out var x) ? Display(x) : id)}`"))} |");
+        }
         sb.AppendLine("\n## Most complex\n\n| Complexity | Item |\n|---|---|");
         foreach (var n in model.Nodes.Where(n => n.Complexity > 1 && n.Kind != "component").OrderByDescending(n => n.Complexity).Take(20))
             sb.AppendLine($"| {n.Complexity} | {SourceLink(n.File, n.Line, $"`{Esc(Display(n))}`")} |");
