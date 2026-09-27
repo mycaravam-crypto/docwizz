@@ -59,7 +59,6 @@ static class Frontend
             && index.TryGetValue(Key(verb[5..], url), out var target) ? e with { To = target } : e).ToList();
     }
 
-    // ponytail: MapGroup prefixes aren't applied; grouped minimal APIs won't link until they are.
     static string Key(string verb, string route) =>
         verb.ToUpperInvariant() + " /" + Regex.Replace(route.TrimStart('~').Trim('/').ToLowerInvariant(), @"\{[^}]*\}", "{}");
 }

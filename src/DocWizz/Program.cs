@@ -112,6 +112,7 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     var ids = nodes.Select(n => n.Id).ToHashSet();
     nodes.AddRange(feNodes.Concat(projNodes).Where(n => ids.Add(n.Id)));
     edges = Frontend.LinkHttp(nodes, [.. edges, .. feEdges, .. projEdges]);
+    Externals.Link(nodes, edges);
 
     // Test code leaves only `tests` edges (test symbol → code it uses) behind.
     var testFiles = scanned.Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))
@@ -121,7 +122,7 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     edges = edges.Where(e => !testIds.Contains(e.To) && (!testIds.Contains(e.From) || e.Kind is "calls" or "imports" or "renders" or "injects" or "http"))
         .Select(e => testIds.Contains(e.From) ? new Edge(e.From, e.To, "tests") : e).Distinct().ToList();
 
-    nodes = nodes.Select(n => n with { Language = Language(n.File) }).ToList();
+    nodes = nodes.Select(n => n.Kind == "external" ? n : n with { Language = Language(n.File) }).ToList();
 
     var files = scanned.Where(f => !testFiles.Contains(Path.GetRelativePath(root, f).Replace('\\', '/'))).ToList();
     return (new CodeModel(Git(root, "rev-parse --short HEAD")?.Trim(), nodes, edges), files);

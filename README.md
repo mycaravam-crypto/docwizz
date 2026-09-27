@@ -28,7 +28,11 @@ Source → analyzers (Roslyn for C#, TypeScript + Vue compiler for `.vue`/`.ts`,
 
 The code model holds facts only: symbols, signatures, endpoints (route, input, response, authorization), props/emits,
 projects and packages, and relationships (`contains`, `calls`, `implements`, `inherits`, `injects`, `creates`, `registers`,
-`imports`, `renders`, `routes-to`, `persists`, `publishes`, `subscribes`, `http`, `references`, `depends-on`, `tests`).
+`imports`, `renders`, `routes-to`, `persists`, `publishes`, `subscribes`, `http`, `references`, `depends-on`, `tests`, `connects`).
+External systems (databases, caches, message brokers, HTTP APIs, identity providers, storage, e-mail — see
+[Externals.cs](src/DocWizz/Externals.cs)) are `external` nodes tagged with their category and certainty: `detected`
+(a call shows it: `UseNpgsql`, `AddHttpClient<T>` with a base address, `fetch('https://…')`), `inferred` (only a package
+reference or a single candidate points to it) or `unknown` (a `DbContext` whose database the code doesn't name).
 Every node records its `language` (csharp, vue, typescript, msbuild, npm); C# types carry roles as tags
 (controller, service, repository, entity, dbcontext, background-service, middleware, hub, options).
 Test code (`tests:` globs) only contributes `tests` edges.

@@ -73,6 +73,7 @@ static class CSharpScanner
             }
 
             ScanRegistrations(sm, syntaxRoot, rel, nodes, edges);
+            ScanExternals(sm, syntaxRoot, rel, nodes, edges);
         }
 
         // Entities are what a DbContext persists.
@@ -195,6 +196,64 @@ static class CSharpScanner
                     ScanMinimalEndpoint(sm, inv, inv.ArgumentList.Arguments[2].Expression, verb.Token.ValueText.ToUpperInvariant(), route, groupAuth, rel, nodes, edges);
         }
     }
+
+    // External systems the code talks to (see Externals): known calls and creations, HttpClient base addresses.
+    static void ScanExternals(SemanticModel sm, SyntaxNode root, string rel, List<Node> nodes, List<Edge> edges)
+    {
+        void Connect(SyntaxNode at, string key, string name, string category)
+        {
+            nodes.Add(Externals.Node(key, name, category, "detected", rel, Line(at)));
+            if (Owner(sm, at) is { } from) edges.Add(new(from, $"ext:{key}", "connects", "detected"));
+        }
+        static bool LiteralUri(ExpressionSyntax e, out Uri? uri)
+        {
+            uri = null;
+            return e is ObjectCreationExpressionSyntax { ArgumentList.Arguments: [{ Expression: LiteralExpressionSyntax lit }, ..] }
+                && Uri.TryCreate(lit.Token.ValueText, UriKind.Absolute, out uri);
+        }
+
+        foreach (var n in root.DescendantNodes())
+        {
+            var (name, qualified) = n switch
+            {
+                InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax ma } =>
+                    (ma.Name.Identifier.Text, $"{ma.Expression.ToString().Split('.').Last()}.{ma.Name.Identifier.Text}"),
+                InvocationExpressionSyntax { Expression: IdentifierNameSyntax id } => (id.Identifier.Text, null),
+                ObjectCreationExpressionSyntax oc => (TypeName(oc.Type), null),
+                _ => ((string?)null, (string?)null),
+            };
+            if (name is not null && Externals.ByCall(name, qualified) is { } k) Connect(n, k.Key, k.Name, k.Category);
+
+            // `BaseAddress = new Uri("https://erp.example.com/")`, in an AddHttpClient<T>(..) registration or anywhere.
+            if (n is AssignmentExpressionSyntax a && a.Left.ToString().EndsWith("BaseAddress") && LiteralUri(a.Right, out var u))
+                Connect(n, $"http:{u!.Host}", u.Host, "http-api");
+            // AddHttpClient<T>() without a literal address: an HTTP API whose address lives elsewhere (configuration).
+            if (n is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name: GenericNameSyntax
+                    { Identifier.Text: "AddHttpClient", TypeArgumentList.Arguments: [.., var client] } } } add
+                && !add.DescendantNodes().OfType<AssignmentExpressionSyntax>().Any(x => x.Left.ToString().EndsWith("BaseAddress") && LiteralUri(x.Right, out _)))
+                Connect(n, $"http:{TypeName(client)}", $"HTTP API used by {TypeName(client)}", "http-api");
+        }
+    }
+
+    // Who talks to an external system: T of an enclosing AddDbContext<T>/AddHttpClient<T>(..), else the enclosing type.
+    static string? Owner(SemanticModel sm, SyntaxNode at)
+    {
+        foreach (var a in at.AncestorsAndSelf())
+        {
+            if (a is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name: GenericNameSyntax
+                    { Identifier.Text: "AddDbContext" or "AddDbContextPool" or "AddDbContextFactory" or "AddHttpClient", TypeArgumentList.Arguments: [.., var t] } } }
+                && sm.GetTypeInfo(t).Type is { } type && InSource(type)) return Id(type);
+            if (a is BaseTypeDeclarationSyntax decl && sm.GetDeclaredSymbol(decl) is { } s) return Id(s);
+        }
+        return null;
+    }
+
+    static string TypeName(TypeSyntax t) => t switch
+    {
+        QualifiedNameSyntax q => TypeName(q.Right),
+        SimpleNameSyntax s => s.Identifier.Text,
+        _ => t.ToString(),
+    };
 
     // `app.MapGroup("/api").MapGroup("/x")`, possibly via a local (`var g = app.MapGroup(..)`), → "/api/x";
     // Auth is set when any group in the chain calls RequireAuthorization().

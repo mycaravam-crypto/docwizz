@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 model=$(mktemp)
 out=$(dotnet run --project src/DocWizz -- scan fixture "$model")
 echo "$out"
-grep -q "Files  15" <<<"$out"  # tests/ excluded
+grep -q "Files  17" <<<"$out"  # tests/ excluded
 
 python3 - "$model" <<'PY'
 import json, sys
@@ -31,7 +31,7 @@ roles = lambda i: nodes[i].get("tags") or []
 assert "entity" in roles(D + "Material") and "service" in roles(A + "MaterialService") and "repository" in roles(I + "SqlMaterialRepository")
 assert "background-service" in roles(I + "MaterialCleanup") and "middleware" in roles(I + "TimingMiddleware") and "options" in roles(I + "MaterialOptions")
 assert nodes[I + "MaterialChanged"]["kind"] == "delegate" and nodes[I + "MaterialChanged"]["parameters"] == ["id: int"]
-assert {n.get("language") for n in nodes.values()} == {"csharp", "vue", "typescript", "msbuild", "npm"}, {n.get("language") for n in nodes.values()}
+assert {n.get("language") for n in nodes.values() if n["kind"] != "external"} == {"csharp", "vue", "typescript", "msbuild", "npm"}, {n.get("language") for n in nodes.values()}
 assert nodes["vue:frontend/src/components/MaterialForm.vue"]["language"] == "vue"
 assert ("injects", D + "Material", D + "Material") not in edges, "record copy ctor leaked as injection"
 assert "controller" in nodes[API + "MaterialController"]["tags"]
@@ -81,6 +81,18 @@ assert form["state"] == ["name", "valid (computed)", "watch name"], form
 sub = [e for e in m["edges"] if e["kind"] == "subscribes" and e["from"].endswith("MaterialTable.vue")]
 assert sub == [{"from": "vue:" + F + "components/MaterialTable.vue", "to": "vue:" + F + "components/MaterialForm.vue", "kind": "subscribes", "label": "created"}], sub
 assert nodes["ts:" + F + "stores/materialStore.ts#useMaterialStore"]["kind"] == "store"
+
+# External systems: detected from calls, inferred from packages, attributed to the code (or project) that uses them
+ext = {n["id"]: n["tags"] for n in nodes.values() if n["kind"] == "external"}
+assert ext == {"ext:http:erp.example.com": ["http-api", "detected"], "ext:redis": ["cache", "detected"],
+               "ext:http:rates.example.org": ["http-api", "detected"], "ext:sqlserver": ["database", "inferred"],
+               "ext:oidc": ["identity", "inferred"]}, ext  # relative /api/... calls are not external
+connects = {(e["from"], e["to"], e.get("label")) for e in m["edges"] if e["kind"] == "connects"}
+for c in [(I + "ErpClient", "ext:http:erp.example.com", "detected"),  # AddHttpClient<ErpClient>(BaseAddress = ...)
+          ("ts:" + F + "api/materialApi.ts#getRates", "ext:http:rates.example.org", "detected"),
+          ("proj:backend/Fixture.csproj", "ext:redis", "detected"),  # top-level statement → its project
+          (I + "AppDbContext", "ext:sqlserver", "inferred")]:
+    assert c in connects, c
 PY
 
 # Documentation analysis: planted undocumented code is critical, trivial code is ignored.
@@ -183,7 +195,9 @@ grep -q "_Evidence:_ \[backend/Api/MaterialController.cs:[0-9]*-[0-9]*\](" "$doc
 python3 -c "import json,sys; assert json.load(open(sys.argv[1]))['profile'] == 'default'" "$docs/.docwizz/documentation.json"
 [ -f "$docs/notes.md" ] || { echo "deleted a hand-written file"; exit 1; }
 grep -q 'c0 -->|HTTP| c1' "$docs/views/containers.md"                          # frontend → backend container
-grep -q '| Material | AppDbContext | POST /orders, SqlMaterialRepository |' "$docs/views/data.md"
+grep -q '| Material | AppDbContext | SQL Server (inferred) | POST /orders, SqlMaterialRepository |' "$docs/views/data.md"
+grep -q '| erp.example.com | http-api | detected | ErpClient |' "$docs/views/context.md"
+grep -q 'c[0-9]* -->|reads/writes| c[0-9]*' "$docs/views/containers.md"
 grep -q 'services: api, web, db' "$docs/views/deployment.md"
 grep -q 'subgraph application\["application"\]' "$docs/views/components.md"
 grep -q '\["createMaterial"\]' "$docs/api.md"                                  # API flow diagram
@@ -243,7 +257,7 @@ architecture:
     application: [infrastructure]
 YAML
 set +e; bypass=$(dw architecture "$repo" 2>/dev/null); set -e
-grep -A1 "ARCH-004  api → infrastructure" <<<"$bypass" | grep -q "backend/Program.cs → backend/Infrastructure/SqlMaterialRepository.cs.*bypassing application"
+grep -q "backend/Program.cs → backend/Infrastructure/SqlMaterialRepository.cs.*bypassing application" <<<"$bypass"
 grep -q "ARCH-004  api → infrastructure  \[low\]" <<<"$bypass"
 # fail_on: low-severity violations are reported but don't fail; max_complexity does
 cat >> "$repo/docwizz.yaml" <<'YAML'

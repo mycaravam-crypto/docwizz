@@ -22,9 +22,15 @@ partial class Generator
     List<Node> DbContexts => model.Nodes.Where(n => n.Tags?.Contains("dbcontext") == true).ToList();
     bool HasFrontend => model.Nodes.Any(n => n.Kind is "component" or "route");
 
-    // External HTTP calls: unresolved `http:VERB url` targets.
-    List<(string From, string Url)> ExternalHttp => model.Edges.Where(e => e.Kind == "http" && e.To.StartsWith("http:") && nodes.ContainsKey(e.From))
-        .Select(e => (e.From, e.To[5..])).Distinct().ToList();
+    List<Node> ExternalSystems => model.Nodes.Where(n => n.Kind == "external").OrderBy(n => Externals.Category(n)).ThenBy(n => n.Name).ToList();
+    ILookup<string, Edge> Connections => connections ??= model.Edges.Where(e => e.Kind == "connects").ToLookup(e => e.To);
+    ILookup<string, Edge>? connections;
+
+    IEnumerable<Node> DatabasesOf(Node ctx) => model.Edges.Where(e => e.Kind == "connects" && e.From == ctx.Id)
+        .Select(e => nodes.GetValueOrDefault(e.To)).OfType<Node>();
+
+    // "SQL Server _(inferred)_": the name with its certainty unless detected.
+    static string ExternalLabel(Node ext) => Externals.Certainty(ext) == "detected" ? ext.Name : $"{ext.Name} ({Externals.Certainty(ext)})";
 
     // The container (project) a symbol lives in; code outside any project is grouped by language.
     Dictionary<string, string>? containerOf;
@@ -43,10 +49,21 @@ partial class Generator
         var edges = new List<(string, string, int)>();
         if (HasFrontend) edges.Add(("Users (browser)", SystemName, 0));
         else if (model.Nodes.Any(n => n.Tags?.Contains("endpoint") == true)) edges.Add(("API clients", SystemName, 0));
-        foreach (var db in DbContexts) edges.Add((SystemName, $"Database ({db.Name})", 0));
-        foreach (var url in ExternalHttp.Select(h => h.Url).Distinct().Order())
-            edges.Add((SystemName, $"HTTP {url}", 0));
+        foreach (var ext in ExternalSystems) edges.Add((SystemName, ExternalLabel(ext), 0));
         sb.AppendLine(edges.Count > 0 ? Mermaid("graph LR", edges, x => x) : "_No users, databases or external services detected._\n");
+
+        if (ExternalSystems.Count > 0)
+        {
+            sb.AppendLine("## External systems\n");
+            sb.AppendLine("_Detected_: a call in the code shows it. _Inferred_: only a package reference (or a single candidate) points to it. " +
+                "_Unknown_: something is there, but the code doesn't say what.\n");
+            sb.AppendLine("| System | Kind | Certainty | Used by | Evidence |\n|---|---|---|---|---|");
+            foreach (var ext in ExternalSystems)
+                sb.AppendLine($"| {ext.Name} | {Externals.Category(ext)} | {Externals.Certainty(ext)} | " +
+                    $"{string.Join(", ", Connections[ext.Id].Where(e => nodes.ContainsKey(e.From)).Select(e => nodes[e.From].Name).Distinct().Order())} | " +
+                    $"{SourceLink(ext.File, ext.Line, CodeModel.Location(ext), sub: "views")} |");
+            sb.AppendLine();
+        }
 
         var packages = model.Nodes.Where(n => n.Kind == "package").GroupBy(n => n.Tags?.FirstOrDefault() ?? "?").ToList();
         if (packages.Count > 0)
@@ -56,8 +73,6 @@ partial class Generator
                 sb.AppendLine($"- **{g.Key}** ({g.Count()}): {string.Join(", ", g.Select(p => $"`{p.Name}`").Order())}");
             sb.AppendLine();
         }
-        if (ExternalHttp.Count > 0)
-            sb.AppendLine("HTTP calls without a matching endpoint in the scan are shown as external services; see [API](../api.md).\n");
         return sb.ToString();
     }
 
@@ -65,7 +80,7 @@ partial class Generator
     {
         var sb = new StringBuilder("# Containers\n\n");
         sb.AppendLine("Separately built/deployed units (projects) and how they talk to each other.\n");
-        var code = model.Nodes.Where(n => n.Kind is not ("project" or "package")).ToList();
+        var code = model.Nodes.Where(n => n.Kind is not ("project" or "package" or "external")).ToList();
         var edges = new List<(string From, string To, string Label)>();
         foreach (var e in model.Edges)
         {
@@ -74,7 +89,9 @@ partial class Generator
             if (nodes.TryGetValue(e.To, out var to) && Container(from) != Container(to))
                 edges.Add((Container(from), Container(to), e.Kind == "http" ? "HTTP" : "uses"));
         }
-        foreach (var db in DbContexts) edges.Add((Container(db), $"Database ({db.Name})", "reads/writes"));
+        foreach (var ext in ExternalSystems)
+            foreach (var e in Connections[ext.Id].Where(e => nodes.ContainsKey(e.From)))
+                edges.Add((Container(nodes[e.From]), ExternalLabel(ext), Externals.Category(ext) == "database" ? "reads/writes" : "uses"));
         var grouped = edges.Distinct().ToList();
         if (grouped.Count > 0)
         {
@@ -82,7 +99,8 @@ partial class Generator
             string Id(string x) => ids.TryGetValue(x, out var id) ? id : ids[x] = $"c{ids.Count}";
             var lines = grouped.Select(e => $"    {Id(e.From)} -->|{e.Label}| {Id(e.To)}").ToList();
             sb.AppendLine("```mermaid\ngraph LR");
-            foreach (var (x, id) in ids) sb.AppendLine(x.StartsWith("Database") ? $"    {id}[(\"{x}\")]" : $"    {id}[\"{x.Replace("\"", "'")}\"]");
+            var databases = ExternalSystems.Where(x => Externals.Category(x) == "database").Select(ExternalLabel).ToHashSet();
+            foreach (var (x, id) in ids) sb.AppendLine(databases.Contains(x) ? $"    {id}[(\"{x}\")]" : $"    {id}[\"{x.Replace("\"", "'")}\"]");
             foreach (var l in lines) sb.AppendLine(l);
             sb.AppendLine("```\n");
         }
@@ -148,13 +166,14 @@ partial class Generator
             foreach (var ctx in DbContexts)
             {
                 foreach (var a in injectedBy[ctx.Id].Where(nodes.ContainsKey)) edges.Add((nodes[a].Name, ctx.Name, 0));
+                foreach (var db in DatabasesOf(ctx)) edges.Add((ctx.Name, ExternalLabel(db), 0));
                 foreach (var en in persists[ctx.Id].Where(nodes.ContainsKey)) edges.Add((ctx.Name, nodes[en].Name, 0));
             }
             sb.AppendLine(Mermaid("graph LR", edges.Distinct(), x => x));
-            sb.AppendLine("| Entity | Stored via | Accessed by | Summary |\n|---|---|---|---|");
+            sb.AppendLine("| Entity | Stored via | Database | Accessed by | Summary |\n|---|---|---|---|---|");
             foreach (var ctx in DbContexts)
                 foreach (var en in persists[ctx.Id].Where(nodes.ContainsKey).Select(x => nodes[x]))
-                    sb.AppendLine($"| {en.Name} | {ctx.Name} | {string.Join(", ", injectedBy[ctx.Id].Where(nodes.ContainsKey).Select(a => nodes[a].Name).Distinct().Order())} | {Esc(Summary(en) ?? "")} |");
+                    sb.AppendLine($"| {en.Name} | {ctx.Name} | {string.Join(", ", DatabasesOf(ctx).Select(ExternalLabel))} | {string.Join(", ", injectedBy[ctx.Id].Where(nodes.ContainsKey).Select(a => nodes[a].Name).Distinct().Order())} | {Esc(Summary(en) ?? "")} |");
             sb.AppendLine();
         }
 

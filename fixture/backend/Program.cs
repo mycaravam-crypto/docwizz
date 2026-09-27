@@ -6,6 +6,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddScoped<IMaterialService, MaterialService>();
 builder.Services.AddScoped<IMaterialRepository, SqlMaterialRepository>();
 builder.Services.AddControllers();
+builder.Services.AddHttpClient<ErpClient>(c => c.BaseAddress = new Uri("https://erp.example.com/"));
+builder.Services.AddStackExchangeRedisCache(o => { });
 
 var app = builder.Build();
 app.MapControllers();

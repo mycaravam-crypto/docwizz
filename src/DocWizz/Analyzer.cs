@@ -137,6 +137,7 @@ static class Analyzer
         var calls = model.Edges.Where(e => e.Kind is "calls" or "http").ToLookup(e => e.From, e => e.To);
         var http = model.Edges.Where(e => e.Kind == "http").ToLookup(e => e.From);
         var injects = model.Edges.Where(e => e.Kind == "injects").ToLookup(e => e.From, e => e.To);
+        var connects = model.Edges.Where(e => e.Kind == "connects").ToLookup(e => e.From, e => e.To);
         var inbound = model.Edges.Where(e => e.Kind is "calls" or "injects" or "renders" or "http").ToLookup(e => e.To, e => e.From);
         var outbound = model.Edges.Where(e => CodeModel.DependencyKinds.Contains(e.Kind)).ToLookup(e => e.From);
         var children = model.Edges.Where(e => e.Kind == "contains").ToLookup(e => e.From, e => e.To);
@@ -159,6 +160,9 @@ static class Analyzer
                 found.Add("db");
             if (n.Name.StartsWith("Publish") || n.Name.StartsWith("Send") || outbound[id].Any(e => e.Kind == "publishes")) found.Add("event");
             if (http[id].Any()) found.Add("http");
+            // Talks to an external system itself (or through its type): database → db, http-api → http, else the category.
+            foreach (var ext in connects[id].Concat(parent.TryGetValue(id, out var o) ? connects[o] : []).Select(nodes.GetValueOrDefault).OfType<Node>())
+                found.Add(Externals.Category(ext) switch { "database" => "db", "http-api" => "http", var c => c });
             foreach (var next in calls[id].Concat(implBy[id]))
                 found.UnionWith(Effects(next));
             return found;
