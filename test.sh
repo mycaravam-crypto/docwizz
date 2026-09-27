@@ -65,4 +65,11 @@ if grep -q "\.Add(int, int)" <<<"$report"; then echo "trivial Add flagged"; exit
 # interface <summary> covers the implementation → only param missing
 grep -A1 "  Fixture.Application.MaterialService.CreateAsync" <<<"$report" | grep -q "partial, missing: param"
 if grep -q "MaterialServiceTests" <<<"$report"; then echo "test code analyzed"; exit 1; fi
+
+# Architecture: planted violations and the cycle they cause
+arch=$(sed -n '/^Architecture/,$p' <<<"$report")
+grep -A1 "ARCH-001  domain → infrastructure" <<<"$arch" | grep -q "Domain/Material.cs → backend/Infrastructure/SqlMaterialRepository.cs"
+grep -A1 "ARCH-002  ui → http" <<<"$arch" | grep -q "MaterialTable.vue → GET /api/materials"
+grep -q "ARCH-003  cycle: backend/Domain ↔ backend/Infrastructure" <<<"$arch"
+grep -q "Architecture (2 violations, 1 cycles)" <<<"$arch"
 echo PASS

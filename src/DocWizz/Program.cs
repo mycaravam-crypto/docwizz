@@ -18,11 +18,9 @@ switch (cmd)
     case "scan":
         return Scan(path, args.ElementAtOrDefault(2) ?? "model.json");
     case "analyze":
-        var config = Config.Load(path);
-        Analyzer.Report(Analyzer.Analyze(BuildModel(path, config).Model, config), Console.Out);
-        return 0;
+        return Analyze(path, enforce: false);
     case "check":
-        return Check(path);
+        return Analyze(path, enforce: true);
     default:
         Console.Error.WriteLine("""
             usage:
@@ -79,17 +77,24 @@ static int Scan(string root, string outFile)
     return 0;
 }
 
-static int Check(string root)
+static int Analyze(string root, bool enforce)
 {
     var config = Config.Load(root);
-    var findings = Analyzer.Analyze(BuildModel(root, config).Model, config);
+    var model = BuildModel(root, config).Model;
+    var findings = Analyzer.Analyze(model, config);
     Analyzer.Report(findings, Console.Out);
+    var arch = Architecture.Check(model, config.Architecture);
+    Architecture.Report(arch, Console.Out);
+    if (!enforce) return 0;
+    var (violations, cycles, _) = arch;
 
     var coverage = Analyzer.Coverage(findings);
     var critical = findings.Count(Analyzer.IsCritical);
     var failures = new List<string>();
     if (coverage < config.Check.MinCoverage) failures.Add($"coverage {coverage:0}% < {config.Check.MinCoverage}%");
     if (critical > config.Check.MaxCritical) failures.Add($"{critical} critical > {config.Check.MaxCritical}");
+    if (violations.Count > config.Check.MaxViolations) failures.Add($"{violations.Count} violations > {config.Check.MaxViolations}");
+    if (cycles.Count > config.Check.MaxCycles) failures.Add($"{cycles.Count} cycles > {config.Check.MaxCycles}");
 
     Console.WriteLine();
     Console.WriteLine(failures.Count == 0 ? "check: PASS" : "check: FAIL — " + string.Join("; ", failures));

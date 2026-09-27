@@ -8,6 +8,7 @@ class Config
     public Dictionary<string, Pattern> Patterns { get; set; } = [];
     public CheckConfig Check { get; set; } = new();
     public List<string> Exclude { get; set; } = [];
+    public ArchitectureConfig Architecture { get; set; } = new();
 
     public const string Default = """
         # Patterns are matched in order; the first match decides which XML doc
@@ -32,6 +33,25 @@ class Config
         check:
           min_coverage: 80
           max_critical: 0
+          max_violations: 0
+          max_cycles: 0
+        architecture:
+          layers:               # path globs, first match wins; unmatched files have no layer
+            ui: ["*.vue"]
+            state: ["*/stores/*.ts", "*/composables/*.ts"]
+            client: ["*/api/*.ts", "*/services/*.ts"]
+            api: ["*/Api/*.cs", "*.Api/*.cs", "*/Controllers/*.cs", "*/Endpoints/*.cs"]
+            application: ["*/Application/*.cs", "*.Application/*.cs"]
+            domain: ["*/Domain/*.cs", "*.Domain/*.cs", "*.Core/*.cs"]
+            infrastructure: ["*/Infrastructure/*.cs", "*.Infrastructure/*.cs", "*/Persistence/*.cs"]
+          allow:                # `http` = calling HTTP directly
+            ui: [state, client]
+            state: [client]
+            client: [http]
+            api: [application, domain, infrastructure]
+            application: [domain]
+            domain: []
+            infrastructure: [application, domain]
         # Path globs (relative, `/`-separated) left out of the model entirely.
         exclude: ["tests/*", "test/*", "*.Tests/*", "*.Test/*", "*/__tests__/*", "*.test.ts", "*.spec.ts", "*/e2e/*"]
         """;
@@ -65,6 +85,8 @@ class CheckConfig
 {
     public double MinCoverage { get; set; } = 80;
     public int MaxCritical { get; set; }
+    public int MaxViolations { get; set; }
+    public int MaxCycles { get; set; }
 }
 
 enum Level { None, Low, Medium, High }
