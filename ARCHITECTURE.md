@@ -83,8 +83,10 @@ The model separates what the code states from what DocWizz concludes:
 
 - **[CSharpScanner](src/DocWizz/CSharpScanner.cs)** uses Roslyn with BCL references only. ASP.NET, EF Core and other
   package types stay unresolved and are matched by name. It covers types, members, doc comments, complexity, calls,
-  injection, `accesses`, events, controllers and minimal APIs (`MapGroup` prefixes, group authorization),
-  DI registrations, EF `DbSet`, external-system calls and configuration reads.
+  injection, `accesses`, events, controllers and minimal APIs (`MapGroup` prefixes, group authorization, parameter
+  binding inferred as ASP.NET does when there is no `[From*]`), response codes and types (`ProducesResponseType`,
+  `.Produces<T>()`, `Results<…>`, `Ok(x)`/`TypedResults.X` in the body), the middleware pipeline in registration order,
+  DI registrations, `AddHostedService<T>`, EF `DbSet`, external-system calls and configuration reads.
 - **[scanner-vue](scanner-vue/index.mjs)** uses the TypeScript compiler and `@vue/compiler-sfc`, run by
   [Frontend.cs](src/DocWizz/Frontend.cs) as a Node child process. It covers SFC props, emits, state, lifecycle hooks,
   composables and template renders, exported functions, stores, classes (with their methods), interfaces, types and

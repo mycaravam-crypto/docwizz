@@ -78,7 +78,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     // Kind or tag → label, in reading order (backend, then frontend).
     static readonly (string Label, string Match)[] Roles = [("Controllers", "controller"), ("API endpoints", "endpoint"),
         ("Services", "service"), ("Repositories", "repository"), ("Entities", "entity"), ("DbContexts", "dbcontext"),
-        ("Background services", "background-service"), ("Middleware", "middleware"), ("SignalR hubs", "hub"), ("Options", "options"),
+        ("Background services", "background-service"), ("Hosted services", "hosted"), ("Middleware", "middleware"), ("SignalR hubs", "hub"), ("Options", "options"),
         ("Vue components", "component"), ("Views", "view"), ("Stores", "store"), ("Composables", "composable"), ("Routes", "route")];
 
     // Well-known packages → what they tell a reader about the stack. Anything else is in views/context.md.
@@ -173,7 +173,16 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             var input = string.Join("<br>", (n.Parameters ?? []).Select(p => $"`{Esc(p)}`"));
             var auth = n.Tags!.Contains("anonymous") ? "anonymous" : n.Tags.Contains("authorize") ? "required" : "—";
             sb.AppendLine($"| {n.Tags![1]} | `/{n.Route?.TrimStart('/')}` | {Esc(Summary(n) ?? "—")} | {(input == "" ? "—" : input)} | " +
-                $"{(n.Returns is null ? "—" : $"`{Esc(n.Returns)}`")} | {auth} | {SourceLink(n.File, n.Line, $"{Path.GetFileName(n.File)}:{n.Line}")} | {string.Join(", ", from)} |");
+                $"{Response(n)} | {auth} | {SourceLink(n.File, n.Line, $"{Path.GetFileName(n.File)}:{n.Line}")} | {string.Join(", ", from)} |");
+        }
+        // Middleware in registration order, per place that configures it (a project's top-level code, Startup.Configure).
+        foreach (var g in model.Edges.Where(e => e.Kind == "pipeline").GroupBy(e => e.From))
+        {
+            var at = nodes.TryGetValue(g.Key, out var owner) ? owner.Kind == "project" ? $"project `{owner.Name}`" : $"`{Display(owner)}`" : g.Key;
+            sb.AppendLine($"\n## Request pipeline ({at})\n\nMiddleware in the order it is registered; each request passes through it top to bottom.\n");
+            var i = 0;
+            foreach (var e in g)
+                sb.AppendLine($"{++i}. {(nodes.TryGetValue(e.To, out var m) ? $"{ModuleLink(m)} (`UseMiddleware`)" : $"`{e.To["pipeline:".Length..]}`")}");
         }
         // Each endpoint's path: frontend callers → endpoint → handler (controller) → services → data → external systems.
         var flowLines = new List<string>();
@@ -208,6 +217,15 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             foreach (var e in unlinked) sb.AppendLine($"- `{e.To[5..]}` from `{nodes.GetValueOrDefault(e.From)?.Name ?? e.From}`");
         }
         return sb.ToString();
+    }
+
+    // The returned type and the declared/detected status codes: "`Material`<br>200, 404".
+    static string Response(Node n)
+    {
+        var parts = new List<string>();
+        if (n.Returns is not null) parts.Add($"`{Esc(n.Returns)}`");
+        if (n.Responses is { Count: > 0 } r) parts.Add(string.Join(", ", r.Select(x => x.Split(' ', 2) is [var code, var type] ? $"{code} `{Esc(type)}`" : x)));
+        return parts.Count > 0 ? string.Join("<br>", parts) : "—";
     }
 
     string FrontendPage()

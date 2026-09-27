@@ -73,6 +73,7 @@ static class CSharpScanner
             }
 
             ScanRegistrations(sm, syntaxRoot, rel, nodes, edges);
+            ScanPipeline(sm, syntaxRoot, rel, edges);
             ScanExternals(sm, syntaxRoot, rel, nodes, edges);
             ScanConfigurationReads(sm, syntaxRoot, rel, nodes, edges);
         }
@@ -80,6 +81,9 @@ static class CSharpScanner
         // Entities are what a DbContext persists.
         var entities = edges.Where(e => e.Kind == "persists").Select(e => e.To).ToHashSet();
         nodes = nodes.Select(n => entities.Contains(n.Id) ? n with { Tags = [.. n.Tags ?? [], "entity"] } : n).ToList();
+        // Hosted services are what AddHostedService<T>() registers.
+        var hosted = edges.Where(e => e.Kind == "hosts").Select(e => e.To).ToHashSet();
+        nodes = nodes.Select(n => hosted.Contains(n.Id) ? n with { Tags = [.. n.Tags ?? [], "hosted"] } : n).ToList();
 
         // Partial types/methods declare the same symbol more than once; keep the first.
         return (nodes.DistinctBy(n => n.Id).ToList(), edges.Distinct().ToList());
@@ -140,7 +144,8 @@ static class CSharpScanner
         nodes.Add(new Node(id, Kind(sym), sym.Name, rel, Line(member), Vis(sym), Doc(sym),
             Complexity(member), ps, Hash(member), tags, route, EndLine(member),
             method?.Parameters.Select(Param).ToList() is { Count: > 0 } pl ? pl : null,
-            method is { MethodKind: not MethodKind.Constructor } ? Returns(method.ReturnType) : null, Throws(sm, member)));
+            method is { MethodKind: not MethodKind.Constructor } ? Returns(method.ReturnType) : null, Throws(sm, member),
+            Responses: tags is not null && member is MethodDeclarationSyntax m ? Responses(sm, m.AttributeLists, m, m.ReturnType, []) : null));
         edges.Add(new(typeId, id, "contains"));
 
         AddCalls(sm, member, id, edges);
@@ -197,6 +202,9 @@ static class CSharpScanner
             if (name is "AddScoped" or "AddTransient" or "AddSingleton" && ma.Name is GenericNameSyntax { TypeArgumentList.Arguments: [var i, var t] }
                 && sm.GetTypeInfo(i).Type is { } it && sm.GetTypeInfo(t).Type is { } tt && InSource(it) && InSource(tt))
                 edges.Add(new(Id(it), Id(tt), "registers"));
+            if (name == "AddHostedService" && ma.Name is GenericNameSyntax { TypeArgumentList.Arguments: [var h] }
+                && sm.GetTypeInfo(h).Type is { } ht && InSource(ht))
+                edges.Add(new(Owner(sm, inv) ?? $"file:{rel}", Id(ht), "hosts"));
 
             if (!IsMapCall(inv) || inv.ArgumentList.Arguments is not [{ Expression: LiteralExpressionSyntax lit }, _, ..]) continue;
             var (prefix, groupAuth) = Group(sm, ma.Expression, 0);
@@ -208,6 +216,115 @@ static class CSharpScanner
                 foreach (var verb in inv.ArgumentList.Arguments[1].DescendantNodes().OfType<LiteralExpressionSyntax>())
                     ScanMinimalEndpoint(sm, inv, inv.ArgumentList.Arguments[2].Expression, verb.Token.ValueText.ToUpperInvariant(), route, groupAuth, rel, nodes, edges);
         }
+    }
+
+    // The request pipeline: app.UseX(..) / app.UseMiddleware<T>() on the built app or an IApplicationBuilder, in source
+    // order. `pipeline` edges from the configuring code (top level: its project) to the middleware class, or to
+    // `pipeline:UseX` for framework middleware; the label is where it is registered.
+    static void ScanPipeline(SemanticModel sm, SyntaxNode root, string rel, List<Edge> edges)
+    {
+        bool IsApp(ExpressionSyntax e)
+        {
+            while (e is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax m }) e = m.Expression;
+            return sm.GetSymbolInfo(e).Symbol switch
+            {
+                ILocalSymbol l => l.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is VariableDeclaratorSyntax
+                    { Initializer.Value: InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name.Identifier.Text: "Build" } } },
+                IParameterSymbol p => p.Type.Name is "IApplicationBuilder" or "WebApplication",
+                _ => false,
+            };
+        }
+        var uses = root.DescendantNodes().OfType<InvocationExpressionSyntax>()
+            .Select(i => (Call: i, Member: i.Expression as MemberAccessExpressionSyntax))
+            .Where(x => x.Member is { } m && m.Name.Identifier.Text.StartsWith("Use") && IsApp(m.Expression))
+            .OrderBy(x => x.Member!.Name.SpanStart); // `app.UseA().UseB()`: A first
+        foreach (var (call, m) in uses)
+        {
+            var to = m!.Name is GenericNameSyntax { Identifier.Text: "UseMiddleware", TypeArgumentList.Arguments: [var t] }
+                && sm.GetTypeInfo(t).Type is { } type && InSource(type) ? Id(type) : $"pipeline:{m.Name}";
+            edges.Add(new(Owner(sm, call) ?? $"file:{rel}", to, "pipeline", $"{rel}:{Line(call)}"));
+        }
+    }
+
+    static readonly Dictionary<string, int> ResultCodes = new()
+    {
+        ["Ok"] = 200, ["Created"] = 201, ["CreatedAtAction"] = 201, ["CreatedAtRoute"] = 201, ["Accepted"] = 202,
+        ["AcceptedAtAction"] = 202, ["AcceptedAtRoute"] = 202, ["NoContent"] = 204, ["BadRequest"] = 400,
+        ["ValidationProblem"] = 400, ["Unauthorized"] = 401, ["Forbid"] = 403, ["NotFound"] = 404, ["Conflict"] = 409,
+        ["UnprocessableEntity"] = 422, ["Problem"] = 500,
+    };
+
+    // Response status codes (with a type when stated): [ProducesResponseType], .Produces<T>(..)/.ProducesProblem(..) in the
+    // fluent chain, a declared Results<Ok<T>, NotFound> return type, and Ok(x)/NotFound()/Results.X/TypedResults.X in the body.
+    static List<string>? Responses(SemanticModel sm, SyntaxList<AttributeListSyntax> attributes, SyntaxNode? body,
+        TypeSyntax? declared, IEnumerable<InvocationExpressionSyntax> chain)
+    {
+        var found = new SortedDictionary<int, string?>();
+        void Add(int code, string? type) { if (type is not null || !found.ContainsKey(code)) found[code] = type ?? found.GetValueOrDefault(code); }
+        static int? Code(ExpressionSyntax? e) => e is null ? null
+            : e is LiteralExpressionSyntax { Token.Value: int i } ? i
+            : System.Text.RegularExpressions.Regex.Match(e.ToString(), @"Status(\d{3})") is { Success: true } m ? int.Parse(m.Groups[1].Value) : null;
+        string Name(TypeSyntax t) => sm.GetTypeInfo(t).Type is { TypeKind: not TypeKind.Error } s ? s.ToDisplayString(TypeFormat) : t.ToString();
+
+        foreach (var a in attributes.SelectMany(l => l.Attributes).Where(a => AttrName(a) == "ProducesResponseType"))
+        {
+            var args = a.ArgumentList?.Arguments.Select(x => x.Expression).ToList() ?? [];
+            var type = a.Name is GenericNameSyntax { TypeArgumentList.Arguments: [var g] } ? Name(g)
+                : args.OfType<TypeOfExpressionSyntax>().FirstOrDefault() is { } to ? Name(to.Type) : null;
+            if (args.Select(Code).FirstOrDefault(c => c is not null) is { } code) Add(code, type);
+        }
+        foreach (var c in chain)
+            if (c.Expression is MemberAccessExpressionSyntax { Name: var n })
+            {
+                var arg = c.ArgumentList.Arguments.FirstOrDefault()?.Expression;
+                switch (n.Identifier.Text)
+                {
+                    case "Produces": Add(Code(arg) ?? 200, n is GenericNameSyntax { TypeArgumentList.Arguments: [var g] } ? Name(g) : null); break;
+                    case "ProducesProblem": Add(Code(arg) ?? 500, null); break;
+                    case "ProducesValidationProblem": Add(Code(arg) ?? 400, null); break;
+                }
+            }
+        foreach (var g in declared?.DescendantNodesAndSelf().OfType<SimpleNameSyntax>() ?? [])
+            if (ResultCodes.TryGetValue(g.Identifier.Text, out var code) && g.Parent is TypeArgumentListSyntax or TypeSyntax)
+                Add(code, g is GenericNameSyntax { TypeArgumentList.Arguments: [var t] } ? Name(t) : null);
+        foreach (var inv in body is null ? [] : Body(body).OfType<InvocationExpressionSyntax>())
+        {
+            var name = inv.Expression switch
+            {
+                IdentifierNameSyntax id => id.Identifier.Text,  // controller helpers: Ok(x), NotFound()
+                MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.Text: "Results" or "TypedResults" }, Name: var n } => n.Identifier.Text,
+                _ => null,
+            };
+            if (name is null || !ResultCodes.TryGetValue(name, out var code)) continue;
+            // The value is Ok(x)'s argument, or the last argument of Created*/Accepted*(location.., x).
+            var value = (name == "Ok" || (name.StartsWith("Created") || name.StartsWith("Accepted")) && inv.ArgumentList.Arguments.Count > 1)
+                && inv.ArgumentList.Arguments.LastOrDefault()?.Expression is { } v ? sm.GetTypeInfo(v).Type : null;
+            Add(code, value is null or { TypeKind: TypeKind.Error } ? null : value.ToDisplayString(TypeFormat));
+        }
+        return found.Count > 0 ? found.Select(kv => kv.Value is null ? $"{kv.Key}" : $"{kv.Key} {kv.Value}").ToList() : null;
+    }
+
+    // Minimal-API parameters without a [From*] attribute, bound as ASP.NET infers it: a name in the route template → route,
+    // HttpContext/CancellationToken/… → special, IFormFile → form, services → service, simple types → query, else body.
+    // ponytail: services are recognised by shape (interface, DbContext, *Service/*Repository/*Client); DI registrations would be exact.
+    static string MinimalParam(IParameterSymbol p, string route)
+    {
+        var declared = Param(p);
+        if (declared.StartsWith('[')) return declared;
+        var t = p.Type is INamedTypeSymbol { Name: "Nullable", TypeArguments: [var inner] } ? inner : p.Type;
+        var bases = new List<string>();
+        for (var b = t.BaseType; b is not null && bases.Count < 16; b = b.BaseType) bases.Add(b.Name);
+        var source =
+            System.Text.RegularExpressions.Regex.IsMatch(route, $@"\{{{p.Name}(\W[^}}]*)?\}}", System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? "route"
+            : t.Name is "HttpContext" or "HttpRequest" or "HttpResponse" or "CancellationToken" or "ClaimsPrincipal" or "Stream" or "PipeReader" ? "special"
+            : t.Name is "IFormFile" or "IFormFileCollection" or "IFormCollection" ? "form"
+            : t.TypeKind == TypeKind.Interface || (t.TypeKind == TypeKind.Error && t.Name is ['I', >= 'A' and <= 'Z', ..])
+                || bases.Contains("DbContext") || t.Name.EndsWith("Service") || t.Name.EndsWith("Repository") || t.Name.EndsWith("Client") ? "service"
+            : t.SpecialType != SpecialType.None || t.TypeKind == TypeKind.Enum
+                || t.Name is "Guid" or "DateTimeOffset" or "TimeSpan" or "DateOnly" or "TimeOnly" or "Uri"
+                || t is IArrayTypeSymbol { ElementType.SpecialType: not SpecialType.None } ? "query"
+            : "body";
+        return $"[{source}] {declared}";
     }
 
     // External systems the code talks to (see Externals): known calls and creations, HttpClient base addresses.
@@ -364,7 +481,7 @@ static class CSharpScanner
             if (sm.GetSymbolInfo(lambda).Symbol is IMethodSymbol lm)
             {
                 signature = lm;
-                foreach (var p in lm.Parameters.Where(p => InSource(p.Type)))
+                foreach (var p in lm.Parameters.Where(p => InSource(p.Type) && MinimalParam(p, route).StartsWith("[service]")))
                     edges.Add(new(id, Id(p.Type), "injects"));
             }
             AddCalls(sm, lambda, id, edges);
@@ -380,8 +497,10 @@ static class CSharpScanner
         string? text = null;
         var tags = new List<string> { "endpoint", verb, "minimal-api" };
         if (groupAuth) tags.Add("authorize");
+        var chain = new List<InvocationExpressionSyntax>();
         for (SyntaxNode n = inv; n.Parent is MemberAccessExpressionSyntax { Parent: InvocationExpressionSyntax outer } ma; n = outer)
         {
+            chain.Add(outer);
             if (ma.Name.Identifier.Text is "WithSummary" or "WithDescription"
                 && outer.ArgumentList.Arguments.FirstOrDefault()?.Expression is LiteralExpressionSyntax l)
                 text ??= l.Token.ValueText;
@@ -393,10 +512,15 @@ static class CSharpScanner
             .Select(t => t.ToString().TrimStart('/', '*', ' ').TrimEnd('*', '/', ' '))).Trim();
         if (text is { Length: > 0 }) doc ??= new XElement("member", new XElement("summary", text)).ToString();
 
+        // A method group's handler: its own attributes, return type and body.
+        var target = handler is AnonymousFunctionExpressionSyntax ? null
+            : signature?.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() as MethodDeclarationSyntax;
+        var responses = Responses(sm, target?.AttributeLists ?? default, (SyntaxNode?)target ?? handler,
+            target?.ReturnType ?? (handler as ParenthesizedLambdaExpressionSyntax)?.ReturnType, chain);
         nodes.Add(new Node(id, "endpoint", $"{verb} {route}", rel, Line(inv), "public", doc,
             Complexity(handler), Hash: Hash(inv), Tags: tags, Route: route, EndLine: EndLine(inv),
-            Parameters: signature?.Parameters.Select(Param).ToList() is { Count: > 0 } pl ? pl : null,
-            Returns: signature is null ? null : Returns(signature.ReturnType), Throws: Throws(sm, handler)));
+            Parameters: signature?.Parameters.Select(p => MinimalParam(p, route)).ToList() is { Count: > 0 } pl ? pl : null,
+            Returns: signature is null ? null : Returns(signature.ReturnType), Throws: Throws(sm, handler), Responses: responses));
     }
 
     // 1 + decision points.

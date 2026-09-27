@@ -1,6 +1,7 @@
 using Fixture.Application;
 using Fixture.Domain;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Fixture.Api;
@@ -10,6 +11,7 @@ namespace Fixture.Api;
 public class MaterialController(IMaterialService service) : ControllerBase
 {
     [HttpGet("{id}")]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Material?>> Get(int id) => Ok(await service.GetAsync(id));
 
     // Undocumented public endpoint (should be flagged)

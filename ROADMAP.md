@@ -7,11 +7,6 @@ or human-written. AI runs on a self-hosted model only; code is never sent to a p
 
 ## Next
 
-- **C# depth.**
-  - `UseMiddleware<T>` pipeline order.
-  - `AddHostedService<T>`.
-  - Response types from `Produces`/`ProducesResponseType` and `TypedResults`.
-  - Request body/parameter binding for minimal APIs without attributes.
 - **Architecture risks.**
   - Coupling metrics per module (fan-in/fan-out, instability).
   - Entities exposed directly as API responses.

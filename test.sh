@@ -42,6 +42,19 @@ assert "cs:endpoint:PATCH /api/materials/{id}" in nodes, "MapMethods endpoint"
 # minimal API: comment above documents it; handler params are injections
 assert "Places an order" in nodes["cs:endpoint:POST /orders"]["doc"]
 assert ("injects", "cs:endpoint:POST /orders", I + "AppDbContext") in edges
+# minimal-API binding without attributes; injects only for services, not the body
+assert nodes["cs:endpoint:POST /orders"]["parameters"] == ["[service] db: AppDbContext"]
+patch = nodes["cs:endpoint:PATCH /api/materials/{id}"]
+assert patch["parameters"] == ["[route] id: int", "[query] notify: bool?", "[body] change: RenameMaterialRequest", "[special] ct: CancellationToken"], patch
+assert not any(e[0] == "injects" and e[1] == patch["id"] for e in edges), "body parameter injected"
+# responses: [ProducesResponseType], Ok(x)/CreatedAtAction(.., x), .Produces<T>(), Results.NoContent()
+assert nodes[API + "MaterialController.Get(int)"]["responses"] == ["200 Material", "404"]
+assert nodes[API + "MaterialController.Create(string, int, string, string, string, bool)"]["responses"] == ["201 int"]
+assert nodes["cs:endpoint:GET /health"]["responses"] == ["200 string"] and nodes["cs:endpoint:DELETE /admin/cache"]["responses"] == ["204"]
+# request pipeline in registration order; AddHostedService<T>
+pipe = [e["to"] for e in m["edges"] if e["kind"] == "pipeline"]
+assert pipe == ["pipeline:UseHttpsRedirection", I + "TimingMiddleware", "pipeline:UseAuthorization"], pipe
+assert "hosted" in nodes[I + "MaterialCleanup"]["tags"]
 assert not any("Tests" in n["id"] for n in nodes.values() if n["kind"] != "project"), "test code in the model"
 assert ("tests", "cs:Fixture.Tests.MaterialServiceTests.CreateAsync_Creates(Fixture.Application.MaterialService)", A + "MaterialService." + create) in edges
 
@@ -203,6 +216,10 @@ for f in index.md architecture.md api.md frontend.md quality.md modules/backend-
   [ -f "$docs/$f" ] || { echo "missing $f"; exit 1; }
 done
 grep -q "| POST | \`/api/materials\` |.*\`createMaterial\`" "$docs/api.md"
+grep -q "| GET | \`/api/materials/{id}\` |.*| \`Material?\`<br>200 \`Material\`, 404 |" "$docs/api.md"
+grep -q "^## Request pipeline (project \`Fixture\`)" "$docs/api.md"
+grep -q "^2\. \[TimingMiddleware\](modules/backend-Infrastructure.md#.*) (\`UseMiddleware\`)" "$docs/api.md"
+grep -q "^3\. \`UseAuthorization\`" "$docs/api.md"
 grep -q "| PUT | \`/api/materials/{id}\` | Renames a material. | \`id: int\`<br>\`\[body\] request: RenameMaterialRequest\` | \`Material\` | required |" "$docs/api.md"
 grep -q "ARCH-001 | domain → infrastructure | high |" "$docs/architecture.md"
 grep -q "^- \`Fixture\`: ASP.NET Core on net9.0" "$docs/index.md"
