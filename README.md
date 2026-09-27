@@ -100,7 +100,8 @@ Without `--ai`, cached drafts are still used and nothing is sent.
 ## CI
 
 The repository is a GitHub Action: on a pull request it runs `docwizz check --since <base>` and posts the result as one
-comment, updated on every push, and fails the job when the change introduces critical gaps, failing violations or
+comment, updated on every push, including ADR candidates (a new external system or layer dependency the change
+introduces, for a human to record), and fails the job when the change introduces critical gaps, failing violations or
 too-complex code.
 
 ```yaml

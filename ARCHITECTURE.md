@@ -115,7 +115,8 @@ The model separates what the code states from what DocWizz concludes:
   and external namespaces used by the domain layer.
 - **[Diff](src/DocWizz/Diff.cs)** compares two models by symbol id and body hash. It reports changed, added and
   removed symbols, the affected pages, and the gaps and violations a change introduced. A touched symbol also marks
-  every flow passing through it: `api.md` / `frontend.md` and the module pages along that flow.
+  every flow passing through it: `api.md` / `frontend.md` and the module pages along that flow. New external systems
+  and new layer dependencies are listed as ADR candidates: decisions to record, not decisions DocWizz makes.
 
 ## Generation
 

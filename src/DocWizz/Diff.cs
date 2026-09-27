@@ -2,7 +2,7 @@ record DiffResult(
     List<Node> Added, List<Node> Removed, List<Node> Changed,
     List<string> Pages,
     List<string> DepsAdded, List<string> DepsRemoved,
-    List<DocumentationItem> NewGaps, List<Violation> NewViolations);
+    List<DocumentationItem> NewGaps, List<Violation> NewViolations, List<string> Decisions);
 
 static class Diff
 {
@@ -27,8 +27,22 @@ static class Diff
         var gapsBefore = Analyzer.Analyze(before, config).Where(f => f.Status != Status.Documented).Select(f => f.Node.Id).ToHashSet();
         var newGaps = Analyzer.Analyze(after, config).Where(f => f.Status != Status.Documented && !gapsBefore.Contains(f.Node.Id)).ToList();
 
-        var violationsBefore = Architecture.Check(before, config.Architecture).Violations.Select(Key).ToHashSet();
-        var newViolations = Architecture.Check(after, config.Architecture).Violations.Where(v => !violationsBefore.Contains(Key(v))).ToList();
+        var archBefore = Architecture.Check(before, config.Architecture);
+        var archAfter = Architecture.Check(after, config.Architecture);
+        var violationsBefore = archBefore.Violations.Select(Key).ToHashSet();
+        var newViolations = archAfter.Violations.Where(v => !violationsBefore.Contains(Key(v))).ToList();
+
+        // ADR candidates: decisions the change implies but nobody wrote down — a new external system, a new layer dependency.
+        var decisions = new List<string>();
+        var externalsBefore = before.Nodes.Where(n => n.Kind == "external").Select(n => n.Id).ToHashSet();
+        foreach (var ext in after.Nodes.Where(n => n.Kind == "external" && !externalsBefore.Contains(n.Id)).OrderBy(n => n.Name))
+        {
+            var users = after.Edges.Where(e => e.Kind == "connects" && e.To == ext.Id).Select(e => e.From[(e.From.IndexOf(':') + 1)..]).Distinct().Order().ToList();
+            decisions.Add($"Adopt {ext.Name} ({Externals.Category(ext)}, {Externals.Certainty(ext)})" + (users.Count > 0 ? $" — used by {string.Join(", ", users)}" : ""));
+        }
+        var layersBefore = archBefore.LayerDependencies.Select(d => (d.From, d.To)).ToHashSet();
+        foreach (var d in archAfter.LayerDependencies.Where(d => !layersBefore.Contains((d.From, d.To))))
+            decisions.Add($"Let layer {d.From} depend on {(d.To == "http" ? "HTTP directly" : d.To)} ({(d.Allowed ? "allowed by the rules" : "not allowed by the rules: change them or the code")})");
 
         // Pages mirror Generator's layout: every symbol lives on its module page, plus the overview it appears in.
         var pages = new SortedSet<string>();
@@ -48,7 +62,7 @@ static class Diff
             pages.Add("architecture-description.md");
         if (newGaps.Count > 0 || pages.Count > 0) pages.Add("quality.md");
 
-        return new(added, removed, changed, [.. pages], depsAdded, depsRemoved, newGaps, newViolations);
+        return new(added, removed, changed, [.. pages], depsAdded, depsRemoved, newGaps, newViolations, decisions);
     }
 
     static string Key(Violation v) => $"{v.Rule}|{v.FromFile}|{v.To}";
@@ -77,6 +91,12 @@ static class Diff
             o.WriteLine("Architecture change: module dependencies");
             foreach (var x in d.DepsAdded) o.WriteLine($"  + {x}");
             foreach (var x in d.DepsRemoved) o.WriteLine($"  - {x}");
+        }
+        if (d.Decisions.Count > 0)
+        {
+            o.WriteLine();
+            o.WriteLine($"ADR candidates ({d.Decisions.Count}) — decisions this change implies; record them in docs/architecture/decisions/");
+            foreach (var x in d.Decisions) o.WriteLine($"  ? {x}");
         }
         o.WriteLine();
         o.WriteLine($"Introduced: {d.NewGaps.Count(Analyzer.IsCritical)} critical, " +

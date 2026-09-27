@@ -348,6 +348,11 @@ cat > "$repo/backend/Domain/Audit.cs" <<'CS'
 namespace Fixture.Domain;
 public class Audit { public void Log(Fixture.Infrastructure.SqlMaterialRepository r) => r.FindAsync(1); }
 CS
+cat > "$repo/backend/Infrastructure/Notices.cs" <<'CS'
+namespace Fixture.Infrastructure;
+/// <summary>Mails a notice when a material is published.</summary>
+public class Notices(Fixture.Application.IEventPublisher events) { public void Send() => new System.Net.Mail.SmtpClient().Send("a", "b", "c", "d"); }
+CS
 set +e; impact=$(dw check "$repo" --since HEAD); code=$?; set -e
 echo "$impact"
 [ "$code" -eq 1 ] || { echo "check --since should fail"; exit 1; }
@@ -360,6 +365,9 @@ grep -q "✓ api.md" <<<"$impact"
 grep -q "✓ modules/backend-Api.md" <<<"$impact"
 grep -q "Introduced: 0 critical, 1 other documentation gaps, 1 architecture violations" <<<"$impact"
 grep -q "ARCH-001  domain → infrastructure  backend/Domain/Audit.cs" <<<"$impact"
+# ADR candidates: a new external system and a new layer dependency
+grep -q "? Adopt SMTP server (email, detected) — used by Fixture.Infrastructure.Notices.Send()" <<<"$impact"
+grep -q "? Let layer infrastructure depend on application (allowed by the rules)" <<<"$impact"
 # Two refs: commit the change, then compare HEAD~1..HEAD from inside the repo, without a dir argument
 git -C "$repo" add -A && git -C "$repo" -c user.name=t -c user.email=t@t commit -qm change
 refs=$(cd "$repo" && dotnet run --project "$OLDPWD/src/DocWizz" -- diff HEAD~1 HEAD)
