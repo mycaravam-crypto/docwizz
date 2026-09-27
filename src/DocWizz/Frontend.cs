@@ -51,19 +51,9 @@ static class Frontend
     // Points `http:GET /api/x/{}` edges at the matching backend endpoint node, when there is one.
     public static List<Edge> LinkHttp(List<Node> nodes, List<Edge> edges)
     {
-        var byId = nodes.ToDictionary(n => n.Id);
-        var parent = edges.Where(e => e.Kind == "contains").ToDictionary(e => e.To, e => e.From);
         var index = new Dictionary<string, string>();
-
         foreach (var n in nodes.Where(n => n.Tags is ["endpoint", _, ..]))
-        {
-            var route = n.Route ?? "";
-            if (parent.TryGetValue(n.Id, out var p) && byId[p].Route is { } prefix && !route.StartsWith('/') && !route.StartsWith("~/"))
-            {
-                route = $"{prefix}/{route}".Replace("[controller]", byId[p].Name.Replace("Controller", ""), StringComparison.OrdinalIgnoreCase);
-            }
-            index.TryAdd(Key(n.Tags![1], route), n.Id);
-        }
+            index.TryAdd(Key(n.Tags![1], n.Route ?? ""), n.Id);
 
         return edges.Select(e => e.Kind == "http" && e.To.Split(' ', 2) is [var verb, var url]
             && index.TryGetValue(Key(verb[5..], url), out var target) ? e with { To = target } : e).ToList();

@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 var cmd = args.ElementAtOrDefault(0);
 var path = args.ElementAtOrDefault(1) ?? ".";
 
-if (cmd is "scan" or "analyze" or "check" && !Directory.Exists(path))
+if (cmd is "scan" or "analyze" or "check" or "generate" && !Directory.Exists(path))
 {
     Console.Error.WriteLine($"not a directory: {path}");
     return 1;
@@ -21,12 +21,15 @@ switch (cmd)
         return Analyze(path, enforce: false);
     case "check":
         return Analyze(path, enforce: true);
+    case "generate":
+        return Generate(path, args.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"));
     default:
         Console.Error.WriteLine("""
             usage:
               docwizz scan <dir> [model.json]   write the code model
               docwizz analyze <dir>             documentation report
               docwizz check <dir>               report + exit 1 if thresholds fail (CI)
+              docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
             """);
         return 1;
 }
@@ -59,12 +62,7 @@ static (Model Model, List<string> Files) BuildModel(string root, Config config)
 static int Scan(string root, string outFile)
 {
     var (model, files) = BuildModel(root, Config.Load(root));
-    File.WriteAllText(outFile, JsonSerializer.Serialize(model, new JsonSerializerOptions
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    }));
+    WriteModel(model, outFile);
 
     Console.WriteLine($"Files  {files.Count}");
     foreach (var g in files.GroupBy(Path.GetExtension).OrderBy(g => g.Key))
@@ -74,6 +72,29 @@ static int Scan(string root, string outFile)
         Console.WriteLine($"  {g.Key,-12} {g.Count()}");
     Console.WriteLine($"Edges  {model.Edges.Count}");
     Console.WriteLine($"→ {outFile}");
+    return 0;
+}
+
+static void WriteModel(Model model, string file) =>
+    File.WriteAllText(file, JsonSerializer.Serialize(model, new JsonSerializerOptions
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    }));
+
+static int Generate(string root, string outDir)
+{
+    var config = Config.Load(root);
+    var model = BuildModel(root, config).Model;
+    var findings = Analyzer.Analyze(model, config);
+    var arch = Architecture.Check(model, config.Architecture);
+    var written = new Generator(root, outDir, model, findings, arch, config.Architecture).Run();
+
+    // Fingerprint for `docwizz diff`: the model these docs were generated from.
+    Directory.CreateDirectory(Path.Combine(outDir, ".docwizz"));
+    WriteModel(model, Path.Combine(outDir, ".docwizz", "model.json"));
+    Console.WriteLine($"{written.Count} pages → {outDir} (commit {model.Commit ?? "unknown"})");
     return 0;
 }
 

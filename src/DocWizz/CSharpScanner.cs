@@ -67,8 +67,10 @@ static class CSharpScanner
                         edges.Add(new(typeId, Id(p.Type), "injects"));
 
                 if (decl is not TypeDeclarationSyntax td) continue;
+                var classRoute = RouteArg(decl.AttributeLists, "Route")
+                    ?.Replace("[controller]", type.Name.Replace("Controller", ""), StringComparison.OrdinalIgnoreCase);
                 foreach (var member in td.Members)
-                    ScanMember(sm, member, typeId, rel, nodes, edges);
+                    ScanMember(sm, member, typeId, classRoute, rel, nodes, edges);
             }
 
             ScanRegistrations(sm, syntaxRoot, rel, nodes, edges);
@@ -78,8 +80,8 @@ static class CSharpScanner
         return (nodes.DistinctBy(n => n.Id).ToList(), edges.Distinct().ToList());
     }
 
-    static void ScanMember(SemanticModel sm, MemberDeclarationSyntax member, string typeId, string rel,
-        List<Node> nodes, List<Edge> edges)
+    static void ScanMember(SemanticModel sm, MemberDeclarationSyntax member, string typeId, string? classRoute,
+        string rel, List<Node> nodes, List<Edge> edges)
     {
         ISymbol? sym = member switch
         {
@@ -96,7 +98,10 @@ static class CSharpScanner
         if (member is MethodDeclarationSyntax md && HttpVerbs.FirstOrDefault(v => HasAttr(md.AttributeLists, v)) is { } verb)
         {
             tags = ["endpoint", verb[4..].ToUpperInvariant()];
+            // Full route: [Route] on the class + the verb's template, unless the template is absolute.
             route = RouteArg(md.AttributeLists, verb) ?? "";
+            if (classRoute is not null && !route.StartsWith('/') && !route.StartsWith("~/"))
+                route = route.Length == 0 ? classRoute : $"{classRoute}/{route}";
         }
         if (sym is IPropertySymbol { Type: INamedTypeSymbol { Name: "DbSet", TypeArguments: [var entity] } } && InSource(entity))
             edges.Add(new(typeId, Id(entity), "dbset"));

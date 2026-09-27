@@ -5,6 +5,7 @@ Small tool, creates documentation. Finds the code that *needs* docs and doesn't 
 docwizz scan <dir> [model.json]   # write the code model (nodes + edges)
 docwizz analyze <dir>             # documentation report
 docwizz check <dir>               # report, exit 1 if thresholds fail (CI)
+docwizz generate <dir> [out]      # Markdown + Mermaid docs (default <dir>/docs)
 ./test.sh                         # smoke test against fixture/
 ```
 
