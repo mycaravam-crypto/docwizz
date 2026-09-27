@@ -113,16 +113,17 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     var settings = Configuration.Scan(root, candidates.Where(Configuration.IsConfigFile));
     var defined = settings.Select(n => n.Id).ToHashSet();
     nodes.RemoveAll(n => n.Kind == "config" && defined.Contains(n.Id));
-    nodes = nodes.DistinctBy(n => n.Id).ToList();
+    var testFiles = scanned.Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))
+        .Where(f => config.Tests.Any(g => FileSystemName.MatchesSimpleExpression(g, f))).ToHashSet();
+    // Same id from test and production code (a test router's `route:/login`): production wins.
+    nodes = nodes.OrderBy(n => testFiles.Contains(n.File)).DistinctBy(n => n.Id).ToList();
     var ids = nodes.Select(n => n.Id).ToHashSet();
-    nodes.AddRange(feNodes.Concat(projNodes).Concat(settings).Where(n => ids.Add(n.Id)));
+    nodes.AddRange(feNodes.OrderBy(n => testFiles.Contains(n.File)).Concat(projNodes).Concat(settings).Where(n => ids.Add(n.Id)));
     edges = Frontend.LinkHttp(nodes, [.. edges, .. feEdges, .. projEdges]);
     Externals.Link(nodes, edges);
     Configuration.Link(nodes, edges);
 
     // Test code leaves only `tests` edges (test symbol → code it uses) behind.
-    var testFiles = scanned.Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))
-        .Where(f => config.Tests.Any(g => FileSystemName.MatchesSimpleExpression(g, f))).ToHashSet();
     var testIds = nodes.Where(n => testFiles.Contains(n.File)).Select(n => n.Id).ToHashSet();
     nodes.RemoveAll(n => testIds.Contains(n.Id));
     edges = edges.Where(e => !testIds.Contains(e.To) && (!testIds.Contains(e.From) || e.Kind is "calls" or "imports" or "renders" or "injects" or "http"))
