@@ -32,4 +32,16 @@ assert nodes[A + "MaterialService." + create]["complexity"] >= 8
 assert nodes[A + "IMaterialService.GetAsync(int)"].get("doc")
 assert "cs:endpoint:GET /health" in nodes
 PY
+
+# Documentation analysis: planted undocumented code is critical, trivial code is ignored.
+set +e; report=$(dotnet run --project src/DocWizz -- check fixture); code=$?; set -e
+echo "$report"
+[ "$code" -eq 1 ] || { echo "check should fail on fixture"; exit 1; }
+critical=$(sed -n '/^Critical/,/^Warnings/p' <<<"$report")
+grep -q "MaterialService.CreateAsync" <<<"$critical"
+grep -q "MaterialController.Create(" <<<"$critical"
+grep -q "side effects: db, event" <<<"$critical"
+if grep -q "\.Add(int, int)" <<<"$report"; then echo "trivial Add flagged"; exit 1; fi
+# interface <summary> covers the implementation → only param missing
+grep -A1 "MaterialService.GetAsync" <<<"$report" | grep -q "partial, missing: param"
 echo PASS

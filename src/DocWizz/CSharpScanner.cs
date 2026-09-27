@@ -55,6 +55,9 @@ static class CSharpScanner
 
                 if (type.BaseType is { } bt && InSource(bt)) edges.Add(new(typeId, Id(bt), "inherits"));
                 foreach (var i in type.Interfaces.Where(InSource)) edges.Add(new(typeId, Id(i), "implements"));
+                foreach (var im in type.AllInterfaces.Where(InSource).SelectMany(i => i.GetMembers()))
+                    if (type.FindImplementationForInterfaceMember(im) is { } impl && InSource(impl))
+                        edges.Add(new(Id(impl), Id(im), "implements"));
 
                 // Constructor injection: primary ctor or explicit ctors.
                 foreach (var ctor in type.InstanceConstructors)
