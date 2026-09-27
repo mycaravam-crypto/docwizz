@@ -136,6 +136,7 @@ arch=$(sed -n '/^Architecture/,$p' <<<"$report")
 grep -A1 "ARCH-001  domain → infrastructure" <<<"$arch" | grep -q "Domain/Material.cs → backend/Infrastructure/SqlMaterialRepository.cs"
 grep -A1 "ARCH-002  ui → http" <<<"$arch" | grep -q "MaterialTable.vue → GET /api/materials"
 grep -q "ARCH-003  cycle: backend/Domain ↔ backend/Infrastructure" <<<"$arch"
+grep -q "ARCH-001  domain → infrastructure  \[high\]" <<<"$arch" && grep -q "ARCH-002  ui → http  \[medium\]" <<<"$arch"
 grep -q "dependencies: .*domain → infrastructure 1 ✗" <<<"$arch"
 set +e; dw architecture fixture --format json > "$model.arch" 2>/dev/null; code=$?; set -e
 [ "$code" -eq 1 ] || { echo "architecture should fail on violations"; exit 1; }
@@ -153,7 +154,7 @@ for f in index.md architecture.md api.md frontend.md quality.md modules/backend-
 done
 grep -q "| POST | \`/api/materials\` |.*\`createMaterial\`" "$docs/api.md"
 grep -q "| PUT | \`/api/materials/{id}\` | Renames a material. | \`id: int\`<br>\`\[body\] request: RenameMaterialRequest\` | \`Material\` | required |" "$docs/api.md"
-grep -q "ARCH-001 | domain → infrastructure" "$docs/architecture.md"
+grep -q "ARCH-001 | domain → infrastructure | high |" "$docs/architecture.md"
 grep -q "^- \`Fixture\`: ASP.NET Core on net9.0" "$docs/index.md"
 grep -q "^- Entity Framework Core, SQL Server (9.0.0)" "$docs/index.md"
 grep -q "^- Vue (^3.5.0)" "$docs/index.md"
@@ -230,6 +231,20 @@ architecture:
 YAML
 set +e; bypass=$(dw architecture "$repo" 2>/dev/null); set -e
 grep -A1 "ARCH-004  api → infrastructure" <<<"$bypass" | grep -q "backend/Program.cs → backend/Infrastructure/SqlMaterialRepository.cs.*bypassing application"
+grep -q "ARCH-004  api → infrastructure  \[low\]" <<<"$bypass"
+# fail_on: low-severity violations are reported but don't fail; max_complexity does
+cat >> "$repo/docwizz.yaml" <<'YAML'
+check:
+  fail_on: medium
+  max_cycles: 5
+  max_complexity: 5
+YAML
+dw architecture "$repo" >/dev/null 2>&1 || { echo "low-severity violation failed architecture despite fail_on: medium"; exit 1; }
+set +e; complex=$(dw check "$repo" 2>/dev/null); set -e
+grep -q "complexity > 5: Fixture.Application.MaterialService.CreateAsync(.*) ([0-9]*)" <<<"$complex" || { echo "$complex" | tail -3; exit 1; }
+if grep -q "violations >" <<<"$complex"; then echo "low violation counted"; exit 1; fi
+echo "architecture: { severity: { ARCH-001: extreme } }" > "$repo/docwizz.yaml"
+if dw architecture "$repo" >/dev/null 2>&1; then echo "bad severity accepted"; exit 1; fi
 rm -rf "$repo"
 
 # AI drafts: served from the cache per (symbol, body hash), marked, never over a written summary

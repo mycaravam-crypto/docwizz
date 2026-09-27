@@ -6,6 +6,8 @@ class ArchitectureConfig
     public Dictionary<string, List<string>> Layers { get; set; } = [];
     // layer → layers it may depend on (`http` = calling HTTP directly). Layers not listed are unrestricted.
     public Dictionary<string, List<string>> Allow { get; set; } = [];
+    // rule → high/medium/low, overriding the defaults (ARCH-001 high, ARCH-002 medium, ARCH-004 low).
+    public Dictionary<string, string> Severity { get; set; } = [];
 }
 
 record ArchitectureResult(List<Violation> Violations, List<List<string>> Cycles, Dictionary<string, int> LayerFiles,
@@ -14,10 +16,19 @@ record ArchitectureResult(List<Violation> Violations, List<List<string>> Cycles,
 // Actual dependencies between layers (`http` = calls HTTP directly), Count = number of references.
 record LayerDependency(string From, string To, int Count, bool Allowed);
 
-record Violation(string Rule, string FromLayer, string ToLayer, string FromFile, string To, string Example);
+record Violation(string Rule, string FromLayer, string ToLayer, string FromFile, string To, string Example, Level Severity = Level.Low);
 
 static class Architecture
 {
+    static readonly Dictionary<string, Level> DefaultSeverity = new()
+        { ["ARCH-001"] = Level.High, ["ARCH-002"] = Level.Medium, ["ARCH-004"] = Level.Low };
+
+    public static Level ParseSeverity(string s) => Enum.TryParse<Level>(s, true, out var l) && l != Level.None && !int.TryParse(s, out _)
+        ? l : throw new ArgumentException($"unknown severity '{s}' (high, medium, low)");
+
+    // The violations `check` counts: those at or above `check.fail_on`.
+    public static List<Violation> Failing(IEnumerable<Violation> violations, CheckConfig check) =>
+        violations.Where(v => v.Severity >= ParseSeverity(check.FailOn)).ToList();
 
     public static ArchitectureResult Check(CodeModel model, ArchitectureConfig config)
     {
@@ -51,7 +62,10 @@ static class Architecture
         }
 
         // One finding per file pair: the first edge is the example.
-        violations = violations.DistinctBy(v => (v.Rule, v.FromFile, v.To)).ToList();
+        violations = violations.DistinctBy(v => (v.Rule, v.FromFile, v.To)).Select(v => v with
+        {
+            Severity = config.Severity.TryGetValue(v.Rule, out var s) ? ParseSeverity(s) : DefaultSeverity.GetValueOrDefault(v.Rule, Level.Medium),
+        }).ToList();
 
         // Folder-level cycles (a folder ≈ a namespace/module in both C# and Vue projects).
         var graph = deps.Where(e => e.Kind != "http" && nodes.ContainsKey(e.To))
@@ -127,9 +141,9 @@ static class Architecture
         o.WriteLine(new string('─', 40));
         o.WriteLine("  layers: " + string.Join(", ", layerFiles.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key} {kv.Value}")));
         o.WriteLine("  dependencies: " + string.Join(", ", layerDeps.Select(d => $"{d.From} → {d.To} {d.Count}{(d.Allowed ? "" : " ✗")}")));
-        foreach (var g in violations.GroupBy(v => (v.Rule, v.FromLayer, v.ToLayer)).OrderBy(g => g.Key.Rule))
+        foreach (var g in violations.GroupBy(v => (v.Rule, v.FromLayer, v.ToLayer, v.Severity)).OrderByDescending(g => g.Key.Severity).ThenBy(g => g.Key.Rule))
         {
-            o.WriteLine($"  {g.Key.Rule}  {g.Key.FromLayer} → {g.Key.ToLayer}");
+            o.WriteLine($"  {g.Key.Rule}  {g.Key.FromLayer} → {g.Key.ToLayer}  [{g.Key.Severity.ToString().ToLowerInvariant()}]");
             foreach (var v in g)
                 o.WriteLine($"    {v.FromFile} → {v.To}  ({v.Example})");
         }

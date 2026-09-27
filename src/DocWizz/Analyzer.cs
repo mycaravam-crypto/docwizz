@@ -24,6 +24,8 @@ class Config
           max_critical: 0
           max_violations: 0
           max_cycles: 0
+          fail_on: low          # minimum violation severity that fails check: low, medium, high
+          # max_complexity: 20  # fail when a symbol's cyclomatic complexity exceeds this
         architecture:
           layers:               # path globs, first match wins; unmatched files have no layer
             ui: ["*.vue"]
@@ -41,6 +43,7 @@ class Config
             application: [domain]
             domain: []
             infrastructure: [application, domain]
+          severity: {}          # rule → high/medium/low; defaults ARCH-001 high, ARCH-002 medium, ARCH-004 low
         # Test code (path globs): scanned only to link tests to the code they exercise; never analyzed or documented.
         tests: ["tests/*", "test/*", "*.Tests/*", "*.Test/*", "*/__tests__/*", "*.test.ts", "*.spec.ts", "*/e2e/*"]
         # Path globs (relative, `/`-separated) left out of the model entirely.
@@ -59,6 +62,8 @@ class Config
         var builtIn = Yaml.Deserialize<Config>(Profiles.Yaml(config.Profile));
         if (profile is not null || config.Patterns.Count == 0) config.Patterns = builtIn.Patterns;
         if (config.ArchitectureSections.Count == 0) config.ArchitectureSections = builtIn.ArchitectureSections;
+        // Fail fast on bad severities rather than mid-check.
+        foreach (var s in config.Architecture.Severity.Values.Append(config.Check.FailOn)) global::Architecture.ParseSeverity(s);
         return config;
     }
 }
@@ -86,6 +91,10 @@ class CheckConfig
     public int MaxCritical { get; set; }
     public int MaxViolations { get; set; }
     public int MaxCycles { get; set; }
+    // Minimum violation severity that counts against max_violations (lower ones are reported only).
+    public string FailOn { get; set; } = "low";
+    // Fail when any symbol's cyclomatic complexity exceeds this (unset = no limit).
+    public int? MaxComplexity { get; set; }
 }
 
 enum Level { None, Low, Medium, High }

@@ -215,9 +215,12 @@ static int DiffCommand(string root, string? gitRef, Config config, bool enforce,
     if (!enforce) return 0;
 
     var critical = result.NewGaps.Count(Analyzer.IsCritical);
-    var ok = critical == 0 && result.NewViolations.Count == 0;
+    var violations = Architecture.Failing(result.NewViolations, config.Check).Count;
+    var complex = TooComplex(result.Added.Concat(result.Changed), config.Check);
+    var ok = critical == 0 && violations == 0 && complex.Count == 0;
     Console.WriteLine();
-    Console.WriteLine(ok ? "check: PASS" : $"check: FAIL — introduced {critical} critical gaps, {result.NewViolations.Count} violations");
+    Console.WriteLine(ok ? "check: PASS" : $"check: FAIL — introduced {critical} critical gaps, {violations} violations" +
+        (complex.Count > 0 ? $", {complex.Count} symbols over complexity {config.Check.MaxComplexity}" : ""));
     return ok ? 0 : 1;
 }
 
@@ -254,7 +257,9 @@ static int Analyze(string root, Config config, bool enforce, bool json)
     var model = BuildModel(root, config).Model;
     var findings = Analyzer.Analyze(model, config);
     var arch = Architecture.Check(model, config.Architecture);
-    var (violations, cycles, _, _) = arch;
+    var (_, cycles, _, _) = arch;
+    var violations = Architecture.Failing(arch.Violations, config.Check);
+    var complex = TooComplex(model.Nodes, config.Check);
 
     var coverage = Analyzer.Coverage(findings);
     var critical = findings.Count(Analyzer.IsCritical);
@@ -263,6 +268,8 @@ static int Analyze(string root, Config config, bool enforce, bool json)
     if (critical > config.Check.MaxCritical) failures.Add($"{critical} critical > {config.Check.MaxCritical}");
     if (violations.Count > config.Check.MaxViolations) failures.Add($"{violations.Count} violations > {config.Check.MaxViolations}");
     if (cycles.Count > config.Check.MaxCycles) failures.Add($"{cycles.Count} cycles > {config.Check.MaxCycles}");
+    if (complex.Count > 0) failures.Add($"complexity > {config.Check.MaxComplexity}: " +
+        string.Join(", ", complex.Take(5).Select(n => $"{Generator.Display(n)} ({n.Complexity})")) + (complex.Count > 5 ? ", …" : ""));
     // Human-authored architecture sections the profile requires (docs/architecture/<name>.md).
     var missingSections = config.ArchitectureSections
         .Where(s => !File.Exists(Path.Combine(root, "docs", "architecture", $"{s}.md"))).ToList();
@@ -298,8 +305,11 @@ static int ArchitectureCommand(string root, Config config, bool json)
     var arch = Architecture.Check(BuildModel(root, config).Model, config.Architecture);
     if (json) Console.WriteLine(JsonSerializer.Serialize(arch, JsonOptions()));
     else Architecture.Report(arch, Console.Out);
-    return arch.Violations.Count > config.Check.MaxViolations || arch.Cycles.Count > config.Check.MaxCycles ? 1 : 0;
+    return Architecture.Failing(arch.Violations, config.Check).Count > config.Check.MaxViolations || arch.Cycles.Count > config.Check.MaxCycles ? 1 : 0;
 }
+
+static List<Node> TooComplex(IEnumerable<Node> nodes, CheckConfig check) =>
+    check.MaxComplexity is { } max ? nodes.Where(n => n.Complexity > max).OrderByDescending(n => n.Complexity).ToList() : [];
 
 static string? Git(string dir, string args)
 {

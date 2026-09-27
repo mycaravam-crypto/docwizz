@@ -81,7 +81,7 @@ static class Diff
         foreach (var f in d.NewGaps.OrderByDescending(f => f.Level))
             o.WriteLine($"  {f.Level,-6} {f.Node.File}:{f.Node.Line}  {Generator.Display(f.Node)}  missing: {string.Join(", ", f.Missing)}");
         foreach (var v in d.NewViolations)
-            o.WriteLine($"  {v.Rule}  {v.FromLayer} → {v.ToLayer}  {v.FromFile} → {v.To}");
+            o.WriteLine($"  {v.Rule}  {v.FromLayer} → {v.ToLayer}  {v.FromFile} → {v.To}  [{v.Severity.ToString().ToLowerInvariant()}]");
 
         void Section(string title, List<Node> ns, string sign)
         {

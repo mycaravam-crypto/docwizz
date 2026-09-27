@@ -52,7 +52,9 @@ with a standard. `iso-42010`/`iso-15289` also expect human-authored pages in `do
 applies — copy it as a starting point. `profile:` picks the profile; `patterns:` replaces its patterns. Sections are
 XML doc tag names (`summary`, `param`, `returns`, `exception`, `example`, `remarks`, any custom tag) or the derived
 ones above. Architecture rules: `layers` (path globs) and `allow`; ARCH-001 forbidden direction, ARCH-002 direct HTTP,
-ARCH-003 module cycle, ARCH-004 layer bypassed.
+ARCH-003 module cycle, ARCH-004 layer bypassed. Violations carry a severity (ARCH-001 high, ARCH-002 medium, ARCH-004 low;
+override with `architecture.severity`); `check.fail_on` sets the lowest severity that fails, `check.max_complexity` fails
+on any symbol above that cyclomatic complexity.
 
 ## Generated docs
 

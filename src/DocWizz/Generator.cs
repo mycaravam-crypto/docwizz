@@ -146,9 +146,9 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         if (arch.Violations.Count == 0) sb.AppendLine("None.\n");
         else
         {
-            sb.AppendLine("| Rule | Layers | From | To | Example |\n|---|---|---|---|---|");
-            foreach (var v in arch.Violations)
-                sb.AppendLine($"| {v.Rule} | {v.FromLayer} → {v.ToLayer} | {SourceLink(v.FromFile, "")} | `{v.To}` | {Esc(v.Example)} |");
+            sb.AppendLine("| Rule | Layers | Severity | From | To | Example |\n|---|---|---|---|---|---|");
+            foreach (var v in arch.Violations.OrderByDescending(v => v.Severity))
+                sb.AppendLine($"| {v.Rule} | {v.FromLayer} → {v.ToLayer} | {v.Severity.ToString().ToLowerInvariant()} | {SourceLink(v.FromFile, "")} | `{v.To}` | {Esc(v.Example)} |");
             sb.AppendLine();
         }
         sb.AppendLine($"## Cycles ({arch.Cycles.Count})\n");
