@@ -2,7 +2,21 @@ services:
   api:
     build: ../backend
     ports: ["8080:8080"]
+    environment:
+      - ConnectionStrings__Default=Server=db;Password=not-a-real-secret
+      - MATERIALS__BETA=true
+    depends_on: [db, cache]
   web:
     build: ../frontend
+    depends_on:
+      api:
+        condition: service_started
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
+    volumes: ["db-data:/var/opt/mssql"]
+  cache:
+    image: redis:7
+  mail:
+    image: mailhog/mailhog
+volumes:
+  db-data:

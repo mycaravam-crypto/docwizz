@@ -107,7 +107,8 @@ assert not any("not-a-real-secret" in json.dumps(n) for n in nodes.values()), "c
 reads = {(e["kind"], e["from"], e["to"]) for e in m["edges"] if e["kind"] in ("reads", "binds")}
 assert reads == {("reads", I + "WarehouseClient", "config:warehouse:baseurl"),  # AddHttpClient<WarehouseClient>(.. config["Warehouse:BaseUrl"])
                  ("binds", I + "MaterialOptions", "config:materials"),        # Configure<MaterialOptions>(GetSection("Materials"))
-                 ("reads", "proj:backend/Fixture.csproj", "config:materials:beta")}, reads  # GetEnvironmentVariable("MATERIALS__BETA")
+                 ("reads", "proj:backend/Fixture.csproj", "config:materials:beta"),
+                 ("reads", "proj:backend/Fixture.csproj", "config:audit_endpoint")}, reads  # GetEnvironmentVariable("MATERIALS__BETA")
 assert nodes["ext:http:WarehouseClient"]["name"] == "warehouse.example.net"  # typed client named by its configured URL
 PY
 
@@ -229,10 +230,20 @@ grep -q 'c0 -->|HTTP| c1' "$docs/views/containers.md"                          #
 grep -q '| Material | AppDbContext | SQL Server (inferred) | POST /orders, SqlMaterialRepository |' "$docs/views/data.md"
 grep -q '| erp.example.com | http-api | detected | ErpClient |' "$docs/views/context.md"
 grep -q 'c[0-9]* -->|reads/writes| c[0-9]*' "$docs/views/containers.md"
-grep -q 'services: api, web, db' "$docs/views/deployment.md"
 D="$docs/views/deployment.md"
+# Deployment: compose services (env names only), what they run, Kubernetes, Dockerfiles, IaC
+grep -q '^| \[api\](.*) | build `../backend` | 8080:8080 | ConnectionStrings__Default, MATERIALS__BETA | db, cache |  | project `Fixture` |' "$D"
+grep -q '^| \[db\](.*) | `mcr.microsoft.com/mssql/server:2022-latest` | .* | db-data:/var/opt/mssql | SQL Server — used by the code (inferred) |' "$D"
+grep -q '^| \[mail\](.*) | .* | SMTP server — not referenced by the scanned code |' "$D"
+grep -q 'n[0-9] --> n[0-9]' "$D"                                                  # depends_on graph
+grep -q '^| \[Deployment/materials-api\](.*) | `registry.example.com/materials-api:1.4` | 8080 | Warehouse__BaseUrl |' "$D"
+grep -q '^| \[Service/materials-api\](.*) | — | 80→8080 |' "$D"
+grep -q 'backend/Dockerfile.*: from `mcr.microsoft.com/dotnet/sdk:9.0`, `mcr.microsoft.com/dotnet/aspnet:9.0`; exposes 8080' "$D"
+grep -q 'deploy/main.bicep.*: `Microsoft.Sql/servers`, `Microsoft.Sql/servers/databases`' "$D"
+grep -q '`MATERIALS:BETA`.* | Fixture | detected: set by the deployment (api in deploy/docker-compose.yml) |' "$D"
+grep -q '^## Not derivable from the repository' "$D"
 grep -q '`Warehouse:BaseUrl`.* | default, Development | warehouse.example.net, localhost (Development) | WarehouseClient | detected: defined and read |' "$D"
-grep -q '`MATERIALS:BETA`.* | Fixture | unknown: read, but no repository file defines it' "$D"
+grep -q '`AUDIT_ENDPOINT`.* | Fixture | unknown: read, but no repository file defines it' "$D"
 grep -q '`Materials:MaxQuantity`.* | detected: bound as part of a section |' "$D"
 grep -q '`LegacyExport:Folder`.* | defined, not read by scanned code |' "$D"
 grep -q '`AllowedHosts`.* | read by the framework |' "$D"

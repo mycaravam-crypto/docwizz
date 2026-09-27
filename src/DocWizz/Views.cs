@@ -39,6 +39,7 @@ partial class Generator
 
     string ConfigStatus(Node key) => ConfigReaders[key.Id].Any()
         ? Configuration.DefinedFor(key, ConfigKeys) ? "detected: defined and read"
+            : DeploymentEnv[key.Name.ToLowerInvariant()].ToList() is { Count: > 0 } set ? $"detected: set by the deployment ({string.Join(", ", set)})"
             : "unknown: read, but no repository file defines it (environment variable, secret store or a default)"
         : Configuration.IsFramework(key) ? "read by the framework" : IsRead(key) ? "detected: bound as part of a section" : "defined, not read by scanned code";
 
@@ -231,66 +232,6 @@ partial class Generator
                     $"{string.Join(", ", calls[s.Id].Where(nodes.ContainsKey).Select(c => nodes[c].Name).Distinct().Order())} |");
         }
         return sb.ToString();
-    }
-
-    // Deployment is mostly not in the code: report the descriptors that are, and leave the rest to people.
-    static readonly string[] DeploymentGlobs = ["Dockerfile*", "*.Dockerfile", "docker-compose*.yml", "docker-compose*.yaml",
-        "compose*.yml", "compose*.yaml", "*.bicep", "*.tf", "Chart.yaml", "azure-pipelines.yml", ".gitlab-ci.yml",
-        ".github/workflows/*.yml", ".github/workflows/*.yaml", "Procfile", "fly.toml", "vercel.json", "netlify.toml"];
-
-    string DeploymentView()
-    {
-        var sb = new StringBuilder("# Deployment\n\n");
-        var hosts = Projects.Where(p => p.Tags?.Any(t => t.StartsWith("Microsoft.NET.Sdk.Web") || t == "npm") == true).ToList();
-        if (hosts.Count > 0)
-        {
-            sb.AppendLine("## Deployable units (from project files)\n");
-            foreach (var h in hosts) sb.AppendLine($"- {SourceLink(h.File, 0, h.Name, sub: "views")} — {(h.Tags!.Contains("npm") ? "frontend (npm)" : "ASP.NET Core web host")}");
-            sb.AppendLine();
-        }
-        var descriptors = DeploymentFiles().ToList();
-        sb.AppendLine("## Deployment descriptors\n");
-        if (descriptors.Count == 0) sb.AppendLine("None found (Dockerfile, compose, Bicep/Terraform, Helm, CI pipelines).\n");
-        foreach (var f in descriptors)
-        {
-            sb.AppendLine($"- {SourceLink(f, 0, f, sub: "views")}");
-            if (Path.GetFileName(f).Contains("compose") && ComposeServices(f) is { Count: > 0 } services)
-                sb.AppendLine($"  - services: {string.Join(", ", services)}");
-        }
-        sb.AppendLine();
-        sb.AppendLine(ConfigurationSection());
-        sb.AppendLine(HumanNote("deployment", "Where and how each unit runs (environments, hosting, scaling) is not derivable from code."));
-        return sb.ToString();
-    }
-
-    IEnumerable<string> DeploymentFiles()
-    {
-        string[] skip = [".git", "node_modules", "bin", "obj", "dist"];
-        var stack = new Stack<string>([root]);
-        while (stack.TryPop(out var dir))
-        {
-            foreach (var f in Directory.EnumerateFiles(dir))
-            {
-                var rel = Path.GetRelativePath(root, f).Replace('\\', '/');
-                if (DeploymentGlobs.Any(g => FileSystemName.MatchesSimpleExpression(g, g.Contains('/') ? rel : Path.GetFileName(f))))
-                    yield return rel;
-            }
-            foreach (var d in Directory.EnumerateDirectories(dir))
-                if (!skip.Contains(Path.GetFileName(d))) stack.Push(d);
-        }
-    }
-
-    // ponytail: top-level keys under `services:` by indentation; use a YAML parser if compose files get exotic.
-    List<string> ComposeServices(string rel)
-    {
-        var result = new List<string>();
-        var inServices = false;
-        foreach (var line in File.ReadLines(Path.Combine(root, rel)))
-        {
-            if (Regex.IsMatch(line, @"^\S")) inServices = line.TrimEnd() == "services:";
-            else if (inServices && Regex.Match(line, @"^  ([\w.-]+):\s*$") is { Success: true } m) result.Add(m.Groups[1].Value);
-        }
-        return result;
     }
 
     // A pointer to the human-authored page for a section: linked when it exists, requested when it doesn't.

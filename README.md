@@ -39,7 +39,12 @@ Configuration keys from `appsettings*.json` and `.env` files are `config` nodes 
 them; code that reads a key (`config["A:B"]`, `GetSection`, `GetConnectionString`, `GetEnvironmentVariable`) or binds it
 (`Configure<T>`, `AddOptions<T>().BindConfiguration`) points at it (`reads`, `binds`). Values are never stored — only the
 host of a URL, which also names a typed `HttpClient` whose address comes from configuration. `views/deployment.md` lists
-every key with its status: defined and read, read but not defined in the repository (unknown), or defined but unread.
+every key with its status: defined and read, set by the deployment (compose/Kubernetes `environment`), read but
+not defined in the repository (unknown), or defined but unread.
+
+`views/deployment.md` reads the descriptors themselves: compose services (image or build → the project it builds, ports,
+environment variable *names*, `depends_on`, volumes, and the known system an image runs), Kubernetes workloads and Services,
+Dockerfile base images and exposed ports, Terraform/Bicep resource types — and lists what none of them can tell.
 Every node records its `language` (csharp, vue, typescript, msbuild, npm); C# types carry roles as tags
 (controller, service, repository, entity, dbcontext, background-service, middleware, hub, options).
 Test code (`tests:` globs) only contributes `tests` edges.

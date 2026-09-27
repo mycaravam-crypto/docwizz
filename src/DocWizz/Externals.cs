@@ -36,6 +36,19 @@ static class Externals
             "File.ReadLines", "Directory.CreateDirectory", "Directory.Delete", "Directory.EnumerateFiles", "Directory.GetFiles"]),
     ];
 
+    // Container images of well-known systems (repository name, without registry/tag) → Known key.
+    static readonly (string Image, string Key)[] Images = [("mssql", "sqlserver"), ("azure-sql-edge", "sqlserver"), ("postgres", "postgresql"),
+        ("postgis", "postgresql"), ("mysql", "mysql"), ("mariadb", "mysql"), ("mongo", "mongodb"), ("redis", "redis"), ("rabbitmq", "rabbitmq"),
+        ("kafka", "kafka"), ("cp-kafka", "kafka"), ("elasticsearch", "elasticsearch"), ("keycloak", "keycloak"), ("azurite", "blob"),
+        ("minio", "s3"), ("mailhog", "smtp"), ("mailpit", "smtp"), ("oracle", "oracle"), ("cosmosdb", "cosmos")];
+
+    public static Known? ByImage(string image)
+    {
+        // Any path segment after the registry: mcr.microsoft.com/mssql/server → mssql, server.
+        var segments = image.Split('@')[0].Split('/').Select(s => s.Split(':')[0]).Skip(image.Split('/')[0].Contains('.') ? 1 : 0).ToList();
+        return Images.Where(i => segments.Any(s => s.StartsWith(i.Image))).Select(i => All.First(k => k.Key == i.Key)).FirstOrDefault();
+    }
+
     // name: the invoked method or created type; qualified: "Receiver.Method" (last receiver segment) when there is one.
     public static Known? ByCall(string name, string? qualified = null) =>
         All.FirstOrDefault(k => k.Calls.Any(c => c.Contains('.') ? qualified?.StartsWith(c) == true : c == name));
