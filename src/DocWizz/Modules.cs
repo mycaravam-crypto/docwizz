@@ -77,7 +77,7 @@ partial class Generator
         }
         var access = model.Edges.Where(e => e.Kind is "accesses" or "injects" && Here(e.From) && contexts.Any(c => c.Id == e.To) && Unit(e.From) != e.To)
             .Select(e => (User: UnitLabel(Unit(e.From)), Ctx: nodes[e.To].Name)).Distinct().OrderBy(x => x.User).ToList();
-        data.AddRange(access.Select(a => $"- `{a.User}` uses `{a.Ctx}`"));
+        data.AddRange(access.GroupBy(a => a.Ctx).Select(g => $"- {Users(g.Select(a => a.User))} `{g.Key}`"));
         if (data.Count > 0) sb.AppendLine("## Data and persistence\n\n" + string.Join("\n", data) + "\n");
 
         var external = model.Edges.Where(e => e.Kind == "connects" && Here(e.From) && nodes.ContainsKey(e.To))
@@ -198,6 +198,9 @@ partial class Generator
         return string.Join(" · ", parts);
     }
 
+    // "`A` uses" / "`A`, `B` use"
+    static string Users(IEnumerable<string> users) => users.ToList() is var u && u.Count == 1 ? $"`{u[0]}` uses" : $"{string.Join(", ", u.Select(x => $"`{x}`"))} use";
+
     IEnumerable<string> Observations(string folder, List<Node> tops, List<(string From, string To)> deps)
     {
         foreach (var v in arch.Violations.Where(v => Folder(v.FromFile) == folder || Folder(v.To) == folder).OrderByDescending(v => v.Severity))
@@ -216,7 +219,7 @@ partial class Generator
         if (Layer(folder) is "ui" or "api" or "state" or "client")
             foreach (var (user, ctx) in model.Edges.Where(e => e.Kind is "accesses" or "injects" && nodes.TryGetValue(e.From, out var f) && Folder(f.File) == folder
                     && nodes.GetValueOrDefault(e.To)?.Tags?.Contains("dbcontext") == true)
-                .Select(e => (UnitLabel(Unit(e.From)), nodes[e.To].Name)).Distinct())
-                yield return $"`{user}` uses `{ctx}` directly from the {Layer(folder)} layer — data access bypasses the application layer";
+                .Select(e => (User: UnitLabel(Unit(e.From)), Ctx: nodes[e.To].Name)).Distinct().OrderBy(x => x.User).GroupBy(x => x.Ctx).Select(g => (g.Select(x => x.User), g.Key)))
+                yield return $"{Users(user)} `{ctx}` directly from the {Layer(folder)} layer — data access bypasses the application layer";
     }
 }

@@ -85,6 +85,10 @@ partial class Generator
             : global::Projects.Of(Projects, n.File)?.Name ?? Path.GetExtension(n.File) switch { ".cs" => "C# code", ".sql" => "SQL scripts", _ => "frontend code" };
     }
 
+    // A connection string read by code that connects to this system (GetConnectionString inside UseNpgsql(...)).
+    bool ConnectionStringOf(Node key, Node ext) => key.Name.StartsWith("ConnectionStrings:", StringComparison.OrdinalIgnoreCase)
+        && model.Edges.Any(r => r.Kind == "reads" && r.To == key.Id && Connections[ext.Id].Any(c => c.From == r.From));
+
     string ContextView()
     {
         var sb = new StringBuilder("# System context\n\n");
@@ -104,7 +108,7 @@ partial class Generator
             foreach (var ext in ExternalSystems)
                 sb.AppendLine($"| {ext.Name} | {Externals.Category(ext)} | {Externals.Certainty(ext)} | " +
                     $"{string.Join(", ", Connections[ext.Id].Where(e => nodes.ContainsKey(e.From)).Select(e => nodes[e.From].Name).Distinct().Order())} | " +
-                    $"{string.Join(", ", ConfigKeys.Where(k => Configuration.UrlHosts(k).ContainsValue(ext.Name)).Select(k => $"`{k.Name}`"))} | " +
+                    $"{string.Join(", ", ConfigKeys.Where(k => Configuration.UrlHosts(k).ContainsValue(ext.Name) || ConnectionStringOf(k, ext)).Select(k => $"`{k.Name}`"))} | " +
                     $"{SourceLink(ext.File, ext.Line, CodeModel.Location(ext), sub: "views")} | " +
                     $"{string.Join(", ", ProvisionedBy[ext.Id].Select(f => SourceLink(f, 0, f, sub: "views")))} |");
             sb.AppendLine();

@@ -17,7 +17,7 @@ docwizz diff [dir] <base> <head>  # same, between two git refs (docwizz diff HEA
 docwizz check <dir> --since <ref> # CI: fail only on critical gaps / violations introduced since <ref>
   --profile <name|file.yaml>      # documentation profile (see below)
   --format json                   # analyze/check/architecture as JSON
-./test.sh                         # smoke test against fixture/
+./test.sh                         # smoke test against fixture/ and fixture-legacy/
 ```
 
 Vue/TS support needs Node and a one-time `npm ci` in [scanner-vue/](scanner-vue/) (C# works without it).

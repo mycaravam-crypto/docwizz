@@ -587,4 +587,19 @@ grep -q "8.8.8.8 is not a local or private address" <<<"$public" || { echo "$pub
 cloud=$(OLLAMA_HOST="127.0.0.1:$(cat "$port_file")" DOCWIZZ_MODEL=gpt-oss:120b-cloud dw generate fixture "$(mktemp -d)" --ai 2>&1 >/dev/null)
 grep -q "gpt-oss:120b-cloud is an Ollama cloud model" <<<"$cloud" || { echo "$cloud"; exit 1; }
 kill $fake; rm -rf "$docs" "$port_file"
+
+# Legacy project: no doc comments, no docwizz.yaml, controller talks to the DbContext and holds the logic
+legacy=$(mktemp -d)
+dw generate fixture-legacy "$legacy" >/dev/null 2>&1
+L="$legacy/modules/Shop-Controllers.md"
+grep -qF -- '- `GET /api/orders/{id}`, `OrdersController`, `POST /api/orders/{id}/ship` use `ShopContext` directly from the api layer' "$L"
+[ "$(grep -c 'directly from the api layer' "$L")" = 1 ] || { echo "repeated data-access observation"; exit 1; }
+grep -q '`OrdersController.Ship(int, string, bool, bool, string)` (18)' "$L"
+grep -q 'POST /api/orders/{id}/ship`: OrdersController → ShopContext → PostgreSQL' "$L"
+grep -q 'Entity exposed: `GET /api/orders/{id}` returns `Order`' "$legacy/architecture.md"
+grep -q 'Logic in the API layer: `OrdersController.Ship' "$legacy/architecture.md"
+grep -q '^| PostgreSQL | database | detected | ShopContext | `ConnectionStrings:Shop` |' "$legacy/views/context.md"
+grep -q 'against the `default` profile: \*\*0%\*\* of 3 items' "$legacy/quality.md"
+if grep -rq "🤖 _\|## Overview 🤖\|## Purpose" "$legacy"; then echo "legacy docs claim intent nobody wrote"; exit 1; fi
+rm -rf "$legacy"
 echo PASS
