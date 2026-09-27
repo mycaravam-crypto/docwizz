@@ -1,0 +1,77 @@
+name: DocWizz check
+description: Comments the documentation gaps and architecture violations a pull request introduces (docwizz check --since).
+branding: { icon: book-open, color: blue }
+inputs:
+  path:
+    description: Directory to scan, relative to the workspace.
+    default: .
+  base:
+    description: Git ref to compare against. Defaults to the pull request's base commit.
+    default: ''
+  comment:
+    description: Post the result as a pull request comment (updated in place on later pushes).
+    default: 'true'
+  fail:
+    description: Fail the job when the change introduces critical gaps, failing violations or too-complex code.
+    default: 'true'
+  github-token:
+    description: 'Token used to comment. Needs pull-requests: write.'
+    default: ${{ github.token }}
+outputs:
+  result:
+    description: pass or fail
+    value: ${{ steps.check.outputs.result }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-dotnet@v4
+      with: { dotnet-version: 10.0.x }
+    - uses: actions/setup-node@v4
+      with: { node-version: 22 }
+    - name: Build DocWizz
+      shell: bash
+      run: |
+        npm ci --prefix "$GITHUB_ACTION_PATH/scanner-vue" --silent
+        dotnet build "$GITHUB_ACTION_PATH/src/DocWizz" -c Release -o "$RUNNER_TEMP/docwizz" --nologo -v q
+    - name: docwizz check --since
+      id: check
+      shell: bash
+      env:
+        BASE: ${{ inputs.base || github.event.pull_request.base.sha }}
+        TARGET: ${{ inputs.path }}
+        DOCWIZZ_SCANNER_VUE: ${{ github.action_path }}/scanner-vue/index.mjs
+      run: |
+        [ -n "$BASE" ] || { echo "::error::no base ref: run on pull_request or set the base input"; exit 1; }
+        git rev-parse --verify -q "$BASE^{commit}" >/dev/null || { echo "::error::$BASE is not in the checkout; use actions/checkout with fetch-depth: 0"; exit 1; }
+        set +e
+        out=$(dotnet "$RUNNER_TEMP/docwizz/DocWizz.dll" check "$TARGET" --since "$BASE")
+        code=$?
+        set -e
+        echo "$out"
+        if [ "$code" -eq 0 ]; then result=pass; icon="✅"; else result=fail; icon="❌"; fi
+        echo "result=$result" >> "$GITHUB_OUTPUT"
+        report="$RUNNER_TEMP/docwizz-report.md"
+        { echo "<!-- docwizz-check -->"
+          echo "### $icon DocWizz: $(tail -n1 <<<"$out")"
+          echo
+          echo '```text'
+          echo "$out"
+          echo '```'
+        } > "$report"
+        cat "$report" >> "$GITHUB_STEP_SUMMARY"
+    - name: Comment on the pull request
+      if: inputs.comment == 'true' && github.event.pull_request.number
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR: ${{ github.event.pull_request.number }}
+        REPO: ${{ github.repository }}
+      run: |
+        report="$RUNNER_TEMP/docwizz-report.md"
+        id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq '.[] | select(.body | startswith("<!-- docwizz-check -->")) | .id' | tail -n1)
+        if [ -n "$id" ]; then gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@"$report" >/dev/null
+        else gh api "repos/$REPO/issues/$PR/comments" -F body=@"$report" >/dev/null; fi
+    - name: Fail on introduced problems
+      if: inputs.fail == 'true' && steps.check.outputs.result == 'fail'
+      shell: bash
+      run: exit 1

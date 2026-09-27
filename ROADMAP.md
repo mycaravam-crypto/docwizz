@@ -16,7 +16,6 @@ or human-written. AI runs on a self-hosted model only; code is never sent to a p
 ## Eventually
 
 - HTML output.
-- CI integration: a GitHub Action that comments `check --since` results on pull requests.
 - More languages and frameworks: SQL (stored procedures, migrations), React/Angular, Java/Spring.
 - ADR candidates, i.e. decisions the code implies (a new external system, a new layer dependency) proposed as
   drafts for a human to write.

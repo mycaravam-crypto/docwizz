@@ -96,3 +96,26 @@ Every connection is checked on its resolved address and must go to loopback or a
 refused. Drafts are marked 🤖, never replace written docs, and are cached in `docs/.docwizz/ai-cache.json` by
 symbol + body hash together with the symbols they were generated from, so unchanged code is never sent again.
 Without `--ai`, cached drafts are still used and nothing is sent.
+
+## CI
+
+The repository is a GitHub Action: on a pull request it runs `docwizz check --since <base>` and posts the result as one
+comment, updated on every push, and fails the job when the change introduces critical gaps, failing violations or
+too-complex code.
+
+```yaml
+on: pull_request
+permissions: { contents: read, pull-requests: write }
+jobs:
+  docwizz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }          # the base commit must be in the checkout
+      - uses: mycaravam-crypto/docwizz@main
+        with:
+          path: .                         # directory to scan
+          # base: origin/main             # default: the pull request's base commit
+          # comment: 'false'              # only the job summary
+          # fail: 'false'                 # report, never fail
+```
