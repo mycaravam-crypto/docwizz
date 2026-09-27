@@ -243,12 +243,17 @@ static int Analyze(string root, Config config, bool enforce, bool json)
     if (critical > config.Check.MaxCritical) failures.Add($"{critical} critical > {config.Check.MaxCritical}");
     if (violations.Count > config.Check.MaxViolations) failures.Add($"{violations.Count} violations > {config.Check.MaxViolations}");
     if (cycles.Count > config.Check.MaxCycles) failures.Add($"{cycles.Count} cycles > {config.Check.MaxCycles}");
+    // Human-authored architecture sections the profile requires (docs/architecture/<name>.md).
+    var missingSections = config.ArchitectureSections
+        .Where(s => !File.Exists(Path.Combine(root, "docs", "architecture", $"{s}.md"))).ToList();
+    if (missingSections.Count > 0) failures.Add($"missing architecture sections: {string.Join(", ", missingSections)}");
 
     if (json)
         Console.WriteLine(JsonSerializer.Serialize(new
         {
             documentation = DocumentationJson(model, config, findings),
             architecture = arch,
+            missingArchitectureSections = config.ArchitectureSections.Count > 0 ? missingSections : null,
             check = enforce ? new { pass = failures.Count == 0, failures } : null,
         }, JsonOptions()));
     else
@@ -256,6 +261,9 @@ static int Analyze(string root, Config config, bool enforce, bool json)
         Console.WriteLine($"Profile: {config.Profile}");
         Analyzer.Report(findings, Console.Out);
         Architecture.Report(arch, Console.Out);
+        if (config.ArchitectureSections.Count > 0)
+            Console.WriteLine($"  human-authored sections (docs/architecture/): " + string.Join(", ",
+                config.ArchitectureSections.Select(s => missingSections.Contains(s) ? $"{s} ✗" : $"{s} ✓")));
         if (enforce)
         {
             Console.WriteLine();

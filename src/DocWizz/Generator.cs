@@ -41,6 +41,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         Write("frontend.md", FrontendPage());
         Write("quality.md", Quality());
         foreach (var (page, _, body) in Views()) Write($"views/{page}.md", body());
+        Write("architecture-description.md", DescriptionPage());
         return written;
     }
 
@@ -62,7 +63,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         sb.AppendLine($"| Architecture violations / cycles | {arch.Violations.Count} / {arch.Cycles.Count} |\n");
         if (drafts.Count > 0)
             sb.AppendLine($"🤖 marks {drafts.Count} AI-drafted summaries for code that has no docs yet — review them, then move them into the code.\n");
-        sb.AppendLine("- [Architecture](architecture.md)\n- [API endpoints](api.md)\n- [Frontend](frontend.md)\n- [Quality](quality.md)\n");
+        sb.AppendLine("- [Architecture description](architecture-description.md)\n- [Architecture](architecture.md)\n- [API endpoints](api.md)\n" +
+            "- [Frontend](frontend.md)\n- [Quality](quality.md)\n");
         sb.AppendLine("## Modules\n");
         foreach (var m in modules) sb.AppendLine($"- [{m}](modules/{Slug(m)}.md) — {Layer(m) ?? "no layer"}");
         return sb.ToString();
@@ -122,8 +124,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         // API view: frontend callers → endpoint → implementing component.
         var handlerOf = model.Edges.Where(e => e.Kind == "calls").ToLookup(e => e.From, e => e.To);
         var flow = endpoints.SelectMany(n =>
-                callers[n.Id].Where(nodes.ContainsKey).Select(c => (From: nodes[c].Name, To: n.Name.Contains(' ') ? n.Name : $"{n.Tags![1]} /{n.Route?.TrimStart('/')}"))
-                .Concat([(From: n.Name.Contains(' ') ? n.Name : $"{n.Tags![1]} /{n.Route?.TrimStart('/')}",
+                callers[n.Id].Where(nodes.ContainsKey).Select(c => (From: nodes[c].Name, To: EndpointLabel(n)))
+                .Concat([(From: EndpointLabel(n),
                     To: parent.ContainsKey(n.Id) ? nodes[Top(n.Id)].Name : handlerOf[n.Id].Where(nodes.ContainsKey).Select(h => nodes[Top(h)].Name).FirstOrDefault() ?? "")]))
             .Where(e => e.To != "").Distinct().Select(e => (e.From, e.To, 0)).ToList();
         if (flow.Count is > 0 and <= MaxDiagramEdges * 2)
@@ -287,6 +289,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         return sb.Append("```\n").ToString();
     }
 
+    static string EndpointLabel(Node n) => $"{n.Tags![1]} /{n.Route?.TrimStart('/')}";
     public static string Display(Node n) => n.Id[(n.Id.IndexOf(':') + 1)..];
     public static string Folder(string file) => Path.GetDirectoryName(file)?.Replace('\\', '/') is { Length: > 0 } d ? d : ".";
     public static string Slug(string folder) => folder == "." ? "root" : Regex.Replace(folder, @"[^A-Za-z0-9.\-]+", "-");

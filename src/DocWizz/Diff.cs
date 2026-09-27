@@ -39,7 +39,10 @@ static class Diff
             if (n.Kind is "component" or "route") pages.Add("frontend.md");
         }
         if (added.Count + removed.Count > 0) pages.Add("index.md");
-        if (depsAdded.Count + depsRemoved.Count + newViolations.Count > 0) pages.Add("architecture.md");
+        if (depsAdded.Count + depsRemoved.Count + newViolations.Count > 0)
+            pages.UnionWith(["architecture.md", "architecture-description.md", "views/components.md"]);
+        if (added.Concat(removed).Any(n => n.Kind == "endpoint" || n.Tags?.Contains("endpoint") == true))
+            pages.Add("architecture-description.md");
         if (newGaps.Count > 0 || pages.Count > 0) pages.Add("quality.md");
 
         return new(added, removed, changed, [.. pages], depsAdded, depsRemoved, newGaps, newViolations);
