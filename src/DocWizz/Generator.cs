@@ -159,9 +159,9 @@ class Generator(string root, string outDir, CodeModel model, List<Finding> findi
         sb.AppendLine($"Documentation coverage: **{Analyzer.Coverage(findings):0}%** of {findings.Count} items that need docs.\n");
         var open = findings.Where(f => f.Status != Status.Documented).OrderByDescending(f => f.Level).ThenBy(f => f.Node.File).ToList();
         sb.AppendLine($"## Undocumented ({open.Count})\n");
-        sb.AppendLine("| Level | Item | Status | Missing | Why it needs docs |\n|---|---|---|---|---|");
+        sb.AppendLine("| Level | Item | Status | Missing | Why it needs docs | Tested |\n|---|---|---|---|---|---|");
         foreach (var f in open)
-            sb.AppendLine($"| {f.Level} | {SourceLink(f.Node.File, f.Node.Line, $"`{Esc(Display(f.Node))}`")} | {f.Status} | {string.Join(", ", f.Missing)} | {Esc(string.Join("; ", f.Reasons))} |");
+            sb.AppendLine($"| {f.Level} | {SourceLink(f.Node.File, f.Node.Line, $"`{Esc(Display(f.Node))}`")} | {f.Status} | {string.Join(", ", f.Missing)} | {Esc(string.Join("; ", f.Reasons))} | {(f.Tested ? "✓" : "—")} |");
         sb.AppendLine("\n## Most complex\n\n| Complexity | Item |\n|---|---|");
         foreach (var n in model.Nodes.Where(n => n.Complexity > 1 && n.Kind != "component").OrderByDescending(n => n.Complexity).Take(20))
             sb.AppendLine($"| {n.Complexity} | {SourceLink(n.File, n.Line, $"`{Esc(Display(n))}`")} |");

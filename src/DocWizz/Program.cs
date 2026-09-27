@@ -59,14 +59,24 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
             FileSystemName.MatchesSimpleExpression(g, Path.GetRelativePath(root, f).Replace('\\', '/'))))
         .Distinct()
         .ToList();
-    var files = candidates.Where(f => exts.Contains(Path.GetExtension(f)) && !f.EndsWith(".d.ts")).ToList();
+    var scanned = candidates.Where(f => exts.Contains(Path.GetExtension(f)) && !f.EndsWith(".d.ts")).ToList();
 
-    var (nodes, edges) = CSharpScanner.Scan(root, files.Where(f => f.EndsWith(".cs")));
-    var (feNodes, feEdges) = Frontend.Scan(root, files.Where(f => !f.EndsWith(".cs")).ToList());
+    var (nodes, edges) = CSharpScanner.Scan(root, scanned.Where(f => f.EndsWith(".cs")));
+    var (feNodes, feEdges) = Frontend.Scan(root, scanned.Where(f => !f.EndsWith(".cs")).ToList());
     var (projNodes, projEdges) = Projects.Scan(root, candidates.Where(f => f.EndsWith(".csproj") || Path.GetFileName(f) == "package.json"));
     var ids = nodes.Select(n => n.Id).ToHashSet();
     nodes.AddRange(feNodes.Concat(projNodes).Where(n => ids.Add(n.Id)));
     edges = Frontend.LinkHttp(nodes, [.. edges, .. feEdges, .. projEdges]);
+
+    // Test code leaves only `tests` edges (test symbol → code it uses) behind.
+    var testFiles = scanned.Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))
+        .Where(f => config.Tests.Any(g => FileSystemName.MatchesSimpleExpression(g, f))).ToHashSet();
+    var testIds = nodes.Where(n => testFiles.Contains(n.File)).Select(n => n.Id).ToHashSet();
+    nodes.RemoveAll(n => testIds.Contains(n.Id));
+    edges = edges.Where(e => !testIds.Contains(e.To) && (!testIds.Contains(e.From) || e.Kind is "calls" or "imports" or "renders" or "injects" or "http"))
+        .Select(e => testIds.Contains(e.From) ? new Edge(e.From, e.To, "tests") : e).Distinct().ToList();
+
+    var files = scanned.Where(f => !testFiles.Contains(Path.GetRelativePath(root, f).Replace('\\', '/'))).ToList();
     return (new CodeModel(Git(root, "rev-parse --short HEAD")?.Trim(), nodes, edges), files);
 }
 

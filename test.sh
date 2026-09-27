@@ -35,7 +35,8 @@ assert "cs:endpoint:PATCH /api/materials/{id}" in nodes, "MapMethods endpoint"
 # minimal API: comment above documents it; handler params are injections
 assert "Places an order" in nodes["cs:endpoint:POST /orders"]["doc"]
 assert ("injects", "cs:endpoint:POST /orders", I + "AppDbContext") in edges
-assert not any("Tests" in n["id"] for n in nodes.values()), "tests/ not excluded"
+assert not any("Tests" in n["id"] for n in nodes.values()), "test code in the model"
+assert ("tests", "cs:Fixture.Tests.MaterialServiceTests.CreateAsync_Creates(Fixture.Application.MaterialService)", A + "MaterialService." + create) in edges
 
 # Signatures and the API model
 create_svc = nodes[A + "MaterialService." + create]
@@ -102,6 +103,8 @@ done
 grep -q "| POST | \`/api/materials\` |.*\`createMaterial\`" "$docs/api.md"
 grep -q "| PUT | \`/api/materials/{id}\` | Renames a material. | \`id: int\`<br>\`\[body\] request: RenameMaterialRequest\` | \`Material\` | required |" "$docs/api.md"
 grep -q "ARCH-001 | domain → infrastructure" "$docs/architecture.md"
+grep "MaterialService.CreateAsync" "$docs/quality.md" | grep -q "| ✓ |"  # tested
+grep "MaterialController.Create(" "$docs/quality.md" | grep -q "| — |"  # untested
 grep -q "/materials\` | \[MaterialTable\]" "$docs/frontend.md"
 grep -q "n0 --> n1" "$docs/modules/backend-Application.md"
 [ -f "$docs/notes.md" ] || { echo "deleted a hand-written file"; exit 1; }

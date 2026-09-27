@@ -8,6 +8,7 @@ class Config
     public Dictionary<string, Pattern> Patterns { get; set; } = [];
     public CheckConfig Check { get; set; } = new();
     public List<string> Exclude { get; set; } = [];
+    public List<string> Tests { get; set; } = [];
     public ArchitectureConfig Architecture { get; set; } = new();
 
     public const string Default = """
@@ -52,8 +53,10 @@ class Config
             application: [domain]
             domain: []
             infrastructure: [application, domain]
+        # Test code (path globs): scanned only to link tests to the code they exercise; never analyzed or documented.
+        tests: ["tests/*", "test/*", "*.Tests/*", "*.Test/*", "*/__tests__/*", "*.test.ts", "*.spec.ts", "*/e2e/*"]
         # Path globs (relative, `/`-separated) left out of the model entirely.
-        exclude: ["tests/*", "test/*", "*.Tests/*", "*.Test/*", "*/__tests__/*", "*.test.ts", "*.spec.ts", "*/e2e/*"]
+        exclude: []
         """;
 
     public static Config Load(string dir)
@@ -92,7 +95,7 @@ class CheckConfig
 enum Level { None, Low, Medium, High }
 enum Status { Documented, Partial, Undocumented }
 
-record Finding(Node Node, Level Level, Status Status, string Pattern, List<string> Missing, List<string> Reasons);
+record Finding(Node Node, Level Level, Status Status, string Pattern, List<string> Missing, List<string> Reasons, bool Tested = false);
 
 static class Analyzer
 {
@@ -110,6 +113,10 @@ static class Analyzer
         var callers = model.Edges.Where(e => e.Kind == "calls").ToLookup(e => e.To, e => e.From);
         var injects = model.Edges.Where(e => e.Kind == "injects").ToLookup(e => e.From, e => e.To);
         var inbound = model.Edges.Where(e => e.Kind is "calls" or "injects" or "renders" or "http").ToLookup(e => e.To, e => e.From);
+        var children = model.Edges.Where(e => e.Kind == "contains").ToLookup(e => e.From, e => e.To);
+        var tested = model.Edges.Where(e => e.Kind == "tests").Select(e => e.To).ToHashSet();
+        // A test through the interface, an implementation, or any member counts.
+        bool Tested(string id) => tested.Contains(id) || implOf[id].Concat(implBy[id]).Concat(children[id]).Any(tested.Contains);
 
         var effectsCache = new Dictionary<string, HashSet<string>>();
 
@@ -166,7 +173,7 @@ static class Analyzer
             var missing = Missing(doc, sections, node.Params ?? 0);
             var status = missing.Count == 0 ? Status.Documented
                 : missing.Count == sections.Count ? Status.Undocumented : Status.Partial;
-            findings.Add(new(node, level, status, patternName ?? "", missing, reasons));
+            findings.Add(new(node, level, status, patternName ?? "", missing, reasons, Tested(node.Id)));
         }
         return findings;
     }
@@ -209,7 +216,8 @@ static class Analyzer
         o.WriteLine();
         o.WriteLine($"{findings.Count(f => f.Status == Status.Documented)} documented, " +
                     $"{findings.Count(f => f.Status == Status.Partial)} partial, " +
-                    $"{findings.Count(f => f.Status == Status.Undocumented)} undocumented");
+                    $"{findings.Count(f => f.Status == Status.Undocumented)} undocumented; " +
+                    $"{findings.Count(f => f.Tested)} of {findings.Count} have tests");
 
         void Section(string title, IEnumerable<Finding> fs)
         {
