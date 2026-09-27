@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Enumeration;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -17,7 +18,8 @@ switch (cmd)
     case "scan":
         return Scan(path, args.ElementAtOrDefault(2) ?? "model.json");
     case "analyze":
-        Analyzer.Report(Analyzer.Analyze(BuildModel(path).Model, Config.Load(path)), Console.Out);
+        var config = Config.Load(path);
+        Analyzer.Report(Analyzer.Analyze(BuildModel(path, config).Model, config), Console.Out);
         return 0;
     case "check":
         return Check(path);
@@ -31,23 +33,31 @@ switch (cmd)
         return 1;
 }
 
-static (Model Model, List<string> Files) BuildModel(string root)
+static (Model Model, List<string> Files) BuildModel(string root, Config config)
 {
-    string[] skip = ["bin", "obj", "node_modules", ".git"];
+    string[] skip = ["bin", "obj", "node_modules", "dist"];
     string[] exts = [".cs", ".vue", ".ts"];
 
-    var files = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
-        .Where(f => exts.Contains(Path.GetExtension(f)))
-        .Where(f => !Path.GetRelativePath(root, f).Split(Path.DirectorySeparatorChar).Any(skip.Contains))
+    // Prefer git's view (honours .gitignore, skips nested worktrees); fall back to a directory walk.
+    var candidates = Git(root, "ls-files --cached --others --exclude-standard")?
+        .Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(f => Path.Combine(root, f)).Where(File.Exists)
+        ?? Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories);
+    var files = candidates
+        .Where(f => exts.Contains(Path.GetExtension(f)) && !f.EndsWith(".d.ts"))
+        .Where(f => !Path.GetRelativePath(root, f).Split(Path.DirectorySeparatorChar).SkipLast(1)
+            .Any(d => d.StartsWith('.') || skip.Contains(d)))
+        .Where(f => !config.Exclude.Any(g =>
+            FileSystemName.MatchesSimpleExpression(g, Path.GetRelativePath(root, f).Replace('\\', '/'))))
+        .Distinct()
         .ToList();
 
     var (nodes, edges) = CSharpScanner.Scan(root, files.Where(f => f.EndsWith(".cs")));
-    return (new Model(GitCommit(root), nodes, edges), files);
+    return (new Model(Git(root, "rev-parse --short HEAD")?.Trim(), nodes, edges), files);
 }
 
 static int Scan(string root, string outFile)
 {
-    var (model, files) = BuildModel(root);
+    var (model, files) = BuildModel(root, Config.Load(root));
     File.WriteAllText(outFile, JsonSerializer.Serialize(model, new JsonSerializerOptions
     {
         WriteIndented = true,
@@ -69,7 +79,7 @@ static int Scan(string root, string outFile)
 static int Check(string root)
 {
     var config = Config.Load(root);
-    var findings = Analyzer.Analyze(BuildModel(root).Model, config);
+    var findings = Analyzer.Analyze(BuildModel(root, config).Model, config);
     Analyzer.Report(findings, Console.Out);
 
     var coverage = Analyzer.Coverage(findings);
@@ -83,15 +93,15 @@ static int Check(string root)
     return failures.Count == 0 ? 0 : 1;
 }
 
-static string? GitCommit(string dir)
+static string? Git(string dir, string args)
 {
     try
     {
-        var p = Process.Start(new ProcessStartInfo("git", "rev-parse --short HEAD")
+        var p = Process.Start(new ProcessStartInfo("git", args)
             { WorkingDirectory = dir, RedirectStandardOutput = true, RedirectStandardError = true })!;
-        var sha = p.StandardOutput.ReadToEnd().Trim();
+        var output = p.StandardOutput.ReadToEnd();
         p.WaitForExit();
-        return p.ExitCode == 0 ? sha : null;
+        return p.ExitCode == 0 ? output : null;
     }
     catch { return null; }
 }

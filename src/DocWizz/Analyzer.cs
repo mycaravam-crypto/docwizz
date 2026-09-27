@@ -7,6 +7,7 @@ class Config
 {
     public Dictionary<string, Pattern> Patterns { get; set; } = [];
     public CheckConfig Check { get; set; } = new();
+    public List<string> Exclude { get; set; } = [];
 
     public const string Default = """
         # Patterns are matched in order; the first match decides which XML doc
@@ -28,6 +29,8 @@ class Config
         check:
           min_coverage: 80
           max_critical: 0
+        # Path globs (relative, `/`-separated) left out of the model entirely.
+        exclude: ["tests/*", "test/*", "*.Tests/*", "*.Test/*"]
         """;
 
     public static Config Load(string dir)
@@ -68,7 +71,7 @@ record Finding(Node Node, Level Level, Status Status, string Pattern, List<strin
 
 static class Analyzer
 {
-    static readonly string[] Analyzed = ["class", "record", "struct", "interface", "enum", "method"];
+    static readonly string[] Analyzed = ["class", "record", "struct", "interface", "enum", "method", "endpoint"];
 
     public static List<Finding> Analyze(Model model, Config config)
     {
@@ -89,7 +92,8 @@ static class Analyzer
             if (effectsCache.TryGetValue(id, out var cached)) return cached;
             var found = effectsCache[id] = [];
             if (!nodes.TryGetValue(id, out var n)) return found;
-            if (parent.TryGetValue(id, out var owner) && injects[owner].Any(t => nodes.GetValueOrDefault(t)?.Tags?.Contains("dbcontext") == true))
+            var injected = parent.TryGetValue(id, out var owner) ? injects[owner].Concat(injects[id]) : injects[id];
+            if (injected.Any(t => nodes.GetValueOrDefault(t)?.Tags?.Contains("dbcontext") == true))
                 found.Add("db");
             if (n.Name.StartsWith("Publish") || n.Name.StartsWith("Send")) found.Add("event");
             foreach (var next in calls[id].Concat(implBy[id]))
@@ -107,18 +111,20 @@ static class Analyzer
             var reasons = new List<string>();
             var score = 0;
             if (node.Visibility is "public" or "protected") { score += 2; reasons.Add(node.Visibility); }
-            if (node.Complexity >= 8) { score += 2; reasons.Add($"complexity {node.Complexity}"); }
+            if (node.Complexity >= 15) { score += 3; reasons.Add($"complexity {node.Complexity}"); }
+            else if (node.Complexity >= 8) { score += 2; reasons.Add($"complexity {node.Complexity}"); }
             else if (node.Complexity >= 4) { score += 1; reasons.Add($"complexity {node.Complexity}"); }
             if (node.Params >= 4) { score += 1; reasons.Add($"{node.Params} params"); }
             var fanIn = inbound[node.Id].Concat(implOf[node.Id].SelectMany(i => inbound[i])).Distinct().Count();
             if (fanIn >= 3) { score += 1; reasons.Add($"{fanIn} callers"); }
-            if (node.Kind == "method" && Effects(node.Id) is { Count: > 0 } fx)
+            if (node.Kind is "method" or "endpoint" && Effects(node.Id) is { Count: > 0 } fx)
             {
                 score += 1;
                 reasons.Add("side effects: " + string.Join(", ", fx.Order()));
             }
 
-            var level = score >= 5 ? Level.High : score >= 3 ? Level.Medium : score >= 1 ? Level.Low : Level.None;
+            // Tuned on a real repo: public + one weak signal (e.g. touches the DB) stays Low.
+            var level = score >= 6 ? Level.High : score >= 4 ? Level.Medium : score >= 1 ? Level.Low : Level.None;
             if (Enum.TryParse<Level>(pattern.Level, true, out var min) && min > level)
             {
                 level = min;
@@ -128,9 +134,10 @@ static class Analyzer
 
             // An interface member's docs cover its implementations.
             var doc = node.Doc ?? implOf[node.Id].Select(i => nodes.GetValueOrDefault(i)?.Doc).FirstOrDefault(d => d is not null);
-            var missing = Missing(doc, pattern.Sections, node.Params ?? 0);
+            var sections = pattern.Sections.Where(s => s != "param" || node.Params > 0).ToList();
+            var missing = Missing(doc, sections, node.Params ?? 0);
             var status = missing.Count == 0 ? Status.Documented
-                : missing.Count == pattern.Sections.Count ? Status.Undocumented : Status.Partial;
+                : missing.Count == sections.Count ? Status.Undocumented : Status.Partial;
             findings.Add(new(node, level, status, patternName ?? "", missing, reasons));
         }
         return findings;

@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 model=$(mktemp)
 out=$(dotnet run --project src/DocWizz -- scan fixture "$model")
 echo "$out"
-grep -q "Files  13" <<<"$out"
+grep -q "Files  13" <<<"$out"  # tests/ excluded
 
 python3 - "$model" <<'PY'
 import json, sys
@@ -31,6 +31,10 @@ assert "controller" in nodes[API + "MaterialController"]["tags"]
 assert nodes[A + "MaterialService." + create]["complexity"] >= 8
 assert nodes[A + "IMaterialService.GetAsync(int)"].get("doc")
 assert "cs:endpoint:GET /health" in nodes
+# minimal API: comment above documents it; handler params are injections
+assert "Places an order" in nodes["cs:endpoint:POST /orders"]["doc"]
+assert ("injects", "cs:endpoint:POST /orders", I + "AppDbContext") in edges
+assert not any("Tests" in n["id"] for n in nodes.values()), "tests/ not excluded"
 PY
 
 # Documentation analysis: planted undocumented code is critical, trivial code is ignored.
@@ -43,5 +47,6 @@ grep -q "MaterialController.Create(" <<<"$critical"
 grep -q "side effects: db, event" <<<"$critical"
 if grep -q "\.Add(int, int)" <<<"$report"; then echo "trivial Add flagged"; exit 1; fi
 # interface <summary> covers the implementation → only param missing
-grep -A1 "MaterialService.GetAsync" <<<"$report" | grep -q "partial, missing: param"
+grep -A1 "  Fixture.Application.MaterialService.CreateAsync" <<<"$report" | grep -q "partial, missing: param"
+if grep -q "MaterialServiceTests" <<<"$report"; then echo "test code analyzed"; exit 1; fi
 echo PASS

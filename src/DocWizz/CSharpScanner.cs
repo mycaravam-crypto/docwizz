@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.CodeAnalysis;
@@ -16,6 +17,7 @@ static class CSharpScanner
 {
     static readonly SymbolDisplayFormat IdFormat = SymbolDisplayFormat.CSharpErrorMessageFormat;
     static readonly string[] HttpVerbs = ["HttpGet", "HttpPost", "HttpPut", "HttpDelete", "HttpPatch"];
+    static readonly string[] MapVerbs = ["MapGet", "MapPost", "MapPut", "MapDelete", "MapPatch"];
 
     public static (List<Node>, List<Edge>) Scan(string root, IEnumerable<string> files)
     {
@@ -72,7 +74,8 @@ static class CSharpScanner
             ScanRegistrations(sm, syntaxRoot, rel, nodes, edges);
         }
 
-        return (nodes, edges.Distinct().ToList());
+        // Partial types/methods declare the same symbol more than once; keep the first.
+        return (nodes.DistinctBy(n => n.Id).ToList(), edges.Distinct().ToList());
     }
 
     static void ScanMember(SemanticModel sm, MemberDeclarationSyntax member, string typeId, string rel,
@@ -102,10 +105,21 @@ static class CSharpScanner
             Complexity(member), ps, Hash(member), tags, route));
         edges.Add(new(typeId, id, "contains"));
 
-        foreach (var inv in member.DescendantNodes().OfType<InvocationExpressionSyntax>())
-            if (Resolve(sm.GetSymbolInfo(inv)) is IMethodSymbol target && InSource(target))
-                edges.Add(new(id, Id(target.ReducedFrom ?? target.OriginalDefinition), "calls"));
+        AddCalls(sm, member, id, edges);
     }
+
+    static void AddCalls(SemanticModel sm, SyntaxNode body, string from, List<Edge> edges)
+    {
+        foreach (var inv in Body(body).OfType<InvocationExpressionSyntax>())
+            if (Resolve(sm.GetSymbolInfo(inv)) is IMethodSymbol target && InSource(target))
+                edges.Add(new(from, Id(target.ReducedFrom ?? target.OriginalDefinition), "calls"));
+    }
+
+    // Minimal-API handlers inside Map*() belong to their endpoint node, not the enclosing method.
+    static bool IsMapCall(SyntaxNode n) =>
+        n is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax ma } && MapVerbs.Contains(ma.Name.Identifier.Text);
+
+    static IEnumerable<SyntaxNode> Body(SyntaxNode n) => n.DescendantNodes(d => d == n || !IsMapCall(d));
 
     // services.AddScoped<I, T>() and app.MapGet("/route", ...), wherever they appear.
     static void ScanRegistrations(SemanticModel sm, SyntaxNode root, string rel, List<Node> nodes, List<Edge> edges)
@@ -119,18 +133,49 @@ static class CSharpScanner
                 && sm.GetTypeInfo(i).Type is { } it && sm.GetTypeInfo(t).Type is { } tt && InSource(it) && InSource(tt))
                 edges.Add(new(Id(it), Id(tt), "registers"));
 
-            if (name is "MapGet" or "MapPost" or "MapPut" or "MapDelete" or "MapPatch"
-                && inv.ArgumentList.Arguments.FirstOrDefault()?.Expression is LiteralExpressionSyntax lit)
-            {
-                var verb = name[3..].ToUpperInvariant();
-                nodes.Add(new Node($"cs:endpoint:{verb} {lit.Token.ValueText}", "endpoint", $"{verb} {lit.Token.ValueText}",
-                    rel, Line(inv), Hash: Hash(inv), Tags: ["endpoint", verb, "minimal-api"], Route: lit.Token.ValueText));
-            }
+            if (IsMapCall(inv) && inv.ArgumentList.Arguments is [{ Expression: LiteralExpressionSyntax lit }, _, ..])
+                ScanMinimalEndpoint(sm, inv, name[3..].ToUpperInvariant(), lit.Token.ValueText, rel, nodes, edges);
         }
     }
 
+    static void ScanMinimalEndpoint(SemanticModel sm, InvocationExpressionSyntax inv, string verb, string route,
+        string rel, List<Node> nodes, List<Edge> edges)
+    {
+        var id = $"cs:endpoint:{verb} {route}";
+        var handler = inv.ArgumentList.Arguments[1].Expression;
+        string? doc = null;
+
+        if (handler is AnonymousFunctionExpressionSyntax lambda)
+        {
+            // Handler parameters are what minimal APIs inject.
+            if (sm.GetSymbolInfo(lambda).Symbol is IMethodSymbol lm)
+                foreach (var p in lm.Parameters.Where(p => InSource(p.Type)))
+                    edges.Add(new(id, Id(p.Type), "injects"));
+            AddCalls(sm, lambda, id, edges);
+        }
+        else if (Resolve(sm.GetSymbolInfo(handler)) is IMethodSymbol method && InSource(method))
+        {
+            edges.Add(new(id, Id(method), "calls"));
+            doc = Doc(method);
+        }
+
+        // Docs: .WithSummary/.WithDescription in the fluent chain, else a comment above the statement.
+        string? text = null;
+        for (SyntaxNode n = inv; n.Parent is MemberAccessExpressionSyntax { Parent: InvocationExpressionSyntax outer } ma; n = outer)
+            if (ma.Name.Identifier.Text is "WithSummary" or "WithDescription"
+                && outer.ArgumentList.Arguments.FirstOrDefault()?.Expression is LiteralExpressionSyntax l)
+                text ??= l.Token.ValueText;
+        text ??= string.Join(" ", (inv.FirstAncestorOrSelf<StatementSyntax>()?.GetLeadingTrivia() ?? default)
+            .Where(t => t.IsKind(SyntaxKind.SingleLineCommentTrivia) || t.IsKind(SyntaxKind.MultiLineCommentTrivia))
+            .Select(t => t.ToString().TrimStart('/', '*', ' ').TrimEnd('*', '/', ' '))).Trim();
+        if (text is { Length: > 0 }) doc ??= new XElement("member", new XElement("summary", text)).ToString();
+
+        nodes.Add(new Node(id, "endpoint", $"{verb} {route}", rel, Line(inv), "public", doc,
+            Complexity(handler), Hash: Hash(inv), Tags: ["endpoint", verb, "minimal-api"], Route: route));
+    }
+
     // 1 + decision points.
-    static int Complexity(SyntaxNode n) => 1 + n.DescendantNodes().Count(d => d switch
+    static int Complexity(SyntaxNode n) => 1 + Body(n).Count(d => d switch
     {
         IfStatementSyntax or ConditionalExpressionSyntax or WhileStatementSyntax or ForStatementSyntax
             or ForEachStatementSyntax or DoStatementSyntax or CatchClauseSyntax or CaseSwitchLabelSyntax

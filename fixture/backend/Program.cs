@@ -11,3 +11,6 @@ var app = builder.Build();
 app.MapControllers();
 app.MapGet("/health", () => "ok");
 app.Run();
+
+// Places an order for materials.
+app.MapPost("/orders", async (Fixture.Infrastructure.AppDbContext db) => { if (db is null) return; await Task.CompletedTask; });
