@@ -252,8 +252,8 @@ class Generator(string root, string outDir, Model model, List<Finding> findings,
         return sb.Append("```\n").ToString();
     }
 
-    static string Display(Node n) => n.Id[(n.Id.IndexOf(':') + 1)..];
-    static string Folder(string file) => Path.GetDirectoryName(file)?.Replace('\\', '/') is { Length: > 0 } d ? d : ".";
-    static string Slug(string folder) => folder == "." ? "root" : Regex.Replace(folder, @"[^A-Za-z0-9.\-]+", "-");
+    public static string Display(Node n) => n.Id[(n.Id.IndexOf(':') + 1)..];
+    public static string Folder(string file) => Path.GetDirectoryName(file)?.Replace('\\', '/') is { Length: > 0 } d ? d : ".";
+    public static string Slug(string folder) => folder == "." ? "root" : Regex.Replace(folder, @"[^A-Za-z0-9.\-]+", "-");
     static string Esc(string s) => s.Replace("|", "\\|").Replace("\n", " ");
 }

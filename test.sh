@@ -88,4 +88,36 @@ grep -q "n0 --> n1" "$docs/modules/backend-Application.md"
 [ -f "$docs/notes.md" ] || { echo "deleted a hand-written file"; exit 1; }
 [ ! -f "$docs/stale.md" ] || { echo "stale generated page kept"; exit 1; }
 rm -rf "$docs"
+
+# Change impact: only what a change introduces fails `check --since`
+repo=$(mktemp -d)
+cp -r fixture/. "$repo"
+git -C "$repo" init -q && git -C "$repo" add -A && git -C "$repo" -c user.name=t -c user.email=t@t commit -qm base
+dw() { dotnet run --project src/DocWizz -- "$@"; }
+dw check "$repo" --since HEAD | grep -q "check: PASS"
+python3 - "$repo/backend/Application/MaterialService.cs" <<'PY'
+import sys; p = sys.argv[1]; s = open(p).read()
+s = s.replace("    // Trivial: should NOT be flagged", """    public int Score(int a, int b, int c, int d)
+    {
+        if (a > b && c > d) return 1;
+        if (a < b || c < d) return 2;
+        return a > 0 ? (b > 0 ? 3 : 4) : 5;
+    }
+
+    // Trivial: should NOT be flagged""")
+open(p, "w").write(s)
+PY
+cat > "$repo/backend/Domain/Audit.cs" <<'CS'
+namespace Fixture.Domain;
+public class Audit { public void Log(Fixture.Infrastructure.SqlMaterialRepository r) => r.FindAsync(1); }
+CS
+set +e; impact=$(dw check "$repo" --since HEAD); code=$?; set -e
+echo "$impact"
+[ "$code" -eq 1 ] || { echo "check --since should fail"; exit 1; }
+grep -q "+ Fixture.Application.MaterialService.Score(int, int, int, int)" <<<"$impact"
+grep -q "✓ modules/backend-Application.md" <<<"$impact"
+grep -q "✓ architecture.md" <<<"$impact"
+grep -q "Introduced: 0 critical, 1 other documentation gaps, 1 architecture violations" <<<"$impact"
+grep -q "ARCH-001  domain → infrastructure  backend/Domain/Audit.cs" <<<"$impact"
+rm -rf "$repo"
 echo PASS

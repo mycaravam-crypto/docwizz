@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Formats.Tar;
 using System.IO.Enumeration;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -7,7 +8,7 @@ using System.Text.Json.Serialization;
 var cmd = args.ElementAtOrDefault(0);
 var path = args.ElementAtOrDefault(1) ?? ".";
 
-if (cmd is "scan" or "analyze" or "check" or "generate" && !Directory.Exists(path))
+if (cmd is "scan" or "analyze" or "check" or "generate" or "diff" && !Directory.Exists(path))
 {
     Console.Error.WriteLine($"not a directory: {path}");
     return 1;
@@ -19,8 +20,12 @@ switch (cmd)
         return Scan(path, args.ElementAtOrDefault(2) ?? "model.json");
     case "analyze":
         return Analyze(path, enforce: false);
+    case "check" when args.ElementAtOrDefault(2) == "--since" && args.ElementAtOrDefault(3) is { } since:
+        return DiffCommand(path, since, enforce: true);
     case "check":
         return Analyze(path, enforce: true);
+    case "diff":
+        return DiffCommand(path, args.ElementAtOrDefault(2), enforce: false);
     case "generate":
         return Generate(path, args.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"));
     default:
@@ -29,6 +34,8 @@ switch (cmd)
               docwizz scan <dir> [model.json]   write the code model
               docwizz analyze <dir>             documentation report
               docwizz check <dir>               report + exit 1 if thresholds fail (CI)
+              docwizz check <dir> --since <ref> exit 1 only on gaps/violations introduced since <ref>
+              docwizz diff <dir> [ref]          what changed vs <ref> (default: docs/.docwizz/model.json)
               docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
             """);
         return 1;
@@ -96,6 +103,68 @@ static int Generate(string root, string outDir)
     WriteModel(model, Path.Combine(outDir, ".docwizz", "model.json"));
     Console.WriteLine($"{written.Count} pages → {outDir} (commit {model.Commit ?? "unknown"})");
     return 0;
+}
+
+static int DiffCommand(string root, string? gitRef, bool enforce)
+{
+    var config = Config.Load(root);
+    Model? before;
+    string baseline;
+    if (gitRef is not null)
+    {
+        before = ModelAt(root, gitRef, config);
+        baseline = gitRef;
+    }
+    else
+    {
+        var fingerprint = Path.Combine(root, "docs", ".docwizz", "model.json");
+        if (!File.Exists(fingerprint))
+        {
+            Console.Error.WriteLine($"no {fingerprint}; run docwizz generate first or pass a git ref");
+            return 1;
+        }
+        before = JsonSerializer.Deserialize<Model>(File.ReadAllText(fingerprint), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        baseline = $"docs generated at {before?.Commit ?? "unknown"}";
+    }
+    if (before is null) return 1;
+
+    var result = Diff.Compare(before, BuildModel(root, config).Model, config);
+    Diff.Report(result, baseline, Console.Out);
+    if (!enforce) return 0;
+
+    var critical = result.NewGaps.Count(Analyzer.IsCritical);
+    var ok = critical == 0 && result.NewViolations.Count == 0;
+    Console.WriteLine();
+    Console.WriteLine(ok ? "check: PASS" : $"check: FAIL — introduced {critical} critical gaps, {result.NewViolations.Count} violations");
+    return ok ? 0 : 1;
+}
+
+// Scans the tree as it was at <ref>, extracted from git into a temp dir.
+static Model? ModelAt(string root, string gitRef, Config config)
+{
+    var prefix = Git(root, "rev-parse --show-prefix")?.Trim();
+    var sha = Git(root, $"rev-parse --short {gitRef}")?.Trim();
+    if (prefix is null || sha is null)
+    {
+        Console.Error.WriteLine($"not a git repo or unknown ref: {gitRef}");
+        return null;
+    }
+    var tmp = Directory.CreateTempSubdirectory("docwizz-");
+    try
+    {
+        var tar = Path.Combine(tmp.FullName, "tree.tar");
+        var tree = prefix.Length == 0 ? gitRef : $"{gitRef}:{prefix}";
+        // From a subdirectory git archive narrows to that subdirectory *within* <tree>; run it from the top.
+        var top = Git(root, "rev-parse --show-toplevel")!.Trim();
+        if (Git(top, $"archive --format=tar -o \"{tar}\" {tree}") is null) return null;
+        var dir = Directory.CreateDirectory(Path.Combine(tmp.FullName, "tree")).FullName;
+        TarFile.ExtractToDirectory(tar, dir, overwriteFiles: true);
+        return BuildModel(dir, config).Model with { Commit = sha };
+    }
+    finally
+    {
+        tmp.Delete(recursive: true);
+    }
 }
 
 static int Analyze(string root, bool enforce)

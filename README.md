@@ -6,6 +6,8 @@ docwizz scan <dir> [model.json]   # write the code model (nodes + edges)
 docwizz analyze <dir>             # documentation report
 docwizz check <dir>               # report, exit 1 if thresholds fail (CI)
 docwizz generate <dir> [out]      # Markdown + Mermaid docs (default <dir>/docs)
+docwizz diff <dir> [ref]          # changed symbols + affected doc pages (default baseline: docs/.docwizz/model.json)
+docwizz check <dir> --since <ref> # CI: fail only on critical gaps / violations introduced since <ref>
 ./test.sh                         # smoke test against fixture/
 ```
 
