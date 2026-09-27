@@ -10,6 +10,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
 
     // Also write an HTML twin of every page (Html.cs).
     public bool WriteHtml { get; init; }
+    // Repository files (relative, `/`-separated) after exclude:/.gitignore; the deployment view picks its descriptors from them.
+    public List<string> Files { get; init; } = [];
     static readonly string[] TopKinds = ["class", "record", "struct", "interface", "type", "enum", "delegate", "component", "module", "store",
         "procedure", "sql-function", "sql-view", "trigger", "table", "migration"];
     const int MaxDiagramEdges = 60;
@@ -253,7 +255,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         var callers = model.Edges.Where(e => e.Kind == "http").ToLookup(e => e.To, e => e.From);
         var endpoints = model.Nodes.Where(n => n.Tags?.Contains("endpoint") == true)
             .OrderBy(n => n.Route?.TrimStart('/')).ThenBy(n => n.Tags![1]).ToList();
-        sb.AppendLine("| Method | Route | Summary | Input | Response | Authorization | Handler | Called from |\n|---|---|---|---|---|---|---|---|");
+        sb.AppendLine(endpoints.Count == 0 ? "No endpoints found.\n"
+            : "| Method | Route | Summary | Input | Response | Authorization | Handler | Called from |\n|---|---|---|---|---|---|---|---|");
         foreach (var n in endpoints)
         {
             var from = callers[n.Id].Select(c => nodes.TryGetValue(c, out var cn) ? $"`{cn.Name}`" : c).Distinct();
@@ -435,6 +438,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         string Id(T x) => ids.TryGetValue(x, out var id) ? id : ids[x] = $"n{ids.Count}";
         var sb = new StringBuilder($"```mermaid\n{header}\n");
         var lines = edges.Select(e => $"    {Id(e.From)} -->{(e.Count > 0 ? $"|{e.Count}|" : "")} {Id(e.To)}").ToList();
+        if (lines.Count == 0) return "None.\n";
         foreach (var (x, id) in ids) sb.AppendLine($"    {id}[\"{label(x).Replace("\"", "'")}\"]");
         foreach (var l in lines) sb.AppendLine(l);
         return sb.Append("```\n").ToString();

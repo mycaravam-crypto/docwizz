@@ -24,7 +24,7 @@ Vue/TS support needs Node and a one-time `npm ci` in [scanner-vue/](scanner-vue/
 
 ## Pipeline
 
-Source → analyzers (Roslyn for C#, TypeScript + Vue compiler for `.vue`/`.ts`, `.csproj`/`package.json`) →
+Source → analyzers (Roslyn for C#, TypeScript + Vue compiler for `.vue`/`.ts`/`.js`, `.csproj`/`package.json`) →
 **code model** ([CodeModel.cs](src/DocWizz/CodeModel.cs)) → documentation analysis + architecture rules →
 **documentation model** → generators (Markdown/Mermaid, JSON). Analyzers never write Markdown.
 
@@ -53,12 +53,12 @@ calls it) and schema migrations in order, shown in `views/data.md`.
 React and Angular frontends are read like Vue: components, props, hooks, routes, and HTTP calls linked to the endpoints
 they reach. Java/Spring code (controllers, services, repositories, entities, `@*Mapping` endpoints, injection, `application.yml`)
 is read into the same model, so flows, API tables and checks work across C# and Java.
-Every node records its `language` (csharp, vue, typescript, sql, java, msbuild, maven, gradle, npm); C# types carry roles as tags
+Every node records its `language` (csharp, vue, typescript, javascript, sql, java, msbuild, maven, gradle, npm); C# types carry roles as tags
 (controller, service, repository, entity, dbcontext, background-service, middleware, hub, options).
 Test code (`tests:` globs) only contributes `tests` edges.
 
 Each documentation item records which sections its profile requires and where each present section comes from:
-`written` (doc comment), `fact` (derived from the model: dependencies, endpoint, input, output, authorization, events,
+`written` (doc comment; with `comment_docs: true`, also a plain `//` block directly above a C# member), `fact` (derived from the model: dependencies, endpoint, input, output, authorization, events,
 state — a Vue component's refs, computed values and watchers),
 `inferred` (heuristics: side effects) or `ai` (drafts — shown with 🤖, never close a gap), plus the source symbols it
 was derived from, with their source locations as `evidence` (`file:line-endLine`; module pages show it too).

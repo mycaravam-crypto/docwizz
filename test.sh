@@ -602,4 +602,30 @@ grep -q '^| PostgreSQL | database | detected | ShopContext | `ConnectionStrings:
 grep -q 'against the `default` profile: \*\*0%\*\* of 3 items' "$legacy/quality.md"
 if grep -rq "🤖 _\|## Overview 🤖\|## Purpose" "$legacy"; then echo "legacy docs claim intent nobody wrote"; exit 1; fi
 rm -rf "$legacy"
+
+# exclude: reaches the deployment view; comment_docs: counts a // block as the summary; .mjs is scanned
+own=$(mktemp -d); cp -r fixture/. "$own"; out=$(mktemp -d)
+dw init "$own" >/dev/null
+sed -i 's|^exclude: \[\]|exclude: ["deploy/*"]|; s|^comment_docs: false|comment_docs: true|' "$own/docwizz.yaml"
+printf 'export const answer = () => 42\n' > "$own/frontend/src/tool.mjs"
+dw generate "$own" "$out" >/dev/null 2>&1
+if grep -q "docker-compose\|main.bicep" "$out/views/deployment.md"; then echo "exclude ignored by the deployment view"; exit 1; fi
+python3 - "$out/.docwizz/model.json" <<'PY'
+import json, sys
+m = json.load(open(sys.argv[1]))
+assert any(n["file"].endswith("tool.mjs") for n in m["nodes"]), "tool.mjs not scanned"
+doc = next(n for n in m["nodes"] if n["id"].startswith("cs:Fixture.Application.MaterialService.CreateAsync("))["doc"]
+assert "HIGH requirement" in doc, doc
+PY
+rm -rf "$own" "$out"
+
+# A console app with no layers or endpoints: no empty diagrams or tables, not called a web host
+tiny=$(mktemp -d); out=$(mktemp -d)
+printf '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType></PropertyGroup></Project>\n' > "$tiny/Tiny.csproj"
+printf 'class Program { static void Main() { } }\n' > "$tiny/Program.cs"
+dw generate "$tiny" "$out" >/dev/null 2>&1
+if grep -q '```mermaid' "$out/architecture.md"; then echo "empty diagram rendered"; exit 1; fi
+grep -q "No endpoints found." "$out/api.md"
+grep -q "Tiny.csproj) — executable" "$out/views/deployment.md"
+rm -rf "$tiny" "$out"
 echo PASS

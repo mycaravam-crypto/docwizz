@@ -107,7 +107,7 @@ partial class Generator
             sb.AppendLine("| System | Kind | Certainty | Used by | Configured by | Evidence | Provisioned by |\n|---|---|---|---|---|---|---|");
             foreach (var ext in ExternalSystems)
                 sb.AppendLine($"| {ext.Name} | {Externals.Category(ext)} | {Externals.Certainty(ext)} | " +
-                    $"{string.Join(", ", Connections[ext.Id].Where(e => nodes.ContainsKey(e.From)).Select(e => nodes[e.From].Name).Distinct().Order())} | " +
+                    $"{string.Join(", ", Connections[ext.Id].Where(e => nodes.ContainsKey(e.From)).Select(e => parent.ContainsKey(e.From) ? ShortName(nodes[e.From]) : nodes[e.From].Name).Distinct().Order())} | " +
                     $"{string.Join(", ", ConfigKeys.Where(k => Configuration.UrlHosts(k).ContainsValue(ext.Name) || ConnectionStringOf(k, ext)).Select(k => $"`{k.Name}`"))} | " +
                     $"{SourceLink(ext.File, ext.Line, CodeModel.Location(ext), sub: "views")} | " +
                     $"{string.Join(", ", ProvisionedBy[ext.Id].Select(f => SourceLink(f, 0, f, sub: "views")))} |");

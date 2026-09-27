@@ -11,8 +11,12 @@ static class CSharpScanner
     static readonly string[] HttpVerbs = ["HttpGet", "HttpPost", "HttpPut", "HttpDelete", "HttpPatch"];
     static readonly string[] MapVerbs = ["MapGet", "MapPost", "MapPut", "MapDelete", "MapPatch", "MapMethods"];
 
-    public static (List<Node>, List<Edge>) Scan(string root, IEnumerable<string> files)
+    // ponytail: set per Scan call, read by Doc(); thread it through the scan methods if scans ever run in parallel.
+    static bool commentDocs;
+
+    public static (List<Node>, List<Edge>) Scan(string root, IEnumerable<string> files, bool commentDocs = false)
     {
+        CSharpScanner.commentDocs = commentDocs;
         var parse = new CSharpParseOptions(documentationMode: DocumentationMode.Parse);
         var trees = files.Select(f => CSharpSyntaxTree.ParseText(File.ReadAllText(f), parse, path: f)).ToList();
 
@@ -621,7 +625,28 @@ static class CSharpScanner
     static string? Doc(ISymbol s)
     {
         var xml = s.GetDocumentationCommentXml();
-        return string.IsNullOrWhiteSpace(xml) ? null : xml.Trim();
+        if (!string.IsNullOrWhiteSpace(xml)) return xml.Trim();
+        if (!commentDocs) return null;
+        // `comment_docs: true`: a plain `//` block directly above the declaration (no blank line in between) is its summary.
+        var text = s.DeclaringSyntaxReferences.Select(r => LeadingComment(r.GetSyntax())).FirstOrDefault(t => t.Length > 0);
+        return text is null ? null : new XElement("member", new XElement("summary", text)).ToString();
+    }
+
+    static string LeadingComment(SyntaxNode n)
+    {
+        var trivia = n.GetLeadingTrivia();
+        var lines = new List<string>();
+        var newlines = 0;
+        for (var i = trivia.Count - 1; i >= 0; i--)
+        {
+            var t = trivia[i];
+            if (t.IsKind(SyntaxKind.WhitespaceTrivia)) continue;
+            if (t.IsKind(SyntaxKind.EndOfLineTrivia)) { if (++newlines > 1) break; continue; }
+            if (!t.IsKind(SyntaxKind.SingleLineCommentTrivia)) break;
+            lines.Insert(0, t.ToString()[2..].Trim());
+            newlines = 0;
+        }
+        return string.Join(" ", lines).Trim();
     }
 
     static string Kind(ISymbol s) => s switch

@@ -8,6 +8,7 @@ class Config
     public Dictionary<string, Pattern> Patterns { get; set; } = [];
     public CheckConfig Check { get; set; } = new();
     public List<string> Exclude { get; set; } = [];
+    public bool CommentDocs { get; set; }
     public List<string> Tests { get; set; } = [];
     public ArchitectureConfig Architecture { get; set; } = new();
     public string Profile { get; set; } = "default";
@@ -48,6 +49,8 @@ class Config
         tests: ["tests/*", "test/*", "*.Tests/*", "*.Test/*", "*/__tests__/*", "*.test.ts", "*.spec.ts", "*/e2e/*", "*/src/test/*"]
         # Path globs (relative, `/`-separated) left out of the model entirely.
         exclude: []
+        # Count a plain // comment block directly above a C# member as its summary (for code that doesn't use /// XML docs).
+        comment_docs: false
         """;
 
     static readonly IDeserializer Yaml = new DeserializerBuilder().WithNamingConvention(UnderscoredNamingConvention.Instance).Build();

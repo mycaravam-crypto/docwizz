@@ -1,4 +1,4 @@
-// Scans .vue/.ts files into docwizz model nodes/edges.
+// Scans .vue/.ts/.js files into docwizz model nodes/edges.
 // usage: node index.mjs <root>   (stdin: absolute file paths, one per line; stdout: {nodes, edges})
 import fs from 'node:fs'
 import path from 'node:path'
@@ -11,7 +11,7 @@ const files = fs.readFileSync(0, 'utf8').split('\n').map(s => s.trim()).filter(B
 const nodes = []
 const edges = []
 const rel = f => path.relative(root, f).split(path.sep).join('/')
-const scriptKind = f => f.endsWith('.tsx') ? ts.ScriptKind.TSX : f.endsWith('.jsx') ? ts.ScriptKind.JSX : ts.ScriptKind.TS
+const scriptKind = f => f.endsWith('.tsx') ? ts.ScriptKind.TSX : /\.(jsx?|mjs)$/.test(f) ? ts.ScriptKind.JSX : ts.ScriptKind.TS
 const fileId = f => (f.endsWith('.vue') ? 'vue:' : 'ts:') + rel(f)
 const hash = s => crypto.createHash('sha256').update(s).digest('hex').slice(0, 12)
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -63,7 +63,7 @@ function resolveImport(from, spec) {
     while (dir !== path.dirname(dir) && !fs.existsSync(path.join(dir, 'package.json'))) dir = path.dirname(dir)
     base = path.join(dir, 'src', spec.slice(2))
   } else return null
-  return [base, base + '.ts', base + '.tsx', base + '.jsx', base + '.vue', path.join(base, 'index.ts'), path.join(base, 'index.tsx')].find(f => fs.existsSync(f) && fs.statSync(f).isFile()) ?? null
+  return [base, base + '.ts', base + '.tsx', base + '.jsx', base + '.js', base + '.mjs', base + '.vue', path.join(base, 'index.ts'), path.join(base, 'index.tsx')].find(f => fs.existsSync(f) && fs.statSync(f).isFile()) ?? null
 }
 
 // `/api/x/${id}?q=${n}` → '/api/x/{}'

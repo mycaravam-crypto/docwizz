@@ -23,6 +23,13 @@ partial class Generator
     List<DeployedUnit> ComposeUnits => composeUnits ??= [.. DeploymentFiles.Where(IsCompose).SelectMany(Compose)];
     List<DeployedUnit> KubernetesUnits => kubernetesUnits ??= [.. DeploymentFiles.Where(f => !IsCompose(f) && (f.EndsWith(".yaml") || f.EndsWith(".yml"))).SelectMany(Kubernetes)];
 
+    static string HostKind(List<string> tags) =>
+        tags.Contains("npm") ? "frontend (npm)"
+        : tags.Contains("Microsoft.NET.Sdk.Web") ? "ASP.NET Core web host"
+        : tags.Contains("Microsoft.NET.Sdk.Worker") ? ".NET worker"
+        : tags.Contains("maven") || tags.Contains("gradle") ? "Java application"
+        : "executable";
+
     static bool IsCompose(string f) => Path.GetFileName(f).Contains("compose");
 
     // Configuration keys the deployment sets (compose `environment`, Kubernetes `env`), A__B read as A:B → where.
@@ -39,7 +46,7 @@ partial class Generator
         if (hosts.Count > 0)
         {
             sb.AppendLine("## Deployable units (from project files)\n");
-            foreach (var h in hosts) sb.AppendLine($"- {SourceLink(h.File, 0, h.Name, sub: "views")} — {(h.Tags!.Contains("npm") ? "frontend (npm)" : "ASP.NET Core web host")}");
+            foreach (var h in hosts) sb.AppendLine($"- {SourceLink(h.File, 0, h.Name, sub: "views")} — {HostKind(h.Tags!)}");
             sb.AppendLine();
         }
 
@@ -206,22 +213,10 @@ partial class Generator
         .Select(l => Regex.Match(l, @"^\s*resource\s+(?:""([^""]+)""|\w+\s+'([^'@]+)@)")).Where(m => m.Success)
         .Select(m => m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value)];
 
-    IEnumerable<string> FindDeploymentFiles()
-    {
-        string[] skip = [".git", "node_modules", "bin", "obj", "dist"];
-        var stack = new Stack<string>([root]);
-        while (stack.TryPop(out var dir))
-        {
-            foreach (var f in Directory.EnumerateFiles(dir))
-            {
-                var rel = Path.GetRelativePath(root, f).Replace('\\', '/');
-                if (DeploymentGlobs.Any(g => FileSystemName.MatchesSimpleExpression(g, g.Contains('/') ? rel : Path.GetFileName(f))) || IsKubernetes(f))
-                    yield return rel;
-            }
-            foreach (var d in Directory.EnumerateDirectories(dir))
-                if (!skip.Contains(Path.GetFileName(d))) stack.Push(d);
-        }
-    }
+    // From the scan's file list, so exclude: and .gitignore apply here too.
+    IEnumerable<string> FindDeploymentFiles() => Files.Where(rel =>
+        DeploymentGlobs.Any(g => FileSystemName.MatchesSimpleExpression(g, g.Contains('/') ? rel : Path.GetFileName(rel)))
+        || IsKubernetes(Path.Combine(root, rel)));
 
     // Any other YAML file with a top-level apiVersion and kind.
     static bool IsKubernetes(string f)

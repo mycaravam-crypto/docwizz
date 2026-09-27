@@ -90,25 +90,31 @@ static int Usage(string? error)
     return 1;
 }
 
-static (CodeModel Model, List<string> Files) BuildModel(string root, Config config)
+// Every file docwizz may read. Prefer git's view (honours .gitignore, skips nested worktrees); fall back to a directory walk.
+// Dot-directories are skipped except those named in `dotDirs` (CI descriptors live in .github/.circleci).
+static List<string> RepoFiles(string root, Config config, string[]? dotDirs = null)
 {
     string[] skip = ["bin", "obj", "node_modules", "dist"];
-    string[] exts = [".cs", ".vue", ".ts", ".tsx", ".jsx", ".sql", ".java"];
-
-    // Prefer git's view (honours .gitignore, skips nested worktrees); fall back to a directory walk.
-    var candidates = (Git(root, "ls-files --cached --others --exclude-standard")?
+    return (Git(root, "ls-files --cached --others --exclude-standard")?
         .Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(f => Path.Combine(root, f)).Where(File.Exists)
         ?? Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
         .Where(f => !Path.GetRelativePath(root, f).Split(Path.DirectorySeparatorChar).SkipLast(1)
-            .Any(d => d.StartsWith('.') || skip.Contains(d)))
+            .Any(d => (d.StartsWith('.') && dotDirs?.Contains(d) != true) || skip.Contains(d)))
         .Where(f => !config.Exclude.Any(g =>
             FileSystemName.MatchesSimpleExpression(g, Path.GetRelativePath(root, f).Replace('\\', '/'))))
         .Distinct()
         .ToList();
-    var scanned = candidates.Where(f => exts.Contains(Path.GetExtension(f)) && !f.EndsWith(".d.ts")).ToList();
+}
 
-    var (nodes, edges) = CSharpScanner.Scan(root, scanned.Where(f => f.EndsWith(".cs")));
-    var (feNodes, feEdges) = Frontend.Scan(root, scanned.Where(f => Path.GetExtension(f) is ".vue" or ".ts" or ".tsx" or ".jsx").ToList());
+static (CodeModel Model, List<string> Files) BuildModel(string root, Config config)
+{
+    string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java"];
+    var candidates = RepoFiles(root, config);
+    var scanned = candidates.Where(f => exts.Contains(Path.GetExtension(f)) && !f.EndsWith(".d.ts") && !f.EndsWith(".min.js")
+        && !f.Replace('\\', '/').Contains("/wwwroot/lib/")).ToList(); // ponytail: libman/bower vendor dir only; other vendored JS needs exclude:
+
+    var (nodes, edges) = CSharpScanner.Scan(root, scanned.Where(f => f.EndsWith(".cs")), config.CommentDocs);
+    var (feNodes, feEdges) = Frontend.Scan(root, scanned.Where(f => Path.GetExtension(f) is ".vue" or ".ts" or ".tsx" or ".js" or ".jsx" or ".mjs").ToList());
     var (sqlNodes, sqlEdges) = Sql.Scan(root, scanned.Where(f => f.EndsWith(".sql")));
     var (javaNodes, javaEdges) = JavaScanner.Scan(root, scanned.Where(f => f.EndsWith(".java")));
     var (projNodes, projEdges) = Projects.Scan(root, candidates.Where(f => f.EndsWith(".csproj") || f.EndsWith(".sln") || f.EndsWith(".slnx")
@@ -142,7 +148,7 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
 
 static string? Language(string file) => Path.GetExtension(file) switch
 {
-    ".cs" => "csharp", ".vue" => "vue", ".ts" or ".tsx" => "typescript", ".jsx" => "javascript", ".sql" => "sql", ".java" => "java", ".csproj" => "msbuild",
+    ".cs" => "csharp", ".vue" => "vue", ".ts" or ".tsx" => "typescript", ".js" or ".jsx" or ".mjs" => "javascript", ".sql" => "sql", ".java" => "java", ".csproj" => "msbuild",
     _ => Path.GetFileName(file) switch { "package.json" => "npm", "pom.xml" => "maven", "build.gradle" or "build.gradle.kts" => "gradle", _ => null },
 };
 
@@ -214,7 +220,11 @@ static async Task<int> Generate(string root, string outDir, Config config, bool 
     }
     var summaries = drafts.Where(d => !d.Key.StartsWith("module:") && d.Value.Text.Length > 0).ToDictionary(d => d.Key, d => d.Value.Text);
     var overviews = drafts.Where(d => d.Key.StartsWith("module:")).ToDictionary(d => d.Key["module:".Length..], d => d.Value);
-    var (pages, changed) = new Generator(root, outDir, model, findings, arch, config, summaries, overviews) { WriteHtml = html }.Run();
+    var (pages, changed) = new Generator(root, outDir, model, findings, arch, config, summaries, overviews)
+    {
+        WriteHtml = html,
+        Files = [.. RepoFiles(root, config, [".github", ".circleci"]).Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))],
+    }.Run();
 
     // Fingerprint for `docwizz diff`: the model these docs were generated from.
     Directory.CreateDirectory(Path.Combine(outDir, ".docwizz"));

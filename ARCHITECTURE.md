@@ -82,7 +82,7 @@ The model separates what the code states from what DocWizz concludes:
 ## Scanners
 
 - **[CSharpScanner](src/DocWizz/CSharpScanner.cs)** uses Roslyn with BCL references only. ASP.NET, EF Core and other
-  package types stay unresolved and are matched by name. It covers types, members, doc comments, complexity, calls,
+  package types stay unresolved and are matched by name. It covers types, members, doc comments (with `comment_docs`, also the `//` block above a member), complexity, calls,
   injection, `accesses`, events, controllers and minimal APIs (`MapGroup` prefixes, group authorization, parameter
   binding inferred as ASP.NET does when there is no `[From*]`), response codes and types (`ProducesResponseType`,
   `.Produces<T>()`, `Results<…>`, `Ok(x)`/`TypedResults.X` in the body), the middleware pipeline in registration order,
@@ -92,7 +92,7 @@ The model separates what the code states from what DocWizz concludes:
   composables and template renders, exported functions, stores, classes (with their methods), interfaces, types and
   enums, imports and calls, and router routes. HTTP calls are `fetch`/`axios`, and calls through wrappers: an
   `axios.create({ baseURL })` instance, or a helper that passes its parameters on as URL and method (`request('POST',
-  url)`). A pre-pass finds the wrappers in every file, so they resolve across imports. React (`.tsx`/`.jsx`): capitalised
+  url)`). A pre-pass finds the wrappers in every file, so they resolve across imports. Plain `.js`/`.mjs` is read like TypeScript (`*.min.js` and `wwwroot/lib/` are skipped). React (`.tsx`/`.jsx`): capitalised
   functions returning JSX are components (props, hooks, rendered children), routes from `createBrowserRouter` and
   `<Route>`. Angular: `@Component` classes (`@Input`/`@Output`, signal inputs, lifecycle methods, children by template
   selector), `@Injectable` services, `HttpClient` calls, calls through injected services, `Routes` incl. `loadComponent`.
@@ -140,7 +140,7 @@ The model separates what the code states from what DocWizz concludes:
 | [Modules.cs](src/DocWizz/Modules.cs) | `modules/<folder>.md`: role, key components, API, data, external systems, configuration, flows, gaps, observations, then the component reference |
 | [Flows.cs](src/DocWizz/Flows.cs) | flow tracing used by api.md, frontend.md and module pages |
 | [Views.cs](src/DocWizz/Views.cs) | `views/context.md`, `containers.md`, `components.md`, `data.md`; the configuration table |
-| [Deployment.cs](src/DocWizz/Deployment.cs) | `views/deployment.md`: compose, Kubernetes, Dockerfiles, IaC |
+| [Deployment.cs](src/DocWizz/Deployment.cs) | `views/deployment.md`: compose, Kubernetes, Dockerfiles, IaC, from the scan's file list (`exclude:`, `.gitignore`) |
 | [Description.cs](src/DocWizz/Description.cs) | `architecture-description.md`, structured after ISO/IEC/IEEE 42010 |
 
 **Flows.** A flow is a 0-1 breadth-first search from an endpoint or route. It follows `calls`, `accesses`, `http`,
