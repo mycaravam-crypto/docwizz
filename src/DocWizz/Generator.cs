@@ -42,8 +42,30 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         Write("quality.md", Quality());
         foreach (var (page, _, body) in Views()) Write($"views/{page}.md", body());
         Write("architecture-description.md", DescriptionPage());
+        File.WriteAllText(Path.Combine(outDir, "search.json"), SearchIndex());
+        written.Add("search.json");
         return written;
     }
+
+    // Everything a reader might look up, with the page (and anchor) that documents it: for search boxes and tooling.
+    string SearchIndex()
+    {
+        var entries = new List<SearchEntry>();
+        void Entry(string name, string kind, string page, string? summary) => entries.Add(new(name, kind, page, summary));
+        foreach (var n in model.Nodes.Where(n => TopKinds.Contains(n.Kind) && n.Kind != "module" && Top(n.Id) == n.Id))
+            Entry(n.Name, n.Kind, $"modules/{Slug(Folder(n.File))}.md#{Anchor(n.Id)}", WrittenSummary(n));
+        foreach (var n in model.Nodes.Where(n => n.Tags?.Contains("endpoint") == true))
+            Entry(EndpointLabel(n), "endpoint", "api.md", WrittenSummary(n));
+        foreach (var n in model.Nodes.Where(n => n.Kind == "route")) Entry(n.Route ?? n.Name, "route", "frontend.md", null);
+        foreach (var n in model.Nodes.Where(n => n.Kind == "config")) Entry(n.Name, "config", "views/deployment.md#configuration", null);
+        foreach (var f in model.Nodes.Where(n => n.Kind is not ("route" or "project" or "package" or "external" or "config")).Select(n => Folder(n.File)).Distinct())
+            Entry(f, "module", $"modules/{Slug(f)}.md", null);
+        return System.Text.Json.JsonSerializer.Serialize(entries.OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase).ThenBy(e => e.Kind),
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)
+            { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+    }
+
+    record SearchEntry(string Name, string Kind, string Page, string? Summary);
 
     string Index(List<string> modules)
     {
@@ -342,7 +364,9 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     static string MemberName(Node m, Node owner) =>
         Display(m).StartsWith(Display(owner)) && Display(m).Length > Display(owner).Length ? Display(m)[(Display(owner).Length + 1)..] : m.Name;
 
-    string Top(string id) => parent.TryGetValue(id, out var p) ? Top(p) : id;
+    // The top-level symbol a member belongs to. A TS class/interface/type/enum stands on its own inside its file module.
+    string Top(string id) => parent.TryGetValue(id, out var p)
+        && !(nodes[p].Kind == "module" && nodes[id].Kind is "class" or "interface" or "type" or "enum") ? Top(p) : id;
 
     // A folder's layer is the layer of its first file that matches one.
     Dictionary<string, string?>? folderLayers;

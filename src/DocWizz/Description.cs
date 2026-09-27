@@ -48,7 +48,7 @@ partial class Generator
         }
 
         sb.AppendLine("## Components _(derived)_\n");
-        var tops = model.Nodes.Where(n => TopKinds.Contains(n.Kind) && n.Kind != "module" && !parent.ContainsKey(n.Id)).ToList();
+        var tops = model.Nodes.Where(n => TopKinds.Contains(n.Kind) && n.Kind != "module" && Top(n.Id) == n.Id).ToList();
         sb.AppendLine(string.Join(", ", tops.GroupBy(n => Layer(Folder(n.File)) ?? "no layer").OrderBy(g => g.Key)
             .Select(g => $"{g.Key}: {g.Count()}")) + $" — see [components](views/components.md).\n");
 

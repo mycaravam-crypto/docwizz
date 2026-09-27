@@ -16,7 +16,7 @@ partial class Generator
     string Module(string folder, List<Node> members)
     {
         var sb = new StringBuilder($"# {folder}\n\n");
-        var tops = members.Where(n => TopKinds.Contains(n.Kind) && !parent.ContainsKey(n.Id)).OrderBy(n => n.Name).ToList();
+        var tops = members.Where(n => TopKinds.Contains(n.Kind) && Top(n.Id) == n.Id).OrderBy(n => n.Name).ToList();
         var topIds = tops.Select(t => t.Id).ToHashSet();
         bool Here(string id) => nodes.TryGetValue(id, out var n) && n.Kind != "external" && Folder(n.File) == folder;
         var endpoints = model.Nodes.Where(n => n.Tags?.Contains("endpoint") == true && Folder(n.File) == folder)
@@ -139,6 +139,7 @@ partial class Generator
             if (t.Events is { Count: > 0 }) sb.AppendLine($"Emits: {string.Join(", ", t.Events)}\n");
             foreach (var (name, section) in Derived(t)) sb.AppendLine($"- **{name}** _({section.Origin.ToString().ToLowerInvariant()})_: {Esc(section.Text)}");
             if (Derived(t).Any()) sb.AppendLine();
+            if (Backlinks(t) is { Length: > 0 } back) sb.AppendLine(back + "\n");
             if (findingOf.TryGetValue(t.Id, out var item))
                 sb.AppendLine("_Evidence:_ " + string.Join(", ", item.Sources.Select(nodes.GetValueOrDefault).OfType<Node>()
                     .Select(n => SourceLink(n.File, n.Line, CodeModel.Location(n), sub: "modules"))) + "\n");
@@ -166,6 +167,26 @@ partial class Generator
 
     // What deserves a closer look here, each with the reason — rule violations, cycles, complexity, coupling, and
     // presentation code that reaches the database directly.
+    // Unit → the flows (routes, endpoints) that reach it.
+    ILookup<string, Node>? reachedBy;
+
+    // Where a component turns up elsewhere: the flows that reach it and the configuration keys it (or a member) reads.
+    string Backlinks(Node t)
+    {
+        reachedBy ??= model.Nodes.Where(n => n.Kind == "route" || n.Tags?.Contains("endpoint") == true)
+            .SelectMany(n => TraceOf(n.Id).Layers.SelectMany(l => l).Select(u => (Unit: u, Start: n))).Distinct()
+            .ToLookup(x => x.Unit, x => x.Start);
+        var parts = new List<string>();
+        var starts = reachedBy[t.Id].Where(s => s.Id != t.Id && Top(s.Id) != t.Id).OrderBy(s => s.Kind == "route").ThenBy(s => s.Route?.TrimStart('/')).ToList();
+        if (starts.Count > 0)
+            parts.Add("_Reached from:_ " + string.Join(", ", starts.Take(MaxListed).Select(s => s.Kind == "route"
+                ? $"[`{s.Route}`](../frontend.md#flows)" : $"[`{EndpointLabel(s)}`](../api.md#flows)")) + (starts.Count > MaxListed ? $", +{starts.Count - MaxListed} more" : ""));
+        var keys = model.Edges.Where(e => e.Kind is "reads" or "binds" && (e.From == t.Id || Top(e.From) == t.Id) && nodes.ContainsKey(e.To))
+            .Select(e => nodes[e.To].Name).Distinct().Order(StringComparer.OrdinalIgnoreCase).ToList();
+        if (keys.Count > 0) parts.Add("_Configuration:_ " + string.Join(", ", keys.Select(k => $"[`{k}`](../views/deployment.md#configuration)")));
+        return string.Join(" · ", parts);
+    }
+
     IEnumerable<string> Observations(string folder, List<Node> tops, List<(string From, string To)> deps)
     {
         foreach (var v in arch.Violations.Where(v => Folder(v.FromFile) == folder || Folder(v.To) == folder).OrderByDescending(v => v.Severity))

@@ -252,6 +252,20 @@ grep -q "_Generated from .* profile \`default\`" "$docs/modules/backend-Applicat
 # Module pages: role, key components, API, data, external systems, flows, gaps, observations — only when there is content
 M="$docs/modules"
 grep -q '^Layer \*\*infrastructure\*\* · project `Fixture` · Repositories: 1, DbContexts: 1' "$M/backend-Infrastructure.md"
+grep -q '^### StockClient$' "$M/frontend-src-api.md"   # TS classes are components of their module page
+# backlinks: the flows that reach a component, the configuration it reads; search.json indexes every documented thing
+grep -q '^_Reached from:_ \[`POST /api/materials`\](../api.md#flows), \[`GET /api/materials/{id}`\](../api.md#flows)' "$M/backend-Application.md"
+grep -q '^_Configuration:_ \[`Warehouse:BaseUrl`\](../views/deployment.md#configuration)' "$M/backend-Infrastructure.md"
+python3 - "$docs/search.json" <<'PY2'
+import json, sys
+idx = {(e["name"], e["kind"]): e for e in json.load(open(sys.argv[1]))}
+assert idx[("MaterialService", "class")]["page"] == "modules/backend-Application.md#materialservice", idx[("MaterialService", "class")]
+assert idx[("GET /api/materials/{id}", "endpoint")]["page"] == "api.md"
+assert idx[("/materials", "route")]["page"] == "frontend.md"
+assert idx[("Warehouse:BaseUrl", "config")]["page"] == "views/deployment.md#configuration"
+assert idx[("backend/Application", "module")]["page"] == "modules/backend-Application.md"
+assert idx[("StockLevel", "interface")]["summary"] == "Stock of one article, as the ERP reports it."
+PY2
 grep -q '^| \[AppDbContext\](#appdbcontext) | dbcontext | 2 |' "$M/backend-Infrastructure.md"
 grep -qF -- '- `AppDbContext` stores Material in SQL Server (inferred)' "$M/backend-Infrastructure.md"
 grep -qF -- '- `SqlMaterialRepository` uses `AppDbContext`' "$M/backend-Infrastructure.md"

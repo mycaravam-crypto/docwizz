@@ -12,8 +12,6 @@ or human-written. AI runs on a self-hosted model only; code is never sent to a p
   source, and existing docs. They would keep per-sentence provenance to the facts they came from.
 - **Incremental regeneration.** Regenerate only the pages whose inputs changed, using the node hashes and the
   impact map.
-- **Navigation.** Backlinks from every component to the flows, endpoints and configuration keys that involve it,
-  plus a search index.
 - **Helm values and Kubernetes ConfigMaps** as configuration sources. Terraform/Bicep resources linked to the
   external systems they provision.
 
