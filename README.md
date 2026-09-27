@@ -1,6 +1,7 @@
 # docwizz
 Small tool, creates documentation. Builds a semantic model of the code first; documentation is one output of it.
 Finds the code that *needs* docs and doesn't have them, and checks the architecture while it's at it.
+How it works: [ARCHITECTURE.md](ARCHITECTURE.md). What's next: [ROADMAP.md](ROADMAP.md).
 
 ```bash
 docwizz init [dir]                # write a starter docwizz.yaml (the defaults, to edit)

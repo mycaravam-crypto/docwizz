@@ -1,0 +1,147 @@
+# How DocWizz works
+
+DocWizz is a code intelligence model that happens to generate documentation. Scanners turn source and project
+files into one language-neutral graph of facts. Everything else reads that graph: documentation analysis,
+architecture rules, change impact, and the Markdown generator. AI is an optional last step that turns facts into
+prose. It is never a source of facts.
+
+```text
+.cs  .vue/.ts  .csproj/package.json  appsettings*.json/.env
+  │      │              │                     │
+CSharpScanner  scanner-vue (Node)  Projects  Configuration        ← facts only
+  └──────┴───────┬──────┴─────────────┘
+                 ▼
+   link: HTTP calls → endpoints (Frontend.LinkHttp), external systems (Externals.Link),
+         config-addressed HTTP clients (Configuration.Link), test code → `tests` edges
+                 ▼
+            CodeModel (nodes + edges)            → docwizz scan
+      ┌──────────┼───────────────┐
+      ▼          ▼               ▼
+  Analyzer   Architecture       Diff             → analyze / check / architecture / diff
+      └────┬─────┘
+           ▼
+       Generator  (+ AiProse drafts, cached)     → generate
+           ▼
+   docs/*.md, docs/.docwizz/{model,documentation}.json
+```
+
+`Program.cs` is the CLI and `BuildModel`, which runs the scanners and link steps in that order.
+
+## The code model
+
+[CodeModel.cs](src/DocWizz/CodeModel.cs) has two records. A `Node` has an id, kind, name, source location and
+optional facts: visibility, doc comment XML, complexity, parameters, return type, thrown exceptions, events, state,
+route, tags and a body hash. An `Edge` has from, to, kind and an optional label. Ids keep their scanner prefix so
+they stay stable across runs:
+
+| Prefix | Nodes |
+|---|---|
+| `cs:` | C# types and members; `cs:endpoint:VERB /route` for minimal APIs |
+| `vue:`, `ts:` | components; modules, functions and stores (`file#name`) |
+| `route:` | frontend routes |
+| `proj:`, `pkg:` | project files, NuGet/npm packages |
+| `ext:` | external systems (`kind: external`, tags `[category, certainty]`) |
+| `config:` | configuration keys, lowercase (`kind: config`, tags `env:<environment>@<file>`, `url:<environment>=<host>`) |
+
+Edge kinds:
+
+| Kind | Meaning |
+|---|---|
+| `contains` | type → member, module → function |
+| `calls`, `creates` | invocation; `new T()` |
+| `implements`, `inherits` | type and member level |
+| `injects` | constructor or minimal-API handler parameter |
+| `accesses` | a member uses its own type's injected dependency (field, property, primary-constructor parameter) |
+| `registers` | DI registration interface → implementation |
+| `persists` | DbContext → entity (`DbSet<T>`) |
+| `publishes`, `subscribes` | C# events; Vue emits (label = event name) |
+| `imports`, `renders`, `routes-to` | frontend structure |
+| `http` | frontend call → endpoint, or unresolved `http:VERB url` |
+| `connects` | code or project → external system (label = certainty) |
+| `reads`, `binds` | code → configuration key; options type → bound section |
+| `references`, `depends-on` | project → project; project → package (label = version) |
+| `tests` | test code → code it exercises (the only trace test code leaves) |
+
+`CodeModel.DependencyKinds` lists the edge kinds that count as a dependency for the architecture rules. `accesses`,
+`connects`, `reads` and `binds` are left out on purpose, so adding them didn't change any layer rule.
+
+### What counts as a fact
+
+The model separates what the code states from what DocWizz concludes:
+
+- **Facts** come from syntax and semantics: symbols, signatures, calls, routes, `[Authorize]`, `DbSet<T>`.
+- **Certainty** is recorded where detection isn't exact. An external system is `detected` when a call shows it
+  (`UseNpgsql`, `AddHttpClient<T>` with a base address, `fetch('https://…')`). It is `inferred` when only a package
+  reference or a single candidate points to it. It is `unknown` when something is there but the code doesn't say
+  what, e.g. a DbContext with no provider.
+- **Name heuristics** are marked in code with `ponytail:` comments and only produce tags: `*Service` → service,
+  `*Repository` → repository. An external system is never invented from a name.
+- **Values** from configuration and deployment files are never stored, because they may be secrets. The one
+  exception is the host of a URL.
+
+## Scanners
+
+- **[CSharpScanner](src/DocWizz/CSharpScanner.cs)** uses Roslyn with BCL references only. ASP.NET, EF Core and other
+  package types stay unresolved and are matched by name. It covers types, members, doc comments, complexity, calls,
+  injection, `accesses`, events, controllers and minimal APIs (`MapGroup` prefixes, group authorization),
+  DI registrations, EF `DbSet`, external-system calls and configuration reads.
+- **[scanner-vue](scanner-vue/index.mjs)** uses the TypeScript compiler and `@vue/compiler-sfc`, run by
+  [Frontend.cs](src/DocWizz/Frontend.cs) as a Node child process. It covers SFC props, emits, state and template
+  renders, exported functions, stores, imports and calls, `fetch`/`axios` calls, and router routes.
+- **[Projects](src/DocWizz/Projects.cs)** reads `.csproj` (SDK, target frameworks, package and project references)
+  and `package.json`.
+- **[Configuration](src/DocWizz/Configuration.cs)** reads `appsettings*.json` and `.env`: keys per environment,
+  no values.
+- **[Externals](src/DocWizz/Externals.cs)** holds the curated list of known systems (packages, calls, container
+  images) and the link step: absolute URLs, package-only evidence, and DbContexts without a known database.
+
+## Analysis
+
+- **[Analyzer](src/DocWizz/Analyzer.cs)** decides per symbol whether it needs documentation. That decision uses
+  visibility, complexity, parameters, fan-in, side effects and the profile's pattern level. It then records which
+  sections the profile requires and where each present one comes from: `written` (doc comment), `fact` (derived
+  from the model), `inferred` (side effects) or `ai`. AI drafts never close a gap.
+- **[Profiles](src/DocWizz/Profiles.cs)** are YAML documentation patterns: match on kind, name, type, tag or
+  visibility, then list the sections required. Reports say "coverage against profile X", never "compliant with".
+- **[Architecture](src/DocWizz/Architecture.cs)** covers path-glob layers, allowed dependencies, violations
+  ARCH-001/002/004 with severities, and folder cycles (ARCH-003).
+- **[Diff](src/DocWizz/Diff.cs)** compares two models by symbol id and body hash. It reports changed, added and
+  removed symbols, the affected pages, and the gaps and violations a change introduced.
+
+## Generation
+
+`Generator` is one partial class, split by page:
+
+| File | Pages |
+|---|---|
+| [Generator.cs](src/DocWizz/Generator.cs) | `index.md`, `architecture.md`, `api.md`, `frontend.md`, `quality.md`, shared helpers |
+| [Modules.cs](src/DocWizz/Modules.cs) | `modules/<folder>.md`: role, key components, API, data, external systems, configuration, flows, gaps, observations, then the component reference |
+| [Flows.cs](src/DocWizz/Flows.cs) | flow tracing used by api.md, frontend.md and module pages |
+| [Views.cs](src/DocWizz/Views.cs) | `views/context.md`, `containers.md`, `components.md`, `data.md`; the configuration table |
+| [Deployment.cs](src/DocWizz/Deployment.cs) | `views/deployment.md`: compose, Kubernetes, Dockerfiles, IaC |
+| [Description.cs](src/DocWizz/Description.cs) | `architecture-description.md`, structured after ISO/IEC/IEEE 42010 |
+
+**Flows.** A flow is a 0-1 breadth-first search from an endpoint or route. It follows `calls`, `accesses`, `http`,
+`renders`, `routes-to`, `connects` and minimal-API `injects`, and dispatches interface members to their
+implementations. Steps inside a unit (a C# type) and interface dispatch cost 0, so the hops shown are between
+units. Frontend flows stop at endpoints, because api.md continues from there.
+
+**Output rules.** Sections appear only when there is content. Diagrams are capped (`MaxDiagramEdges`,
+`MaxViewNodes`) or replaced by a note. Output is deterministic without `--ai`.
+
+**Safe regeneration.** Every generated page starts with a marker line. Only pages with that marker are deleted or
+overwritten. `docs/architecture/*.md` and anything else written by hand is linked, never touched.
+
+## AI
+
+[AiProse](src/DocWizz/AiProse.cs) drafts summaries for items that still lack one. Per item it sends the facts JSON
+(graph neighbours, signature, derived sections with their origin) and that symbol's own source lines. It never
+sends the repository. Drafts are cached per symbol and body hash in `docs/.docwizz/ai-cache.json`, together with
+the symbols they were drafted from (provenance). Drafts are marked 🤖 and never override written documentation.
+
+## Tests
+
+[test.sh](test.sh) runs the CLI against [fixture/](fixture/), a small ASP.NET + EF Core + Vue project with
+deliberate gaps, violations, external systems, configuration and deployment descriptors. It asserts facts in the
+model JSON and lines in the generated pages. When a feature is added, extend the fixture with the smallest case
+that exercises it, and assert both the model and the page.
