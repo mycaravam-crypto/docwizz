@@ -105,9 +105,17 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     edges = edges.Where(e => !testIds.Contains(e.To) && (!testIds.Contains(e.From) || e.Kind is "calls" or "imports" or "renders" or "injects" or "http"))
         .Select(e => testIds.Contains(e.From) ? new Edge(e.From, e.To, "tests") : e).Distinct().ToList();
 
+    nodes = nodes.Select(n => n with { Language = Language(n.File) }).ToList();
+
     var files = scanned.Where(f => !testFiles.Contains(Path.GetRelativePath(root, f).Replace('\\', '/'))).ToList();
     return (new CodeModel(Git(root, "rev-parse --short HEAD")?.Trim(), nodes, edges), files);
 }
+
+static string? Language(string file) => Path.GetExtension(file) switch
+{
+    ".cs" => "csharp", ".vue" => "vue", ".ts" => "typescript", ".csproj" => "msbuild",
+    _ => Path.GetFileName(file) == "package.json" ? "npm" : null,
+};
 
 static int Scan(string root, string outFile, Config config)
 {

@@ -26,8 +26,10 @@ Source → analyzers (Roslyn for C#, TypeScript + Vue compiler for `.vue`/`.ts`,
 **documentation model** → generators (Markdown/Mermaid, JSON). Analyzers never write Markdown.
 
 The code model holds facts only: symbols, signatures, endpoints (route, input, response, authorization), props/emits,
-projects and packages, and relationships (`contains`, `calls`, `implements`, `inherits`, `injects`, `registers`,
+projects and packages, and relationships (`contains`, `calls`, `implements`, `inherits`, `injects`, `creates`, `registers`,
 `imports`, `renders`, `routes-to`, `persists`, `publishes`, `subscribes`, `http`, `references`, `depends-on`, `tests`).
+Every node records its `language` (csharp, vue, typescript, msbuild, npm); C# types carry roles as tags
+(controller, service, repository, entity, dbcontext, background-service, middleware, hub, options).
 Test code (`tests:` globs) only contributes `tests` edges.
 
 Each documentation item records which sections its profile requires and where each present section comes from:

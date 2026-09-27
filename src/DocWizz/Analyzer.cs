@@ -107,8 +107,8 @@ record DocumentationItem(Node Node, string Profile, string Pattern, Level Level,
 static class Analyzer
 {
     static readonly string[] Analyzed = ["class", "record", "struct", "interface", "enum", "method", "endpoint",
-        "component", "function", "store"];
-    static readonly string[] TypeKinds = ["class", "record", "struct", "interface", "enum"];
+        "component", "function", "store", "delegate"];
+    static readonly string[] TypeKinds = ["class", "record", "struct", "interface", "enum", "delegate"];
 
     // Profile section names → the canonical (XML doc tag) name.
     static readonly Dictionary<string, string> Aliases = new()

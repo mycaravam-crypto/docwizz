@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 model=$(mktemp)
 out=$(dotnet run --project src/DocWizz -- scan fixture "$model")
 echo "$out"
-grep -q "Files  14" <<<"$out"  # tests/ excluded
+grep -q "Files  15" <<<"$out"  # tests/ excluded
 
 python3 - "$model" <<'PY'
 import json, sys
@@ -26,6 +26,13 @@ for e in [
     ("calls", D + "Material.Save(Fixture.Infrastructure.SqlMaterialRepository)", I + "SqlMaterialRepository.AddAsync(Fixture.Domain.Material)"),
 ]:
     assert e in edges, f"missing edge {e}"
+assert ("creates", A + "MaterialService." + create, D + "Material") in edges
+roles = lambda i: nodes[i].get("tags") or []
+assert "entity" in roles(D + "Material") and "service" in roles(A + "MaterialService") and "repository" in roles(I + "SqlMaterialRepository")
+assert "background-service" in roles(I + "MaterialCleanup") and "middleware" in roles(I + "TimingMiddleware") and "options" in roles(I + "MaterialOptions")
+assert nodes[I + "MaterialChanged"]["kind"] == "delegate" and nodes[I + "MaterialChanged"]["parameters"] == ["id: int"]
+assert {n.get("language") for n in nodes.values()} == {"csharp", "vue", "typescript", "msbuild", "npm"}, {n.get("language") for n in nodes.values()}
+assert nodes["vue:frontend/src/components/MaterialForm.vue"]["language"] == "vue"
 assert ("injects", D + "Material", D + "Material") not in edges, "record copy ctor leaked as injection"
 assert "controller" in nodes[API + "MaterialController"]["tags"]
 assert nodes[A + "MaterialService." + create]["complexity"] >= 8

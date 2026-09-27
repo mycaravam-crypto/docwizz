@@ -38,14 +38,11 @@ static class CSharpScanner
             {
                 if (sm.GetDeclaredSymbol(decl) is not INamedTypeSymbol type) continue;
                 var typeId = Id(type);
-                var tags = new List<string>();
-                if (HasAttr(decl.AttributeLists, "ApiController") || type.BaseType?.Name is "ControllerBase" or "Controller")
-                    tags.Add("controller");
-                if (type.BaseType?.Name == "DbContext") tags.Add("dbcontext");
+                var tags = Roles(decl, type);
                 var classAuth = Auth(decl.AttributeLists);
 
                 nodes.Add(new Node(typeId, Kind(type), type.Name, rel, Line(decl),
-                    Vis(type), Doc(type), Hash: Hash(decl), Tags: tags.Count > 0 ? tags : null,
+                    Vis(type), Doc(type), Hash: Hash(decl), Tags: tags,
                     Route: RouteArg(decl.AttributeLists, "Route"), EndLine: EndLine(decl)));
 
                 if (type.BaseType is { } bt && InSource(bt)) edges.Add(new(typeId, Id(bt), "inherits"));
@@ -66,11 +63,48 @@ static class CSharpScanner
                     ScanMember(sm, member, typeId, classRoute, classAuth, rel, nodes, edges);
             }
 
+            foreach (var d in syntaxRoot.DescendantNodes().OfType<DelegateDeclarationSyntax>())
+            {
+                if (sm.GetDeclaredSymbol(d) is not { DelegateInvokeMethod: { } invoke } del) continue;
+                nodes.Add(new Node(Id(del), "delegate", del.Name, rel, Line(d), Vis(del), Doc(del), Params: invoke.Parameters.Length,
+                    Hash: Hash(d), EndLine: EndLine(d), Parameters: invoke.Parameters.Select(Param).ToList() is { Count: > 0 } pl ? pl : null,
+                    Returns: Returns(invoke.ReturnType)));
+                if (del.ContainingType is { } owner) edges.Add(new(Id(owner), Id(del), "contains"));
+            }
+
             ScanRegistrations(sm, syntaxRoot, rel, nodes, edges);
         }
 
+        // Entities are what a DbContext persists.
+        var entities = edges.Where(e => e.Kind == "persists").Select(e => e.To).ToHashSet();
+        nodes = nodes.Select(n => entities.Contains(n.Id) ? n with { Tags = [.. n.Tags ?? [], "entity"] } : n).ToList();
+
         // Partial types/methods declare the same symbol more than once; keep the first.
         return (nodes.DistinctBy(n => n.Id).ToList(), edges.Distinct().ToList());
+    }
+
+    // Framework concepts and roles. Base types and interfaces outside the source (ASP.NET, EF, hosting) are unresolved,
+    // so they match by name. ponytail: name heuristics for service/repository/options; add attribute/config rules if noisy.
+    static List<string>? Roles(BaseTypeDeclarationSyntax decl, INamedTypeSymbol type)
+    {
+        var bases = new List<string>();
+        for (var b = type.BaseType; b is not null && bases.Count < 16; b = b.BaseType) bases.Add(b.Name);
+        var interfaces = type.AllInterfaces.Select(i => i.Name).ToList();
+        var tags = new List<string>();
+        if (HasAttr(decl.AttributeLists, "ApiController") || bases.Contains("ControllerBase") || bases.Contains("Controller")) tags.Add("controller");
+        if (bases.Contains("DbContext")) tags.Add("dbcontext");
+        if (bases.Contains("BackgroundService") || interfaces.Contains("IHostedService")) tags.Add("background-service");
+        if (interfaces.Contains("IMiddleware") || type.GetMembers().OfType<IMethodSymbol>()
+                .Any(m => m.Name is "Invoke" or "InvokeAsync" && m.Parameters.FirstOrDefault()?.Type.Name == "HttpContext"))
+            tags.Add("middleware");
+        if (bases.Contains("Hub")) tags.Add("hub");
+        if (type.TypeKind is TypeKind.Class or TypeKind.Struct)
+        {
+            if (type.Name.EndsWith("Repository") || interfaces.Any(i => i.EndsWith("Repository"))) tags.Add("repository");
+            else if (type.Name.EndsWith("Service") && !tags.Contains("background-service")) tags.Add("service");
+            if (type.Name.EndsWith("Options") || type.Name.EndsWith("Settings")) tags.Add("options");
+        }
+        return tags.Count > 0 ? tags : null;
     }
 
     static void ScanMember(SemanticModel sm, MemberDeclarationSyntax member, string typeId, string? classRoute,
@@ -115,6 +149,10 @@ static class CSharpScanner
         foreach (var inv in Body(body).OfType<InvocationExpressionSyntax>())
             if (Resolve(sm.GetSymbolInfo(inv)) is IMethodSymbol target && InSource(target))
                 edges.Add(new(from, Id(target.ReducedFrom ?? target.OriginalDefinition), "calls"));
+
+        foreach (var oc in Body(body).OfType<BaseObjectCreationExpressionSyntax>())
+            if (sm.GetTypeInfo(oc).Type is INamedTypeSymbol created && InSource(created))
+                edges.Add(new(from, Id(created.OriginalDefinition), "creates"));
 
         // C# events: `x.Changed += h` subscribes; any other use (Changed(..), Changed?.Invoke(..)) raises it.
         foreach (var r in Body(body).OfType<IdentifierNameSyntax>())
