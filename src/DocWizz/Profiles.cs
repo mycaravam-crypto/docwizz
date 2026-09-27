@@ -3,8 +3,8 @@
 // borrow its vocabulary — DocWizz reports coverage against the profile, never compliance with the standard.
 //
 // Sections: summary, param, returns, exception, example, remarks (written doc comments), and derived from the code:
-// dependencies, endpoint, authorization, input, output, events (facts), side_effects (inferred).
-// `param`/`returns`/`exception`/`input`/`output`/`events`/`endpoint` only apply when the symbol has them.
+// dependencies, endpoint, authorization, input, output, events, state (facts), side_effects (inferred).
+// `param`/`returns`/`exception`/`input`/`output`/`events`/`state`/`endpoint` only apply when the symbol has them.
 static class Profiles
 {
     public static string[] Names => [.. All.Keys];
@@ -16,7 +16,7 @@ static class Profiles
               endpoint:   { match: { tag: endpoint }, level: high, sections: [summary, param, input, output, authorization] }
               controller: { match: { tag: controller }, level: high, sections: [summary, dependencies] }
               service:    { match: { type: "*Service" }, sections: [summary, param, dependencies, side_effects] }
-              component:  { match: { kind: component }, sections: [summary, param, dependencies, events] }   # param = every prop has a /** doc */
+              component:  { match: { kind: component }, sections: [summary, param, dependencies, events, state] }   # param = every prop has a /** doc */
               default:    { sections: [summary] }
             """,
         // Reference documentation for developers: full signatures, effects, failure modes.
@@ -41,7 +41,7 @@ static class Profiles
               controller: { match: { tag: controller }, level: high, sections: [summary, dependencies, endpoint] }
               service:    { match: { kind: class, name: "*Service" }, level: medium, sections: [summary, dependencies, side_effects] }
               interface:  { match: { kind: interface }, level: medium, sections: [summary] }
-              component:  { match: { kind: component }, level: medium, sections: [summary, dependencies] }
+              component:  { match: { kind: component }, level: medium, sections: [summary, dependencies, state] }
               store:      { match: { kind: store }, level: medium, sections: [summary, dependencies] }
               default:    { sections: [summary] }
             """,
@@ -58,7 +58,7 @@ static class Profiles
               controller: { match: { tag: controller }, level: high, sections: [summary, dependencies, endpoint] }
               service:    { match: { kind: class, name: "*Service" }, level: medium, sections: [summary, dependencies, side_effects] }
               interface:  { match: { kind: interface }, level: medium, sections: [summary] }
-              component:  { match: { kind: component }, level: medium, sections: [summary, dependencies] }
+              component:  { match: { kind: component }, level: medium, sections: [summary, dependencies, state] }
               store:      { match: { kind: store }, level: medium, sections: [summary, dependencies] }
               default:    { sections: [summary] }
             architecture_sections: [stakeholders, concerns, decisions, deployment, security]

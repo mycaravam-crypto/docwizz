@@ -33,7 +33,8 @@ Every node records its `language` (csharp, vue, typescript, msbuild, npm); C# ty
 Test code (`tests:` globs) only contributes `tests` edges.
 
 Each documentation item records which sections its profile requires and where each present section comes from:
-`written` (doc comment), `fact` (derived from the model: dependencies, endpoint, input, output, authorization, events),
+`written` (doc comment), `fact` (derived from the model: dependencies, endpoint, input, output, authorization, events,
+state — a Vue component's refs, computed values and watchers),
 `inferred` (heuristics: side effects) or `ai` (drafts — shown with 🤖, never close a gap), plus the source symbols it
 was derived from. `generate` writes it to `docs/.docwizz/documentation.json`.
 

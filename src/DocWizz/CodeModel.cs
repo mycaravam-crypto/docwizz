@@ -3,13 +3,14 @@
 
 // Parameters are "name: Type", prefixed with the binding source for endpoints ("[body] request: CreateRequest").
 // Returns is the unwrapped result type (Task<ActionResult<T>> → T), null for void/Task. Events are emitted event names.
+// State: a component's reactive state (refs, `x (computed)`, `watch x`).
 // Tags carry framework concepts and roles (controller, endpoint, service, repository, entity, middleware, store, …).
 // Language (csharp, typescript, vue, msbuild, npm) is the source language; ids keep their scanner prefix for stability.
 record Node(string Id, string Kind, string Name, string File, int Line,
     string? Visibility = null, string? Doc = null, int? Complexity = null,
     int? Params = null, string? Hash = null, List<string>? Tags = null, string? Route = null, int? EndLine = null,
     List<string>? Parameters = null, string? Returns = null, List<string>? Throws = null, List<string>? Events = null,
-    string? Language = null);
+    string? Language = null, List<string>? State = null);
 
 // Label carries the detail a kind alone doesn't (e.g. the event name of a `subscribes` edge).
 record Edge(string From, string To, string Kind, string? Label = null);

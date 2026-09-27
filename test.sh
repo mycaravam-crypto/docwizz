@@ -77,6 +77,7 @@ for e in [
 form = nodes["vue:" + F + "components/MaterialForm.vue"]
 assert form["params"] == 1 and "Form for requesting" in form["doc"] and "emits" in form["tags"]
 assert form["parameters"] == ["defaultQuantity: number"] and form["events"] == ["created"], form
+assert form["state"] == ["name", "valid (computed)", "watch name"], form
 sub = [e for e in m["edges"] if e["kind"] == "subscribes" and e["from"].endswith("MaterialTable.vue")]
 assert sub == [{"from": "vue:" + F + "components/MaterialTable.vue", "to": "vue:" + F + "components/MaterialForm.vue", "kind": "subscribes", "label": "created"}], sub
 assert nodes["ts:" + F + "stores/materialStore.ts#useMaterialStore"]["kind"] == "store"
@@ -100,6 +101,7 @@ dw() { dotnet run --project src/DocWizz -- "$@"; }
 dw analyze fixture --format json 2>/dev/null > "$model"
 dw analyze fixture --format json --profile software 2>/dev/null > "$model.software"
 dw analyze fixture --format json --profile api 2>/dev/null > "$model.api"
+dw analyze fixture --format json --profile architecture 2>/dev/null > "$model.arch-profile"
 python3 - "$model" <<'PY'
 import json, sys
 def items(f): return {i["id"]: i for i in json.load(open(f))["documentation"]["items"]}
@@ -119,6 +121,8 @@ rename = api[API + "MaterialController.Rename(int, Fixture.Api.RenameMaterialReq
 assert rename["sections"]["input"]["text"] == "id: int, [body] request: RenameMaterialRequest"
 assert rename["sections"]["authorization"] == {"origin": "fact", "text": "required"}
 assert json.load(open(sys.argv[1] + ".api"))["documentation"]["profile"] == "api"
+form = items(sys.argv[1] + ".arch-profile")["vue:frontend/src/components/MaterialForm.vue"]
+assert form["sections"]["state"] == {"origin": "fact", "text": "name, valid (computed), watch name"}, form
 PY
 if dw analyze fixture --profile nope >/dev/null 2>&1; then echo "unknown profile accepted"; exit 1; fi
 set +e; iso=$(dw check fixture --profile iso-42010 2>/dev/null); set -e

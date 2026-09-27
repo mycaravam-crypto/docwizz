@@ -169,6 +169,7 @@ static class Analyzer
             "returns" or "output" => n.Returns is not null,
             "exception" => n.Throws is not null,
             "endpoint" or "authorization" => Endpoints(n).Count > 0,
+            "state" => n.State is { Count: > 0 },
             "events" => n.Events is { Count: > 0 } || outbound[n.Id].Any(e => e.Kind == "publishes"),
             _ => true,
         };
@@ -185,6 +186,7 @@ static class Analyzer
                 e.Tags!.Contains("anonymous") ? "anonymous" : e.Tags.Contains("authorize") ? "required" : "none declared").Distinct())), []),
             "input" => (new(Origin.Fact, string.Join(", ", n.Parameters ?? [])), []),
             "output" => (new(Origin.Fact, n.Returns!), []),
+            "state" => (new(Origin.Fact, string.Join(", ", n.State!)), []),
             "events" => (new(Origin.Fact, string.Join(", ", outbound[n.Id].Where(e => e.Kind == "publishes").Select(e => Name(e.To))
                 .Concat(n.Events ?? []).Distinct())), outbound[n.Id].Where(e => e.Kind == "publishes").Select(e => e.To)),
             _ => null,

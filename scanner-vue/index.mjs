@@ -147,6 +147,11 @@ function scanScript(file, sf, owner, lineOffset, component) {
       if (imp && imp.target.endsWith('.ts')) edge(cur, `${fileId(imp.target)}#${imp.name}`, 'calls')
       if (component && callee === 'defineProps') props = propsOf(n, sf)
       if (component && callee === 'defineEmits') component.emits = emitsOf(n, sf)
+      // Component state: `const x = ref(..)` / reactive / computed, and what it watches.
+      if (component && ['ref', 'shallowRef', 'reactive', 'computed'].includes(callee)
+          && ts.isVariableDeclaration(n.parent) && ts.isIdentifier(n.parent.name))
+        component.state.push(callee === 'computed' ? `${n.parent.name.text} (computed)` : n.parent.name.text)
+      if (component && callee === 'watch' && n.arguments[0]) component.state.push(`watch ${n.arguments[0].getText(sf)}`)
       if (callee === 'createRouter' || callee === 'createWebHistory') scanRoutes(file, sf, imports, line)
     }
     ts.forEachChild(n, c => visit(c, cur))
@@ -242,7 +247,7 @@ for (const file of files) {
     if (file.endsWith('.vue')) {
       const { descriptor } = parseSfc(src, { filename: file })
       const block = descriptor.scriptSetup ?? descriptor.script
-      const component = { emits: null }
+      const component = { emits: null, state: [] }
       const node = {
         id, kind: 'component', name: path.basename(file, '.vue'), file: rel(file), line: 1,
         endLine: src.split('\n').length, visibility: 'public',
@@ -275,6 +280,7 @@ for (const file of files) {
       node.complexity = complexityScore
       node.params = props?.length ?? 0
       if (props?.length) node.parameters = props.map(p => p.type ? `${p.name}: ${p.type}` : p.name)
+      if (component.state.length) node.state = component.state
       if (component.emits) {
         node.tags = [...(node.tags ?? []), 'emits']
         if (component.emits.length) node.events = component.emits
