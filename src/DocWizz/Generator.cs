@@ -32,7 +32,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             written.Add(rel);
         }
 
-        var modules = model.Nodes.Where(n => n.Kind is not ("route" or "project" or "package" or "external") || parent.ContainsKey(n.Id))
+        var modules = model.Nodes.Where(n => n.Kind is not ("route" or "project" or "package" or "external" or "config") || parent.ContainsKey(n.Id))
             .GroupBy(n => Folder(n.File)).OrderBy(g => g.Key).ToList();
         foreach (var m in modules) Write($"modules/{Slug(m.Key)}.md", Module(m.Key, m.ToList()));
         Write("index.md", Index(modules.Select(m => m.Key).ToList()));

@@ -8,6 +8,9 @@ builder.Services.AddScoped<IMaterialRepository, SqlMaterialRepository>();
 builder.Services.AddControllers();
 builder.Services.AddHttpClient<ErpClient>(c => c.BaseAddress = new Uri("https://erp.example.com/"));
 builder.Services.AddStackExchangeRedisCache(o => { });
+builder.Services.AddHttpClient<WarehouseClient>(c => c.BaseAddress = new Uri(builder.Configuration["Warehouse:BaseUrl"]!));
+builder.Services.Configure<MaterialOptions>(builder.Configuration.GetSection("Materials"));
+var featureFlag = Environment.GetEnvironmentVariable("MATERIALS__BETA");
 
 var app = builder.Build();
 app.MapControllers();

@@ -29,6 +29,48 @@ partial class Generator
     IEnumerable<Node> DatabasesOf(Node ctx) => model.Edges.Where(e => e.Kind == "connects" && e.From == ctx.Id)
         .Select(e => nodes.GetValueOrDefault(e.To)).OfType<Node>();
 
+    List<Node> ConfigKeys => model.Nodes.Where(n => n.Kind == "config").OrderBy(n => n.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    ILookup<string, Edge> ConfigReaders => configReaders ??= model.Edges.Where(e => e.Kind is "reads" or "binds").ToLookup(e => e.To);
+    ILookup<string, Edge>? configReaders;
+
+    // Whether code reads a defined key: the key itself or a section above it.
+    bool IsRead(Node key) => ConfigKeys.Any(r => ConfigReaders[r.Id].Any()
+        && (r.Id == key.Id || key.Name.StartsWith(r.Name + ":", StringComparison.OrdinalIgnoreCase)));
+
+    string ConfigStatus(Node key) => ConfigReaders[key.Id].Any()
+        ? Configuration.DefinedFor(key, ConfigKeys) ? "detected: defined and read"
+            : "unknown: read, but no repository file defines it (environment variable, secret store or a default)"
+        : Configuration.IsFramework(key) ? "read by the framework" : IsRead(key) ? "detected: bound as part of a section" : "defined, not read by scanned code";
+
+    // Environments a key is defined for: its own files, or for a section, those of the keys below it.
+    IEnumerable<string> DefinedFor(Node key) => ConfigKeys.Where(k => k.Id == key.Id || k.Name.StartsWith(key.Name + ":", StringComparison.OrdinalIgnoreCase))
+        .SelectMany(Configuration.Environments).Distinct();
+
+    string ConfigReaderList(Node key) => string.Join(", ", ConfigReaders[key.Id].Where(e => nodes.ContainsKey(e.From))
+        .Select(e => UnitLabel(Unit(e.From)) + (e.Kind == "binds" ? " (binds)" : "")).Distinct().Order());
+
+    // Configuration keys: where they are defined (per environment), who reads them, and what is not known from the repository.
+    string ConfigurationSection()
+    {
+        var keys = ConfigKeys;
+        if (keys.Count == 0) return "";
+        var sb = new StringBuilder("## Configuration\n\n");
+        var envs = keys.SelectMany(Configuration.Definitions).Distinct()
+            .GroupBy(x => x.Env).Select(g => $"{g.Key} ({string.Join(", ", g.Select(x => SourceLink(x.File, 0, x.File, sub: "views")).Distinct())})").ToList();
+        if (envs.Count > 0) sb.AppendLine("Environments with configuration files in the repository: " + string.Join(", ", envs) + ". " +
+            "Values are not shown — they may be secrets — except the host of a URL.\n");
+        sb.AppendLine("| Key | Defined for | Points to | Read by | Status |\n|---|---|---|---|---|");
+        // Unread defined keys are summarised per top-level section; everything code reads is listed.
+        var listed = keys.Where(k => ConfigReaders[k.Id].Any() || IsRead(k)).ToList();
+        foreach (var k in listed)
+            sb.AppendLine($"| {SourceLink(k.File, k.Line, $"`{k.Name}`", sub: "views")} | {string.Join(", ", DefinedFor(k))} | " +
+                $"{string.Join(", ", Configuration.UrlHosts(k).Select(h => h.Key == "default" ? h.Value : $"{h.Value} ({h.Key})"))} | {ConfigReaderList(k)} | {ConfigStatus(k)} |");
+        foreach (var g in keys.Except(listed).GroupBy(k => k.Name.Split(':')[0], StringComparer.OrdinalIgnoreCase).OrderBy(g => g.Key))
+            sb.AppendLine($"| {(g.Count() == 1 ? SourceLink(g.First().File, g.First().Line, $"`{g.First().Name}`", sub: "views") : $"`{g.Key}:*` ({g.Count()} keys)")} | " +
+                $"{string.Join(", ", g.SelectMany(Configuration.Environments).Distinct())} | | | {ConfigStatus(g.First())} |");
+        return sb.ToString();
+    }
+
     // "SQL Server _(inferred)_": the name with its certainty unless detected.
     static string ExternalLabel(Node ext) => Externals.Certainty(ext) == "detected" ? ext.Name : $"{ext.Name} ({Externals.Certainty(ext)})";
 
@@ -57,10 +99,11 @@ partial class Generator
             sb.AppendLine("## External systems\n");
             sb.AppendLine("_Detected_: a call in the code shows it. _Inferred_: only a package reference (or a single candidate) points to it. " +
                 "_Unknown_: something is there, but the code doesn't say what.\n");
-            sb.AppendLine("| System | Kind | Certainty | Used by | Evidence |\n|---|---|---|---|---|");
+            sb.AppendLine("| System | Kind | Certainty | Used by | Configured by | Evidence |\n|---|---|---|---|---|---|");
             foreach (var ext in ExternalSystems)
                 sb.AppendLine($"| {ext.Name} | {Externals.Category(ext)} | {Externals.Certainty(ext)} | " +
                     $"{string.Join(", ", Connections[ext.Id].Where(e => nodes.ContainsKey(e.From)).Select(e => nodes[e.From].Name).Distinct().Order())} | " +
+                    $"{string.Join(", ", ConfigKeys.Where(k => Configuration.UrlHosts(k).ContainsValue(ext.Name)).Select(k => $"`{k.Name}`"))} | " +
                     $"{SourceLink(ext.File, ext.Line, CodeModel.Location(ext), sub: "views")} |");
             sb.AppendLine();
         }
@@ -80,7 +123,7 @@ partial class Generator
     {
         var sb = new StringBuilder("# Containers\n\n");
         sb.AppendLine("Separately built/deployed units (projects) and how they talk to each other.\n");
-        var code = model.Nodes.Where(n => n.Kind is not ("project" or "package" or "external")).ToList();
+        var code = model.Nodes.Where(n => n.Kind is not ("project" or "package" or "external" or "config")).ToList();
         var edges = new List<(string From, string To, string Label)>();
         foreach (var e in model.Edges)
         {
@@ -215,6 +258,7 @@ partial class Generator
                 sb.AppendLine($"  - services: {string.Join(", ", services)}");
         }
         sb.AppendLine();
+        sb.AppendLine(ConfigurationSection());
         sb.AppendLine(HumanNote("deployment", "Where and how each unit runs (environments, hosting, scaling) is not derivable from code."));
         return sb.ToString();
     }

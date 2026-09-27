@@ -74,6 +74,7 @@ static class CSharpScanner
 
             ScanRegistrations(sm, syntaxRoot, rel, nodes, edges);
             ScanExternals(sm, syntaxRoot, rel, nodes, edges);
+            ScanConfigurationReads(sm, syntaxRoot, rel, nodes, edges);
         }
 
         // Entities are what a DbContext persists.
@@ -245,6 +246,65 @@ static class CSharpScanner
                 && !add.DescendantNodes().OfType<AssignmentExpressionSyntax>().Any(x => x.Left.ToString().EndsWith("BaseAddress") && LiteralUri(x.Right, out _)))
                 Connect(n, $"http:{TypeName(client)}", $"HTTP API used by {TypeName(client)}", "http-api");
         }
+    }
+
+    static readonly string[] SectionCalls = ["GetSection", "GetRequiredSection", "GetConnectionString", "GetValue", "BindConfiguration"];
+    static readonly string[] OptionsCalls = ["Configure", "AddOptions", "ConfigureOptions"];
+
+    // Configuration keys the code reads (`reads`) or binds to an options type (`binds`): GetSection("A:B"), config["A:B"],
+    // GetConnectionString("X") (→ ConnectionStrings:X), GetValue<T>("A"), Configure<T>(..GetSection("A")),
+    // AddOptions<T>().BindConfiguration("A"), Environment.GetEnvironmentVariable("A__B") (→ A:B).
+    // ponytail: configuration types are unresolved (no package refs), so receivers are matched by call and name shape.
+    static void ScanConfigurationReads(SemanticModel sm, SyntaxNode root, string rel, List<Node> nodes, List<Edge> edges)
+    {
+        static string? Literal(BaseArgumentListSyntax? args) =>
+            args?.Arguments.FirstOrDefault()?.Expression is LiteralExpressionSyntax { Token.Value: string v } ? v : null;
+        static bool LooksLikeConfig(ExpressionSyntax receiver) =>
+            System.Text.RegularExpressions.Regex.IsMatch(receiver.ToString().Split('.').Last(), "config|settings", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        // The key an expression reads: its own literal, prefixed by the GetSection(..) it is called on.
+        static string? Key(ExpressionSyntax e) => e switch
+        {
+            InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax ma } inv when SectionCalls.Contains(ma.Name.Identifier.Text)
+                && Literal(inv.ArgumentList) is { } lit =>
+                Join(Key(ma.Expression), ma.Name.Identifier.Text == "GetConnectionString" ? $"ConnectionStrings:{lit}" : lit),
+            ElementAccessExpressionSyntax ea when Literal(ea.ArgumentList) is { } lit
+                && (Key(ea.Expression) is not null || LooksLikeConfig(ea.Expression)) => Join(Key(ea.Expression), lit),
+            _ => null,
+        };
+        static string Join(string? prefix, string key) => prefix is null ? key : $"{prefix}:{key}";
+
+        foreach (var n in root.DescendantNodes().OfType<ExpressionSyntax>())
+        {
+            string? key = null;
+            if (n is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name.Identifier.Text: "GetEnvironmentVariable" } } env
+                && Literal(env.ArgumentList) is { } name)
+                key = name.Replace("__", ":");
+            else if (n is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax ma } inv && SectionCalls.Contains(ma.Name.Identifier.Text)
+                && (ma.Name.Identifier.Text != "GetValue" || Key(ma.Expression) is not null || LooksLikeConfig(ma.Expression)))
+                key = Key(inv);
+            else if (n is ElementAccessExpressionSyntax)
+                key = Key(n);
+            if (key is null) continue;
+            // Only the outermost expression names the full key (`GetSection("A")["B"]` → A:B).
+            if (n.Parent is MemberAccessExpressionSyntax { Parent: InvocationExpressionSyntax outer } && Key(outer) is not null
+                || n.Parent is ElementAccessExpressionSyntax ea && ea.Expression == n && Key(ea) is not null) continue;
+
+            nodes.Add(new Node(Configuration.Id(key), "config", key, rel, Line(n)));
+            var (owner, kind) = OptionsOwner(sm, n) is { } options ? (options, "binds") : (Owner(sm, n), "reads");
+            edges.Add(new(owner ?? $"file:{rel}", Configuration.Id(key), kind)); // top-level code: resolved to its project later
+        }
+    }
+
+    // Configure<T>(..), AddOptions<T>().Bind*(..): the options type T the key is bound to.
+    static string? OptionsOwner(SemanticModel sm, SyntaxNode at)
+    {
+        foreach (var a in at.AncestorsAndSelf().OfType<InvocationExpressionSyntax>())
+            for (ExpressionSyntax? e = a; e is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax ma }; e = ma.Expression)
+                if (ma.Name is GenericNameSyntax { TypeArgumentList.Arguments: [var t] } g && OptionsCalls.Contains(g.Identifier.Text)
+                    && sm.GetTypeInfo(t).Type is { } type && InSource(type))
+                    return Id(type);
+        return null;
     }
 
     // Who talks to an external system: T of an enclosing AddDbContext<T>/AddHttpClient<T>(..), else the enclosing member

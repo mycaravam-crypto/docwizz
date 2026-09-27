@@ -77,6 +77,12 @@ partial class Generator
                 $"- {g.Key.Name} ({Externals.Category(g.Key)}, {Externals.Certainty(g.Key)}) — used by {string.Join(", ", g.Select(x => $"`{x.User}`").Distinct())}")) +
                 "\n\nSee [system context](../views/context.md).\n");
 
+        var settings = model.Edges.Where(e => e.Kind is "reads" or "binds" && Here(e.From) && nodes.ContainsKey(e.To)).Select(e => nodes[e.To]).Distinct()
+            .OrderBy(k => k.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        if (settings.Count > 0)
+            sb.AppendLine("## Configuration\n\n| Key | Read by | Status |\n|---|---|---|\n" + string.Join("\n", settings.Select(k =>
+                $"| `{k.Name}` | {ConfigReaderList(k)} | {ConfigStatus(k)} |")) + "\n\nAll keys: [deployment](../views/deployment.md#configuration).\n");
+
         // Flows: every route and endpoint whose path starts or passes here.
         var flows = model.Nodes.Where(n => n.Kind == "route").OrderBy(n => n.Route)
             .Concat(model.Nodes.Where(n => n.Tags?.Contains("endpoint") == true).OrderBy(n => n.Route?.TrimStart('/')).ThenBy(n => n.Tags![1]))

@@ -109,10 +109,16 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     var (nodes, edges) = CSharpScanner.Scan(root, scanned.Where(f => f.EndsWith(".cs")));
     var (feNodes, feEdges) = Frontend.Scan(root, scanned.Where(f => !f.EndsWith(".cs")).ToList());
     var (projNodes, projEdges) = Projects.Scan(root, candidates.Where(f => f.EndsWith(".csproj") || Path.GetFileName(f) == "package.json"));
+    // Keys defined in configuration files win over the bare key nodes code reads create.
+    var settings = Configuration.Scan(root, candidates.Where(Configuration.IsConfigFile));
+    var defined = settings.Select(n => n.Id).ToHashSet();
+    nodes.RemoveAll(n => n.Kind == "config" && defined.Contains(n.Id));
+    nodes = nodes.DistinctBy(n => n.Id).ToList();
     var ids = nodes.Select(n => n.Id).ToHashSet();
-    nodes.AddRange(feNodes.Concat(projNodes).Where(n => ids.Add(n.Id)));
+    nodes.AddRange(feNodes.Concat(projNodes).Concat(settings).Where(n => ids.Add(n.Id)));
     edges = Frontend.LinkHttp(nodes, [.. edges, .. feEdges, .. projEdges]);
     Externals.Link(nodes, edges);
+    Configuration.Link(nodes, edges);
 
     // Test code leaves only `tests` edges (test symbol → code it uses) behind.
     var testFiles = scanned.Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))
@@ -122,7 +128,7 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     edges = edges.Where(e => !testIds.Contains(e.To) && (!testIds.Contains(e.From) || e.Kind is "calls" or "imports" or "renders" or "injects" or "http"))
         .Select(e => testIds.Contains(e.From) ? new Edge(e.From, e.To, "tests") : e).Distinct().ToList();
 
-    nodes = nodes.Select(n => n.Kind == "external" ? n : n with { Language = Language(n.File) }).ToList();
+    nodes = nodes.Select(n => n.Kind is "external" or "config" ? n : n with { Language = Language(n.File) }).ToList();
 
     var files = scanned.Where(f => !testFiles.Contains(Path.GetRelativePath(root, f).Replace('\\', '/'))).ToList();
     return (new CodeModel(Git(root, "rev-parse --short HEAD")?.Trim(), nodes, edges), files);

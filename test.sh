@@ -31,7 +31,7 @@ roles = lambda i: nodes[i].get("tags") or []
 assert "entity" in roles(D + "Material") and "service" in roles(A + "MaterialService") and "repository" in roles(I + "SqlMaterialRepository")
 assert "background-service" in roles(I + "MaterialCleanup") and "middleware" in roles(I + "TimingMiddleware") and "options" in roles(I + "MaterialOptions")
 assert nodes[I + "MaterialChanged"]["kind"] == "delegate" and nodes[I + "MaterialChanged"]["parameters"] == ["id: int"]
-assert {n.get("language") for n in nodes.values() if n["kind"] != "external"} == {"csharp", "vue", "typescript", "msbuild", "npm"}, {n.get("language") for n in nodes.values()}
+assert {n.get("language") for n in nodes.values() if n["kind"] not in ("external", "config")} == {"csharp", "vue", "typescript", "msbuild", "npm"}, {n.get("language") for n in nodes.values()}
 assert nodes["vue:frontend/src/components/MaterialForm.vue"]["language"] == "vue"
 assert ("injects", D + "Material", D + "Material") not in edges, "record copy ctor leaked as injection"
 assert "controller" in nodes[API + "MaterialController"]["tags"]
@@ -89,13 +89,26 @@ assert not any(e[0] == "accesses" and e[2] == D + "Material" for e in edges), "m
 ext = {n["id"]: n["tags"] for n in nodes.values() if n["kind"] == "external"}
 assert ext == {"ext:http:erp.example.com": ["http-api", "detected"], "ext:redis": ["cache", "detected"],
                "ext:http:rates.example.org": ["http-api", "detected"], "ext:sqlserver": ["database", "inferred"],
-               "ext:oidc": ["identity", "inferred"]}, ext  # relative /api/... calls are not external
+               "ext:oidc": ["identity", "inferred"], "ext:http:WarehouseClient": ["http-api", "detected"]}, ext  # relative /api/... calls are not external
 connects = {(e["from"], e["to"], e.get("label")) for e in m["edges"] if e["kind"] == "connects"}
 for c in [(I + "ErpClient", "ext:http:erp.example.com", "detected"),  # AddHttpClient<ErpClient>(BaseAddress = ...)
           ("ts:" + F + "api/materialApi.ts#getRates", "ext:http:rates.example.org", "detected"),
           ("proj:backend/Fixture.csproj", "ext:redis", "detected"),  # top-level statement → its project
           (I + "AppDbContext", "ext:sqlserver", "inferred")]:
     assert c in connects, c
+
+# Configuration: keys from appsettings*.json (per environment, no values), read/bound by code
+url = nodes["config:warehouse:baseurl"]
+assert url["file"] == "backend/appsettings.json" and url["line"] == 5, url
+assert set(url["tags"]) == {"env:default@backend/appsettings.json", "url:default=warehouse.example.net",
+                            "env:Development@backend/appsettings.Development.json", "url:Development=localhost"}, url
+assert nodes["config:logging:loglevel:default"]["line"] == 2  # nested keys on one line
+assert not any("not-a-real-secret" in json.dumps(n) for n in nodes.values()), "config value leaked into the model"
+reads = {(e["kind"], e["from"], e["to"]) for e in m["edges"] if e["kind"] in ("reads", "binds")}
+assert reads == {("reads", I + "WarehouseClient", "config:warehouse:baseurl"),  # AddHttpClient<WarehouseClient>(.. config["Warehouse:BaseUrl"])
+                 ("binds", I + "MaterialOptions", "config:materials"),        # Configure<MaterialOptions>(GetSection("Materials"))
+                 ("reads", "proj:backend/Fixture.csproj", "config:materials:beta")}, reads  # GetEnvironmentVariable("MATERIALS__BETA")
+assert nodes["ext:http:WarehouseClient"]["name"] == "warehouse.example.net"  # typed client named by its configured URL
 PY
 
 # Documentation analysis: planted undocumented code is critical, trivial code is ignored.
@@ -217,6 +230,15 @@ grep -q '| Material | AppDbContext | SQL Server (inferred) | POST /orders, SqlMa
 grep -q '| erp.example.com | http-api | detected | ErpClient |' "$docs/views/context.md"
 grep -q 'c[0-9]* -->|reads/writes| c[0-9]*' "$docs/views/containers.md"
 grep -q 'services: api, web, db' "$docs/views/deployment.md"
+D="$docs/views/deployment.md"
+grep -q '`Warehouse:BaseUrl`.* | default, Development | warehouse.example.net, localhost (Development) | WarehouseClient | detected: defined and read |' "$D"
+grep -q '`MATERIALS:BETA`.* | Fixture | unknown: read, but no repository file defines it' "$D"
+grep -q '`Materials:MaxQuantity`.* | detected: bound as part of a section |' "$D"
+grep -q '`LegacyExport:Folder`.* | defined, not read by scanned code |' "$D"
+grep -q '`AllowedHosts`.* | read by the framework |' "$D"
+grep -q '| warehouse.example.net | http-api | detected | WarehouseClient | `Warehouse:BaseUrl` |' "$docs/views/context.md"
+grep -q '| `Materials` | MaterialOptions (binds) | detected: defined and read |' "$docs/modules/backend-Infrastructure.md"
+if grep -rq "not-a-real-secret" "$docs"; then echo "config value leaked into docs"; exit 1; fi
 grep -q 'subgraph application\["application"\]' "$docs/views/components.md"
 grep -q '\["createMaterial"\]' "$docs/api.md"                                  # API flow diagram
 # Flows: endpoint → handler → services (through interfaces) → data → external systems; route → … → endpoints

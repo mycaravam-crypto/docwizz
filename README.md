@@ -29,11 +29,17 @@ Source → analyzers (Roslyn for C#, TypeScript + Vue compiler for `.vue`/`.ts`,
 The code model holds facts only: symbols, signatures, endpoints (route, input, response, authorization), props/emits,
 projects and packages, and relationships (`contains`, `calls`, `implements`, `inherits`, `injects`, `creates`, `registers`,
 `imports`, `renders`, `routes-to`, `persists`, `publishes`, `subscribes`, `http`, `references`, `depends-on`, `tests`, `connects`,
-`accesses` — a member using an injected dependency of its own type, which is how a request reaches a `DbContext`).
+`accesses` — a member using an injected dependency of its own type, which is how a request reaches a `DbContext` —,
+`reads`, `binds`).
 External systems (databases, caches, message brokers, HTTP APIs, identity providers, storage, e-mail — see
 [Externals.cs](src/DocWizz/Externals.cs)) are `external` nodes tagged with their category and certainty: `detected`
 (a call shows it: `UseNpgsql`, `AddHttpClient<T>` with a base address, `fetch('https://…')`), `inferred` (only a package
 reference or a single candidate points to it) or `unknown` (a `DbContext` whose database the code doesn't name).
+Configuration keys from `appsettings*.json` and `.env` files are `config` nodes tagged with the environments that define
+them; code that reads a key (`config["A:B"]`, `GetSection`, `GetConnectionString`, `GetEnvironmentVariable`) or binds it
+(`Configure<T>`, `AddOptions<T>().BindConfiguration`) points at it (`reads`, `binds`). Values are never stored — only the
+host of a URL, which also names a typed `HttpClient` whose address comes from configuration. `views/deployment.md` lists
+every key with its status: defined and read, read but not defined in the repository (unknown), or defined but unread.
 Every node records its `language` (csharp, vue, typescript, msbuild, npm); C# types carry roles as tags
 (controller, service, repository, entity, dbcontext, background-service, middleware, hub, options).
 Test code (`tests:` globs) only contributes `tests` edges.

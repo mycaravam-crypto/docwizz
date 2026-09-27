@@ -72,7 +72,7 @@ static class Architecture
             .Select(e => (From: Folder(nodes[e.From].File), To: Folder(nodes[e.To].File)))
             .Where(p => p.From != p.To).Distinct()
             .ToLookup(p => p.From, p => p.To);
-        var code = model.Nodes.Where(n => n.Kind is not ("project" or "package" or "external")).ToList();
+        var code = model.Nodes.Where(n => n.Kind is not ("project" or "package" or "external" or "config")).ToList();
         var folders = code.Select(n => Folder(n.File)).Distinct();
         var layerFiles = code.Select(n => n.File).Distinct()
             .GroupBy(f => LayerOf(f) ?? "(none)").ToDictionary(g => g.Key, g => g.Count());
