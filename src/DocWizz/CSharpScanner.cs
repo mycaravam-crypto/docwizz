@@ -79,6 +79,7 @@ static class CSharpScanner
                 if (sm.GetDeclaredSymbol(decl) is { } t)
                     edges.AddRange(usings.Select(u => new Edge(Id(t), $"ns:{u}", "uses-namespace")));
             ScanRegistrations(sm, syntaxRoot, rel, nodes, edges);
+            ScanSqlReferences(sm, syntaxRoot, rel, edges);
             ScanPipeline(sm, syntaxRoot, rel, edges);
             ScanExternals(sm, syntaxRoot, rel, nodes, edges);
             ScanConfigurationReads(sm, syntaxRoot, rel, nodes, edges);
@@ -114,6 +115,7 @@ static class CSharpScanner
                 .Any(m => m.Name is "Invoke" or "InvokeAsync" && m.Parameters.FirstOrDefault()?.Type.Name == "HttpContext"))
             tags.Add("middleware");
         if (bases.Contains("Hub")) tags.Add("hub");
+        if (bases.Contains("Migration") && HasAttr(decl.AttributeLists, "Migration")) tags.Add("migration"); // EF Core migrations
         if (type.TypeKind is TypeKind.Class or TypeKind.Struct)
         {
             if (type.Name.EndsWith("Repository") || interfaces.Any(i => i.EndsWith("Repository"))) tags.Add("repository");
@@ -225,6 +227,25 @@ static class CSharpScanner
                 // MapMethods("/route", ["PATCH", ...], handler)
                 foreach (var verb in inv.ArgumentList.Arguments[1].DescendantNodes().OfType<LiteralExpressionSyntax>())
                     ScanMinimalEndpoint(sm, inv, inv.ArgumentList.Arguments[2].Expression, verb.Token.ValueText.ToUpperInvariant(), route, groupAuth, rel, nodes, edges);
+        }
+    }
+
+    // Stored procedures called from code: a literal "EXEC dbo.X ..." anywhere (FromSqlRaw, ExecuteSqlRaw, SqlCommand), or a
+    // literal name passed or assigned next to CommandType.StoredProcedure (Dapper `commandType:`, SqlCommand.CommandText).
+    // `sqlref:<name>` edges; Sql.Link resolves them to procedure nodes and drops the rest.
+    static void ScanSqlReferences(SemanticModel sm, SyntaxNode root, string rel, List<Edge> edges)
+    {
+        foreach (var lit in root.DescendantNodes().OfType<LiteralExpressionSyntax>().Where(l => l.IsKind(SyntaxKind.StringLiteralExpression)))
+        {
+            var text = lit.Token.ValueText;
+            var name = System.Text.RegularExpressions.Regex.Match(text, @"^\s*EXEC(?:UTE)?\s+([\w.\[\]]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase) is { Success: true } m
+                ? m.Groups[1].Value
+                : System.Text.RegularExpressions.Regex.IsMatch(text, @"^[\w.\[\]]+$")
+                    && (lit.Parent is ArgumentSyntax { Parent: ArgumentListSyntax args } && args.ToString().Contains("StoredProcedure")
+                        || lit.Parent is AssignmentExpressionSyntax a && a.Left.ToString().EndsWith("CommandText")
+                            && lit.FirstAncestorOrSelf<MemberDeclarationSyntax>()?.ToString().Contains("CommandType.StoredProcedure") == true)
+                    ? text : null;
+            if (name is not null) edges.Add(new(Owner(sm, lit) ?? $"file:{rel}", $"sqlref:{Sql.Name(name)}", "calls"));
         }
     }
 

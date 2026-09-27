@@ -93,7 +93,7 @@ static int Usage(string? error)
 static (CodeModel Model, List<string> Files) BuildModel(string root, Config config)
 {
     string[] skip = ["bin", "obj", "node_modules", "dist"];
-    string[] exts = [".cs", ".vue", ".ts"];
+    string[] exts = [".cs", ".vue", ".ts", ".sql"];
 
     // Prefer git's view (honours .gitignore, skips nested worktrees); fall back to a directory walk.
     var candidates = (Git(root, "ls-files --cached --others --exclude-standard")?
@@ -108,7 +108,8 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     var scanned = candidates.Where(f => exts.Contains(Path.GetExtension(f)) && !f.EndsWith(".d.ts")).ToList();
 
     var (nodes, edges) = CSharpScanner.Scan(root, scanned.Where(f => f.EndsWith(".cs")));
-    var (feNodes, feEdges) = Frontend.Scan(root, scanned.Where(f => !f.EndsWith(".cs")).ToList());
+    var (feNodes, feEdges) = Frontend.Scan(root, scanned.Where(f => f.EndsWith(".vue") || f.EndsWith(".ts")).ToList());
+    var (sqlNodes, sqlEdges) = Sql.Scan(root, scanned.Where(f => f.EndsWith(".sql")));
     var (projNodes, projEdges) = Projects.Scan(root, candidates.Where(f => f.EndsWith(".csproj") || f.EndsWith(".sln") || f.EndsWith(".slnx") || Path.GetFileName(f) == "package.json"));
     // Keys defined in configuration files win over the bare key nodes code reads create.
     var settings = Configuration.Scan(root, candidates.Where(Configuration.IsConfigFile));
@@ -120,8 +121,8 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     // Same id from test and production code (a test router's `route:/login`): production wins.
     nodes = nodes.OrderBy(n => testFiles.Contains(n.File)).DistinctBy(n => n.Id).ToList();
     var ids = nodes.Select(n => n.Id).ToHashSet();
-    nodes.AddRange(feNodes.OrderBy(n => testFiles.Contains(n.File)).Concat(projNodes).Concat(settings).Where(n => ids.Add(n.Id)));
-    edges = Frontend.LinkHttp(nodes, [.. edges, .. feEdges, .. projEdges]);
+    nodes.AddRange(feNodes.OrderBy(n => testFiles.Contains(n.File)).Concat(sqlNodes).Concat(projNodes).Concat(settings).Where(n => ids.Add(n.Id)));
+    edges = Frontend.LinkHttp(nodes, Sql.Link(nodes, [.. edges, .. feEdges, .. sqlEdges, .. projEdges]));
     Externals.Link(nodes, edges);
     Configuration.Link(nodes, edges);
 
@@ -139,7 +140,7 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
 
 static string? Language(string file) => Path.GetExtension(file) switch
 {
-    ".cs" => "csharp", ".vue" => "vue", ".ts" => "typescript", ".csproj" => "msbuild",
+    ".cs" => "csharp", ".vue" => "vue", ".ts" => "typescript", ".sql" => "sql", ".csproj" => "msbuild",
     _ => Path.GetFileName(file) == "package.json" ? "npm" : null,
 };
 

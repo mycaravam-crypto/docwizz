@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 model=$(mktemp)
 out=$(dotnet run --project src/DocWizz -- scan fixture "$model")
 echo "$out"
-grep -q "Files  19" <<<"$out"  # tests/ excluded
+grep -q "Files  21" <<<"$out"  # tests/ excluded
 
 python3 - "$model" <<'PY'
 import json, sys
@@ -31,7 +31,7 @@ roles = lambda i: nodes[i].get("tags") or []
 assert "entity" in roles(D + "Material") and "service" in roles(A + "MaterialService") and "repository" in roles(I + "SqlMaterialRepository")
 assert "background-service" in roles(I + "MaterialCleanup") and "middleware" in roles(I + "TimingMiddleware") and "options" in roles(I + "MaterialOptions")
 assert nodes[I + "MaterialChanged"]["kind"] == "delegate" and nodes[I + "MaterialChanged"]["parameters"] == ["id: int"]
-assert {n.get("language") for n in nodes.values() if n["kind"] not in ("external", "config")} == {"csharp", "vue", "typescript", "msbuild", "npm"}, {n.get("language") for n in nodes.values()}
+assert {n.get("language") for n in nodes.values() if n["kind"] not in ("external", "config")} == {"csharp", "vue", "typescript", "sql", "msbuild", "npm"}, {n.get("language") for n in nodes.values()}
 assert nodes["vue:frontend/src/components/MaterialForm.vue"]["language"] == "vue"
 assert ("injects", D + "Material", D + "Material") not in edges, "record copy ctor leaked as injection"
 assert "controller" in nodes[API + "MaterialController"]["tags"]
@@ -55,6 +55,14 @@ assert nodes["cs:endpoint:GET /health"]["responses"] == ["200 string"] and nodes
 pipe = [e["to"] for e in m["edges"] if e["kind"] == "pipeline"]
 assert pipe == ["pipeline:UseHttpsRedirection", I + "TimingMiddleware", "pipeline:UseAuthorization"], pipe
 assert "hosted" in nodes[I + "MaterialCleanup"]["tags"]
+# SQL: procedures (doc, parameters), tables from migrations, what routines touch, code calling a procedure
+assert nodes["sql:dbo.getlowstock"]["kind"] == "procedure" and nodes["sql:dbo.getlowstock"]["parameters"] == ["@threshold: int"]
+assert "below a threshold" in nodes["sql:dbo.getlowstock"]["doc"] and nodes["sql:dbo.materials"]["kind"] == "table"
+assert nodes["sql:migration:db/migrations/v1__materials.sql"]["kind"] == "migration"
+for e in [("accesses", "sql:dbo.getlowstock", "sql:dbo.materials"), ("accesses", "sql:dbo.resetstock", "sql:dbo.materials"),
+          ("calls", "sql:dbo.resetstock", "sql:dbo.getlowstock"), ("calls", I + "SqlMaterialRepository.LowStockAsync(int)", "sql:dbo.getlowstock")]:
+    assert e in edges, e
+assert "sql:dbo.ignored" not in nodes and not any(e[2] == "sql:dbo.ignored" for e in edges)
 assert not any("Tests" in n["id"] for n in nodes.values() if n["kind"] != "project"), "test code in the model"
 assert ("tests", "cs:Fixture.Tests.MaterialServiceTests.CreateAsync_Creates(Fixture.Application.MaterialService)", A + "MaterialService." + create) in edges
 
@@ -282,7 +290,9 @@ grep -q '`Attach(Fixture.Application.MaterialService)`.* | Starts listening to `
 grep -q "_Evidence:_ \[backend/Api/MaterialController.cs:[0-9]*-[0-9]*\](" "$docs/modules/backend-Api.md"
 python3 -c "import json,sys; assert json.load(open(sys.argv[1]))['profile'] == 'default'" "$docs/.docwizz/documentation.json"
 [ -f "$docs/notes.md" ] || { echo "deleted a hand-written file"; exit 1; }
-grep -q 'c0 -->|HTTP| c1' "$docs/views/containers.md"                          # frontend → backend container
+fe=$(grep -o 'c[0-9]*\["fixture-frontend"\]' "$docs/views/containers.md" | cut -d'[' -f1)
+be=$(grep -o 'c[0-9]*\["Fixture"\]' "$docs/views/containers.md" | cut -d'[' -f1)
+grep -q "$fe -->|HTTP| $be" "$docs/views/containers.md"                          # frontend → backend container
 grep -q '| Material | AppDbContext | SQL Server (inferred) | POST /orders, SqlMaterialRepository |' "$docs/views/data.md"
 grep -q '| erp.example.com | http-api | detected | ErpClient |' "$docs/views/context.md"
 grep -q 'c[0-9]* -->|reads/writes| c[0-9]*' "$docs/views/containers.md"
@@ -297,6 +307,8 @@ grep -q '^| \[Service/materials-api\](.*) | — | 80→8080 |' "$D"
 grep -q 'backend/Dockerfile.*: from `mcr.microsoft.com/dotnet/sdk:9.0`, `mcr.microsoft.com/dotnet/aspnet:9.0`; exposes 8080' "$D"
 grep -q 'deploy/main.bicep.*: `Microsoft.Sql/servers` → SQL Server (used by the code, inferred), `Microsoft.Sql/servers/databases` → SQL Server' "$D"
 grep -q '^| SQL Server | database | inferred |.*| \[deploy/main.bicep\](.*) |$' "$docs/views/context.md"   # provisioned by IaC
+grep -q '^| \[GetLowStock\](.*) | procedure | Materials whose stock is below a threshold, lowest first. | @threshold: int | Materials | SqlMaterialRepository |' "$docs/views/data.md"
+grep -q '^1\. \[V1__materials\](.*) — Creates the materials table.' "$docs/views/data.md"
 grep -q '`MATERIALS:BETA`.* | Fixture | detected: set by the deployment (api in deploy/docker-compose.yml) |' "$D"
 grep -q '^## Not derivable from the repository' "$D"
 grep -q '`Warehouse:BaseUrl`.* | default, Development | warehouse.example.net, localhost (Development) | WarehouseClient | detected: defined and read |' "$D"
@@ -452,7 +464,7 @@ CS
 sed -i '1i using Microsoft.EntityFrameworkCore;' "$risk/backend/Domain/IMaterialRepository.cs"
 dw generate "$risk" "$risk/docs" >/dev/null 2>&1
 A="$risk/docs/architecture.md"
-grep -q '^| \[backend/Infrastructure\](modules/backend-Infrastructure.md) | infrastructure | 3 | 1 | 0.25 |' "$A"
+grep -q '^| \[backend/Infrastructure\](modules/backend-Infrastructure.md) | infrastructure | 3 | 2 | 0.40 |' "$A"   # fan-out: Domain, db (stored procedure)
 grep -q '^- Entity exposed: `GET /api/materials/{id}` returns `Material`' "$A"
 grep -q '^- Logic in the API layer: `PricingController.Price(.*)` has complexity [0-9]*' "$A"
 grep -q '^- Domain depends on `Microsoft.EntityFrameworkCore` (`IMaterialRepository`)' "$A"

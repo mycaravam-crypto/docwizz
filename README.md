@@ -48,7 +48,9 @@ not defined in the repository (unknown), or defined but unread.
 environment variable *names*, `depends_on`, volumes, and the known system an image runs), Kubernetes workloads and Services,
 Dockerfile base images and exposed ports, Terraform/Bicep resource types with the known system each provisions (also
 shown as "provisioned by" in `views/context.md`) — and lists what none of them can tell.
-Every node records its `language` (csharp, vue, typescript, msbuild, npm); C# types carry roles as tags
+SQL scripts add stored procedures, functions, views and tables (with the tables each routine touches and the code that
+calls it) and schema migrations in order, shown in `views/data.md`.
+Every node records its `language` (csharp, vue, typescript, sql, msbuild, npm); C# types carry roles as tags
 (controller, service, repository, entity, dbcontext, background-service, middleware, hub, options).
 Test code (`tests:` globs) only contributes `tests` edges.
 

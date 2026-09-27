@@ -116,7 +116,7 @@ record DocumentationItem(Node Node, string Profile, string Pattern, Level Level,
 static class Analyzer
 {
     static readonly string[] Analyzed = ["class", "record", "struct", "interface", "type", "enum", "method", "endpoint",
-        "component", "function", "store", "delegate"];
+        "component", "function", "store", "delegate", "procedure", "sql-function", "sql-view", "trigger"];
     static readonly string[] TypeKinds = ["class", "record", "struct", "interface", "type", "enum", "delegate"];
 
     // Profile section names → the canonical (XML doc tag) name.

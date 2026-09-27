@@ -82,7 +82,7 @@ partial class Generator
         containerOf ??= [];
         if (containerOf.TryGetValue(n.File, out var c)) return c;
         return containerOf[n.File] = n.Kind == "project" ? n.Name
-            : global::Projects.Of(Projects, n.File)?.Name ?? (n.File.EndsWith(".cs") ? "C# code" : "frontend code");
+            : global::Projects.Of(Projects, n.File)?.Name ?? Path.GetExtension(n.File) switch { ".cs" => "C# code", ".sql" => "SQL scripts", _ => "frontend code" };
     }
 
     string ContextView()
@@ -198,6 +198,9 @@ partial class Generator
         return sb.ToString();
     }
 
+    // A symbol's section on its module page, linked from a views/ page.
+    string ViewLink(Node n) => $"[{n.Name}](../modules/{Slug(Folder(n.File))}.md#{Anchor(Top(n.Id))})";
+
     string DataView()
     {
         var sb = new StringBuilder("# Data\n\n");
@@ -221,6 +224,37 @@ partial class Generator
                     sb.AppendLine($"| {en.Name} | {ctx.Name} | {string.Join(", ", DatabasesOf(ctx).Select(ExternalLabel))} | {string.Join(", ", injectedBy[ctx.Id].Where(nodes.ContainsKey).Select(a => nodes[a].Name).Distinct().Order())} | {Esc(Summary(en) ?? "")} |");
             sb.AppendLine();
         }
+
+        // SQL in the repository: tables and the routines that touch them, and schema migrations in order.
+        var routines = model.Nodes.Where(n => n.Kind is "procedure" or "sql-function" or "sql-view" or "trigger").OrderBy(n => n.Name).ToList();
+        var tables = model.Nodes.Where(n => n.Kind == "table").OrderBy(n => n.Name).ToList();
+        if (routines.Count + tables.Count > 0)
+        {
+            var accesses = model.Edges.Where(e => e.Kind == "accesses" && e.To.StartsWith("sql:")).ToLookup(e => e.To, e => e.From);
+            var touches = model.Edges.Where(e => e.Kind == "accesses" && e.From.StartsWith("sql:")).ToLookup(e => e.From, e => e.To);
+            var callers = model.Edges.Where(e => e.Kind == "calls" && e.To.StartsWith("sql:") && !e.From.StartsWith("sql:")).ToLookup(e => e.To, e => e.From);
+            string Names(IEnumerable<string> ids) => string.Join(", ", ids.Where(nodes.ContainsKey).Select(id => UnitLabel(Unit(id))).Distinct().Order());
+            sb.AppendLine("## Database objects (SQL)\n");
+            if (tables.Count > 0)
+            {
+                sb.AppendLine("| Table | Defined in | Used by |\n|---|---|---|");
+                foreach (var t in tables) sb.AppendLine($"| {ViewLink(t)} | {SourceLink(t.File, t.Line, t.File, sub: "views")} | {Names(accesses[t.Id])} |");
+                sb.AppendLine();
+            }
+            if (routines.Count > 0)
+            {
+                sb.AppendLine("| Routine | Kind | Summary | Parameters | Tables | Called from |\n|---|---|---|---|---|---|");
+                foreach (var r in routines)
+                    sb.AppendLine($"| {ViewLink(r)} | {r.Kind.Replace("sql-", "")} | {Esc(Summary(r) ?? "—")} | {Esc(string.Join(", ", r.Parameters ?? []))} | " +
+                        $"{string.Join(", ", touches[r.Id].Where(nodes.ContainsKey).Select(x => nodes[x].Name).Distinct().Order())} | {Names(callers[r.Id])} |");
+                sb.AppendLine();
+            }
+        }
+        var migrations = model.Nodes.Where(n => n.Kind == "migration" || n.Tags?.Contains("migration") == true && n.Kind == "class")
+            .OrderBy(n => n.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        if (migrations.Count > 0)
+            sb.AppendLine("## Schema migrations\n\nIn file-name order, which is the order Flyway and EF Core apply them.\n\n" +
+                string.Join("\n", migrations.Select((m, i) => $"{i + 1}. {SourceLink(m.File, m.Line, m.Name, sub: "views")}{(Summary(m) is { } s ? $" — {Esc(s)}" : "")}")) + "\n");
 
         var stores = model.Nodes.Where(n => n.Kind == "store").ToList();
         if (stores.Count > 0)

@@ -8,7 +8,7 @@ static class Diff
 {
     // Kinds worth reporting; properties/modules churn with every edit and carry no docs of their own.
     static readonly string[] Reported = ["class", "record", "struct", "interface", "type", "enum", "method", "constructor",
-        "endpoint", "component", "function", "store", "route"];
+        "endpoint", "component", "function", "store", "route", "procedure", "sql-function", "sql-view", "trigger", "table", "migration"];
 
     public static DiffResult Compare(CodeModel before, CodeModel after, Config config)
     {

@@ -10,7 +10,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
 
     // Also write an HTML twin of every page (Html.cs).
     public bool WriteHtml { get; init; }
-    static readonly string[] TopKinds = ["class", "record", "struct", "interface", "type", "enum", "delegate", "component", "module", "store"];
+    static readonly string[] TopKinds = ["class", "record", "struct", "interface", "type", "enum", "delegate", "component", "module", "store",
+        "procedure", "sql-function", "sql-view", "trigger", "table", "migration"];
     const int MaxDiagramEdges = 60;
 
     readonly ArchitectureConfig archConfig = config.Architecture;
@@ -115,6 +116,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     static readonly (string Label, string Match)[] Roles = [("Controllers", "controller"), ("API endpoints", "endpoint"),
         ("Services", "service"), ("Repositories", "repository"), ("Entities", "entity"), ("DbContexts", "dbcontext"),
         ("Background services", "background-service"), ("Hosted services", "hosted"), ("Middleware", "middleware"), ("SignalR hubs", "hub"), ("Options", "options"),
+        ("Stored procedures", "procedure"), ("SQL tables", "table"), ("Migrations", "migration"),
         ("Vue components", "component"), ("Views", "view"), ("Stores", "store"), ("Composables", "composable"), ("Routes", "route")];
 
     // Well-known packages → what they tell a reader about the stack. Anything else is in views/context.md.
