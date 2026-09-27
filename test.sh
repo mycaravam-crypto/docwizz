@@ -178,6 +178,7 @@ grep "\[MaterialTable\]" "$docs/frontend.md" | grep -q "| MaterialForm @created 
 grep -q "n0 --> n1" "$docs/modules/backend-Application.md"
 grep "\`CreateAsync" "$docs/modules/backend-Application.md" | grep -q "side effects (inferred): db, event"
 grep -q "_Generated from .* profile \`default\`" "$docs/modules/backend-Application.md"
+grep -q '`Attach(Fixture.Application.MaterialService)`.* | Starts listening to `service`. |' "$docs/modules/backend-Application.md"
 grep -q "_Evidence:_ \[backend/Api/MaterialController.cs:[0-9]*-[0-9]*\](" "$docs/modules/backend-Api.md"
 python3 -c "import json,sys; assert json.load(open(sys.argv[1]))['profile'] == 'default'" "$docs/.docwizz/documentation.json"
 [ -f "$docs/notes.md" ] || { echo "deleted a hand-written file"; exit 1; }

@@ -285,7 +285,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             if (ms.Count == 0) continue;
             sb.AppendLine("| Member | Summary | Derived from code | Complexity |\n|---|---|---|---|");
             foreach (var m in ms)
-                sb.AppendLine($"| {SourceLink(m.File, m.Line, $"`{Esc(Display(m).Split('.').Last())}`", sub: "modules")}{Badge(m)} | {Esc(Summary(m) ?? "")} | " +
+                sb.AppendLine($"| {SourceLink(m.File, m.Line, $"`{Esc(MemberName(m, t))}`", sub: "modules")}{Badge(m)} | {Esc(Summary(m) ?? "")} | " +
                     $"{Esc(string.Join("; ", Derived(m).Select(d => $"{d.Name}{(d.Section.Origin == Origin.Inferred ? " (inferred)" : "")}: {d.Section.Text}")))} | {m.Complexity} |");
             sb.AppendLine();
         }
@@ -298,6 +298,10 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
 
     IEnumerable<Edge> Dependencies() => model.Edges.Where(e => CodeModel.DependencyKinds.Contains(e.Kind))
         .Where(e => nodes.ContainsKey(e.From) && (nodes.ContainsKey(e.To) || e.To.StartsWith("http:")));
+
+    // A member as shown under its type: `Attach(Fixture.Application.MaterialService)`, not the full id.
+    static string MemberName(Node m, Node owner) =>
+        Display(m).StartsWith(Display(owner)) && Display(m).Length > Display(owner).Length ? Display(m)[(Display(owner).Length + 1)..] : m.Name;
 
     string Top(string id) => parent.TryGetValue(id, out var p) ? Top(p) : id;
 
@@ -317,8 +321,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         if (doc is null) return null;
         try
         {
-            var text = XElement.Parse(doc).Element("summary")?.Value;
-            return text is null ? null : Regex.Replace(text, @"\s+", " ").Trim();
+            return XElement.Parse(doc).Element("summary") is { } e ? Analyzer.Text(e) : null;
         }
         catch { return null; }
     }

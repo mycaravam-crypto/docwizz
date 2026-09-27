@@ -278,9 +278,19 @@ static class Analyzer
             var documented = xml.Elements("param").Count(e => !string.IsNullOrWhiteSpace(e.Value));
             return documented >= paramCount ? $"{documented} documented" : null;
         }
-        var text = xml.Element(section)?.Value;
-        return string.IsNullOrWhiteSpace(text) ? null : System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ").Trim();
+        var text = xml.Element(section) is { } e ? Text(e) : null;
+        return string.IsNullOrWhiteSpace(text) ? null : text;
     }
+
+    // A doc element's text with <see cref/>, <paramref name/> etc. rendered as their target (`XElement.Value` drops them).
+    public static string Text(XElement e) => System.Text.RegularExpressions.Regex.Replace(string.Concat(e.Nodes().Select(n => n switch
+    {
+        XText t => t.Value,
+        XElement { IsEmpty: true } r when (r.Attribute("cref") ?? r.Attribute("name") ?? r.Attribute("langword")) is { } a
+            => $"`{a.Value.Split(':').Last().Split('(')[0].Split('.').Last()}`",
+        XElement x => Text(x),
+        _ => "",
+    })), @"\s+", " ").Trim();
 
     static bool Matches(Match m, Node n, string? typeName) =>
         Glob(m.Kind, n.Kind) && Glob(m.Name, n.Name) && Glob(m.Type, typeName) && Glob(m.Visibility, n.Visibility)
