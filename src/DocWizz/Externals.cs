@@ -42,6 +42,17 @@ static class Externals
         ("kafka", "kafka"), ("cp-kafka", "kafka"), ("elasticsearch", "elasticsearch"), ("keycloak", "keycloak"), ("azurite", "blob"),
         ("minio", "s3"), ("mailhog", "smtp"), ("mailpit", "smtp"), ("oracle", "oracle"), ("cosmosdb", "cosmos")];
 
+    // Infrastructure-as-code resource types (Terraform prefixes, Bicep/ARM provider namespaces) → Known key.
+    static readonly (string Prefix, string Key)[] Resources = [("Microsoft.Sql/", "sqlserver"), ("azurerm_mssql_", "sqlserver"),
+        ("azurerm_sql_", "sqlserver"), ("Microsoft.DBforPostgreSQL/", "postgresql"), ("azurerm_postgresql_", "postgresql"),
+        ("Microsoft.DBforMySQL/", "mysql"), ("azurerm_mysql_", "mysql"), ("Microsoft.DocumentDB/", "cosmos"), ("azurerm_cosmosdb_", "cosmos"),
+        ("Microsoft.Cache/redis", "redis"), ("azurerm_redis_", "redis"), ("aws_elasticache_", "redis"), ("Microsoft.ServiceBus/", "servicebus"),
+        ("azurerm_servicebus_", "servicebus"), ("Microsoft.Storage/storageAccounts", "blob"), ("azurerm_storage_", "blob"), ("aws_s3_bucket", "s3"),
+        ("aws_msk_", "kafka"), ("aws_opensearch_", "elasticsearch"), ("aws_elasticsearch_", "elasticsearch")];
+
+    public static Known? ByResource(string type) =>
+        Resources.Where(r => type.StartsWith(r.Prefix, StringComparison.OrdinalIgnoreCase)).Select(r => All.First(k => k.Key == r.Key)).FirstOrDefault();
+
     public static Known? ByImage(string image)
     {
         // Any path segment after the registry: mcr.microsoft.com/mssql/server → mssql, server.

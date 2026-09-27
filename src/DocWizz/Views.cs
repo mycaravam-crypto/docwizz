@@ -100,12 +100,13 @@ partial class Generator
             sb.AppendLine("## External systems\n");
             sb.AppendLine("_Detected_: a call in the code shows it. _Inferred_: only a package reference (or a single candidate) points to it. " +
                 "_Unknown_: something is there, but the code doesn't say what.\n");
-            sb.AppendLine("| System | Kind | Certainty | Used by | Configured by | Evidence |\n|---|---|---|---|---|---|");
+            sb.AppendLine("| System | Kind | Certainty | Used by | Configured by | Evidence | Provisioned by |\n|---|---|---|---|---|---|---|");
             foreach (var ext in ExternalSystems)
                 sb.AppendLine($"| {ext.Name} | {Externals.Category(ext)} | {Externals.Certainty(ext)} | " +
                     $"{string.Join(", ", Connections[ext.Id].Where(e => nodes.ContainsKey(e.From)).Select(e => nodes[e.From].Name).Distinct().Order())} | " +
                     $"{string.Join(", ", ConfigKeys.Where(k => Configuration.UrlHosts(k).ContainsValue(ext.Name)).Select(k => $"`{k.Name}`"))} | " +
-                    $"{SourceLink(ext.File, ext.Line, CodeModel.Location(ext), sub: "views")} |");
+                    $"{SourceLink(ext.File, ext.Line, CodeModel.Location(ext), sub: "views")} | " +
+                    $"{string.Join(", ", ProvisionedBy[ext.Id].Select(f => SourceLink(f, 0, f, sub: "views")))} |");
             sb.AppendLine();
         }
 

@@ -1,0 +1,6 @@
+image:
+  repository: registry.example.com/materials-api
+api:
+  env:
+    - name: Materials__MaxQuantity
+      value: "750"

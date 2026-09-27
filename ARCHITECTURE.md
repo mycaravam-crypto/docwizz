@@ -96,10 +96,10 @@ The model separates what the code states from what DocWizz concludes:
 - **[Projects](src/DocWizz/Projects.cs)** reads `.csproj` (SDK, target frameworks, package and project references,
   role: executable, library or test from `OutputType`, the SDK and test packages), `package.json`, and the solution
   folders of `.sln`/`.slnx`. Files in a test project count as test code, whatever their path.
-- **[Configuration](src/DocWizz/Configuration.cs)** reads `appsettings*.json` and `.env`: keys per environment,
-  no values.
+- **[Configuration](src/DocWizz/Configuration.cs)** reads `appsettings*.json`, `.env`, Kubernetes ConfigMaps and the env
+  blocks of Helm `values*.yaml`: keys per environment, no values (only the host of a URL).
 - **[Externals](src/DocWizz/Externals.cs)** holds the curated list of known systems (packages, calls, container
-  images) and the link step: absolute URLs, package-only evidence, and DbContexts without a known database.
+  images, IaC resource types) and the link step: absolute URLs, package-only evidence, and DbContexts without a known database.
 
 ## Analysis
 

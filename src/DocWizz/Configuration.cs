@@ -1,17 +1,26 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using YamlDotNet.RepresentationModel;
 
 // Configuration keys defined in appsettings*.json and .env files, as `config` nodes (`config:<key, lowercase>`).
 // Code that reads or binds a key points at it (`reads`, `binds`; see CSharpScanner). Values are never kept — they may be
 // secrets — except the host of a URL value (`url:<environment>=<host>` tag), which names the external system a key points to.
-// Tags: `env:<environment>@<file>` per file that defines the key (appsettings.json → default, appsettings.Production.json → Production).
+// Tags: `env:<environment>@<file>` per file that defines the key (appsettings.json → default, appsettings.Production.json → Production,
+// a Kubernetes ConfigMap → configmap/<name>, a Helm chart's values.yaml → helm, values-prod.yaml → helm-prod).
 static class Configuration
 {
     public static bool IsConfigFile(string file) =>
-        Path.GetFileName(file) is var n && (n == ".env" || n.EndsWith(".env") || Regex.IsMatch(n, @"^appsettings(\.[\w-]+)?\.json$", RegexOptions.IgnoreCase));
+        Path.GetFileName(file) is var n && (n == ".env" || n.EndsWith(".env") || Regex.IsMatch(n, @"^appsettings(\.[\w-]+)?\.json$", RegexOptions.IgnoreCase)
+            || IsHelmValues(file) || IsConfigMap(file));
+
+    static bool IsYaml(string file) => file.EndsWith(".yaml") || file.EndsWith(".yml");
+    static bool IsHelmValues(string file) => Regex.IsMatch(Path.GetFileName(file), @"^values([.-][\w-]+)?\.ya?ml$")
+        && File.Exists(Path.Combine(Path.GetDirectoryName(file) ?? "", "Chart.yaml"));
+    static bool IsConfigMap(string file) => IsYaml(file) && File.ReadLines(file).Take(500).Any(l => l.TrimEnd() == "kind: ConfigMap");
 
     static string Environment(string file) =>
         Regex.Match(Path.GetFileName(file), @"^appsettings\.([\w-]+)\.json$", RegexOptions.IgnoreCase) is { Success: true } m ? m.Groups[1].Value
+            : IsYaml(file) ? Regex.Match(Path.GetFileName(file), @"^values[.-]([\w-]+)\.ya?ml$") is { Success: true } v ? $"helm-{v.Groups[1].Value}" : "helm"
             : file.EndsWith(".json") ? "default" : Path.GetFileName(file);
 
     public static string Id(string key) => $"config:{key.ToLowerInvariant()}";
@@ -28,7 +37,7 @@ static class Configuration
         }
 
         // appsettings.json first: a key's location is where its default is defined.
-        foreach (var file in files.OrderBy(f => Environment(f) != "default").ThenBy(f => f))
+        foreach (var file in files.OrderBy(f => Environment(f) != "default").ThenBy(f => IsYaml(f)).ThenBy(f => f))
         {
             var rel = Path.GetRelativePath(root, file).Replace('\\', '/');
             var env = Environment(file);
@@ -54,19 +63,54 @@ static class Configuration
                         new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
                     if (doc.RootElement.ValueKind == JsonValueKind.Object) Walk(doc.RootElement, "");
                 }
+                else if (IsYaml(file))
+                {
+                    var yaml = new YamlStream();
+                    yaml.Load(new StringReader(string.Join('\n', lines)));
+                    foreach (var doc in yaml.Documents)
+                        if (Scalar(Child(doc.RootNode, "kind")) == "ConfigMap")
+                        {
+                            // data: { Key__Sub: value } → Key:Sub, for the workloads that mount it.
+                            var name = Scalar(Child(Child(doc.RootNode, "metadata"), "name")) ?? "?";
+                            if (Child(doc.RootNode, "data") is YamlMappingNode data)
+                                foreach (var (k, v) in data.Children)
+                                    if (Scalar(k) is { } key) Define(key.Replace("__", ":"), rel, (int)k.Start.Line, $"configmap/{name}", Scalar(v));
+                        }
+                        else
+                            // Helm values: the environment variables the chart passes to its containers, wherever they sit
+                            // (env / extraEnv / envVars / environment, as KEY: value or [{ name, value }]).
+                            // ponytail: other values are chart-specific settings, not application keys; map them when a chart's template is read.
+                            foreach (var envBlock in Descendants(doc.RootNode).Where(p => Scalar(p.Key) is "env" or "extraEnv" or "envVars" or "environment"))
+                                foreach (var (k, v, line) in envBlock.Value switch
+                                {
+                                    YamlMappingNode m => m.Children.Select(c => (Scalar(c.Key), Scalar(c.Value), (int)c.Key.Start.Line)),
+                                    YamlSequenceNode sq => sq.Children.Select(c => (Scalar(Child(c, "name")), Scalar(Child(c, "value")), (int)c.Start.Line)),
+                                    _ => [],
+                                })
+                                    if (k is not null) Define(k.Replace("__", ":"), rel, line, env, v);
+                }
                 else
                     // KEY=value; ASP.NET reads A__B as A:B.
                     for (var i = 0; i < lines.Length; i++)
                         if (Regex.Match(lines[i], @"^\s*(?:export\s+)?([A-Za-z_][\w.]*)\s*=\s*(.*)$") is { Success: true } m)
                             Define(m.Groups[1].Value.Replace("__", ":"), rel, i + 1, env, m.Groups[2].Value.Trim().Trim('"', '\''));
             }
-            catch (Exception e) when (e is JsonException or IOException)
+            catch (Exception e) when (e is JsonException or IOException or YamlDotNet.Core.YamlException)
             {
                 Console.Error.WriteLine($"docwizz: skipped {rel}: {e.Message}");
             }
         }
         return [.. keys.Values];
     }
+
+    static YamlNode? Child(YamlNode? n, string key) => n is YamlMappingNode m && m.Children.TryGetValue(new YamlScalarNode(key), out var v) ? v : null;
+    static string? Scalar(YamlNode? n) => (n as YamlScalarNode)?.Value;
+    static IEnumerable<KeyValuePair<YamlNode, YamlNode>> Descendants(YamlNode n) => n switch
+    {
+        YamlMappingNode m => m.Children.SelectMany(c => Descendants(c.Value).Prepend(c)),
+        YamlSequenceNode s => s.Children.SelectMany(Descendants),
+        _ => [],
+    };
 
     // Sections ASP.NET or common libraries read without application code asking for them.
     static readonly string[] FrameworkSections = ["Logging", "AllowedHosts", "Kestrel", "Urls", "Serilog", "DetailedErrors", "HostFilteringOptions"];

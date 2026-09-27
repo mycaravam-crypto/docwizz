@@ -70,7 +70,8 @@ partial class Generator
         {
             sb.AppendLine("## Infrastructure as code\n");
             foreach (var (f, resources) in iac)
-                sb.AppendLine($"- {SourceLink(f, 0, f, sub: "views")}: {string.Join(", ", resources.GroupBy(r => r).Select(g => g.Count() > 1 ? $"`{g.Key}` ×{g.Count()}" : $"`{g.Key}`"))}");
+                sb.AppendLine($"- {SourceLink(f, 0, f, sub: "views")}: {string.Join(", ", resources.GroupBy(r => r).Select(g =>
+                    (g.Count() > 1 ? $"`{g.Key}` ×{g.Count()}" : $"`{g.Key}`") + (Externals.ByResource(g.Key) is { } k ? $" → {Provisions(k)}" : "")))}");
             sb.AppendLine();
         }
 
@@ -98,6 +99,16 @@ partial class Generator
                 $"{Esc(string.Join(", ", u.Ports))} | {Esc(string.Join(", ", u.Env))} | {string.Join(", ", u.DependsOn)} | {Esc(string.Join(", ", u.Volumes))} | {Runs(u)} |");
         sb.AppendLine();
     }
+
+    // A known system the deployment provides, and whether the code uses it.
+    string Provisions(Externals.Known k) => nodes.TryGetValue($"ext:{k.Key}", out var ext)
+        ? $"{k.Name} (used by the code, {Externals.Certainty(ext)})" : $"{k.Name} (not referenced by the scanned code)";
+
+    // IaC files that provision an external system.
+    ILookup<string, string>? provisionedBy;
+    ILookup<string, string> ProvisionedBy => provisionedBy ??= DeploymentFiles.Where(f => f.EndsWith(".tf") || f.EndsWith(".bicep"))
+        .SelectMany(f => Resources(f).Select(Externals.ByResource).OfType<Externals.Known>().Select(k => (Ext: $"ext:{k.Key}", File: f)))
+        .Distinct().ToLookup(x => x.Ext, x => x.File);
 
     // What a unit runs: the project its build context contains, or the known system its image is.
     string Runs(DeployedUnit u)
