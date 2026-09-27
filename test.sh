@@ -85,6 +85,33 @@ if grep -q "\.Add(int, int)" <<<"$report"; then echo "trivial Add flagged"; exit
 grep -A1 "  Fixture.Application.MaterialService.CreateAsync" <<<"$report" | grep -q "partial, missing: param"
 if grep -q "MaterialServiceTests" <<<"$report"; then echo "test code analyzed"; exit 1; fi
 
+# Documentation model: section provenance, sources, profiles, JSON
+dw() { dotnet run --project src/DocWizz -- "$@"; }
+dw analyze fixture --format json 2>/dev/null > "$model"
+dw analyze fixture --format json --profile software 2>/dev/null > "$model.software"
+dw analyze fixture --format json --profile api 2>/dev/null > "$model.api"
+python3 - "$model" <<'PY'
+import json, sys
+def items(f): return {i["id"]: i for i in json.load(open(f))["documentation"]["items"]}
+A, API = "cs:Fixture.Application.", "cs:Fixture.Api."
+create = A + "MaterialService.CreateAsync(string, int, string, string, string, bool)"
+d = items(sys.argv[1])
+c = d[create]
+assert c["sections"]["summary"] == {"origin": "written", "text": "Creates a material request."}, c
+assert c["sections"]["side_effects"] == {"origin": "inferred", "text": "db, event"}, c
+assert c["sections"]["dependencies"]["origin"] == "fact" and "IMaterialRepository" in c["sections"]["dependencies"]["text"]
+assert A + "IMaterialService.CreateAsync(string, int, string, string, string, bool)" in c["sources"], "interface doc not traced"
+assert c["missing"] == ["param"] and c["tested"]
+sw = items(sys.argv[1] + ".software")
+assert sw[create]["missing"] == ["param", "returns", "exception"], sw[create]["missing"]
+api = items(sys.argv[1] + ".api")
+rename = api[API + "MaterialController.Rename(int, Fixture.Api.RenameMaterialRequest)"]
+assert rename["sections"]["input"]["text"] == "id: int, [body] request: RenameMaterialRequest"
+assert rename["sections"]["authorization"] == {"origin": "fact", "text": "required"}
+assert json.load(open(sys.argv[1] + ".api"))["documentation"]["profile"] == "api"
+PY
+if dw analyze fixture --profile nope >/dev/null 2>&1; then echo "unknown profile accepted"; exit 1; fi
+
 # Architecture: planted violations and the cycle they cause
 arch=$(sed -n '/^Architecture/,$p' <<<"$report")
 grep -A1 "ARCH-001  domain → infrastructure" <<<"$arch" | grep -q "Domain/Material.cs → backend/Infrastructure/SqlMaterialRepository.cs"
@@ -107,6 +134,9 @@ grep "MaterialService.CreateAsync" "$docs/quality.md" | grep -q "| ✓ |"  # tes
 grep "MaterialController.Create(" "$docs/quality.md" | grep -q "| — |"  # untested
 grep -q "/materials\` | \[MaterialTable\]" "$docs/frontend.md"
 grep -q "n0 --> n1" "$docs/modules/backend-Application.md"
+grep "\`CreateAsync" "$docs/modules/backend-Application.md" | grep -q "side effects (inferred): db, event"
+grep -q "_Generated from .* profile \`default\`" "$docs/modules/backend-Application.md"
+python3 -c "import json,sys; assert json.load(open(sys.argv[1]))['profile'] == 'default'" "$docs/.docwizz/documentation.json"
 [ -f "$docs/notes.md" ] || { echo "deleted a hand-written file"; exit 1; }
 [ ! -f "$docs/stale.md" ] || { echo "stale generated page kept"; exit 1; }
 rm -rf "$docs"
@@ -115,7 +145,6 @@ rm -rf "$docs"
 repo=$(mktemp -d)
 cp -r fixture/. "$repo"
 git -C "$repo" init -q && git -C "$repo" add -A && git -C "$repo" -c user.name=t -c user.email=t@t commit -qm base
-dw() { dotnet run --project src/DocWizz -- "$@"; }
 dw check "$repo" --since HEAD | grep -q "check: PASS"
 python3 - "$repo/backend/Application/MaterialService.cs" <<'PY'
 import sys; p = sys.argv[1]; s = open(p).read()
@@ -158,5 +187,10 @@ dotnet run --project src/DocWizz -- generate fixture "$docs" >/dev/null 2>&1
 grep -q "| GET | \`/api/materials/{id}\` | 🤖 _Returns one material by id._ |" "$docs/api.md"
 grep -q "🤖 marks 1 AI-drafted" "$docs/index.md"
 if grep -q "outdated draft" -r "$docs"/*.md; then echo "stale draft used"; exit 1; fi
+python3 - "$docs/.docwizz/documentation.json" <<'PY'
+import json, sys
+i = {i["id"]: i for i in json.load(open(sys.argv[1]))["items"]}["cs:Fixture.Api.MaterialController.Get(int)"]
+assert i["sections"]["summary"]["origin"] == "ai" and "summary" in i["missing"], i  # drafts never close a gap
+PY
 rm -rf "$docs"
 echo PASS

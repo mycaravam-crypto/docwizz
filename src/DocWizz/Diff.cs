@@ -2,7 +2,7 @@ record DiffResult(
     List<Node> Added, List<Node> Removed, List<Node> Changed,
     List<string> Pages,
     List<string> DepsAdded, List<string> DepsRemoved,
-    List<Finding> NewGaps, List<Violation> NewViolations);
+    List<DocumentationItem> NewGaps, List<Violation> NewViolations);
 
 static class Diff
 {

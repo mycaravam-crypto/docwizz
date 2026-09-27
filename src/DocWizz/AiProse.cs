@@ -19,11 +19,11 @@ static class AiProse
         don't guess at anything the facts and source don't support.
         """;
 
-    record Target(Node Node, Finding Finding);
+    record Target(Node Node, DocumentationItem Item);
 
     // Returns node id → summary, from cache and (when allowed) fresh API calls.
     public static async Task<Dictionary<string, string>> Summaries(
-        string root, CodeModel model, List<Finding> findings, string cacheFile, bool call)
+        string root, CodeModel model, List<DocumentationItem> findings, string cacheFile, bool call)
     {
         var cache = Load(cacheFile);
         var targets = findings.Where(f => f.Missing.Contains("summary") && f.Node.Hash is not null)
@@ -47,7 +47,7 @@ static class AiProse
                 try
                 {
                     if (Volatile.Read(ref stopped) == 1) return (t.Node, Text: null);
-                    return (t.Node, Text: await Draft(client, facts.For(t.Node, t.Finding)));
+                    return (t.Node, Text: await Draft(client, facts.For(t.Node, t.Item)));
                 }
                 catch (Exception e) when (e is AnthropicUnauthorizedException or AnthropicForbiddenException)
                 {
@@ -113,7 +113,7 @@ static class AiProse
 
         string Name(string id) => nodes.TryGetValue(id, out var n) ? Generator.Display(n) : id.Replace("http:", "");
 
-        public string For(Node n, Finding f)
+        public string For(Node n, DocumentationItem f)
         {
             IEnumerable<string> Out(params string[] kinds) => outgoing[n.Id].Where(e => kinds.Contains(e.Kind)).Select(e => Name(e.To)).Distinct();
             IEnumerable<string> In(params string[] kinds) => incoming[n.Id].Where(e => kinds.Contains(e.Kind)).Select(e => Name(e.From)).Distinct();

@@ -4,44 +4,67 @@ using System.IO.Enumeration;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-// ponytail: hand-rolled arg switch; move to System.CommandLine once commands grow options
-var ai = args.Contains("--ai");
-args = args.Where(a => a != "--ai").ToArray();
-var cmd = args.ElementAtOrDefault(0);
-var path = args.ElementAtOrDefault(1) ?? ".";
+// ponytail: hand-rolled arg parsing; move to System.CommandLine if options keep growing
+string[] valued = ["format", "profile", "since"];
+var opts = new Dictionary<string, string>();
+var pos = new List<string>();
+for (var i = 0; i < args.Length; i++)
+{
+    if (args[i] == "--ai") opts["ai"] = "";
+    else if (args[i].StartsWith("--") && valued.Contains(args[i][2..]) && i + 1 < args.Length) opts[args[i][2..]] = args[++i];
+    else if (args[i].StartsWith("--")) return Usage($"unknown option {args[i]}");
+    else pos.Add(args[i]);
+}
+var cmd = pos.ElementAtOrDefault(0);
+var path = pos.ElementAtOrDefault(1) ?? ".";
+if (opts.GetValueOrDefault("format") is { } format && format is not ("console" or "json")) return Usage($"unknown format {format}");
+var json = opts.GetValueOrDefault("format") == "json";
 
-if (cmd is "scan" or "analyze" or "check" or "generate" or "diff" && !Directory.Exists(path))
+if (cmd is null) return Usage(null);
+if (!Directory.Exists(path))
 {
     Console.Error.WriteLine($"not a directory: {path}");
     return 1;
 }
+Config config;
+try { config = Config.Load(path, opts.GetValueOrDefault("profile")); }
+catch (ArgumentException e) { return Usage(e.Message); }
 
 switch (cmd)
 {
     case "scan":
-        return Scan(path, args.ElementAtOrDefault(2) ?? "model.json");
+        return Scan(path, pos.ElementAtOrDefault(2) ?? "model.json", config);
     case "analyze":
-        return Analyze(path, enforce: false);
-    case "check" when args.ElementAtOrDefault(2) == "--since" && args.ElementAtOrDefault(3) is { } since:
-        return DiffCommand(path, since, enforce: true);
+        return Analyze(path, config, enforce: false, json);
+    case "check" when opts.GetValueOrDefault("since") is { } since:
+        return DiffCommand(path, since, config, enforce: true);
     case "check":
-        return Analyze(path, enforce: true);
+        return Analyze(path, config, enforce: true, json);
     case "diff":
-        return DiffCommand(path, args.ElementAtOrDefault(2), enforce: false);
+        return DiffCommand(path, pos.ElementAtOrDefault(2), config, enforce: false);
     case "generate":
-        return await Generate(path, args.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), ai);
+        return await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"));
     default:
-        Console.Error.WriteLine("""
-            usage:
-              docwizz scan <dir> [model.json]   write the code model
-              docwizz analyze <dir>             documentation report
-              docwizz check <dir>               report + exit 1 if thresholds fail (CI)
-              docwizz check <dir> --since <ref> exit 1 only on gaps/violations introduced since <ref>
-              docwizz diff <dir> [ref]          what changed vs <ref> (default: docs/.docwizz/model.json)
-              docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
-                [--ai]                          draft missing summaries with Claude (cached per code hash)
-            """);
-        return 1;
+        return Usage($"unknown command {cmd}");
+}
+
+static int Usage(string? error)
+{
+    if (error is not null) Console.Error.WriteLine(error);
+    Console.Error.WriteLine($"""
+        usage:
+          docwizz scan <dir> [model.json]   write the code model
+          docwizz analyze <dir>             documentation report
+          docwizz check <dir>               report + exit 1 if thresholds fail (CI)
+          docwizz check <dir> --since <ref> exit 1 only on gaps/violations introduced since <ref>
+          docwizz diff <dir> [ref]          what changed vs <ref> (default: docs/.docwizz/model.json)
+          docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
+            [--ai]                          draft missing summaries with Claude (cached per code hash)
+        options:
+          --profile <name>                  documentation profile: {string.Join(", ", Profiles.Names)}
+          --format console|json             analyze/check output
+        """);
+    return 1;
 }
 
 static (CodeModel Model, List<string> Files) BuildModel(string root, Config config)
@@ -80,9 +103,9 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     return (new CodeModel(Git(root, "rev-parse --short HEAD")?.Trim(), nodes, edges), files);
 }
 
-static int Scan(string root, string outFile)
+static int Scan(string root, string outFile, Config config)
 {
-    var (model, files) = BuildModel(root, Config.Load(root));
+    var (model, files) = BuildModel(root, config);
     WriteModel(model, outFile);
 
     Console.WriteLine($"Files  {files.Count}");
@@ -96,34 +119,54 @@ static int Scan(string root, string outFile)
     return 0;
 }
 
-static void WriteModel(CodeModel model, string file) =>
-    File.WriteAllText(file, JsonSerializer.Serialize(model, new JsonSerializerOptions
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    }));
-
-static async Task<int> Generate(string root, string outDir, bool ai)
+static JsonSerializerOptions JsonOptions() => new()
 {
-    var config = Config.Load(root);
+    WriteIndented = true,
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+};
+
+static void WriteModel(CodeModel model, string file) => File.WriteAllText(file, JsonSerializer.Serialize(model, JsonOptions()));
+
+// The documentation model as data: per item what is required, what exists and where it comes from.
+static object DocumentationJson(CodeModel model, Config config, List<DocumentationItem> items) => new
+{
+    commit = model.Commit,
+    profile = config.Profile,
+    note = $"coverage against the '{config.Profile}' profile; not a statement of standards compliance",
+    coverage = Math.Round(Analyzer.Coverage(items), 1),
+    items = items.Select(i => new
+    {
+        id = i.Node.Id, kind = i.Node.Kind, file = i.Node.File, line = i.Node.Line,
+        level = i.Level, status = i.Status, pattern = i.Pattern, required = i.Required,
+        sections = i.Sections, missing = i.Missing, reasons = i.Reasons, sources = i.Sources, tested = i.Tested,
+    }),
+};
+
+static async Task<int> Generate(string root, string outDir, Config config, bool ai)
+{
     var model = BuildModel(root, config).Model;
     var findings = Analyzer.Analyze(model, config);
     var arch = Architecture.Check(model, config.Architecture);
     // Cached drafts are always used; new ones are only requested with --ai.
     var drafts = await AiProse.Summaries(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-cache.json"), ai);
-    var written = new Generator(root, outDir, model, findings, arch, config.Architecture, drafts).Run();
+    foreach (var f in findings)
+        if (drafts.TryGetValue(f.Node.Id, out var draft)) f.Sections["summary"] = new(Origin.Ai, draft);
+    var written = new Generator(root, outDir, model, findings, arch, config, drafts).Run();
 
     // Fingerprint for `docwizz diff`: the model these docs were generated from.
     Directory.CreateDirectory(Path.Combine(outDir, ".docwizz"));
     WriteModel(model, Path.Combine(outDir, ".docwizz", "model.json"));
+    File.WriteAllText(Path.Combine(outDir, ".docwizz", "documentation.json"),
+        JsonSerializer.Serialize(DocumentationJson(model, config, findings), JsonOptions()));
     Console.WriteLine($"{written.Count} pages → {outDir} (commit {model.Commit ?? "unknown"})");
     return 0;
 }
 
-static int DiffCommand(string root, string? gitRef, bool enforce)
+static int DiffCommand(string root, string? gitRef, Config config, bool enforce)
 {
-    var config = Config.Load(root);
     CodeModel? before;
     string baseline;
     if (gitRef is not null)
@@ -139,7 +182,7 @@ static int DiffCommand(string root, string? gitRef, bool enforce)
             Console.Error.WriteLine($"no {fingerprint}; run docwizz generate first or pass a git ref");
             return 1;
         }
-        before = JsonSerializer.Deserialize<CodeModel>(File.ReadAllText(fingerprint), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        before = JsonSerializer.Deserialize<CodeModel>(File.ReadAllText(fingerprint), JsonOptions());
         baseline = $"docs generated at {before?.Commit ?? "unknown"}";
     }
     if (before is null) return 1;
@@ -183,15 +226,11 @@ static CodeModel? ModelAt(string root, string gitRef, Config config)
     }
 }
 
-static int Analyze(string root, bool enforce)
+static int Analyze(string root, Config config, bool enforce, bool json)
 {
-    var config = Config.Load(root);
     var model = BuildModel(root, config).Model;
     var findings = Analyzer.Analyze(model, config);
-    Analyzer.Report(findings, Console.Out);
     var arch = Architecture.Check(model, config.Architecture);
-    Architecture.Report(arch, Console.Out);
-    if (!enforce) return 0;
     var (violations, cycles, _) = arch;
 
     var coverage = Analyzer.Coverage(findings);
@@ -202,9 +241,25 @@ static int Analyze(string root, bool enforce)
     if (violations.Count > config.Check.MaxViolations) failures.Add($"{violations.Count} violations > {config.Check.MaxViolations}");
     if (cycles.Count > config.Check.MaxCycles) failures.Add($"{cycles.Count} cycles > {config.Check.MaxCycles}");
 
-    Console.WriteLine();
-    Console.WriteLine(failures.Count == 0 ? "check: PASS" : "check: FAIL — " + string.Join("; ", failures));
-    return failures.Count == 0 ? 0 : 1;
+    if (json)
+        Console.WriteLine(JsonSerializer.Serialize(new
+        {
+            documentation = DocumentationJson(model, config, findings),
+            architecture = arch,
+            check = enforce ? new { pass = failures.Count == 0, failures } : null,
+        }, JsonOptions()));
+    else
+    {
+        Console.WriteLine($"Profile: {config.Profile}");
+        Analyzer.Report(findings, Console.Out);
+        Architecture.Report(arch, Console.Out);
+        if (enforce)
+        {
+            Console.WriteLine();
+            Console.WriteLine(failures.Count == 0 ? "check: PASS" : "check: FAIL — " + string.Join("; ", failures));
+        }
+    }
+    return enforce && failures.Count > 0 ? 1 : 0;
 }
 
 static string? Git(string dir, string args)
