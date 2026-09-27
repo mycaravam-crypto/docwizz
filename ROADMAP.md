@@ -7,9 +7,6 @@ or human-written. AI runs on a self-hosted model only; code is never sent to a p
 
 ## Next
 
-- **Flow-aware change impact.** `diff` maps changed symbols to their module page, `api.md` and `frontend.md` only
-  when the changed symbol is itself an endpoint or component. Using flows, a changed service should mark every
-  endpoint page and module page whose flow passes through it.
 - **Project roles.** Classify projects as executable, library or test from `OutputType`, the SDK and test packages.
   Read `.sln`/`.slnx` so the solution structure (Frontend / API / Application / Domain / Infrastructure / Tests)
   comes from metadata instead of folder names.

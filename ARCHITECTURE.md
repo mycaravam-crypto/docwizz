@@ -106,7 +106,8 @@ The model separates what the code states from what DocWizz concludes:
 - **[Architecture](src/DocWizz/Architecture.cs)** covers path-glob layers, allowed dependencies, violations
   ARCH-001/002/004 with severities, and folder cycles (ARCH-003).
 - **[Diff](src/DocWizz/Diff.cs)** compares two models by symbol id and body hash. It reports changed, added and
-  removed symbols, the affected pages, and the gaps and violations a change introduced.
+  removed symbols, the affected pages, and the gaps and violations a change introduced. A touched symbol also marks
+  every flow passing through it: `api.md` / `frontend.md` and the module pages along that flow.
 
 ## Generation
 

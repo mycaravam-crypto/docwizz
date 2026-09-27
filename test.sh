@@ -284,6 +284,7 @@ s = s.replace("    // Trivial: should NOT be flagged", """    public int Score(i
     // Trivial: should NOT be flagged""")
 open(p, "w").write(s)
 PY
+sed -i 's/FindAsync(id).AsTask()/FindAsync(id + 0).AsTask()/' "$repo/backend/Infrastructure/SqlMaterialRepository.cs"
 cat > "$repo/backend/Domain/Audit.cs" <<'CS'
 namespace Fixture.Domain;
 public class Audit { public void Log(Fixture.Infrastructure.SqlMaterialRepository r) => r.FindAsync(1); }
@@ -294,6 +295,10 @@ echo "$impact"
 grep -q "+ Fixture.Application.MaterialService.Score(int, int, int, int)" <<<"$impact"
 grep -q "✓ modules/backend-Application.md" <<<"$impact"
 grep -q "✓ architecture.md" <<<"$impact"
+# the changed repository method is reached by the endpoints' flows: their pages are affected too
+grep -q "~ Fixture.Infrastructure.SqlMaterialRepository.FindAsync(int)" <<<"$impact"
+grep -q "✓ api.md" <<<"$impact"
+grep -q "✓ modules/backend-Api.md" <<<"$impact"
 grep -q "Introduced: 0 critical, 1 other documentation gaps, 1 architecture violations" <<<"$impact"
 grep -q "ARCH-001  domain → infrastructure  backend/Domain/Audit.cs" <<<"$impact"
 # Two refs: commit the change, then compare HEAD~1..HEAD from inside the repo, without a dir argument
@@ -369,7 +374,7 @@ class H(http.server.BaseHTTPRequestHandler):
 s = http.server.HTTPServer(("127.0.0.1", 0), H)
 open(sys.argv[1], "w").write(str(s.server_port)); s.serve_forever()
 PY
-fake=$!; trap 'kill $fake 2>/dev/null' EXIT
+fake=$!; trap 'kill $fake 2>/dev/null || true' EXIT
 until [ -s "$port_file" ]; do sleep 0.1; done
 OLLAMA_HOST="127.0.0.1:$(cat "$port_file")" DOCWIZZ_MODEL=local:7b dw generate fixture "$docs" --ai >/dev/null 2>&1
 grep -q "🤖 _Drafted locally._" "$docs/api.md"

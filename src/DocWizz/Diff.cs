@@ -38,6 +38,9 @@ static class Diff
             if (n.Kind == "endpoint" || n.Tags?.Contains("endpoint") == true) pages.Add("api.md");
             if (n.Kind is "component" or "route") pages.Add("frontend.md");
         }
+        // Flows passing through a touched symbol: a changed service marks the endpoints and routes that reach it.
+        pages.UnionWith(Generator.FlowPages(after, config, added.Concat(changed).Select(n => n.Id)));
+        pages.UnionWith(Generator.FlowPages(before, config, removed.Select(n => n.Id)));
         if (added.Count + removed.Count > 0) pages.Add("index.md");
         if (depsAdded.Count + depsRemoved.Count + newViolations.Count > 0)
             pages.UnionWith(["architecture.md", "architecture-description.md", "views/components.md"]);

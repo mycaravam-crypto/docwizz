@@ -75,3 +75,22 @@ partial class Generator
     IEnumerable<Node> Reached(FlowTrace t, Func<Node, bool> match) =>
         t.Layers.SelectMany(l => l).Select(nodes.GetValueOrDefault).OfType<Node>().Where(match);
 }
+
+partial class Generator
+{
+    // Change impact: pages that show a flow passing through any touched symbol — api.md / frontend.md, and the module
+    // page of every unit on that flow (module pages list each flow that starts or passes there).
+    public static IEnumerable<string> FlowPages(CodeModel model, Config config, IEnumerable<string> touched)
+    {
+        var g = new Generator("", "", model, [], null!, config, []);
+        var units = touched.Where(g.nodes.ContainsKey).Select(g.Unit).ToHashSet();
+        foreach (var n in model.Nodes.Where(n => n.Kind == "route" || n.Tags?.Contains("endpoint") == true))
+        {
+            var on = g.TraceOf(n.Id).Layers.SelectMany(l => l).Prepend(n.Id).ToList();
+            if (!on.Skip(1).Any(units.Contains)) continue;
+            yield return n.Kind == "route" ? "frontend.md" : "api.md";
+            foreach (var u in on)
+                if (g.nodes.TryGetValue(u, out var x) && x.Kind != "external") yield return $"modules/{Slug(Folder(x.File))}.md";
+        }
+    }
+}
