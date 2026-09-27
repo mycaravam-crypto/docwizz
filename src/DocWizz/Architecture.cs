@@ -8,7 +8,11 @@ class ArchitectureConfig
     public Dictionary<string, List<string>> Allow { get; set; } = [];
 }
 
-record ArchitectureResult(List<Violation> Violations, List<List<string>> Cycles, Dictionary<string, int> LayerFiles);
+record ArchitectureResult(List<Violation> Violations, List<List<string>> Cycles, Dictionary<string, int> LayerFiles,
+    List<LayerDependency> LayerDependencies);
+
+// Actual dependencies between layers (`http` = calls HTTP directly), Count = number of references.
+record LayerDependency(string From, string To, int Count, bool Allowed);
 
 record Violation(string Rule, string FromLayer, string ToLayer, string FromFile, string To, string Example);
 
@@ -38,8 +42,12 @@ static class Architecture
                 continue;
             }
             if (!nodes.TryGetValue(e.To, out var to) || LayerOf(to.File) is not { } toLayer || toLayer == fromLayer) continue;
-            if (!allowed.Contains(toLayer))
-                violations.Add(new("ARCH-001", fromLayer, toLayer, from.File, to.File, $"{Short(from.Id)} {e.Kind} {Short(to.Id)}"));
+            if (allowed.Contains(toLayer)) continue;
+            // Reachable through allowed layers → a layer was skipped (ARCH-004); otherwise a forbidden direction (ARCH-001).
+            var via = Via(config.Allow, fromLayer, toLayer);
+            violations.Add(via is null
+                ? new("ARCH-001", fromLayer, toLayer, from.File, to.File, $"{Short(from.Id)} {e.Kind} {Short(to.Id)}")
+                : new("ARCH-004", fromLayer, toLayer, from.File, to.File, $"{Short(from.Id)} {e.Kind} {Short(to.Id)}, bypassing {via}"));
         }
 
         // One finding per file pair: the first edge is the example.
@@ -54,7 +62,27 @@ static class Architecture
         var folders = code.Select(n => Folder(n.File)).Distinct();
         var layerFiles = code.Select(n => n.File).Distinct()
             .GroupBy(f => LayerOf(f) ?? "(none)").ToDictionary(g => g.Key, g => g.Count());
-        return new(violations, StronglyConnected(folders, graph).Where(c => c.Count > 1).ToList(), layerFiles);
+        var layerDeps = deps.Select(e => (From: LayerOf(nodes[e.From].File),
+                To: e.Kind == "http" ? "http" : nodes.TryGetValue(e.To, out var t) ? LayerOf(t.File) : null))
+            .Where(d => d.From is not null && d.To is not null && d.From != d.To)
+            .GroupBy(d => d).OrderBy(g => g.Key.From).ThenBy(g => g.Key.To)
+            .Select(g => new LayerDependency(g.Key.From!, g.Key.To!, g.Count(),
+                !config.Allow.TryGetValue(g.Key.From!, out var a) || a.Contains(g.Key.To!))).ToList();
+        return new(violations, StronglyConnected(folders, graph).Where(c => c.Count > 1).ToList(), layerFiles, layerDeps);
+    }
+
+    // The first intermediate layer on an allowed path from → … → to, or null if `to` isn't reachable.
+    static string? Via(Dictionary<string, List<string>> allow, string from, string to)
+    {
+        var seen = new HashSet<string> { from };
+        var queue = new Queue<(string Layer, string First)>(allow[from].Where(seen.Add).Select(l => (l, l)));
+        while (queue.TryDequeue(out var cur))
+            foreach (var next in allow.GetValueOrDefault(cur.Layer) ?? [])
+            {
+                if (next == to) return cur.First;
+                if (seen.Add(next)) queue.Enqueue((next, cur.First));
+            }
+        return null;
     }
 
     static string Folder(string file) => Path.GetDirectoryName(file)?.Replace('\\', '/') ?? "";
@@ -93,11 +121,12 @@ static class Architecture
 
     public static void Report(ArchitectureResult r, TextWriter o)
     {
-        var (violations, cycles, layerFiles) = r;
+        var (violations, cycles, layerFiles, layerDeps) = r;
         o.WriteLine();
         o.WriteLine($"Architecture ({violations.Count} violations, {cycles.Count} cycles)");
         o.WriteLine(new string('─', 40));
         o.WriteLine("  layers: " + string.Join(", ", layerFiles.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key} {kv.Value}")));
+        o.WriteLine("  dependencies: " + string.Join(", ", layerDeps.Select(d => $"{d.From} → {d.To} {d.Count}{(d.Allowed ? "" : " ✗")}")));
         foreach (var g in violations.GroupBy(v => (v.Rule, v.FromLayer, v.ToLayer)).OrderBy(g => g.Key.Rule))
         {
             o.WriteLine($"  {g.Key.Rule}  {g.Key.FromLayer} → {g.Key.ToLayer}");

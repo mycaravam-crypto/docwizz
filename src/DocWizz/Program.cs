@@ -42,6 +42,8 @@ switch (cmd)
         return Analyze(path, config, enforce: true, json);
     case "diff":
         return DiffCommand(path, pos.ElementAtOrDefault(2), config, enforce: false);
+    case "architecture":
+        return ArchitectureCommand(path, config, json);
     case "generate":
         return await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"));
     default:
@@ -58,11 +60,12 @@ static int Usage(string? error)
           docwizz check <dir>               report + exit 1 if thresholds fail (CI)
           docwizz check <dir> --since <ref> exit 1 only on gaps/violations introduced since <ref>
           docwizz diff <dir> [ref]          what changed vs <ref> (default: docs/.docwizz/model.json)
+          docwizz architecture <dir>        layers, dependencies, violations; exit 1 above check thresholds
           docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
             [--ai]                          draft missing summaries with Claude (cached per code hash)
         options:
           --profile <name>                  documentation profile: {string.Join(", ", Profiles.Names)}
-          --format console|json             analyze/check output
+          --format console|json             analyze/check/architecture output
         """);
     return 1;
 }
@@ -231,7 +234,7 @@ static int Analyze(string root, Config config, bool enforce, bool json)
     var model = BuildModel(root, config).Model;
     var findings = Analyzer.Analyze(model, config);
     var arch = Architecture.Check(model, config.Architecture);
-    var (violations, cycles, _) = arch;
+    var (violations, cycles, _, _) = arch;
 
     var coverage = Analyzer.Coverage(findings);
     var critical = findings.Count(Analyzer.IsCritical);
@@ -260,6 +263,14 @@ static int Analyze(string root, Config config, bool enforce, bool json)
         }
     }
     return enforce && failures.Count > 0 ? 1 : 0;
+}
+
+static int ArchitectureCommand(string root, Config config, bool json)
+{
+    var arch = Architecture.Check(BuildModel(root, config).Model, config.Architecture);
+    if (json) Console.WriteLine(JsonSerializer.Serialize(arch, JsonOptions()));
+    else Architecture.Report(arch, Console.Out);
+    return arch.Violations.Count > config.Check.MaxViolations || arch.Cycles.Count > config.Check.MaxCycles ? 1 : 0;
 }
 
 static string? Git(string dir, string args)

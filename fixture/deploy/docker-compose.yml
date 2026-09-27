@@ -1,0 +1,8 @@
+services:
+  api:
+    build: ../backend
+    ports: ["8080:8080"]
+  web:
+    build: ../frontend
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
