@@ -92,7 +92,10 @@ The model separates what the code states from what DocWizz concludes:
   composables and template renders, exported functions, stores, classes (with their methods), interfaces, types and
   enums, imports and calls, and router routes. HTTP calls are `fetch`/`axios`, and calls through wrappers: an
   `axios.create({ baseURL })` instance, or a helper that passes its parameters on as URL and method (`request('POST',
-  url)`). A pre-pass finds the wrappers in every file, so they resolve across imports.
+  url)`). A pre-pass finds the wrappers in every file, so they resolve across imports. React (`.tsx`/`.jsx`): capitalised
+  functions returning JSX are components (props, hooks, rendered children), routes from `createBrowserRouter` and
+  `<Route>`. Angular: `@Component` classes (`@Input`/`@Output`, signal inputs, lifecycle methods, children by template
+  selector), `@Injectable` services, `HttpClient` calls, calls through injected services, `Routes` incl. `loadComponent`.
 - **[JavaScanner](src/DocWizz/JavaScanner.cs)** reads Java without a parser (comments and strings masked, then
   regexes): types and members with Javadoc, Spring roles, `@*Mapping` endpoints with parameter sources, auth and the
   unwrapped return type, constructor/`@Autowired`/Lombok injection, calls through injected fields (overloads by name

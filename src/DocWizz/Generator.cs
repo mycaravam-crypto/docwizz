@@ -117,7 +117,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         ("Services", "service"), ("Repositories", "repository"), ("Entities", "entity"), ("DbContexts", "dbcontext"),
         ("Background services", "background-service"), ("Hosted services", "hosted"), ("Middleware", "middleware"), ("SignalR hubs", "hub"), ("Options", "options"),
         ("Stored procedures", "procedure"), ("SQL tables", "table"), ("Migrations", "migration"),
-        ("Vue components", "component"), ("Views", "view"), ("Stores", "store"), ("Composables", "composable"), ("Routes", "route")];
+        ("UI components", "component"), ("Views", "view"), ("Stores", "store"), ("Composables", "composable"), ("Routes", "route")];
 
     // Well-known packages → what they tell a reader about the stack. Anything else is in views/context.md.
     // ponytail: a short curated list; extend it (or read it from config) when a project's stack goes unnamed.
@@ -349,7 +349,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
                 sb.AppendLine("\n## Flows\n\nFrom each route to the backend endpoints it can reach, hop by hop; see [API](api.md) for what the endpoints do.\n\n" +
                     string.Join("\n", lines));
         }
-        if (routes.Count == 0 && components.Count == 0) sb.AppendLine("No Vue frontend found.");
+        if (routes.Count == 0 && components.Count == 0) sb.AppendLine("No frontend (Vue, React, Angular) found.");
         return sb.ToString();
     }
 

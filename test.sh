@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 model=$(mktemp)
 out=$(dotnet run --project src/DocWizz -- scan fixture "$model")
 echo "$out"
-grep -q "Files  26" <<<"$out"  # tests/ excluded
+grep -q "Files  33" <<<"$out"  # tests/ excluded
 
 python3 - "$model" <<'PY'
 import json, sys
@@ -78,6 +78,25 @@ for e in [("injects", Jv + "controller.InventoryController", Jv + "service.Inven
           ("connects", "proj:java/pom.xml", "ext:postgresql")]:
     assert e in edges, e
 assert not any("InventoryControllerTest" in n for n in nodes), "src/test is test code"
+# React: components with props, hooks and renders; createBrowserRouter routes; fetch → the Spring endpoint
+Rc = "ts:react/src/"
+page, lst = nodes[Rc + "pages/InventoryPage.tsx#InventoryPage"], nodes[Rc + "components/ItemList.tsx#ItemList"]
+assert page["kind"] == lst["kind"] == "component" and page["hooks"] == ["useState()", "useEffect()"], page
+assert lst["parameters"] == ["items: string[]", "compact: boolean"] and "list of item names" in lst["doc"], lst
+# Angular: @Component with @Input/@Output, lifecycle, template children; @Injectable service; HttpClient → the C# endpoint
+Ng = "ts:angular/src/app/stock/"
+row, stock = nodes[Ng + "item-row.component.ts#ItemRowComponent"], nodes[Ng + "stock.component.ts#StockComponent"]
+assert row["kind"] == "component" and row["parameters"] == ["sku: string"] and row["events"] == ["picked"], row
+assert stock["hooks"] == ["ngOnInit"] and "service" in nodes[Ng + "stock.service.ts#StockService"]["tags"]
+for e in [("renders", Rc + "pages/InventoryPage.tsx#InventoryPage", Rc + "components/ItemList.tsx#ItemList"),
+          ("routes-to", "route:/inventory", Rc + "pages/InventoryPage.tsx#InventoryPage"),
+          ("http", Rc + "pages/InventoryPage.tsx#InventoryPage", Jv + "controller.InventoryController.low(int)"),
+          ("renders", Ng + "stock.component.ts#StockComponent", Ng + "item-row.component.ts#ItemRowComponent"),
+          ("routes-to", "route:/stock", Ng + "stock.component.ts#StockComponent"),
+          ("routes-to", "route:/stock/:sku", Ng + "item-row.component.ts#ItemRowComponent"),   # loadComponent
+          ("calls", Ng + "stock.component.ts#StockComponent.ngOnInit", Ng + "stock.service.ts#StockService.level"),
+          ("http", Ng + "stock.service.ts#StockService.level", API + "StockController.Get(string)")]:
+    assert e in edges, e
 assert not any("Tests" in n["id"] for n in nodes.values() if n["kind"] != "project"), "test code in the model"
 assert ("tests", "cs:Fixture.Tests.MaterialServiceTests.CreateAsync_Creates(Fixture.Application.MaterialService)", A + "MaterialService." + create) in edges
 
@@ -221,14 +240,15 @@ grep -q "check: FAIL.*missing architecture sections: stakeholders, concerns, dec
 # Architecture: planted violations and the cycle they cause
 arch=$(sed -n '/^Architecture/,$p' <<<"$report")
 grep -A1 "ARCH-001  domain → infrastructure" <<<"$arch" | grep -q "Domain/Material.cs → backend/Infrastructure/SqlMaterialRepository.cs"
-grep -A1 "ARCH-002  ui → http" <<<"$arch" | grep -q "MaterialTable.vue → GET /api/materials"
+grep -A2 "ARCH-002  ui → http" <<<"$arch" | grep -q "MaterialTable.vue → GET /api/materials"
+grep -A2 "ARCH-002  ui → http" <<<"$arch" | grep -q "InventoryPage.tsx → GET /api/inventory/low"   # React fetch in a component
 grep -q "ARCH-003  cycle: backend/Domain ↔ backend/Infrastructure" <<<"$arch"
 grep -q "ARCH-001  domain → infrastructure  \[high\]" <<<"$arch" && grep -q "ARCH-002  ui → http  \[medium\]" <<<"$arch"
 grep -q "dependencies: .*domain → infrastructure 1 ✗" <<<"$arch"
 set +e; dw architecture fixture --format json > "$model.arch" 2>/dev/null; code=$?; set -e
 [ "$code" -eq 1 ] || { echo "architecture should fail on violations"; exit 1; }
 python3 -c "import json,sys; a=json.load(open(sys.argv[1])); assert {'from':'api','to':'application','count':7,'allowed':True} in a['layerDependencies'], a" "$model.arch"   # 4 C# + 3 Java (inject, 2 calls)
-grep -q "Architecture (2 violations, 1 cycles)" <<<"$arch"
+grep -q "Architecture (3 violations, 1 cycles)" <<<"$arch"
 
 # Docs generation: pages, cross-links, and safe regeneration
 docs=$(mktemp -d)

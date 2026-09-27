@@ -11,6 +11,7 @@ const files = fs.readFileSync(0, 'utf8').split('\n').map(s => s.trim()).filter(B
 const nodes = []
 const edges = []
 const rel = f => path.relative(root, f).split(path.sep).join('/')
+const scriptKind = f => f.endsWith('.tsx') ? ts.ScriptKind.TSX : f.endsWith('.jsx') ? ts.ScriptKind.JSX : ts.ScriptKind.TS
 const fileId = f => (f.endsWith('.vue') ? 'vue:' : 'ts:') + rel(f)
 const hash = s => crypto.createHash('sha256').update(s).digest('hex').slice(0, 12)
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -62,7 +63,7 @@ function resolveImport(from, spec) {
     while (dir !== path.dirname(dir) && !fs.existsSync(path.join(dir, 'package.json'))) dir = path.dirname(dir)
     base = path.join(dir, 'src', spec.slice(2))
   } else return null
-  return [base, base + '.ts', base + '.vue', path.join(base, 'index.ts')].find(f => fs.existsSync(f) && fs.statSync(f).isFile()) ?? null
+  return [base, base + '.ts', base + '.tsx', base + '.jsx', base + '.vue', path.join(base, 'index.ts'), path.join(base, 'index.tsx')].find(f => fs.existsSync(f) && fs.statSync(f).isFile()) ?? null
 }
 
 // `/api/x/${id}?q=${n}` → '/api/x/{}'
@@ -95,8 +96,8 @@ function httpCall(call, ctx, param = () => null) {
       }
     return urlOrParam(first, param, method)
   }
-  if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression)) {
-    const obj = callee.expression.text
+  if (ts.isPropertyAccessExpression(callee) && (ts.isIdentifier(callee.expression) || ts.isPropertyAccessExpression(callee.expression))) {
+    const obj = callee.expression.getText()   // axios, api (an axios instance), this.http (Angular HttpClient)
     const base = obj === 'axios' ? '' : ctx.instances.get(obj)
     const method = callee.name.text.toUpperCase()
     if (base !== undefined && VERBS.has(method)) {
@@ -129,14 +130,34 @@ function urlOrParam(arg, param, method) {
 // Pre-pass over every file: axios instances and request helpers, and what each file exports, so wrappers resolve
 // across imports. instances: local name → baseURL; helpers: local name → { url: { param, prefix }, method }.
 const wrappers = new Map()
+const selectors = new Map() // Angular component selector → component id
 const wrapperCalls = new Set() // `file:pos` of the call inside a helper: its URL is the helper's parameter, not a call site
 function scriptOf(file) {
   const src = fs.readFileSync(file, 'utf8')
-  if (!file.endsWith('.vue')) return { sf: ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS), lineOffset: 0 }
+  if (!file.endsWith('.vue')) return { sf: ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, scriptKind(file)), lineOffset: 0 }
   const { descriptor } = parseSfc(src, { filename: file })
   const block = descriptor.scriptSetup ?? descriptor.script
   return block && { sf: ts.createSourceFile(file, block.content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS), lineOffset: block.loc.start.line - 1 }
 }
+// The component an import names: a .vue file is one; a TS/TSX export is `<file>#<name>` (default → its declared name).
+function componentId(target, name) {
+  if (target.endsWith('.vue')) return fileId(target)
+  return `${fileId(target)}#${name === 'default' ? wrappers.get(target)?.exports.get('default') ?? name : name}`
+}
+
+// @Decorator({ a: 'x', b: \`y\` }) on a class → { a: 'x', b: 'y' } (string properties only); undefined without it.
+function decoratorArg(node, name) {
+  const d = (ts.canHaveDecorators(node) ? ts.getDecorators(node) : undefined)?.find(d => ts.isCallExpression(d.expression) && d.expression.expression.getText() === name)
+  if (!d) return undefined
+  const o = d.expression.arguments[0]
+  const out = {}
+  if (o && ts.isObjectLiteralExpression(o))
+    for (const p of o.properties) if (ts.isPropertyAssignment(p) && ts.isStringLiteralLike(p.initializer)) out[p.name.getText()] = p.initializer.text
+  return out
+}
+const hasDecorator = (node, name) => (ts.canHaveDecorators(node) ? ts.getDecorators(node) : undefined)
+  ?.some(d => (ts.isCallExpression(d.expression) ? d.expression.expression : d.expression).getText() === name)
+
 function wrapperContext(file, imports) {
   const own = wrappers.get(file) ?? { instances: new Map(), helpers: new Map(), exports: new Map() }
   const ctx = { instances: new Map(own.instances), helpers: new Map(own.helpers) }
@@ -167,7 +188,13 @@ function scanWrappers(files) {
             if (isCreate(d.initializer)) w.instances.set(d.name.text, baseOf(d.initializer))
             if (exported) w.exports.set(d.name.text, d.name.text)
           }
-      if (ts.isFunctionDeclaration(st) && st.name && exported) w.exports.set(st.name.text, st.name.text)
+      if (ts.isFunctionDeclaration(st) && st.name && exported)
+        w.exports.set(st.modifiers?.some(m => m.kind === ts.SyntaxKind.DefaultKeyword) ? 'default' : st.name.text, st.name.text)
+      if (ts.isClassDeclaration(st) && st.name) {
+        if (exported) w.exports.set(st.name.text, st.name.text)
+        const selector = decoratorArg(st, 'Component')?.selector
+        if (selector) selectors.set(selector, `${fileId(file)}#${st.name.text}`)
+      }
       if (ts.isExportAssignment(st)) {
         if (ts.isIdentifier(st.expression)) w.exports.set('default', st.expression.text)
         else if (isCreate(st.expression)) { w.instances.set('*default', baseOf(st.expression)); w.exports.set('default', '*default') }
@@ -227,6 +254,20 @@ const TYPE_KINDS = [[ts.isClassDeclaration, 'class'], [ts.isInterfaceDeclaration
 function scanScript(file, sf, owner, lineOffset, component) {
   const imports = importsOf(file, sf, owner)
   const ctx = wrapperContext(file, imports)
+  // Angular DI: constructor parameter properties and `x = inject(T)` fields. HttpClient ones are HTTP receivers
+  // (this.http.get(..)); ones typed by a local class route `this.svc.m()` calls to that class.
+  ctx.members = new Map()
+  for (const cls of sf.statements.filter(ts.isClassDeclaration)) {
+    const injected = [
+      ...(cls.members.find(ts.isConstructorDeclaration)?.parameters ?? []).filter(p => p.type && ts.isTypeReferenceNode(p.type)).map(p => [p.name.getText(sf), p.type.typeName.getText(sf)]),
+      ...cls.members.filter(m => ts.isPropertyDeclaration(m) && m.initializer && ts.isCallExpression(m.initializer) && m.initializer.expression.getText(sf) === 'inject')
+        .map(m => [m.name.getText(sf), m.initializer.arguments[0]?.getText(sf)]),
+    ]
+    for (const [name, type] of injected) {
+      if (type === 'HttpClient') ctx.instances.set(`this.${name}`, '')
+      else if (imports.get(type)?.target && !imports.get(type).target.endsWith('.vue')) ctx.members.set(name, componentId(imports.get(type).target, imports.get(type).name))
+    }
+  }
 
   const line = n => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1 + lineOffset
   const endLine = n => sf.getLineAndCharacterOfPosition(n.getEnd()).line + 1 + lineOffset
@@ -294,7 +335,9 @@ function scanScript(file, sf, owner, lineOffset, component) {
       if (component && ts.isIdentifier(n.expression) && (LIFECYCLE.has(callee) || /^use[A-Z]/.test(callee)))
         component.hooks.push(LIFECYCLE.has(callee) ? callee : `${callee}()`)
       const imp = ts.isIdentifier(n.expression) && imports.get(n.expression.text)
-      if (imp && imp.target.endsWith('.ts')) edge(cur, `${fileId(imp.target)}#${imp.name}`, 'calls')
+      if (imp && !imp.target.endsWith('.vue')) edge(cur, componentId(imp.target, imp.name), 'calls')
+      const through = callee.match(/^this\.(\w+)\.(\w+)$/)
+      if (through && ctx.members.has(through[1])) edge(cur, `${ctx.members.get(through[1])}.${through[2]}`, 'calls')
       if (component && callee === 'defineProps') props = propsOf(n, sf)
       if (component && callee === 'defineEmits') component.emits = emitsOf(n, sf)
       // Component state: `const x = ref(..)` / reactive / computed, and what it watches.
@@ -302,11 +345,20 @@ function scanScript(file, sf, owner, lineOffset, component) {
           && ts.isVariableDeclaration(n.parent) && ts.isIdentifier(n.parent.name))
         component.state.push(callee === 'computed' ? `${n.parent.name.text} (computed)` : n.parent.name.text)
       if (component && callee === 'watch' && n.arguments[0]) component.state.push(`watch ${n.arguments[0].getText(sf)}`)
-      if (callee === 'createRouter' || callee === 'createWebHistory') scanRoutes(file, sf, imports, line)
+      if (['createRouter', 'createWebHistory', 'createBrowserRouter', 'createHashRouter', 'createMemoryRouter', 'provideRouter', 'RouterModule.forRoot', 'RouterModule.forChild'].includes(callee))
+        scanRoutes(file, sf, imports, line)
+    }
+    // Angular `const routes: Routes = [...]`; React Router <Route path=".." element={<X />} />.
+    if (ts.isVariableDeclaration(n) && n.type?.getText(sf) === 'Routes') scanRoutes(file, sf, imports, line)
+    if ((ts.isJsxSelfClosingElement(n) || ts.isJsxOpeningElement(n)) && n.tagName.getText(sf) === 'Route') {
+      const attr = k => n.attributes.properties.find(a => ts.isJsxAttribute(a) && a.name.getText(sf) === k)?.initializer
+      const p = attr('path')
+      if (p && ts.isStringLiteral(p)) addRoute(file, p.text, line(n), jsxTarget(attr('element'), imports, file, sf))
     }
     ts.forEachChild(n, c => visit(c, cur))
   }
   visit(sf, owner)
+  if (!component) scanComponents(file, sf, imports, line, owner)
   return { imports, props }
 }
 
@@ -343,6 +395,115 @@ function emitsOf(call, sf) {
   return names
 }
 
+// Route paths as the router sees them: Angular's are relative ('materials' → /materials).
+function addRoute(file, raw, line, target) {
+  const route = raw.startsWith('/') ? raw : `/${raw}`
+  const id = `route:${route}`
+  nodes.push({ id, kind: 'route', name: route, file: rel(file), line, route })
+  if (target) edge(id, target, 'routes-to')
+}
+
+// element={<X />} → X's component id.
+function jsxTarget(init, imports, file, sf) {
+  const expr = init && ts.isJsxExpression(init) ? init.expression : init
+  const tag = expr && (ts.isJsxSelfClosingElement(expr) ? expr.tagName : ts.isJsxElement(expr) ? expr.openingElement.tagName : null)
+  if (!tag || !ts.isIdentifier(tag)) return null
+  const imp = imports.get(tag.text)
+  return imp ? componentId(imp.target, imp.name) : `${fileId(file)}#${tag.text}`
+}
+
+const NG_LIFECYCLE = new Set(['ngOnChanges', 'ngOnInit', 'ngDoCheck', 'ngAfterContentInit', 'ngAfterContentChecked',
+  'ngAfterViewInit', 'ngAfterViewChecked', 'ngOnDestroy'])
+
+// React function components and Angular @Component classes in a TS/TSX file: the nodes scanScript made for them
+// (exported functions and classes) become components, with props, events, hooks and what they render.
+function scanComponents(file, sf, imports, line, owner) {
+  const byId = id => nodes.find(n => n.id === id)
+  for (const st of sf.statements) {
+    // React: a capitalised function (declaration or arrow const) whose body has JSX.
+    let fn = null, name = null
+    if (ts.isFunctionDeclaration(st) && st.name) [fn, name] = [st, st.name.text]
+    else if (ts.isVariableStatement(st))
+      for (const d of st.declarationList.declarations)
+        if (ts.isIdentifier(d.name) && d.initializer && (ts.isArrowFunction(d.initializer) || ts.isFunctionExpression(d.initializer))) [fn, name] = [d.initializer, d.name.text]
+    if (fn && /^[A-Z]/.test(name)) {
+      let jsx = false
+      const hooks = [], rendered = new Set()
+      const walk = n => {
+        if (ts.isJsxElement(n) || ts.isJsxSelfClosingElement(n) || ts.isJsxFragment(n)) jsx = true
+        if ((ts.isJsxSelfClosingElement(n) || ts.isJsxOpeningElement(n)) && ts.isIdentifier(n.tagName) && /^[A-Z]/.test(n.tagName.text) && n.tagName.text !== 'Route') {
+          const imp = imports.get(n.tagName.text)
+          if (imp) rendered.add(componentId(imp.target, imp.name))
+          else if (sf.statements.some(s => (ts.isFunctionDeclaration(s) && s.name?.text === n.tagName.text)
+              || (ts.isVariableStatement(s) && s.declarationList.declarations.some(d => d.name.getText(sf) === n.tagName.text))))
+            rendered.add(`${fileId(file)}#${n.tagName.text}`)
+        }
+        if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && /^use[A-Z]/.test(n.expression.text)) hooks.push(`${n.expression.text}()`)
+        ts.forEachChild(n, walk)
+      }
+      walk(fn.body ?? fn)
+      if (!jsx) continue
+      const id = `${fileId(file)}#${name}`
+      let node = byId(id)
+      if (!node) { // not exported: still a component of this file
+        node = { id, name, file: rel(file), line: line(st), visibility: 'public', hash: hash(st.getText(sf)), complexity: complexity(fn), doc: jsDoc(st) }
+        nodes.push(node); edge(owner, id, 'contains')
+      }
+      node.kind = 'component'
+      node.tags = [...new Set([...(node.tags ?? []).filter(t => t !== 'composable'), 'react'])]
+      const props = reactProps(fn.parameters[0], sf)
+      node.params = props.length
+      if (props.length) node.parameters = props
+      else delete node.parameters
+      if (hooks.length) node.hooks = [...new Set(hooks)]
+      for (const r of rendered) edge(id, r, 'renders')
+      continue
+    }
+    // Angular: @Component classes (@Injectable ones are services).
+    if (!ts.isClassDeclaration(st) || !st.name) continue
+    const id = `${fileId(file)}#${st.name.text}`
+    const node = byId(id)
+    if (!node) continue
+    if (hasDecorator(st, 'Injectable')) node.tags = [...new Set([...(node.tags ?? []), 'service'])]
+    const meta = decoratorArg(st, 'Component')
+    if (!meta) continue
+    node.kind = 'component'
+    node.tags = [...new Set([...(node.tags ?? []), 'angular'])]
+    const inputs = [], outputs = [], hooks = []
+    for (const m of st.members) {
+      const mname = m.name?.getText(sf)
+      const init = ts.isPropertyDeclaration(m) && m.initializer && ts.isCallExpression(m.initializer) ? m.initializer.expression.getText(sf) : ''
+      if (hasDecorator(m, 'Input') || /^input(\.required)?$/.test(init)) inputs.push(m.type ? `${mname}: ${m.type.getText(sf)}` : mname)
+      if (hasDecorator(m, 'Output') || init === 'output') outputs.push(mname)
+      if (ts.isMethodDeclaration(m) && NG_LIFECYCLE.has(mname)) hooks.push(mname)
+    }
+    node.params = inputs.length
+    if (inputs.length) node.parameters = inputs
+    if (outputs.length) { node.events = outputs; node.tags.push('emits') }
+    if (hooks.length) node.hooks = hooks
+    // Child components from the template: <app-item-row> → the component with that selector.
+    let template = meta.template ?? ''
+    if (meta.templateUrl) try { template = fs.readFileSync(path.resolve(path.dirname(file), meta.templateUrl), 'utf8') } catch {}
+    for (const tag of new Set([...template.matchAll(/<([a-z][\w]*-[\w-]+)/g)].map(m => m[1])))
+      if (selectors.has(tag)) edge(id, selectors.get(tag), 'renders')
+  }
+}
+
+// React props: an interface/type in the file, an inline type literal, or destructured names.
+function reactProps(param, sf) {
+  if (!param) return []
+  let members = null
+  const t = param.type
+  if (t && ts.isTypeLiteralNode(t)) members = t.members
+  else if (t && ts.isTypeReferenceNode(t)) {
+    const decl = sf.statements.find(s => (ts.isInterfaceDeclaration(s) || ts.isTypeAliasDeclaration(s)) && s.name.text === t.typeName.getText(sf))
+    members = decl ? (ts.isInterfaceDeclaration(decl) ? decl.members : decl.type.members ?? []) : null
+  }
+  if (members) return members.filter(m => m.name).map(m => m.type ? `${m.name.getText(sf)}: ${m.type.getText(sf)}` : m.name.getText(sf))
+  if (ts.isObjectBindingPattern(param.name)) return param.name.elements.map(e => e.name.getText(sf))
+  return []
+}
+
 let routesScanned = new Set()
 function scanRoutes(file, sf, imports, line) {
   if (routesScanned.has(file)) return
@@ -351,17 +512,18 @@ function scanRoutes(file, sf, imports, line) {
     if (ts.isObjectLiteralExpression(n)) {
       const prop = k => n.properties.find(p => ts.isPropertyAssignment(p) && p.name.getText(sf) === k)?.initializer
       const p = prop('path')
-      const c = prop('component')
+      const c = prop('component') ?? prop('loadComponent')
       if (p && ts.isStringLiteralLike(p)) {
-        const id = `route:${p.text}`
-        nodes.push({ id, kind: 'route', name: p.text, file: rel(file), line: line(n), route: p.text })
         let target = null
-        if (c && ts.isIdentifier(c)) target = imports.get(c.text)?.target
+        if (c && ts.isIdentifier(c) && imports.get(c.text)) target = componentId(imports.get(c.text).target, imports.get(c.text).name)
         else if (c && ts.isArrowFunction(c)) {
-          const imp = c.body.getText(sf).match(/import\(\s*['"`]([^'"`]+)['"`]\s*\)/)
-          if (imp) target = resolveImport(file, imp[1])
+          // () => import('./X.vue') / import('./x.component').then(m => m.X)
+          const text = c.body.getText(sf)
+          const imp = text.match(/import\(\s*['"`]([^'"`]+)['"`]\s*\)/)
+          const file2 = imp && resolveImport(file, imp[1])
+          if (file2) target = componentId(file2, text.match(/\.then\(\s*\(?\s*\w+\s*\)?\s*=>\s*\w+\.(\w+)/)?.[1] ?? 'default')
         }
-        if (target) edge(id, fileId(target), 'routes-to')
+        addRoute(file, p.text, line(n), target ?? jsxTarget(prop('element'), imports, file, sf))
       }
     }
     ts.forEachChild(n, walk)
@@ -438,7 +600,7 @@ for (const file of files) {
         if (component.emits.length) node.events = component.emits
       }
     } else {
-      const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+      const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, scriptKind(file))
       nodes.push({ id, kind: 'module', name: path.basename(file), file: rel(file), line: 1, hash: hash(src) })
       scanScript(file, sf, id, 0, null)
     }

@@ -7,7 +7,4 @@ or human-written. AI runs on a self-hosted model only; code is never sent to a p
 
 ## Next
 
-
-## Eventually
-
-- More languages and frameworks: React/Angular.
+Everything planned so far is done. New ideas go here as they come up; open an issue to propose one.

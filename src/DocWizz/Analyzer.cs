@@ -28,9 +28,9 @@ class Config
           # max_complexity: 20  # fail when a symbol's cyclomatic complexity exceeds this
         architecture:
           layers:               # path globs, first match wins; unmatched files have no layer
-            ui: ["*.vue"]
+            ui: ["*.vue", "*.tsx", "*.jsx", "*.component.ts"]
             state: ["*/stores/*.ts", "*/composables/*.ts"]
-            client: ["*/api/*.ts", "*/services/*.ts"]
+            client: ["*/api/*.ts", "*/services/*.ts", "*.service.ts"]
             api: ["*/Api/*.cs", "*.Api/*.cs", "*/Controllers/*.cs", "*/Endpoints/*.cs", "*/controller/*.java", "*/web/*.java"]
             application: ["*/Application/*.cs", "*.Application/*.cs", "*/service/*.java"]
             domain: ["*/Domain/*.cs", "*.Domain/*.cs", "*.Core/*.cs", "*/domain/*.java", "*/model/*.java", "*/entity/*.java"]

@@ -50,7 +50,8 @@ Dockerfile base images and exposed ports, Terraform/Bicep resource types with th
 shown as "provisioned by" in `views/context.md`) — and lists what none of them can tell.
 SQL scripts add stored procedures, functions, views and tables (with the tables each routine touches and the code that
 calls it) and schema migrations in order, shown in `views/data.md`.
-Java/Spring code (controllers, services, repositories, entities, `@*Mapping` endpoints, injection, `application.yml`)
+React and Angular frontends are read like Vue: components, props, hooks, routes, and HTTP calls linked to the endpoints
+they reach. Java/Spring code (controllers, services, repositories, entities, `@*Mapping` endpoints, injection, `application.yml`)
 is read into the same model, so flows, API tables and checks work across C# and Java.
 Every node records its `language` (csharp, vue, typescript, sql, java, msbuild, maven, gradle, npm); C# types carry roles as tags
 (controller, service, repository, entity, dbcontext, background-service, middleware, hub, options).

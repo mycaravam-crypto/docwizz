@@ -49,7 +49,9 @@ static class Architecture
             if (e.Kind == "http")
             {
                 if (!allowed.Contains("http"))
-                    violations.Add(new("ARCH-002", fromLayer, "http", from.File, e.To.Replace("http:", ""), $"{from.Name} calls HTTP directly"));
+                    violations.Add(new("ARCH-002", fromLayer, "http", from.File,
+                        nodes.TryGetValue(e.To, out var ep) && ep.Tags is ["endpoint", var verb, ..] ? $"{verb} /{ep.Route?.TrimStart('/')}" : e.To.Replace("http:", ""),
+                        $"{from.Name} calls HTTP directly"));
                 continue;
             }
             if (!nodes.TryGetValue(e.To, out var to) || LayerOf(to.File) is not { } toLayer || toLayer == fromLayer) continue;

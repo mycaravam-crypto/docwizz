@@ -93,7 +93,7 @@ static int Usage(string? error)
 static (CodeModel Model, List<string> Files) BuildModel(string root, Config config)
 {
     string[] skip = ["bin", "obj", "node_modules", "dist"];
-    string[] exts = [".cs", ".vue", ".ts", ".sql", ".java"];
+    string[] exts = [".cs", ".vue", ".ts", ".tsx", ".jsx", ".sql", ".java"];
 
     // Prefer git's view (honours .gitignore, skips nested worktrees); fall back to a directory walk.
     var candidates = (Git(root, "ls-files --cached --others --exclude-standard")?
@@ -108,7 +108,7 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     var scanned = candidates.Where(f => exts.Contains(Path.GetExtension(f)) && !f.EndsWith(".d.ts")).ToList();
 
     var (nodes, edges) = CSharpScanner.Scan(root, scanned.Where(f => f.EndsWith(".cs")));
-    var (feNodes, feEdges) = Frontend.Scan(root, scanned.Where(f => f.EndsWith(".vue") || f.EndsWith(".ts")).ToList());
+    var (feNodes, feEdges) = Frontend.Scan(root, scanned.Where(f => Path.GetExtension(f) is ".vue" or ".ts" or ".tsx" or ".jsx").ToList());
     var (sqlNodes, sqlEdges) = Sql.Scan(root, scanned.Where(f => f.EndsWith(".sql")));
     var (javaNodes, javaEdges) = JavaScanner.Scan(root, scanned.Where(f => f.EndsWith(".java")));
     var (projNodes, projEdges) = Projects.Scan(root, candidates.Where(f => f.EndsWith(".csproj") || f.EndsWith(".sln") || f.EndsWith(".slnx")
@@ -142,7 +142,7 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
 
 static string? Language(string file) => Path.GetExtension(file) switch
 {
-    ".cs" => "csharp", ".vue" => "vue", ".ts" => "typescript", ".sql" => "sql", ".java" => "java", ".csproj" => "msbuild",
+    ".cs" => "csharp", ".vue" => "vue", ".ts" or ".tsx" => "typescript", ".jsx" => "javascript", ".sql" => "sql", ".java" => "java", ".csproj" => "msbuild",
     _ => Path.GetFileName(file) switch { "package.json" => "npm", "pom.xml" => "maven", "build.gradle" or "build.gradle.kts" => "gradle", _ => null },
 };
 
