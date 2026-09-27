@@ -66,7 +66,7 @@ was derived from, with their source locations as `evidence` (`file:line-endLine`
 
 ## Profiles
 
-`default`, `software`, `api`, `architecture`, `technical-publication`, `iso-42010`, `iso-15289` —
+`default`, `software`, `aspnet`, `vue`, `api`, `architecture`, `technical-publication`, `iso-42010`, `iso-15289` —
 see [Profiles.cs](src/DocWizz/Profiles.cs) — or your organisation's own: a YAML file with the same shape
 (`patterns:`, `architecture_sections:`), passed as `--profile team.yaml` or `profile: team.yaml`. Reports state coverage *against the profile*; nothing claims compliance
 with a standard. `iso-42010`/`iso-15289` also expect human-authored pages in `docs/architecture/`

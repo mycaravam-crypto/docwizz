@@ -28,6 +28,26 @@ static class Profiles
               component:  { match: { kind: component }, sections: [summary, param, events] }
               default:    { sections: [summary, param, returns, exception] }
             """,
+        // ASP.NET Core backends: endpoints and the building blocks around them (roles are the C# scanner's tags).
+        ["aspnet"] = """
+            patterns:
+              endpoint:   { match: { tag: endpoint }, level: high, sections: [summary, param, input, output, authorization] }
+              controller: { match: { tag: controller }, level: high, sections: [summary, dependencies] }
+              dbcontext:  { match: { tag: dbcontext }, level: medium, sections: [summary] }
+              hosted:     { match: { tag: background-service }, level: medium, sections: [summary, dependencies, side_effects] }
+              middleware: { match: { tag: middleware }, level: medium, sections: [summary] }
+              options:    { match: { tag: options }, sections: [summary] }
+              service:    { match: { type: "*Service" }, sections: [summary, param, dependencies, side_effects] }
+              default:    { sections: [summary] }
+            """,
+        // Vue frontends: components' contracts (props, emits, state), stores and composables.
+        ["vue"] = """
+            patterns:
+              component:  { match: { kind: component }, level: medium, sections: [summary, param, dependencies, events, state] }
+              store:      { match: { kind: store }, level: medium, sections: [summary, dependencies, state] }
+              composable: { match: { tag: composable }, sections: [summary, param, returns] }
+              default:    { sections: [summary] }
+            """,
         // Consumers of the HTTP API: every endpoint's contract.
         ["api"] = """
             patterns:

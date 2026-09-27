@@ -196,6 +196,8 @@ dw analyze fixture --format json 2>/dev/null > "$model"
 dw analyze fixture --format json --profile software 2>/dev/null > "$model.software"
 dw analyze fixture --format json --profile api 2>/dev/null > "$model.api"
 dw analyze fixture --format json --profile architecture 2>/dev/null > "$model.arch-profile"
+dw analyze fixture --format json --profile aspnet 2>/dev/null > "$model.aspnet"
+dw analyze fixture --format json --profile vue 2>/dev/null > "$model.vue"
 python3 - "$model" <<'PY'
 import json, sys
 def items(f): return {i["id"]: i for i in json.load(open(f))["documentation"]["items"]}
@@ -219,6 +221,12 @@ assert rename["sections"]["authorization"] == {"origin": "fact", "text": "requir
 assert json.load(open(sys.argv[1] + ".api"))["documentation"]["profile"] == "api"
 form = items(sys.argv[1] + ".arch-profile")["vue:frontend/src/components/MaterialForm.vue"]
 assert form["sections"]["state"] == {"origin": "fact", "text": "name, valid (computed), watch name"}, form
+asp = items(sys.argv[1] + ".aspnet")
+assert asp["cs:Fixture.Infrastructure.MaterialCleanup"]["pattern"] == "hosted" and asp["cs:Fixture.Infrastructure.TimingMiddleware"]["pattern"] == "middleware"
+assert asp["cs:Fixture.Infrastructure.AppDbContext"]["pattern"] == "dbcontext"
+vue = items(sys.argv[1] + ".vue")
+assert vue["vue:frontend/src/components/MaterialForm.vue"]["pattern"] == "component"
+assert [i["pattern"] for i in vue.values() if i["id"].endswith("materialStore.ts#useMaterialStore")] == ["store"], [i for i in vue if "Store" in i]
 PY
 if dw analyze fixture --profile nope >/dev/null 2>&1; then echo "unknown profile accepted"; exit 1; fi
 # Organisational profile from a file; init writes a starter config once
