@@ -32,7 +32,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             written.Add(rel);
         }
 
-        var modules = model.Nodes.Where(n => n.Kind is not ("route" or "endpoint" or "project" or "package" or "external") || parent.ContainsKey(n.Id))
+        var modules = model.Nodes.Where(n => n.Kind is not ("route" or "project" or "package" or "external") || parent.ContainsKey(n.Id))
             .GroupBy(n => Folder(n.File)).OrderBy(g => g.Key).ToList();
         foreach (var m in modules) Write($"modules/{Slug(m.Key)}.md", Module(m.Key, m.ToList()));
         Write("index.md", Index(modules.Select(m => m.Key).ToList()));
@@ -267,57 +267,6 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         sb.AppendLine("\n## Most complex\n\n| Complexity | Item |\n|---|---|");
         foreach (var n in model.Nodes.Where(n => n.Complexity > 1 && n.Kind != "component").OrderByDescending(n => n.Complexity).Take(20))
             sb.AppendLine($"| {n.Complexity} | {SourceLink(n.File, n.Line, $"`{Esc(Display(n))}`")} |");
-        return sb.ToString();
-    }
-
-    string Module(string folder, List<Node> members)
-    {
-        var sb = new StringBuilder($"# {folder}\n\n");
-        if (Layer(folder) is { } layer) sb.AppendLine($"Layer: **{layer}**\n");
-
-        var tops = members.Where(n => TopKinds.Contains(n.Kind) && !parent.ContainsKey(n.Id)).OrderBy(n => n.Name).ToList();
-        var topIds = tops.Select(t => t.Id).ToHashSet();
-        var deps = Dependencies().Select(d => (From: Top(d.From), To: Top(d.To)))
-            .Where(d => d.From != d.To && nodes.ContainsKey(d.To) && (topIds.Contains(d.From) || topIds.Contains(d.To)))
-            .Distinct().ToList();
-
-        string ModuleOf(string id) => Folder(nodes[id].File);
-        var uses = deps.Where(d => topIds.Contains(d.From) && !topIds.Contains(d.To)).Select(d => ModuleOf(d.To)).Distinct().Order().ToList();
-        var usedBy = deps.Where(d => topIds.Contains(d.To) && !topIds.Contains(d.From)).Select(d => ModuleOf(d.From)).Distinct().Order().ToList();
-        if (uses.Count > 0) sb.AppendLine("Depends on: " + string.Join(", ", uses.Select(m => $"[{m}]({Slug(m)}.md)")) + "\n");
-        if (usedBy.Count > 0) sb.AppendLine("Used by: " + string.Join(", ", usedBy.Select(m => $"[{m}]({Slug(m)}.md)")) + "\n");
-
-        var outgoing = deps.Where(d => topIds.Contains(d.From)).Select(d => (d.From, d.To, 0)).ToList();
-        if (outgoing.Count is > 0 and <= MaxDiagramEdges)
-            sb.AppendLine(Mermaid("graph LR", outgoing, id => nodes[id].Name));
-
-        foreach (var t in tops)
-        {
-            sb.AppendLine($"## {t.Name}\n");
-            sb.AppendLine($"_{t.Kind}_ · {SourceLink(t.File, t.Line, Path.GetFileName(t.File), sub: "modules")}{Badge(t)}\n");
-            if (Summary(t) is { } s) sb.AppendLine(s + "\n");
-            if (t.Kind == "component" && t.Params > 0) sb.AppendLine($"Props: {string.Join(", ", t.Parameters ?? [$"{t.Params}"])}\n");
-            if (t.Events is { Count: > 0 }) sb.AppendLine($"Emits: {string.Join(", ", t.Events)}\n");
-            foreach (var (name, section) in Derived(t)) sb.AppendLine($"- **{name}** _({section.Origin.ToString().ToLowerInvariant()})_: {Esc(section.Text)}");
-            if (Derived(t).Any()) sb.AppendLine();
-            if (findingOf.TryGetValue(t.Id, out var item))
-                sb.AppendLine("_Evidence:_ " + string.Join(", ", item.Sources.Select(nodes.GetValueOrDefault).OfType<Node>()
-                    .Select(n => SourceLink(n.File, n.Line, CodeModel.Location(n), sub: "modules"))) + "\n");
-
-            var ms = children[t.Id].Select(nodes.GetValueOrDefault).OfType<Node>()
-                .Where(m => m.Kind is "method" or "function" or "endpoint" && m.Visibility is "public" or "protected" or "internal" or null)
-                .OrderBy(m => m.Line).ToList();
-            if (ms.Count == 0) continue;
-            sb.AppendLine("| Member | Summary | Derived from code | Complexity |\n|---|---|---|---|");
-            foreach (var m in ms)
-                sb.AppendLine($"| {SourceLink(m.File, m.Line, $"`{Esc(MemberName(m, t))}`", sub: "modules")}{Badge(m)} | {Esc(Summary(m) ?? "")} | " +
-                    $"{Esc(string.Join("; ", Derived(m).Select(d => $"{d.Name}{(d.Section.Origin == Origin.Inferred ? " (inferred)" : "")}: {d.Section.Text}")))} | {m.Complexity} |");
-            sb.AppendLine();
-        }
-        var files = members.Select(m => m.File).Distinct().Order().ToList();
-        sb.AppendLine($"---\n_Generated from {members.Count} symbols in {string.Join(", ", files.Select(f => SourceLink(f, 0, f, sub: "modules")))} " +
-            $"(commit `{model.Commit ?? "unknown"}`, profile `{config.Profile}`). Sections marked _fact_ are read from the code, " +
-            "_inferred_ come from heuristics, 🤖 marks AI drafts._");
         return sb.ToString();
     }
 

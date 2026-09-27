@@ -247,7 +247,8 @@ static class CSharpScanner
         }
     }
 
-    // Who talks to an external system: T of an enclosing AddDbContext<T>/AddHttpClient<T>(..), else the enclosing type.
+    // Who talks to an external system: T of an enclosing AddDbContext<T>/AddHttpClient<T>(..), else the enclosing member
+    // (method, property, constructor), else the enclosing type.
     static string? Owner(SemanticModel sm, SyntaxNode at)
     {
         foreach (var a in at.AncestorsAndSelf())
@@ -255,6 +256,7 @@ static class CSharpScanner
             if (a is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name: GenericNameSyntax
                     { Identifier.Text: "AddDbContext" or "AddDbContextPool" or "AddDbContextFactory" or "AddHttpClient", TypeArgumentList.Arguments: [.., var t] } } }
                 && sm.GetTypeInfo(t).Type is { } type && InSource(type)) return Id(type);
+            if (a is BaseMethodDeclarationSyntax or BasePropertyDeclarationSyntax && sm.GetDeclaredSymbol(a) is { } member) return Id(member);
             if (a is BaseTypeDeclarationSyntax decl && sm.GetDeclaredSymbol(decl) is { } s) return Id(s);
         }
         return null;
