@@ -34,7 +34,7 @@ partial class Generator
     {
         var sb = new StringBuilder("# Deployment\n\n");
         sb.AppendLine("What the repository's deployment descriptors state. Environment variables are listed by name only.\n");
-        var hosts = Projects.Where(p => p.Tags?.Any(t => t.StartsWith("Microsoft.NET.Sdk.Web") || t == "npm") == true).ToList();
+        var hosts = Projects.Where(p => p.Tags?.Any(t => t is "executable" or "npm") == true).ToList();
         if (hosts.Count > 0)
         {
             sb.AppendLine("## Deployable units (from project files)\n");
@@ -105,7 +105,7 @@ partial class Generator
         if (u.Build is not null)
         {
             var dir = Path.GetRelativePath(root, Path.GetFullPath(Path.Combine(root, Path.GetDirectoryName(u.File) ?? "", u.Build))).Replace('\\', '/');
-            var projects = Projects.Where(p => dir == "." || p.File.StartsWith(dir.TrimEnd('/') + "/")).Select(p => $"project `{p.Name}`").ToList();
+            var projects = Projects.Where(p => p.Tags?.Contains("test") != true && (dir == "." || p.File.StartsWith(dir.TrimEnd('/') + "/"))).Select(p => $"project `{p.Name}`").ToList();
             if (projects.Count > 0) return string.Join(", ", projects);
         }
         if (u.Image is not null && Externals.ByImage(u.Image) is { } k)

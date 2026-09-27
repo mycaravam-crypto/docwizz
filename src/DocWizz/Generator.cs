@@ -108,7 +108,10 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
                 _ => ".NET",
             };
             var tfms = p.Tags!.Where(t => t.StartsWith("net")).ToList();
-            yield return $"`{p.Name}`: {kind}{(tfms.Count > 0 ? $" on {string.Join(", ", tfms)}" : "")}";
+            var role = p.Tags!.FirstOrDefault(t => t is "executable" or "library" or "test");
+            var folder = p.Tags!.FirstOrDefault(t => t.StartsWith("sln:"))?[4..];
+            yield return $"`{p.Name}`: {kind}{(tfms.Count > 0 ? $" on {string.Join(", ", tfms)}" : "")}" +
+                (role is null ? "" : $" — {role}") + (folder is null ? "" : $", solution folder `{folder}`");
         }
         var versions = model.Edges.Where(e => e.Kind == "depends-on").GroupBy(e => e.To).ToDictionary(g => g.Key, g => g.First().Label);
         var packages = model.Nodes.Where(n => n.Kind == "package").ToDictionary(n => n.Name, n => n.Id);

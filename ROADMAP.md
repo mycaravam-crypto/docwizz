@@ -7,9 +7,6 @@ or human-written. AI runs on a self-hosted model only; code is never sent to a p
 
 ## Next
 
-- **Project roles.** Classify projects as executable, library or test from `OutputType`, the SDK and test packages.
-  Read `.sln`/`.slnx` so the solution structure (Frontend / API / Application / Domain / Infrastructure / Tests)
-  comes from metadata instead of folder names.
 - **Frontend depth.**
   - Lifecycle hooks and composable usage per component.
   - TS classes, interfaces and types.

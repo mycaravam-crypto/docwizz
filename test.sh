@@ -42,7 +42,7 @@ assert "cs:endpoint:PATCH /api/materials/{id}" in nodes, "MapMethods endpoint"
 # minimal API: comment above documents it; handler params are injections
 assert "Places an order" in nodes["cs:endpoint:POST /orders"]["doc"]
 assert ("injects", "cs:endpoint:POST /orders", I + "AppDbContext") in edges
-assert not any("Tests" in n["id"] for n in nodes.values()), "test code in the model"
+assert not any("Tests" in n["id"] for n in nodes.values() if n["kind"] != "project"), "test code in the model"
 assert ("tests", "cs:Fixture.Tests.MaterialServiceTests.CreateAsync_Creates(Fixture.Application.MaterialService)", A + "MaterialService." + create) in edges
 
 # Signatures and the API model
@@ -197,6 +197,21 @@ grep -q "| POST | \`/api/materials\` |.*\`createMaterial\`" "$docs/api.md"
 grep -q "| PUT | \`/api/materials/{id}\` | Renames a material. | \`id: int\`<br>\`\[body\] request: RenameMaterialRequest\` | \`Material\` | required |" "$docs/api.md"
 grep -q "ARCH-001 | domain → infrastructure | high |" "$docs/architecture.md"
 grep -q "^- \`Fixture\`: ASP.NET Core on net9.0" "$docs/index.md"
+# project roles from metadata, solution folders from Fixture.sln (nested: Backend/API)
+grep -q "^- \`Fixture\`: ASP.NET Core on net9.0 — executable, solution folder \`Backend/API\`" "$docs/index.md"
+grep -q "^- \`Fixture.Tests\`: .NET on net9.0 — test, solution folder \`Tests\`" "$docs/index.md"
+# .slnx: folders from <Folder Name="/…/">
+slnx=$(mktemp -d); cp -r fixture/. "$slnx"; rm "$slnx/Fixture.sln"
+cat > "$slnx/Fixture.slnx" <<'XML'
+<Solution>
+  <Folder Name="/Web/"><Project Path="backend/Fixture.csproj" /></Folder>
+  <Project Path="backend/Fixture.Tests/Fixture.Tests.csproj" />
+</Solution>
+XML
+dw generate "$slnx" "$slnx/docs" >/dev/null 2>&1
+grep -q "^- \`Fixture\`: ASP.NET Core on net9.0 — executable, solution folder \`Web\`" "$slnx/docs/index.md"
+grep -q "^- \`Fixture.Tests\`: .NET on net9.0 — test$" "$slnx/docs/index.md"
+rm -rf "$slnx"
 grep -q "^- Entity Framework Core, SQL Server (9.0.0)" "$docs/index.md"
 grep -q "^- Vue (^3.5.0)" "$docs/index.md"
 grep -q "| Repositories | 1 |" "$docs/index.md" && grep -q "| Background services | 1 |" "$docs/index.md"

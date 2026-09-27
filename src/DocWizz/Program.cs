@@ -108,13 +108,14 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
 
     var (nodes, edges) = CSharpScanner.Scan(root, scanned.Where(f => f.EndsWith(".cs")));
     var (feNodes, feEdges) = Frontend.Scan(root, scanned.Where(f => !f.EndsWith(".cs")).ToList());
-    var (projNodes, projEdges) = Projects.Scan(root, candidates.Where(f => f.EndsWith(".csproj") || Path.GetFileName(f) == "package.json"));
+    var (projNodes, projEdges) = Projects.Scan(root, candidates.Where(f => f.EndsWith(".csproj") || f.EndsWith(".sln") || f.EndsWith(".slnx") || Path.GetFileName(f) == "package.json"));
     // Keys defined in configuration files win over the bare key nodes code reads create.
     var settings = Configuration.Scan(root, candidates.Where(Configuration.IsConfigFile));
     var defined = settings.Select(n => n.Id).ToHashSet();
     nodes.RemoveAll(n => n.Kind == "config" && defined.Contains(n.Id));
     var testFiles = scanned.Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))
-        .Where(f => config.Tests.Any(g => FileSystemName.MatchesSimpleExpression(g, f))).ToHashSet();
+        .Where(f => config.Tests.Any(g => FileSystemName.MatchesSimpleExpression(g, f))
+            || Projects.Of(projNodes, f)?.Tags?.Contains("test") == true).ToHashSet(); // test projects: by metadata, not only by path
     // Same id from test and production code (a test router's `route:/login`): production wins.
     nodes = nodes.OrderBy(n => testFiles.Contains(n.File)).DistinctBy(n => n.Id).ToList();
     var ids = nodes.Select(n => n.Id).ToHashSet();

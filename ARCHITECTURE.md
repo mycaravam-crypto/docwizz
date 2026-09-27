@@ -88,8 +88,9 @@ The model separates what the code states from what DocWizz concludes:
 - **[scanner-vue](scanner-vue/index.mjs)** uses the TypeScript compiler and `@vue/compiler-sfc`, run by
   [Frontend.cs](src/DocWizz/Frontend.cs) as a Node child process. It covers SFC props, emits, state and template
   renders, exported functions, stores, imports and calls, `fetch`/`axios` calls, and router routes.
-- **[Projects](src/DocWizz/Projects.cs)** reads `.csproj` (SDK, target frameworks, package and project references)
-  and `package.json`.
+- **[Projects](src/DocWizz/Projects.cs)** reads `.csproj` (SDK, target frameworks, package and project references,
+  role: executable, library or test from `OutputType`, the SDK and test packages), `package.json`, and the solution
+  folders of `.sln`/`.slnx`. Files in a test project count as test code, whatever their path.
 - **[Configuration](src/DocWizz/Configuration.cs)** reads `appsettings*.json` and `.env`: keys per environment,
   no values.
 - **[Externals](src/DocWizz/Externals.cs)** holds the curated list of known systems (packages, calls, container
