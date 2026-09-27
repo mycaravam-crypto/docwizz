@@ -36,7 +36,8 @@ Each documentation item records which sections its profile requires and where ea
 `written` (doc comment), `fact` (derived from the model: dependencies, endpoint, input, output, authorization, events,
 state — a Vue component's refs, computed values and watchers),
 `inferred` (heuristics: side effects) or `ai` (drafts — shown with 🤖, never close a gap), plus the source symbols it
-was derived from. `generate` writes it to `docs/.docwizz/documentation.json`.
+was derived from, with their source locations as `evidence` (`file:line-endLine`; module pages show it too).
+`generate` writes it to `docs/.docwizz/documentation.json`.
 
 ## Profiles
 

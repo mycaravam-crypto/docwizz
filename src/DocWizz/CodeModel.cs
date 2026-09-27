@@ -17,6 +17,9 @@ record Edge(string From, string To, string Kind, string? Label = null);
 
 record CodeModel(string? Commit, List<Node> Nodes, List<Edge> Edges)
 {
+    // Where a symbol lives: "file:line" or "file:line-endLine" — the evidence behind a documentation statement.
+    public static string Location(Node n) => n.EndLine is { } end && end > n.Line ? $"{n.File}:{n.Line}-{end}" : $"{n.File}:{n.Line}";
+
     // Edge kinds that are a dependency of From on To (contains/registers/references/depends-on/tests are not).
     // `creates`: From instantiates To (`new T(..)`).
     public static readonly string[] DependencyKinds = ["calls", "injects", "implements", "inherits", "imports", "renders",

@@ -114,6 +114,8 @@ assert c["sections"]["side_effects"] == {"origin": "inferred", "text": "db, even
 assert c["sections"]["dependencies"]["origin"] == "fact" and "IMaterialRepository" in c["sections"]["dependencies"]["text"]
 assert A + "IMaterialService.CreateAsync(string, int, string, string, string, bool)" in c["sources"], "interface doc not traced"
 assert c["missing"] == ["param"] and c["tested"]
+assert c["evidence"][0] == "backend/Application/MaterialService.cs:13-32", c["evidence"]
+assert any(e.startswith("backend/Application/IMaterialService.cs:") for e in c["evidence"]), c["evidence"]
 sw = items(sys.argv[1] + ".software")
 assert sw[create]["missing"] == ["param", "returns", "exception"], sw[create]["missing"]
 api = items(sys.argv[1] + ".api")
@@ -163,6 +165,7 @@ grep "\[MaterialTable\]" "$docs/frontend.md" | grep -q "| MaterialForm @created 
 grep -q "n0 --> n1" "$docs/modules/backend-Application.md"
 grep "\`CreateAsync" "$docs/modules/backend-Application.md" | grep -q "side effects (inferred): db, event"
 grep -q "_Generated from .* profile \`default\`" "$docs/modules/backend-Application.md"
+grep -q "_Evidence:_ \[backend/Api/MaterialController.cs:[0-9]*-[0-9]*\](" "$docs/modules/backend-Api.md"
 python3 -c "import json,sys; assert json.load(open(sys.argv[1]))['profile'] == 'default'" "$docs/.docwizz/documentation.json"
 [ -f "$docs/notes.md" ] || { echo "deleted a hand-written file"; exit 1; }
 grep -q 'c0 -->|HTTP| c1' "$docs/views/containers.md"                          # frontend → backend container

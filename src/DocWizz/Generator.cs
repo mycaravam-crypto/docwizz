@@ -275,6 +275,9 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             if (t.Events is { Count: > 0 }) sb.AppendLine($"Emits: {string.Join(", ", t.Events)}\n");
             foreach (var (name, section) in Derived(t)) sb.AppendLine($"- **{name}** _({section.Origin.ToString().ToLowerInvariant()})_: {Esc(section.Text)}");
             if (Derived(t).Any()) sb.AppendLine();
+            if (findingOf.TryGetValue(t.Id, out var item))
+                sb.AppendLine("_Evidence:_ " + string.Join(", ", item.Sources.Select(nodes.GetValueOrDefault).OfType<Node>()
+                    .Select(n => SourceLink(n.File, n.Line, CodeModel.Location(n), sub: "modules"))) + "\n");
 
             var ms = children[t.Id].Select(nodes.GetValueOrDefault).OfType<Node>()
                 .Where(m => m.Kind is "method" or "function" or "endpoint" && m.Visibility is "public" or "protected" or "internal" or null)

@@ -145,19 +145,26 @@ static JsonSerializerOptions JsonOptions() => new()
 static void WriteModel(CodeModel model, string file) => File.WriteAllText(file, JsonSerializer.Serialize(model, JsonOptions()));
 
 // The documentation model as data: per item what is required, what exists and where it comes from.
-static object DocumentationJson(CodeModel model, Config config, List<DocumentationItem> items) => new
+static object DocumentationJson(CodeModel model, Config config, List<DocumentationItem> items)
 {
-    commit = model.Commit,
-    profile = config.Profile,
-    note = $"coverage against the '{config.Profile}' profile; not a statement of standards compliance",
-    coverage = Math.Round(Analyzer.Coverage(items), 1),
-    items = items.Select(i => new
+    var nodes = model.Nodes.ToDictionary(n => n.Id);
+    // Evidence: the source location of every symbol an item's sections were derived or drafted from.
+    List<string> Evidence(DocumentationItem i) => i.Sources.Concat(i.Sections.Values.SelectMany(s => s.From ?? []))
+        .Distinct().Select(nodes.GetValueOrDefault).OfType<Node>().Select(CodeModel.Location).ToList();
+    return new
     {
-        id = i.Node.Id, kind = i.Node.Kind, file = i.Node.File, line = i.Node.Line,
-        level = i.Level, status = i.Status, pattern = i.Pattern, required = i.Required,
-        sections = i.Sections, missing = i.Missing, reasons = i.Reasons, sources = i.Sources, tested = i.Tested,
-    }),
-};
+        commit = model.Commit,
+        profile = config.Profile,
+        note = $"coverage against the '{config.Profile}' profile; not a statement of standards compliance",
+        coverage = Math.Round(Analyzer.Coverage(items), 1),
+        items = items.Select(i => new
+        {
+            id = i.Node.Id, kind = i.Node.Kind, file = i.Node.File, line = i.Node.Line,
+            level = i.Level, status = i.Status, pattern = i.Pattern, required = i.Required,
+            sections = i.Sections, missing = i.Missing, reasons = i.Reasons, sources = i.Sources, evidence = Evidence(i), tested = i.Tested,
+        }),
+    };
+}
 
 static async Task<int> Generate(string root, string outDir, Config config, bool ai)
 {
