@@ -17,7 +17,7 @@ static class CSharpScanner
 {
     static readonly SymbolDisplayFormat IdFormat = SymbolDisplayFormat.CSharpErrorMessageFormat;
     static readonly string[] HttpVerbs = ["HttpGet", "HttpPost", "HttpPut", "HttpDelete", "HttpPatch"];
-    static readonly string[] MapVerbs = ["MapGet", "MapPost", "MapPut", "MapDelete", "MapPatch"];
+    static readonly string[] MapVerbs = ["MapGet", "MapPost", "MapPut", "MapDelete", "MapPatch", "MapMethods"];
 
     public static (List<Node>, List<Edge>) Scan(string root, IEnumerable<string> files)
     {
@@ -133,16 +133,20 @@ static class CSharpScanner
                 && sm.GetTypeInfo(i).Type is { } it && sm.GetTypeInfo(t).Type is { } tt && InSource(it) && InSource(tt))
                 edges.Add(new(Id(it), Id(tt), "registers"));
 
-            if (IsMapCall(inv) && inv.ArgumentList.Arguments is [{ Expression: LiteralExpressionSyntax lit }, _, ..])
-                ScanMinimalEndpoint(sm, inv, name[3..].ToUpperInvariant(), lit.Token.ValueText, rel, nodes, edges);
+            if (!IsMapCall(inv) || inv.ArgumentList.Arguments is not [{ Expression: LiteralExpressionSyntax lit }, _, ..]) continue;
+            if (name != "MapMethods")
+                ScanMinimalEndpoint(sm, inv, inv.ArgumentList.Arguments[1].Expression, name[3..].ToUpperInvariant(), lit.Token.ValueText, rel, nodes, edges);
+            else if (inv.ArgumentList.Arguments.Count > 2)
+                // MapMethods("/route", ["PATCH", ...], handler)
+                foreach (var verb in inv.ArgumentList.Arguments[1].DescendantNodes().OfType<LiteralExpressionSyntax>())
+                    ScanMinimalEndpoint(sm, inv, inv.ArgumentList.Arguments[2].Expression, verb.Token.ValueText.ToUpperInvariant(), lit.Token.ValueText, rel, nodes, edges);
         }
     }
 
-    static void ScanMinimalEndpoint(SemanticModel sm, InvocationExpressionSyntax inv, string verb, string route,
-        string rel, List<Node> nodes, List<Edge> edges)
+    static void ScanMinimalEndpoint(SemanticModel sm, InvocationExpressionSyntax inv, ExpressionSyntax handler,
+        string verb, string route, string rel, List<Node> nodes, List<Edge> edges)
     {
         var id = $"cs:endpoint:{verb} {route}";
-        var handler = inv.ArgumentList.Arguments[1].Expression;
         string? doc = null;
 
         if (handler is AnonymousFunctionExpressionSyntax lambda)

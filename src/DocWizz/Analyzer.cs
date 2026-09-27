@@ -24,13 +24,16 @@ class Config
           service:
             match: { type: "*Service" }
             sections: [summary, param]
+          component:            # Vue SFC; `param` = every prop has a /** doc */
+            match: { kind: component }
+            sections: [summary, param]
           default:
             sections: [summary]
         check:
           min_coverage: 80
           max_critical: 0
         # Path globs (relative, `/`-separated) left out of the model entirely.
-        exclude: ["tests/*", "test/*", "*.Tests/*", "*.Test/*"]
+        exclude: ["tests/*", "test/*", "*.Tests/*", "*.Test/*", "*/__tests__/*", "*.test.ts", "*.spec.ts", "*/e2e/*"]
         """;
 
     public static Config Load(string dir)
@@ -71,7 +74,8 @@ record Finding(Node Node, Level Level, Status Status, string Pattern, List<strin
 
 static class Analyzer
 {
-    static readonly string[] Analyzed = ["class", "record", "struct", "interface", "enum", "method", "endpoint"];
+    static readonly string[] Analyzed = ["class", "record", "struct", "interface", "enum", "method", "endpoint",
+        "component", "function", "store"];
 
     public static List<Finding> Analyze(Model model, Config config)
     {
@@ -79,10 +83,11 @@ static class Analyzer
         var parent = model.Edges.Where(e => e.Kind == "contains").ToDictionary(e => e.To, e => e.From);
         var implOf = model.Edges.Where(e => e.Kind == "implements").ToLookup(e => e.From, e => e.To); // impl → interface
         var implBy = model.Edges.Where(e => e.Kind == "implements").ToLookup(e => e.To, e => e.From); // interface → impl
-        var calls = model.Edges.Where(e => e.Kind == "calls").ToLookup(e => e.From, e => e.To);
+        var calls = model.Edges.Where(e => e.Kind is "calls" or "http").ToLookup(e => e.From, e => e.To);
+        var http = model.Edges.Where(e => e.Kind == "http").ToLookup(e => e.From);
         var callers = model.Edges.Where(e => e.Kind == "calls").ToLookup(e => e.To, e => e.From);
         var injects = model.Edges.Where(e => e.Kind == "injects").ToLookup(e => e.From, e => e.To);
-        var inbound = model.Edges.Where(e => e.Kind is "calls" or "injects").ToLookup(e => e.To, e => e.From);
+        var inbound = model.Edges.Where(e => e.Kind is "calls" or "injects" or "renders" or "http").ToLookup(e => e.To, e => e.From);
 
         var effectsCache = new Dictionary<string, HashSet<string>>();
 
@@ -96,6 +101,7 @@ static class Analyzer
             if (injected.Any(t => nodes.GetValueOrDefault(t)?.Tags?.Contains("dbcontext") == true))
                 found.Add("db");
             if (n.Name.StartsWith("Publish") || n.Name.StartsWith("Send")) found.Add("event");
+            if (http[id].Any()) found.Add("http");
             foreach (var next in calls[id].Concat(implBy[id]))
                 found.UnionWith(Effects(next));
             return found;
@@ -114,10 +120,10 @@ static class Analyzer
             if (node.Complexity >= 15) { score += 3; reasons.Add($"complexity {node.Complexity}"); }
             else if (node.Complexity >= 8) { score += 2; reasons.Add($"complexity {node.Complexity}"); }
             else if (node.Complexity >= 4) { score += 1; reasons.Add($"complexity {node.Complexity}"); }
-            if (node.Params >= 4) { score += 1; reasons.Add($"{node.Params} params"); }
+            if (node.Params >= 4) { score += 1; reasons.Add($"{node.Params} {(node.Kind == "component" ? "props" : "params")}"); }
             var fanIn = inbound[node.Id].Concat(implOf[node.Id].SelectMany(i => inbound[i])).Distinct().Count();
             if (fanIn >= 3) { score += 1; reasons.Add($"{fanIn} callers"); }
-            if (node.Kind is "method" or "endpoint" && Effects(node.Id) is { Count: > 0 } fx)
+            if (node.Kind is not ("class" or "record" or "struct" or "interface" or "enum") && Effects(node.Id) is { Count: > 0 } fx)
             {
                 score += 1;
                 reasons.Add("side effects: " + string.Join(", ", fx.Order()));
@@ -191,7 +197,7 @@ static class Analyzer
             o.WriteLine(new string('─', 40));
             foreach (var f in list)
             {
-                o.WriteLine($"  {f.Node.File}:{f.Node.Line}  {f.Node.Id[3..]}");
+                o.WriteLine($"  {f.Node.File}:{f.Node.Line}  {f.Node.Id[(f.Node.Id.IndexOf(':') + 1)..]}");
                 o.WriteLine($"    {f.Status.ToString().ToLowerInvariant()}, missing: {string.Join(", ", f.Missing)}  [{string.Join("; ", f.Reasons)}]");
             }
         }

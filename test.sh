@@ -31,10 +31,26 @@ assert "controller" in nodes[API + "MaterialController"]["tags"]
 assert nodes[A + "MaterialService." + create]["complexity"] >= 8
 assert nodes[A + "IMaterialService.GetAsync(int)"].get("doc")
 assert "cs:endpoint:GET /health" in nodes
+assert "cs:endpoint:PATCH /api/materials/{id}" in nodes, "MapMethods endpoint"
 # minimal API: comment above documents it; handler params are injections
 assert "Places an order" in nodes["cs:endpoint:POST /orders"]["doc"]
 assert ("injects", "cs:endpoint:POST /orders", I + "AppDbContext") in edges
 assert not any("Tests" in n["id"] for n in nodes.values()), "tests/ not excluded"
+
+# Frontend → backend chain: component → store → api client → HTTP → controller endpoint
+F = "frontend/src/"
+for e in [
+    ("calls", "vue:" + F + "components/MaterialForm.vue", "ts:" + F + "stores/materialStore.ts#useMaterialStore"),
+    ("calls", "ts:" + F + "stores/materialStore.ts#useMaterialStore", "ts:" + F + "api/materialApi.ts#createMaterial"),
+    ("http", "ts:" + F + "api/materialApi.ts#createMaterial", API + "MaterialController.Create(string, int, string, string, string, bool)"),
+    ("http", "ts:" + F + "api/materialApi.ts#getMaterial", API + "MaterialController.Get(int)"),
+    ("renders", "vue:" + F + "components/MaterialTable.vue", "vue:" + F + "components/MaterialForm.vue"),
+    ("routes", "route:/materials", "vue:" + F + "components/MaterialTable.vue"),
+]:
+    assert e in edges, f"missing edge {e}"
+form = nodes["vue:" + F + "components/MaterialForm.vue"]
+assert form["params"] == 1 and "Form for requesting" in form["doc"] and "emits" in form["tags"]
+assert nodes["ts:" + F + "stores/materialStore.ts#useMaterialStore"]["kind"] == "store"
 PY
 
 # Documentation analysis: planted undocumented code is critical, trivial code is ignored.

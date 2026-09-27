@@ -52,6 +52,9 @@ static (Model Model, List<string> Files) BuildModel(string root, Config config)
         .ToList();
 
     var (nodes, edges) = CSharpScanner.Scan(root, files.Where(f => f.EndsWith(".cs")));
+    var (feNodes, feEdges) = Frontend.Scan(root, files.Where(f => !f.EndsWith(".cs")).ToList());
+    nodes.AddRange(feNodes.Where(n => nodes.All(x => x.Id != n.Id)));
+    edges = Frontend.LinkHttp(nodes, [.. edges, .. feEdges]);
     return (new Model(Git(root, "rev-parse --short HEAD")?.Trim(), nodes, edges), files);
 }
 
