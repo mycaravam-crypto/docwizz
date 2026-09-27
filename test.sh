@@ -478,8 +478,17 @@ import http.server, json, sys
 class H(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        assert self.path == "/api/chat" and req["model"] == "local:7b" and not req["stream"], req
-        body = json.dumps({"message": {"content": "<think>hmm</think>Drafted locally."}}).encode()
+        assert self.path == "/api/chat" and req["model"] == "local:7b" and not req["stream"] and req["format"] == "json", req
+        facts = json.loads(req["messages"][1]["content"])
+        S = lambda text, *cites: {"text": text, "from": list(cites)}
+        if "module" in facts:  # module overview: one supported sentence, one citing nothing in the facts
+            reply = {"summary": [S(f"Module for {facts['module']}.", facts["members"][0]["name"])], "responsibilities": [S("Owns pricing.", "NotInFacts")]}
+        elif facts["symbol"].startswith("Fixture.Api.MaterialController.Create("):
+            reply = {"summary": [S("Creates a material.", "source")], "behaviour": [S("Delegates to the service.", facts["calls"][0])],
+                     "errors": [S("Invented failure.", "Nope")]}
+        else:
+            reply = "<think>hmm</think>Drafted locally."   # not JSON: taken as a plain summary
+        body = json.dumps({"message": {"content": reply if isinstance(reply, str) else json.dumps(reply)}}).encode()
         self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
     def log_message(self, *a): pass
 s = http.server.HTTPServer(("127.0.0.1", 0), H)
@@ -489,6 +498,17 @@ fake=$!; trap 'kill $fake 2>/dev/null || true' EXIT
 until [ -s "$port_file" ]; do sleep 0.1; done
 OLLAMA_HOST="127.0.0.1:$(cat "$port_file")" DOCWIZZ_MODEL=local:7b dw generate fixture "$docs" --ai >/dev/null 2>&1
 grep -q "🤖 _Drafted locally._" "$docs/api.md"
+# section-level drafts: cited sentences kept with their provenance, uncited ones dropped; module overviews
+grep -q "| POST | \`/api/materials\` | 🤖 _Creates a material._ |" "$docs/api.md"
+grep -q "^## Overview 🤖" "$docs/modules/backend-Api.md" && grep -q "^Module for backend/Api\.$" "$docs/modules/backend-Api.md"
+if grep -rq "Owns pricing\|Invented failure" "$docs"; then echo "uncited sentence kept"; exit 1; fi
+python3 - "$docs/.docwizz/documentation.json" <<'PY2'
+import json, sys
+i = {i["id"]: i for i in json.load(open(sys.argv[1]))["items"]}["cs:Fixture.Api.MaterialController.Create(string, int, string, string, string, bool)"]
+b = i["sections"]["behaviour"]
+assert b["origin"] == "ai" and b["sentences"][0]["from"][0].startswith("cs:Fixture.Application.IMaterialService.CreateAsync("), b
+assert "exception" not in i["sections"] and "summary" in i["missing"], i
+PY2
 public=$(OLLAMA_HOST=8.8.8.8 dw generate fixture "$(mktemp -d)" --ai 2>&1 >/dev/null)
 grep -q "8.8.8.8 is not a local or private address" <<<"$public" || { echo "$public"; exit 1; }
 cloud=$(OLLAMA_HOST="127.0.0.1:$(cat "$port_file")" DOCWIZZ_MODEL=gpt-oss:120b-cloud dw generate fixture "$(mktemp -d)" --ai 2>&1 >/dev/null)

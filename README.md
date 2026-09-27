@@ -90,7 +90,10 @@ Regenerating writes only the pages whose content changed and says which; unchang
 write in `docs/architecture/` — is linked, never overwritten.
 
 `--ai` sends each undocumented item's facts (graph neighbours, signature, derived sections, side effects) and its own
-source lines to a **self-hosted [Ollama](https://ollama.com)** — never to a public AI service. `OLLAMA_HOST` picks the
+source lines to a **self-hosted [Ollama](https://ollama.com)** — never to a public AI service — and drafts its summary,
+responsibilities, behaviour, side effects, errors and usage, plus an overview per module. Every drafted sentence cites
+the facts it rests on; a sentence that cites nothing in the facts is dropped, and the rest keep their citations in
+`documentation.json`. Drafts fill only what is missing, never a written or derived section. `OLLAMA_HOST` picks the
 server (default `localhost:11434`), `DOCWIZZ_MODEL` the model (default `qwen2.5-coder:7b`; `ollama pull` it first).
 Every connection is checked on its resolved address and must go to loopback or a private network (10/8, 172.16/12,
 192.168/16, IPv6 unique-local); proxies are bypassed, and Ollama's `…-cloud` models, which run on ollama.com, are

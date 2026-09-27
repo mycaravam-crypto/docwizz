@@ -198,9 +198,19 @@ static async Task<int> Generate(string root, string outDir, Config config, bool 
     var arch = Architecture.Check(model, config.Architecture);
     // Cached drafts are always used; new ones are only requested with --ai.
     var drafts = await AiProse.Summaries(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-cache.json"), ai);
+    // A draft fills what is missing, never what is written or derived: the summary, and sections the item doesn't have.
     foreach (var f in findings)
-        if (drafts.TryGetValue(f.Node.Id, out var draft)) f.Sections["summary"] = new(Origin.Ai, draft.Text, draft.Sources);
-    var (pages, changed) = new Generator(root, outDir, model, findings, arch, config, drafts.ToDictionary(d => d.Key, d => d.Value.Text)).Run();
+    {
+        if (!drafts.TryGetValue(f.Node.Id, out var draft)) continue;
+        if (draft.Text.Length > 0) f.Sections["summary"] = new(Origin.Ai, draft.Text, draft.Sources, draft.Sections?.GetValueOrDefault("summary"));
+        foreach (var (name, sentences) in draft.Sections ?? [])
+            if (name != "summary" && AiProse.SectionNames.Contains(name))
+                f.Sections.TryAdd(name == "errors" ? "exception" : name,
+                    new(Origin.Ai, string.Join(" ", sentences.Select(x => x.Text)), [.. sentences.SelectMany(x => x.From).Distinct()], sentences));
+    }
+    var summaries = drafts.Where(d => !d.Key.StartsWith("module:") && d.Value.Text.Length > 0).ToDictionary(d => d.Key, d => d.Value.Text);
+    var overviews = drafts.Where(d => d.Key.StartsWith("module:")).ToDictionary(d => d.Key["module:".Length..], d => d.Value);
+    var (pages, changed) = new Generator(root, outDir, model, findings, arch, config, summaries, overviews).Run();
 
     // Fingerprint for `docwizz diff`: the model these docs were generated from.
     Directory.CreateDirectory(Path.Combine(outDir, ".docwizz"));

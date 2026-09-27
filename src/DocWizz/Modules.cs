@@ -31,6 +31,16 @@ partial class Generator
         if (blocks.Count > 0) role.Add(string.Join(", ", blocks));
         if (role.Count > 0) sb.AppendLine(string.Join(" · ", role) + "\n");
 
+        // AI-drafted overview: what the module is for and how it is used, each sentence from the facts it cites.
+        if (overviews?.GetValueOrDefault(folder)?.Sections is { } overview)
+        {
+            sb.AppendLine("## Overview 🤖\n");
+            foreach (var (name, title) in new[] { ("summary", ""), ("responsibilities", "Responsibilities"), ("usage", "Usage") })
+                if (overview.GetValueOrDefault(name) is { Count: > 0 } sentences)
+                    sb.AppendLine((title.Length > 0 ? $"**{title}.** " : "") + string.Join(" ", sentences.Select(x => x.Text)) + "\n");
+            sb.AppendLine("_AI draft from the facts on this page; review it, then write the module's documentation yourself._\n");
+        }
+
         // Key components: the ones the rest of the code relies on most.
         var deps = Dependencies().Select(d => (From: Top(d.From), To: Top(d.To)))
             .Where(d => d.From != d.To && nodes.ContainsKey(d.To) && (topIds.Contains(d.From) || topIds.Contains(d.To)))
@@ -137,7 +147,8 @@ partial class Generator
             if (Summary(t) is { } s) sb.AppendLine(s + "\n");
             if (t.Kind == "component" && t.Params > 0) sb.AppendLine($"Props: {string.Join(", ", t.Parameters ?? [$"{t.Params}"])}\n");
             if (t.Events is { Count: > 0 }) sb.AppendLine($"Emits: {string.Join(", ", t.Events)}\n");
-            foreach (var (name, section) in Derived(t)) sb.AppendLine($"- **{name}** _({section.Origin.ToString().ToLowerInvariant()})_: {Esc(section.Text)}");
+            foreach (var (name, section) in Derived(t))
+                sb.AppendLine($"- **{name}** _({(section.Origin == Origin.Ai ? "🤖 draft" : section.Origin.ToString().ToLowerInvariant())})_: {Esc(section.Text)}");
             if (Derived(t).Any()) sb.AppendLine();
             if (Backlinks(t) is { Length: > 0 } back) sb.AppendLine(back + "\n");
             if (findingOf.TryGetValue(t.Id, out var item))
@@ -151,7 +162,7 @@ partial class Generator
             sb.AppendLine("| Member | Summary | Derived from code | Complexity |\n|---|---|---|---|");
             foreach (var m in ms)
                 sb.AppendLine($"| {SourceLink(m.File, m.Line, $"`{Esc(MemberName(m, t))}`", sub: "modules")}{Badge(m)} | {Esc(Summary(m) ?? "")} | " +
-                    $"{Esc(string.Join("; ", Derived(m).Select(d => $"{d.Name}{(d.Section.Origin == Origin.Inferred ? " (inferred)" : "")}: {d.Section.Text}")))} | {m.Complexity} |");
+                    $"{Esc(string.Join("; ", Derived(m).Select(d => $"{d.Name}{d.Section.Origin switch { Origin.Inferred => " (inferred)", Origin.Ai => " 🤖", _ => "" }}: {d.Section.Text}")))} | {m.Complexity} |");
             sb.AppendLine();
         }
         var files = members.Select(m => m.File).Distinct().Order().ToList();

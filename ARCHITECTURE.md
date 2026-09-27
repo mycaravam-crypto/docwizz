@@ -144,7 +144,10 @@ overwritten. `docs/architecture/*.md` and anything else written by hand is linke
 
 ## AI
 
-[AiProse](src/DocWizz/AiProse.cs) drafts summaries for items that still lack one. Per item it sends the facts JSON
+[AiProse](src/DocWizz/AiProse.cs) drafts documentation for items that still lack a summary (summary, responsibilities,
+behaviour, side effects, errors, usage) and an overview per module. The model answers in JSON, one list of sentences
+per section, each citing the facts it uses; citations are resolved to symbol ids and a sentence without a valid one is
+dropped (per-sentence provenance). Per item it sends the facts JSON
 (graph neighbours, signature, derived sections with their origin) and that symbol's own source lines. It never
 sends the repository, and it only talks to a self-hosted Ollama: every connection's resolved address must be
 loopback or private, proxies are bypassed and Ollama cloud models are refused, so code never reaches a public

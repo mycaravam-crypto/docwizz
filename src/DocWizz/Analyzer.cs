@@ -104,8 +104,8 @@ enum Status { Documented, Partial, Undocumented }
 // Ai drafts are shown (marked) but never close a gap.
 enum Origin { Written, Fact, Inferred, Ai }
 
-// From: for AI drafts, the symbols whose facts the draft was generated from.
-record Section(Origin Origin, string Text, List<string>? From = null);
+// From: for AI drafts, the symbols whose facts the draft was generated from; Sentences: each sentence with its own.
+record Section(Origin Origin, string Text, List<string>? From = null, List<AiProse.Sentence>? Sentences = null);
 
 // One entry of the documentation model: what a symbol must document under the selected profile, what it has
 // (and where each part comes from), and the code it was derived from (Sources) for traceability.
