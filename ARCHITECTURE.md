@@ -110,7 +110,9 @@ The model separates what the code states from what DocWizz concludes:
 - **[Profiles](src/DocWizz/Profiles.cs)** are YAML documentation patterns: match on kind, name, type, tag or
   visibility, then list the sections required. Reports say "coverage against profile X", never "compliant with".
 - **[Architecture](src/DocWizz/Architecture.cs)** covers path-glob layers, allowed dependencies, violations
-  ARCH-001/002/004 with severities, and folder cycles (ARCH-003).
+  ARCH-001/002/004 with severities, and folder cycles (ARCH-003). `architecture.md` adds coupling per module (fan-in,
+  fan-out, instability) and risks that break no rule: entities returned by endpoints, complex members in the API layer,
+  and external namespaces used by the domain layer.
 - **[Diff](src/DocWizz/Diff.cs)** compares two models by symbol id and body hash. It reports changed, added and
   removed symbols, the affected pages, and the gaps and violations a change introduced. A touched symbol also marks
   every flow passing through it: `api.md` / `frontend.md` and the module pages along that flow.

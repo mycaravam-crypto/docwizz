@@ -157,7 +157,51 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         sb.AppendLine($"## Cycles ({arch.Cycles.Count})\n");
         foreach (var c in arch.Cycles) sb.AppendLine($"- {string.Join(" ↔ ", c.Select(m => $"[{m}](modules/{Slug(m)}.md)"))}");
         if (arch.Cycles.Count == 0) sb.AppendLine("None.");
+
+        // Coupling: fan-in (Ca) = modules depending on this one, fan-out (Ce) = modules it depends on,
+        // instability Ce / (Ca + Ce): 0 = everything leans on it, 1 = it leans on everything.
+        var fanIn = moduleEdges.GroupBy(e => e.To).ToDictionary(g => g.Key, g => g.Count());
+        var fanOut = moduleEdges.GroupBy(e => e.From).ToDictionary(g => g.Key, g => g.Count());
+        var coupled = fanIn.Keys.Union(fanOut.Keys).Select(m => (Module: m, In: fanIn.GetValueOrDefault(m), Out: fanOut.GetValueOrDefault(m)))
+            .OrderByDescending(c => c.In + c.Out).ThenBy(c => c.Module).ToList();
+        if (coupled.Count > 0)
+        {
+            sb.AppendLine("\n## Coupling\n\nFan-in: modules that depend on this one. Fan-out: modules it depends on. " +
+                "Instability = fan-out / (fan-in + fan-out); stable modules (near 0) are costly to change, so they should not depend on unstable ones.\n");
+            sb.AppendLine("| Module | Layer | Fan-in | Fan-out | Instability |\n|---|---|---|---|---|");
+            foreach (var c in coupled.Take(MaxListed * 2))
+                sb.AppendLine($"| [{c.Module}](modules/{Slug(c.Module)}.md) | {Layer(c.Module) ?? "—"} | {c.In} | {c.Out} | {(double)c.Out / (c.In + c.Out):0.00} |");
+            if (coupled.Count > MaxListed * 2) sb.AppendLine($"\n_… {coupled.Count - MaxListed * 2} more modules._");
+        }
+
+        var risks = Risks().ToList();
+        sb.AppendLine($"\n## Risks ({risks.Count})\n");
+        sb.AppendLine(risks.Count > 0 ? string.Join("\n", risks.Select(r => $"- {r}")) : "None detected.");
         return sb.ToString();
+    }
+
+    const int ApiLogicComplexity = 8;
+
+    // Design risks that break no configured rule but tend to hurt: entities leaking through the API, business logic in
+    // the API layer, domain code bound to external packages.
+    IEnumerable<string> Risks()
+    {
+        var entities = model.Nodes.Where(n => n.Tags?.Contains("entity") == true).ToList();
+        foreach (var e in model.Nodes.Where(n => n.Tags?.Contains("endpoint") == true).OrderBy(n => n.Route))
+        {
+            var types = (e.Responses ?? []).Append(e.Returns ?? "");
+            var leaked = entities.Where(x => types.Any(t => Regex.IsMatch(t, $@"\b{Regex.Escape(x.Name)}\b"))).Select(x => $"`{x.Name}`").ToList();
+            if (leaked.Count > 0)
+                yield return $"Entity exposed: `{EndpointLabel(e)}` returns {string.Join(", ", leaked)} — persistence shape becomes the API contract; return a DTO";
+        }
+        foreach (var n in model.Nodes.Where(n => n.Kind is "method" or "endpoint" && n.Complexity >= ApiLogicComplexity
+                && (Layer(Folder(n.File)) == "api" || n.Tags?.Contains("endpoint") == true)).OrderByDescending(n => n.Complexity))
+            yield return $"Logic in the API layer: `{Esc(ShortName(n))}` has complexity {n.Complexity} — move the decisions into the application layer " +
+                $"({SourceLink(n.File, n.Line, Path.GetFileName(n.File))})";
+        foreach (var g in model.Edges.Where(e => e.Kind == "uses-namespace" && nodes.TryGetValue(e.From, out var n) && Layer(Folder(n.File)) == "domain")
+                .GroupBy(e => e.To[3..]).OrderBy(g => g.Key))
+            yield return $"Domain depends on `{g.Key}` ({string.Join(", ", g.Select(e => $"`{nodes[e.From].Name}`").Distinct())}) — " +
+                "the domain layer should need nothing outside the language and its own code";
     }
 
     string Api()

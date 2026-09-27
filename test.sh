@@ -378,6 +378,37 @@ echo "architecture: { severity: { ARCH-001: extreme } }" > "$repo/docwizz.yaml"
 if dw architecture "$repo" >/dev/null 2>&1; then echo "bad severity accepted"; exit 1; fi
 rm -rf "$repo"
 
+# Architecture risks: coupling table, entities in API responses, logic in the API layer, external packages in the domain
+risk=$(mktemp -d); cp -r fixture/. "$risk"
+cat > "$risk/backend/Api/PricingController.cs" <<'CS'
+using Microsoft.AspNetCore.Mvc;
+namespace Fixture.Api;
+[ApiController]
+[Route("api/pricing")]
+public class PricingController : ControllerBase
+{
+    [HttpGet("{qty}")]
+    public int Price(int qty, bool urgent, bool member, string region)
+    {
+        var p = qty * 10;
+        if (urgent) p += 5;
+        if (member && qty > 10) p -= 3;
+        if (region == "EU" || region == "UK") p += 2;
+        for (var i = 0; i < qty; i++) if (i % 100 == 0) p--;
+        return p > 0 ? p : 0;
+    }
+}
+CS
+sed -i '1i using Microsoft.EntityFrameworkCore;' "$risk/backend/Domain/IMaterialRepository.cs"
+dw generate "$risk" "$risk/docs" >/dev/null 2>&1
+A="$risk/docs/architecture.md"
+grep -q '^| \[backend/Infrastructure\](modules/backend-Infrastructure.md) | infrastructure | 3 | 1 | 0.25 |' "$A"
+grep -q '^- Entity exposed: `GET /api/materials/{id}` returns `Material`' "$A"
+grep -q '^- Logic in the API layer: `PricingController.Price(.*)` has complexity [0-9]*' "$A"
+grep -q '^- Domain depends on `Microsoft.EntityFrameworkCore` (`IMaterialRepository`)' "$A"
+if grep -q 'Domain depends on `Fixture' "$A"; then echo "own namespace flagged"; exit 1; fi
+rm -rf "$risk"
+
 # AI drafts: served from the cache per (symbol, body hash), marked, never over a written summary
 docs=$(mktemp -d)
 dotnet run --project src/DocWizz -- generate fixture "$docs" >/dev/null 2>&1

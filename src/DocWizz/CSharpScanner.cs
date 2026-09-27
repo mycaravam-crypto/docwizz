@@ -72,6 +72,12 @@ static class CSharpScanner
                 if (del.ContainingType is { } owner) edges.Add(new(Id(owner), Id(del), "contains"));
             }
 
+            // External namespaces the file's types use (own and System.* namespaces are dropped below).
+            var usings = syntaxRoot.DescendantNodes().OfType<UsingDirectiveSyntax>().Where(u => u.Alias is null && u.StaticKeyword == default)
+                .Select(u => u.NamespaceOrType.ToString()).Distinct().ToList();
+            foreach (var decl in syntaxRoot.DescendantNodes().OfType<BaseTypeDeclarationSyntax>().Where(d => d.Parent is not BaseTypeDeclarationSyntax))
+                if (sm.GetDeclaredSymbol(decl) is { } t)
+                    edges.AddRange(usings.Select(u => new Edge(Id(t), $"ns:{u}", "uses-namespace")));
             ScanRegistrations(sm, syntaxRoot, rel, nodes, edges);
             ScanPipeline(sm, syntaxRoot, rel, edges);
             ScanExternals(sm, syntaxRoot, rel, nodes, edges);
@@ -84,6 +90,10 @@ static class CSharpScanner
         // Hosted services are what AddHostedService<T>() registers.
         var hosted = edges.Where(e => e.Kind == "hosts").Select(e => e.To).ToHashSet();
         nodes = nodes.Select(n => hosted.Contains(n.Id) ? n with { Tags = [.. n.Tags ?? [], "hosted"] } : n).ToList();
+
+        var own = comp.GlobalNamespace.GetNamespaceMembers().SelectMany(AllNamespaces).Where(n => n.Locations.Any(l => l.IsInSource))
+            .Select(n => n.ToDisplayString()).ToHashSet();
+        edges.RemoveAll(e => e.Kind == "uses-namespace" && (own.Contains(e.To[3..]) || e.To[3..] is "System" || e.To.StartsWith("ns:System.")));
 
         // Partial types/methods declare the same symbol more than once; keep the first.
         return (nodes.DistinctBy(n => n.Id).ToList(), edges.Distinct().ToList());
@@ -578,6 +588,8 @@ static class CSharpScanner
 
     // Unresolved external types break overload resolution; a single candidate is still the right target.
     static ISymbol? Resolve(SymbolInfo si) => si.Symbol ?? (si.CandidateSymbols.Length == 1 ? si.CandidateSymbols[0] : null);
+
+    static IEnumerable<INamespaceSymbol> AllNamespaces(INamespaceSymbol n) => n.GetNamespaceMembers().SelectMany(AllNamespaces).Prepend(n);
 
     static bool InSource(ISymbol s) => s.Locations.Any(l => l.IsInSource);
     static string Id(ISymbol s) => "cs:" + s.ToDisplayString(IdFormat);

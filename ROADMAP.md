@@ -7,14 +7,6 @@ or human-written. AI runs on a self-hosted model only; code is never sent to a p
 
 ## Next
 
-- **Architecture risks.**
-  - Coupling metrics per module (fan-in/fan-out, instability).
-  - Entities exposed directly as API responses.
-  - Controllers with business logic (high complexity in the api layer).
-  - Unexpected packages in the domain layer.
-
-## Later
-
 - **Section-level AI.** Extend drafts from a summary to responsibilities, behaviour, side effects, error behaviour
   and usage, per symbol and per module. They would use the same inputs: facts marked by origin, the symbol's own
   source, and existing docs. They would keep per-sentence provenance to the facts they came from.
