@@ -1,0 +1,34 @@
+# Documentation profile: default, software, api, architecture, technical-publication, iso-42010, iso-15289.
+# `--profile` overrides it. Add `patterns:` (same shape as in Profiles.cs) to replace the profile's patterns.
+profile: default
+check:
+  min_coverage: 80
+  max_critical: 0
+  max_violations: 0
+  max_cycles: 0
+  fail_on: low          # minimum violation severity that fails check: low, medium, high
+  # max_complexity: 20  # fail when a symbol's cyclomatic complexity exceeds this
+architecture:
+  layers:               # path globs, first match wins; unmatched files have no layer
+    ui: ["*.vue", "*.tsx", "*.jsx", "*.component.ts"]
+    state: ["*/stores/*.ts", "*/composables/*.ts"]
+    client: ["*/api/*.ts", "*/services/*.ts", "*.service.ts"]
+    api: ["*/Api/*.cs", "*.Api/*.cs", "*/Controllers/*.cs", "*/Endpoints/*.cs", "*/controller/*.java", "*/web/*.java"]
+    application: ["*/Application/*.cs", "*.Application/*.cs", "*/service/*.java"]
+    domain: ["*/Domain/*.cs", "*.Domain/*.cs", "*.Core/*.cs", "*/domain/*.java", "*/model/*.java", "*/entity/*.java"]
+    infrastructure: ["*/Infrastructure/*.cs", "*.Infrastructure/*.cs", "*/Persistence/*.cs"]   # Spring Data repositories are ports: no layer by default
+  allow:                # `http` = calling HTTP directly
+    ui: [state, client]
+    state: [client]
+    client: [http]
+    api: [application, domain, infrastructure]
+    application: [domain]
+    domain: []
+    infrastructure: [application, domain]
+  severity: {}          # rule → high/medium/low; defaults ARCH-001 high, ARCH-002 medium, ARCH-004 low
+# Test code (path globs): scanned only to link tests to the code they exercise; never analyzed or documented.
+tests: ["tests/*", "test/*", "*.Tests/*", "*.Test/*", "*/__tests__/*", "*.test.ts", "*.spec.ts", "*/e2e/*", "*/src/test/*"]
+# Path globs (relative, `/`-separated) left out of the model entirely.
+exclude: ["fixture/*", "fixture-legacy/*"]   # test inputs, deliberately under-documented
+# Count a plain // comment block directly above a C# member as its summary (for code that doesn't use /// XML docs).
+comment_docs: true    # this codebase explains itself in // comments
