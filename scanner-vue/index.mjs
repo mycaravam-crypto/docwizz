@@ -14,7 +14,7 @@ const rel = f => path.relative(root, f).split(path.sep).join('/')
 const fileId = f => (f.endsWith('.vue') ? 'vue:' : 'ts:') + rel(f)
 const hash = s => crypto.createHash('sha256').update(s).digest('hex').slice(0, 12)
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-const edge = (from, to, kind) => edges.push({ from, to, kind })
+const edge = (from, to, kind, label) => edges.push(label ? { from, to, kind, label } : { from, to, kind })
 
 const DECISIONS = new Set([
   ts.SyntaxKind.IfStatement, ts.SyntaxKind.ConditionalExpression, ts.SyntaxKind.ForStatement,
@@ -146,7 +146,7 @@ function scanScript(file, sf, owner, lineOffset, component) {
       const imp = ts.isIdentifier(n.expression) && imports.get(n.expression.text)
       if (imp && imp.target.endsWith('.ts')) edge(cur, `${fileId(imp.target)}#${imp.name}`, 'calls')
       if (component && callee === 'defineProps') props = propsOf(n, sf)
-      if (component && callee === 'defineEmits') component.emits = true
+      if (component && callee === 'defineEmits') component.emits = emitsOf(n, sf)
       if (callee === 'createRouter' || callee === 'createWebHistory') scanRoutes(file, sf, imports, line)
     }
     ts.forEachChild(n, c => visit(c, cur))
@@ -167,8 +167,25 @@ function propsOf(call, sf) {
   } else if (call.arguments[0] && ts.isObjectLiteralExpression(call.arguments[0])) members = call.arguments[0].properties
   return members.filter(m => m.name).map(m => {
     const docs = ts.getJSDocCommentsAndTags(m).filter(ts.isJSDoc)
-    return { name: m.name.getText(sf), doc: docs.map(d => ts.getTextOfJSDocComment(d.comment) ?? '').join(' ').trim() }
+    const type = m.type?.getText(sf) ?? (ts.isPropertyAssignment(m) ? m.initializer.getText(sf) : null)
+    return { name: m.name.getText(sf), type, doc: docs.map(d => ts.getTextOfJSDocComment(d.comment) ?? '').join(' ').trim() }
   })
+}
+
+// defineEmits<{ created: [id: number] }>(), defineEmits<{ (e: 'created', id: number): void }>() or defineEmits(['created'])
+function emitsOf(call, sf) {
+  const typeArg = call.typeArguments?.[0]
+  const names = []
+  if (typeArg && ts.isTypeLiteralNode(typeArg))
+    for (const m of typeArg.members) {
+      if (m.name) names.push(m.name.getText(sf).replace(/['"]/g, ''))
+      else if (ts.isCallSignatureDeclaration(m) && m.parameters[0]?.type && ts.isLiteralTypeNode(m.parameters[0].type))
+        names.push(m.parameters[0].type.literal.text)
+    }
+  const arg = call.arguments[0]
+  if (arg && ts.isArrayLiteralExpression(arg)) for (const e of arg.elements) if (ts.isStringLiteralLike(e)) names.push(e.text)
+  if (arg && ts.isObjectLiteralExpression(arg)) for (const p of arg.properties) if (p.name) names.push(p.name.getText(sf).replace(/['"]/g, ''))
+  return names
 }
 
 let routesScanned = new Set()
@@ -203,7 +220,12 @@ function scanTemplate(owner, template, imports) {
   const walk = n => {
     if (n.type === 1) { // element
       const imp = imports.get(n.tag) ?? imports.get(pascal(n.tag))
-      if (imp?.target.endsWith('.vue')) edge(owner, fileId(imp.target), 'renders')
+      if (imp?.target.endsWith('.vue')) {
+        edge(owner, fileId(imp.target), 'renders')
+        // <Child @created="..."> / v-on:created: the parent subscribes to the child's event.
+        for (const p of n.props)
+          if (p.type === 7 && p.name === 'on' && p.arg?.isStatic) edge(owner, fileId(imp.target), 'subscribes', p.arg.content)
+      }
       decisions += n.props.filter(p => p.type === 7 && ['if', 'else-if', 'for'].includes(p.name)).length
     }
     n.children?.forEach(walk)
@@ -220,7 +242,7 @@ for (const file of files) {
     if (file.endsWith('.vue')) {
       const { descriptor } = parseSfc(src, { filename: file })
       const block = descriptor.scriptSetup ?? descriptor.script
-      const component = { emits: false }
+      const component = { emits: null }
       const node = {
         id, kind: 'component', name: path.basename(file, '.vue'), file: rel(file), line: 1,
         endLine: src.split('\n').length, visibility: 'public',
@@ -252,7 +274,11 @@ for (const file of files) {
         node.doc = `<member>${summary ? `<summary>${esc(summary)}</summary>` : ''}${params.join('')}</member>`
       node.complexity = complexityScore
       node.params = props?.length ?? 0
-      if (component.emits) node.tags = [...(node.tags ?? []), 'emits']
+      if (props?.length) node.parameters = props.map(p => p.type ? `${p.name}: ${p.type}` : p.name)
+      if (component.emits) {
+        node.tags = [...(node.tags ?? []), 'emits']
+        if (component.emits.length) node.events = component.emits
+      }
     } else {
       const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
       nodes.push({ id, kind: 'module', name: path.basename(file), file: rel(file), line: 1, hash: hash(src) })

@@ -69,6 +69,9 @@ for e in [
     assert e in edges, f"missing edge {e}"
 form = nodes["vue:" + F + "components/MaterialForm.vue"]
 assert form["params"] == 1 and "Form for requesting" in form["doc"] and "emits" in form["tags"]
+assert form["parameters"] == ["defaultQuantity: number"] and form["events"] == ["created"], form
+sub = [e for e in m["edges"] if e["kind"] == "subscribes" and e["from"].endswith("MaterialTable.vue")]
+assert sub == [{"from": "vue:" + F + "components/MaterialTable.vue", "to": "vue:" + F + "components/MaterialForm.vue", "kind": "subscribes", "label": "created"}], sub
 assert nodes["ts:" + F + "stores/materialStore.ts#useMaterialStore"]["kind"] == "store"
 PY
 
@@ -133,6 +136,7 @@ grep -q "ARCH-001 | domain → infrastructure" "$docs/architecture.md"
 grep "MaterialService.CreateAsync" "$docs/quality.md" | grep -q "| ✓ |"  # tested
 grep "MaterialController.Create(" "$docs/quality.md" | grep -q "| — |"  # untested
 grep -q "/materials\` | \[MaterialTable\]" "$docs/frontend.md"
+grep "\[MaterialTable\]" "$docs/frontend.md" | grep -q "| MaterialForm @created |"
 grep -q "n0 --> n1" "$docs/modules/backend-Application.md"
 grep "\`CreateAsync" "$docs/modules/backend-Application.md" | grep -q "side effects (inferred): db, event"
 grep -q "_Generated from .* profile \`default\`" "$docs/modules/backend-Application.md"

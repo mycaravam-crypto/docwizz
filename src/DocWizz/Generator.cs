@@ -144,10 +144,12 @@ class Generator(string root, string outDir, CodeModel model, List<DocumentationI
         var components = model.Nodes.Where(n => n.Kind == "component").OrderBy(n => n.File).ToList();
         if (components.Count > 0)
         {
-            sb.AppendLine("## Components\n\n| Component | Summary | Props | Renders | Used by |\n|---|---|---|---|---|");
+            var listens = model.Edges.Where(e => e.Kind == "subscribes" && e.Label is not null).ToLookup(e => e.From);
+            sb.AppendLine("## Components\n\n| Component | Summary | Props | Emits | Renders | Listens to | Used by |\n|---|---|---|---|---|---|---|");
             foreach (var c in components)
-                sb.AppendLine($"| {ModuleLink(c)} | {Esc(Summary(c) ?? "—")} | {c.Params ?? 0} | " +
+                sb.AppendLine($"| {ModuleLink(c)} | {Esc(Summary(c) ?? "—")} | {Esc(string.Join(", ", c.Parameters ?? []))} | {string.Join(", ", c.Events ?? [])} | " +
                     $"{string.Join(", ", renders[c.Id].Where(nodes.ContainsKey).Select(x => nodes[x].Name).Distinct())} | " +
+                    $"{string.Join(", ", listens[c.Id].Where(e => nodes.ContainsKey(e.To)).Select(e => $"{nodes[e.To].Name} @{e.Label}").Distinct())} | " +
                     $"{string.Join(", ", renderedBy[c.Id].Where(nodes.ContainsKey).Select(x => nodes[x].Name).Distinct())} |");
         }
         if (routes.Count == 0 && components.Count == 0) sb.AppendLine("No Vue frontend found.");
