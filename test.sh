@@ -354,4 +354,28 @@ assert i["sections"]["summary"]["origin"] == "ai" and "summary" in i["missing"],
 assert "cs:Fixture.Application.IMaterialService.GetAsync(int)" in i["sections"]["summary"]["from"], i  # provenance
 PY
 rm -rf "$docs"
+
+# --ai talks only to a self-hosted Ollama: a fake one on loopback drafts; public hosts and cloud models are refused
+docs=$(mktemp -d); port_file=$(mktemp)
+python3 - "$port_file" <<'PY' &
+import http.server, json, sys
+class H(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        assert self.path == "/api/chat" and req["model"] == "local:7b" and not req["stream"], req
+        body = json.dumps({"message": {"content": "<think>hmm</think>Drafted locally."}}).encode()
+        self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+    def log_message(self, *a): pass
+s = http.server.HTTPServer(("127.0.0.1", 0), H)
+open(sys.argv[1], "w").write(str(s.server_port)); s.serve_forever()
+PY
+fake=$!; trap 'kill $fake 2>/dev/null' EXIT
+until [ -s "$port_file" ]; do sleep 0.1; done
+OLLAMA_HOST="127.0.0.1:$(cat "$port_file")" DOCWIZZ_MODEL=local:7b dw generate fixture "$docs" --ai >/dev/null 2>&1
+grep -q "🤖 _Drafted locally._" "$docs/api.md"
+public=$(OLLAMA_HOST=8.8.8.8 dw generate fixture "$(mktemp -d)" --ai 2>&1 >/dev/null)
+grep -q "8.8.8.8 is not a local or private address" <<<"$public" || { echo "$public"; exit 1; }
+cloud=$(OLLAMA_HOST="127.0.0.1:$(cat "$port_file")" DOCWIZZ_MODEL=gpt-oss:120b-cloud dw generate fixture "$(mktemp -d)" --ai 2>&1 >/dev/null)
+grep -q "gpt-oss:120b-cloud is an Ollama cloud model" <<<"$cloud" || { echo "$cloud"; exit 1; }
+kill $fake; rm -rf "$docs" "$port_file"
 echo PASS

@@ -1,15 +1,18 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Net.Sockets;
 using System.Text.Json;
-using Anthropic;
-using Anthropic.Exceptions;
-using Anthropic.Models.Beta.Messages;
+using System.Text.RegularExpressions;
 
 // Drafts summaries for items that need docs and have none. Deterministic facts go in, prose comes out.
 // Results are cached per (symbol, body hash): unchanged code is never sent twice.
+// Only a self-hosted Ollama is used: every connection must go to a loopback or private-network address,
+// and Ollama's cloud-hosted models are refused, so source code never leaves the network.
 static class AiProse
 {
-    const string Model = "claude-opus-5";
+    const string DefaultModel = "qwen2.5-coder:7b";
     const int MaxSourceLines = 150;
-    const int Parallelism = 4;
+    const int Parallelism = 2; // Ollama queues requests beyond OLLAMA_NUM_PARALLEL anyway
 
     const string Instructions = """
         You write reference documentation for a codebase. You get facts about one symbol, produced by
@@ -40,9 +43,16 @@ static class AiProse
 
         if (call && misses.Count > 0)
         {
-            Console.Error.WriteLine($"docwizz: drafting {misses.Count} summaries with {Model} ({targets.Count - misses.Count} cached)");
+            var name = Environment.GetEnvironmentVariable("DOCWIZZ_MODEL") is { Length: > 0 } m ? m : DefaultModel;
+            // Ollama's `…-cloud` / `…:cloud` models run on ollama.com: that would send the code out.
+            if (name.Split(':').Last().EndsWith("cloud", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Error.WriteLine($"docwizz: AI summaries skipped — {name} is an Ollama cloud model; use a local one");
+                return result;
+            }
+            using var client = LocalOnly(OllamaUri());
+            Console.Error.WriteLine($"docwizz: drafting {misses.Count} summaries with {name} at {client.BaseAddress} ({targets.Count - misses.Count} cached)");
             var facts = new Facts(root, model);
-            AnthropicClient client = new();
             using var gate = new SemaphoreSlim(Parallelism);
             var stopped = 0;
             var drafted = await Task.WhenAll(misses.Select(async t =>
@@ -52,13 +62,13 @@ static class AiProse
                 {
                     if (Volatile.Read(ref stopped) == 1) return (t.Node, Draft: null);
                     var (json, sources) = facts.For(t.Node, t.Item);
-                    return (t.Node, Draft: await Create(client, json) is { } text ? new Draft(text, sources) : null);
+                    return (t.Node, Draft: await Create(client, name, json) is { } text ? new Draft(text, sources) : null);
                 }
-                catch (Exception e) when (e is AnthropicUnauthorizedException or AnthropicForbiddenException)
+                catch (HttpRequestException e)
                 {
-                    // Every other call would fail the same way; say it once and stop.
+                    // Not running, not local, model missing: every other call would fail the same way; say it once and stop.
                     if (Interlocked.Exchange(ref stopped, 1) == 0)
-                        Console.Error.WriteLine("docwizz: AI summaries skipped — no valid credentials (set ANTHROPIC_API_KEY)");
+                        Console.Error.WriteLine($"docwizz: AI summaries skipped — {e.InnerException?.Message ?? e.Message}");
                     return (t.Node, Draft: null);
                 }
                 catch (Exception e)
@@ -78,21 +88,59 @@ static class AiProse
         return result;
     }
 
-    static async Task<string?> Create(AnthropicClient client, string facts)
+    static async Task<string?> Create(HttpClient client, string model, string facts)
     {
-        var response = await client.Beta.Messages.Create(new MessageCreateParams
+        using var response = await client.PostAsync("api/chat", new StringContent(JsonSerializer.Serialize(new
         {
-            Model = Model,
-            MaxTokens = 4000,
-            System = Instructions,
-            OutputConfig = new BetaOutputConfig { Effort = Effort.Low },
-            Betas = ["server-side-fallback-2026-07-01"],
-            Fallbacks = new Default(), // serializes as "default": fallback models picked by refusal category
-            Messages = [new() { Role = Role.User, Content = facts }],
-        });
-        if (response.StopReason == BetaStopReason.Refusal) return null;
-        var text = string.Concat(response.Content.Select(b => b.Value).OfType<BetaTextBlock>().Select(b => b.Text)).Trim();
+            model,
+            stream = false,
+            options = new { temperature = 0 },
+            messages = new[] { new { role = "system", content = Instructions }, new { role = "user", content = facts } },
+        }), System.Text.Encoding.UTF8, "application/json"));
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            throw new HttpRequestException($"model {model} not found (ollama pull {model}, or set DOCWIZZ_MODEL)");
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var text = body.GetProperty("message").GetProperty("content").GetString() ?? "";
+        text = Regex.Replace(text, @"<think>.*?</think>", "", RegexOptions.Singleline).Trim(); // reasoning models
         return text.Length > 0 ? text : null;
+    }
+
+    // OLLAMA_HOST as Ollama itself reads it: `host`, `host:port` or a URL; default localhost:11434.
+    public static Uri OllamaUri()
+    {
+        var v = Environment.GetEnvironmentVariable("OLLAMA_HOST") is { Length: > 0 } h ? h.Trim() : "localhost";
+        var b = new UriBuilder(v.Contains("://") ? v : "http://" + v);
+        if (!Regex.IsMatch(v, @":\d+(/|$)")) b.Port = 11434;
+        if (b.Host is "0.0.0.0" or "[::]") b.Host = "localhost"; // bind-all address, as the server is often configured
+        b.Path = b.Path.TrimEnd('/') + "/";
+        return b.Uri;
+    }
+
+    // Connects only to loopback/private addresses, checked on the resolved address of every connection
+    // (redirects and DNS answers included), and never through a proxy.
+    static HttpClient LocalOnly(Uri baseAddress) => new(new SocketsHttpHandler
+    {
+        UseProxy = false,
+        ConnectCallback = async (ctx, ct) =>
+        {
+            var addresses = await Dns.GetHostAddressesAsync(ctx.DnsEndPoint.Host, ct);
+            if (addresses.Length == 0 || !addresses.All(IsPrivate))
+                throw new IOException($"{ctx.DnsEndPoint.Host} is not a local or private address; docwizz only uses a self-hosted Ollama");
+            var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+            try { await socket.ConnectAsync(addresses, ctx.DnsEndPoint.Port, ct); return new NetworkStream(socket, ownsSocket: true); }
+            catch { socket.Dispose(); throw; }
+        },
+    }) { BaseAddress = baseAddress, Timeout = TimeSpan.FromMinutes(10) }; // local models on CPU are slow
+
+    // Loopback, RFC 1918, IPv6 unique-local.
+    public static bool IsPrivate(IPAddress a)
+    {
+        if (a.IsIPv4MappedToIPv6) a = a.MapToIPv4();
+        if (IPAddress.IsLoopback(a) || a.IsIPv6UniqueLocal) return true;
+        if (a.AddressFamily != AddressFamily.InterNetwork) return false;
+        var b = a.GetAddressBytes();
+        return b[0] == 10 || (b[0] == 172 && b[1] is >= 16 and < 32) || (b[0] == 192 && b[1] == 168);
     }
 
     static string Key(Node n) => $"{n.Id}@{n.Hash}";

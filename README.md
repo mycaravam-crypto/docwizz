@@ -10,7 +10,7 @@ docwizz analyze <dir>             # documentation report
 docwizz check <dir>               # report, exit 1 if thresholds fail (CI)
 docwizz architecture <dir>        # layers, layer dependencies, violations, cycles
 docwizz generate <dir> [out]      # Markdown + Mermaid docs (default <dir>/docs)
-docwizz generate <dir> --ai       # + Claude-drafted summaries for undocumented items (needs ANTHROPIC_API_KEY)
+docwizz generate <dir> --ai       # + summaries for undocumented items, drafted by a self-hosted Ollama
 docwizz diff <dir> [ref]          # changed symbols + affected doc pages (default baseline: docs/.docwizz/model.json)
 docwizz diff [dir] <base> <head>  # same, between two git refs (docwizz diff HEAD~1 HEAD)
 docwizz check <dir> --since <ref> # CI: fail only on critical gaps / violations introduced since <ref>
@@ -87,6 +87,10 @@ ISO/IEC/IEEE 42010). Pages start with a marker and are regenerated; anything wit
 write in `docs/architecture/` — is linked, never overwritten.
 
 `--ai` sends each undocumented item's facts (graph neighbours, signature, derived sections, side effects) and its own
-source lines to `claude-opus-5` (low effort, server-side refusal fallbacks). Drafts are marked 🤖, never replace
-written docs, and are cached in `docs/.docwizz/ai-cache.json` by symbol + body hash together with the symbols they
-were generated from, so unchanged code is never sent again. Without `--ai`, cached drafts are still used and nothing is sent.
+source lines to a **self-hosted [Ollama](https://ollama.com)** — never to a public AI service. `OLLAMA_HOST` picks the
+server (default `localhost:11434`), `DOCWIZZ_MODEL` the model (default `qwen2.5-coder:7b`; `ollama pull` it first).
+Every connection is checked on its resolved address and must go to loopback or a private network (10/8, 172.16/12,
+192.168/16, IPv6 unique-local); proxies are bypassed, and Ollama's `…-cloud` models, which run on ollama.com, are
+refused. Drafts are marked 🤖, never replace written docs, and are cached in `docs/.docwizz/ai-cache.json` by
+symbol + body hash together with the symbols they were generated from, so unchanged code is never sent again.
+Without `--ai`, cached drafts are still used and nothing is sent.

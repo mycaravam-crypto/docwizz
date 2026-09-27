@@ -136,7 +136,9 @@ overwritten. `docs/architecture/*.md` and anything else written by hand is linke
 
 [AiProse](src/DocWizz/AiProse.cs) drafts summaries for items that still lack one. Per item it sends the facts JSON
 (graph neighbours, signature, derived sections with their origin) and that symbol's own source lines. It never
-sends the repository. Drafts are cached per symbol and body hash in `docs/.docwizz/ai-cache.json`, together with
+sends the repository, and it only talks to a self-hosted Ollama: every connection's resolved address must be
+loopback or private, proxies are bypassed and Ollama cloud models are refused, so code never reaches a public
+service. Drafts are cached per symbol and body hash in `docs/.docwizz/ai-cache.json`, together with
 the symbols they were drafted from (provenance). Drafts are marked 🤖 and never override written documentation.
 
 ## Tests

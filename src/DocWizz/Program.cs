@@ -81,7 +81,7 @@ static int Usage(string? error)
           docwizz diff [dir] <base> <head>  what changed between two git refs
           docwizz architecture <dir>        layers, dependencies, violations; exit 1 above check thresholds
           docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
-            [--ai]                          draft missing summaries with Claude (cached per code hash)
+            [--ai]                          draft missing summaries with a local Ollama (cached per code hash)
         options:
           --profile <name|file.yaml>        documentation profile: {string.Join(", ", Profiles.Names)}, or your own file
           --format console|json             analyze/check/architecture output
