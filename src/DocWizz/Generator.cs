@@ -172,17 +172,33 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             sb.AppendLine($"| {n.Tags![1]} | `/{n.Route?.TrimStart('/')}` | {Esc(Summary(n) ?? "—")} | {(input == "" ? "—" : input)} | " +
                 $"{(n.Returns is null ? "—" : $"`{Esc(n.Returns)}`")} | {auth} | {SourceLink(n.File, n.Line, $"{Path.GetFileName(n.File)}:{n.Line}")} | {string.Join(", ", from)} |");
         }
-        // API view: frontend callers → endpoint → implementing component.
-        var handlerOf = model.Edges.Where(e => e.Kind == "calls").ToLookup(e => e.From, e => e.To);
-        var flow = endpoints.SelectMany(n =>
-                callers[n.Id].Where(nodes.ContainsKey).Select(c => (From: nodes[c].Name, To: EndpointLabel(n)))
-                .Concat([(From: EndpointLabel(n),
-                    To: parent.ContainsKey(n.Id) ? nodes[Top(n.Id)].Name : handlerOf[n.Id].Where(nodes.ContainsKey).Select(h => nodes[Top(h)].Name).FirstOrDefault() ?? "")]))
-            .Where(e => e.To != "").Distinct().Select(e => (e.From, e.To, 0)).ToList();
-        if (flow.Count is > 0 and <= MaxDiagramEdges * 2)
-            sb.AppendLine("\n## Flow\n\n" + Mermaid("graph LR", flow, x => x));
+        // Each endpoint's path: frontend callers → endpoint → handler (controller) → services → data → external systems.
+        var flowLines = new List<string>();
+        var flowEdges = new List<(string From, string To, int Count)>();
+        foreach (var n in endpoints)
+        {
+            var trace = Trace(n.Id);
+            var handler = parent.TryGetValue(n.Id, out var owner) ? owner : null;
+            var label = EndpointLabel(n);
+            foreach (var c in callers[n.Id].Where(nodes.ContainsKey)) flowEdges.Add((nodes[c].Name, label, 0));
+            if (handler is not null) flowEdges.Add((label, nodes[handler].Name, 0));
+            foreach (var (from, to) in trace.Steps)
+                flowEdges.Add((from == n.Id ? handler is null ? label : nodes[handler].Name : UnitLabel(from), UnitLabel(to), 0));
+            if (trace.Layers.Count == 0) continue;
+            var data = Reached(trace, x => x.Tags?.Contains("dbcontext") == true).Select(x => x.Name).ToList();
+            var external = Reached(trace, x => x.Kind == "external").Select(ExternalLabel).ToList();
+            flowLines.Add($"- `{label}`: {(handler is null ? "" : $"{nodes[handler].Name} → ")}{Esc(Chain(trace))}" +
+                (data.Count + external.Count > 0 ? $"  \n  _data:_ {(data.Count > 0 ? string.Join(", ", data) : "—")} · _external:_ {(external.Count > 0 ? string.Join(", ", external) : "—")}" : ""));
+        }
+        if (flowLines.Count > 0)
+            sb.AppendLine("\n## Flows\n\nWhat each endpoint reaches: calls, injected dependencies and interface dispatch, hop by hop. " +
+                "Reached means the code can get there, not that every request does.\n\n" + string.Join("\n", flowLines));
+        var distinctFlow = flowEdges.Distinct().ToList();
+        if (distinctFlow.Count is > 0 and <= MaxDiagramEdges * 2)
+            sb.AppendLine("\n## Flow\n\n" + Mermaid("graph LR", distinctFlow, x => x));
 
-        var unlinked = model.Edges.Where(e => e.Kind == "http" && e.To.StartsWith("http:")).ToList();
+        // Absolute URLs are external systems (views/context.md), not missing endpoints.
+        var unlinked = model.Edges.Where(e => e.Kind == "http" && e.To.StartsWith("http:") && !e.To.Contains("://")).ToList();
         if (unlinked.Count > 0)
         {
             sb.AppendLine("\n## Frontend calls without a matching endpoint\n");
@@ -215,6 +231,15 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
                     $"{string.Join(", ", renders[c.Id].Where(nodes.ContainsKey).Select(x => nodes[x].Name).Distinct())} | " +
                     $"{string.Join(", ", listens[c.Id].Where(e => nodes.ContainsKey(e.To)).Select(e => $"{nodes[e.To].Name} @{e.Label}").Distinct())} | " +
                     $"{string.Join(", ", renderedBy[c.Id].Where(nodes.ContainsKey).Select(x => nodes[x].Name).Distinct())} |");
+        }
+        if (routes.Count > 0)
+        {
+            // Route → page → children → stores/composables → API client → backend endpoint (followed further in api.md).
+            var lines = routes.Select(r => (r, Trace(r.Id, stop: n => n.Tags?.Contains("endpoint") == true))).Where(x => x.Item2.Layers.Count > 0)
+                .Select(x => $"- `{x.r.Route}` → {Esc(Chain(x.Item2))}").ToList();
+            if (lines.Count > 0)
+                sb.AppendLine("\n## Flows\n\nFrom each route to the backend endpoints it can reach, hop by hop; see [API](api.md) for what the endpoints do.\n\n" +
+                    string.Join("\n", lines));
         }
         if (routes.Count == 0 && components.Count == 0) sb.AppendLine("No Vue frontend found.");
         return sb.ToString();

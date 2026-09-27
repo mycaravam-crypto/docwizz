@@ -82,6 +82,9 @@ sub = [e for e in m["edges"] if e["kind"] == "subscribes" and e["from"].endswith
 assert sub == [{"from": "vue:" + F + "components/MaterialTable.vue", "to": "vue:" + F + "components/MaterialForm.vue", "kind": "subscribes", "label": "created"}], sub
 assert nodes["ts:" + F + "stores/materialStore.ts#useMaterialStore"]["kind"] == "store"
 
+assert ("accesses", I + "SqlMaterialRepository.AddAsync(Fixture.Domain.Material)", I + "AppDbContext") in edges  # primary-ctor dependency used
+assert not any(e[0] == "accesses" and e[2] == D + "Material" for e in edges), "member of another object counted as own dependency"
+
 # External systems: detected from calls, inferred from packages, attributed to the code (or project) that uses them
 ext = {n["id"]: n["tags"] for n in nodes.values() if n["kind"] == "external"}
 assert ext == {"ext:http:erp.example.com": ["http-api", "detected"], "ext:redis": ["cache", "detected"],
@@ -201,6 +204,12 @@ grep -q 'c[0-9]* -->|reads/writes| c[0-9]*' "$docs/views/containers.md"
 grep -q 'services: api, web, db' "$docs/views/deployment.md"
 grep -q 'subgraph application\["application"\]' "$docs/views/components.md"
 grep -q '\["createMaterial"\]' "$docs/api.md"                                  # API flow diagram
+# Flows: endpoint → handler → services (through interfaces) → data → external systems; route → … → endpoints
+grep -qF -- '- `POST /api/materials`: MaterialController → MaterialService → IEventPublisher, SqlMaterialRepository → AppDbContext → SQL Server (inferred)' "$docs/api.md"
+grep -qF -- '- `GET /api/stock/{sku}`: StockController → ErpClient → erp.example.com' "$docs/api.md"
+grep -qF -- '- `POST /orders`: AppDbContext → SQL Server (inferred)' "$docs/api.md"
+grep -qF -- '- `/materials` → MaterialTable → GET /api/materials (no endpoint found), MaterialForm → useMaterialStore → createMaterial, getMaterial → GET /api/materials/{id}, POST /api/materials' "$docs/frontend.md"
+if grep -q "rates.example.org" "$docs/api.md"; then echo "external URL listed as missing endpoint"; exit 1; fi
 grep -q '| stakeholders | missing |' "$docs/architecture-description.md"
 grep -q 'Endpoints without declared authorization: .*`GET /health`' "$docs/architecture-description.md"
 mkdir -p "$docs/architecture" && echo "# Stakeholders" > "$docs/architecture/stakeholders.md"

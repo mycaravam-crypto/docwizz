@@ -156,9 +156,21 @@ static class CSharpScanner
                 edges.Add(new(from, Id(created.OriginalDefinition), "creates"));
 
         // C# events: `x.Changed += h` subscribes; any other use (Changed(..), Changed?.Invoke(..)) raises it.
+        // `accesses`: the member uses an injected dependency (field, property or primary-constructor parameter) —
+        // how a request reaches a DbContext whose own members (DbSet, SaveChanges) are outside the source.
         foreach (var r in Body(body).OfType<IdentifierNameSyntax>())
         {
-            if (sm.GetSymbolInfo(r).Symbol is not IEventSymbol ev || !InSource(ev)) continue;
+            var symbol = sm.GetSymbolInfo(r).Symbol;
+            var own = r.Parent is not MemberAccessExpressionSyntax ma || ma.Name != r || ma.Expression is ThisExpressionSyntax;
+            if (own && (symbol switch
+                {
+                    IFieldSymbol f => f.Type,
+                    IPropertySymbol p => p.Type,
+                    IParameterSymbol { ContainingSymbol: IMethodSymbol { MethodKind: MethodKind.Constructor } } p => p.Type,
+                    _ => null,
+                }) is INamedTypeSymbol used && InSource(used))
+                edges.Add(new(from, Id(used.OriginalDefinition), "accesses"));
+            if (symbol is not IEventSymbol ev || !InSource(ev)) continue;
             ExpressionSyntax e = r.Parent is MemberAccessExpressionSyntax m && m.Name == r ? m : r;
             var kind = e.Parent is AssignmentExpressionSyntax a && a.Left == e
                 ? a.IsKind(SyntaxKind.AddAssignmentExpression) ? "subscribes" : null

@@ -28,7 +28,8 @@ Source → analyzers (Roslyn for C#, TypeScript + Vue compiler for `.vue`/`.ts`,
 
 The code model holds facts only: symbols, signatures, endpoints (route, input, response, authorization), props/emits,
 projects and packages, and relationships (`contains`, `calls`, `implements`, `inherits`, `injects`, `creates`, `registers`,
-`imports`, `renders`, `routes-to`, `persists`, `publishes`, `subscribes`, `http`, `references`, `depends-on`, `tests`, `connects`).
+`imports`, `renders`, `routes-to`, `persists`, `publishes`, `subscribes`, `http`, `references`, `depends-on`, `tests`, `connects`,
+`accesses` — a member using an injected dependency of its own type, which is how a request reaches a `DbContext`).
 External systems (databases, caches, message brokers, HTTP APIs, identity providers, storage, e-mail — see
 [Externals.cs](src/DocWizz/Externals.cs)) are `external` nodes tagged with their category and certainty: `detected`
 (a call shows it: `UseNpgsql`, `AddHttpClient<T>` with a base address, `fetch('https://…')`), `inferred` (only a package
@@ -64,7 +65,9 @@ on any symbol above that cyclomatic complexity.
 
 ## Generated docs
 
-`index.md` (technology from project files, building blocks by role, sizes), `architecture.md` (dependency view), `api.md`, `frontend.md`, `quality.md`, `modules/*`,
+`index.md` (technology from project files, building blocks by role, sizes), `architecture.md` (dependency view), `api.md` (endpoints and
+their flows: handler → services, through interfaces → DbContext → database / external systems), `frontend.md` (components, and
+each route's flow: page → children → stores → API client → endpoint), `quality.md`, `modules/*`,
 `views/` (context, containers, components, data, deployment) and `architecture-description.md` (structured after
 ISO/IEC/IEEE 42010). Pages start with a marker and are regenerated; anything without it — including everything you
 write in `docs/architecture/` — is linked, never overwritten.
