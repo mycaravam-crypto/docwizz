@@ -59,7 +59,7 @@ class Config
         var file = new[] { Path.Combine(dir, "docwizz.yaml"), "docwizz.yaml" }.FirstOrDefault(File.Exists);
         var config = Yaml.Deserialize<Config>(file is null ? Default : File.ReadAllText(file)) ?? new Config();
         config.Profile = profile ?? config.Profile;
-        var builtIn = Yaml.Deserialize<Config>(Profiles.Yaml(config.Profile));
+        var builtIn = Yaml.Deserialize<Config>(Profiles.Yaml(config.Profile, dir));
         if (profile is not null || config.Patterns.Count == 0) config.Patterns = builtIn.Patterns;
         if (config.ArchitectureSections.Count == 0) config.ArchitectureSections = builtIn.ArchitectureSections;
         // Fail fast on bad severities rather than mid-check.

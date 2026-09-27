@@ -3,6 +3,7 @@ Small tool, creates documentation. Builds a semantic model of the code first; do
 Finds the code that *needs* docs and doesn't have them, and checks the architecture while it's at it.
 
 ```bash
+docwizz init [dir]                # write a starter docwizz.yaml (the defaults, to edit)
 docwizz scan <dir> [model.json]   # write the code model (nodes + edges: facts only)
 docwizz analyze <dir>             # documentation report
 docwizz check <dir>               # report, exit 1 if thresholds fail (CI)
@@ -12,7 +13,7 @@ docwizz generate <dir> --ai       # + Claude-drafted summaries for undocumented 
 docwizz diff <dir> [ref]          # changed symbols + affected doc pages (default baseline: docs/.docwizz/model.json)
 docwizz diff [dir] <base> <head>  # same, between two git refs (docwizz diff HEAD~1 HEAD)
 docwizz check <dir> --since <ref> # CI: fail only on critical gaps / violations introduced since <ref>
-  --profile <name>                # documentation profile (see below)
+  --profile <name|file.yaml>      # documentation profile (see below)
   --format json                   # analyze/check/architecture as JSON
 ./test.sh                         # smoke test against fixture/
 ```
@@ -42,7 +43,8 @@ was derived from, with their source locations as `evidence` (`file:line-endLine`
 ## Profiles
 
 `default`, `software`, `api`, `architecture`, `technical-publication`, `iso-42010`, `iso-15289` —
-see [Profiles.cs](src/DocWizz/Profiles.cs). Reports state coverage *against the profile*; nothing claims compliance
+see [Profiles.cs](src/DocWizz/Profiles.cs) — or your organisation's own: a YAML file with the same shape
+(`patterns:`, `architecture_sections:`), passed as `--profile team.yaml` or `profile: team.yaml`. Reports state coverage *against the profile*; nothing claims compliance
 with a standard. `iso-42010`/`iso-15289` also expect human-authored pages in `docs/architecture/`
 (stakeholders, concerns, decisions, …) and fail `check` while they are missing.
 

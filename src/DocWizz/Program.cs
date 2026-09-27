@@ -28,6 +28,7 @@ if (!Directory.Exists(path))
     Console.Error.WriteLine($"not a directory: {path}");
     return 1;
 }
+if (cmd == "init") return Init(path);
 Config config;
 try { config = Config.Load(path, opts.GetValueOrDefault("profile")); }
 catch (ArgumentException e) { return Usage(e.Message); }
@@ -52,11 +53,26 @@ switch (cmd)
         return Usage($"unknown command {cmd}");
 }
 
+// Starter config: the defaults, spelled out, to edit in place.
+static int Init(string dir)
+{
+    var file = Path.Combine(dir, "docwizz.yaml");
+    if (File.Exists(file))
+    {
+        Console.Error.WriteLine($"{file} exists; not overwriting");
+        return 1;
+    }
+    File.WriteAllText(file, Config.Default);
+    Console.WriteLine($"→ {file}");
+    return 0;
+}
+
 static int Usage(string? error)
 {
     if (error is not null) Console.Error.WriteLine(error);
     Console.Error.WriteLine($"""
         usage:
+          docwizz init [dir]                write a starter docwizz.yaml
           docwizz scan <dir> [model.json]   write the code model
           docwizz analyze <dir>             documentation report
           docwizz check <dir>               report + exit 1 if thresholds fail (CI)
@@ -67,7 +83,7 @@ static int Usage(string? error)
           docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
             [--ai]                          draft missing summaries with Claude (cached per code hash)
         options:
-          --profile <name>                  documentation profile: {string.Join(", ", Profiles.Names)}
+          --profile <name|file.yaml>        documentation profile: {string.Join(", ", Profiles.Names)}, or your own file
           --format console|json             analyze/check/architecture output
         """);
     return 1;

@@ -75,6 +75,12 @@ static class Profiles
             """,
     };
 
-    public static string Yaml(string name) => All.TryGetValue(name, out var y) ? y
-        : throw new ArgumentException($"unknown profile '{name}' ({string.Join(", ", Names)})");
+    // A built-in name, or a YAML file (same shape: patterns, architecture_sections) relative to cwd or the scanned dir.
+    public static string Yaml(string name, string dir)
+    {
+        if (All.TryGetValue(name, out var y)) return y;
+        if (Path.GetExtension(name) is ".yaml" or ".yml" && new[] { name, Path.Combine(dir, name) }.FirstOrDefault(File.Exists) is { } file)
+            return File.ReadAllText(file);
+        throw new ArgumentException($"unknown profile '{name}' ({string.Join(", ", Names)}, or a .yaml file)");
+    }
 }

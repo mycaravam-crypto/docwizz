@@ -127,6 +127,18 @@ form = items(sys.argv[1] + ".arch-profile")["vue:frontend/src/components/Materia
 assert form["sections"]["state"] == {"origin": "fact", "text": "name, valid (computed), watch name"}, form
 PY
 if dw analyze fixture --profile nope >/dev/null 2>&1; then echo "unknown profile accepted"; exit 1; fi
+# Organisational profile from a file; init writes a starter config once
+team=$(mktemp -d)
+cat > "$team/team.yaml" <<'YAML'
+patterns:
+  repo: { match: { tag: repository }, level: high, sections: [summary, remarks] }
+YAML
+dw analyze fixture --format json --profile "$team/team.yaml" 2>/dev/null > "$team/out.json"
+python3 -c "import json,sys; i={i['id']:i for i in json.load(open(sys.argv[1]))['documentation']['items']}['cs:Fixture.Infrastructure.SqlMaterialRepository']; assert i['pattern']=='repo' and i['missing']==['summary','remarks'], i" "$team/out.json"
+dw init "$team" | grep -q "docwizz.yaml"
+grep -q "^profile: default" "$team/docwizz.yaml"
+if dw init "$team" >/dev/null 2>&1; then echo "init overwrote config"; exit 1; fi
+rm -rf "$team"
 set +e; iso=$(dw check fixture --profile iso-42010 2>/dev/null); set -e
 grep -q "human-authored sections (docs/architecture/): stakeholders ✗" <<<"$iso"
 grep -q "check: FAIL.*missing architecture sections: stakeholders, concerns, decisions, deployment, security" <<<"$iso"
