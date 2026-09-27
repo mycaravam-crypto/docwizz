@@ -14,12 +14,11 @@ record Violation(string Rule, string FromLayer, string ToLayer, string FromFile,
 
 static class Architecture
 {
-    static readonly string[] DependencyKinds = ["calls", "injects", "implements", "inherits", "imports", "renders", "routes", "dbset", "http"];
 
-    public static ArchitectureResult Check(Model model, ArchitectureConfig config)
+    public static ArchitectureResult Check(CodeModel model, ArchitectureConfig config)
     {
         var nodes = model.Nodes.ToDictionary(n => n.Id);
-        var deps = model.Edges.Where(e => DependencyKinds.Contains(e.Kind) && nodes.ContainsKey(e.From)).ToList();
+        var deps = model.Edges.Where(e => CodeModel.DependencyKinds.Contains(e.Kind) && nodes.ContainsKey(e.From)).ToList();
 
         var layerCache = new Dictionary<string, string?>();
         string? LayerOf(string file) => layerCache.TryGetValue(file, out var l) ? l : layerCache[file] =
@@ -51,8 +50,9 @@ static class Architecture
             .Select(e => (From: Folder(nodes[e.From].File), To: Folder(nodes[e.To].File)))
             .Where(p => p.From != p.To).Distinct()
             .ToLookup(p => p.From, p => p.To);
-        var folders = model.Nodes.Select(n => Folder(n.File)).Distinct();
-        var layerFiles = model.Nodes.Select(n => n.File).Distinct()
+        var code = model.Nodes.Where(n => n.Kind is not ("project" or "package")).ToList();
+        var folders = code.Select(n => Folder(n.File)).Distinct();
+        var layerFiles = code.Select(n => n.File).Distinct()
             .GroupBy(f => LayerOf(f) ?? "(none)").ToDictionary(g => g.Key, g => g.Count());
         return new(violations, StronglyConnected(folders, graph).Where(c => c.Count > 1).ToList(), layerFiles);
     }

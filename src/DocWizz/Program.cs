@@ -44,29 +44,30 @@ switch (cmd)
         return 1;
 }
 
-static (Model Model, List<string> Files) BuildModel(string root, Config config)
+static (CodeModel Model, List<string> Files) BuildModel(string root, Config config)
 {
     string[] skip = ["bin", "obj", "node_modules", "dist"];
     string[] exts = [".cs", ".vue", ".ts"];
 
     // Prefer git's view (honours .gitignore, skips nested worktrees); fall back to a directory walk.
-    var candidates = Git(root, "ls-files --cached --others --exclude-standard")?
+    var candidates = (Git(root, "ls-files --cached --others --exclude-standard")?
         .Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(f => Path.Combine(root, f)).Where(File.Exists)
-        ?? Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories);
-    var files = candidates
-        .Where(f => exts.Contains(Path.GetExtension(f)) && !f.EndsWith(".d.ts"))
+        ?? Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
         .Where(f => !Path.GetRelativePath(root, f).Split(Path.DirectorySeparatorChar).SkipLast(1)
             .Any(d => d.StartsWith('.') || skip.Contains(d)))
         .Where(f => !config.Exclude.Any(g =>
             FileSystemName.MatchesSimpleExpression(g, Path.GetRelativePath(root, f).Replace('\\', '/'))))
         .Distinct()
         .ToList();
+    var files = candidates.Where(f => exts.Contains(Path.GetExtension(f)) && !f.EndsWith(".d.ts")).ToList();
 
     var (nodes, edges) = CSharpScanner.Scan(root, files.Where(f => f.EndsWith(".cs")));
     var (feNodes, feEdges) = Frontend.Scan(root, files.Where(f => !f.EndsWith(".cs")).ToList());
-    nodes.AddRange(feNodes.Where(n => nodes.All(x => x.Id != n.Id)));
-    edges = Frontend.LinkHttp(nodes, [.. edges, .. feEdges]);
-    return (new Model(Git(root, "rev-parse --short HEAD")?.Trim(), nodes, edges), files);
+    var (projNodes, projEdges) = Projects.Scan(root, candidates.Where(f => f.EndsWith(".csproj") || Path.GetFileName(f) == "package.json"));
+    var ids = nodes.Select(n => n.Id).ToHashSet();
+    nodes.AddRange(feNodes.Concat(projNodes).Where(n => ids.Add(n.Id)));
+    edges = Frontend.LinkHttp(nodes, [.. edges, .. feEdges, .. projEdges]);
+    return (new CodeModel(Git(root, "rev-parse --short HEAD")?.Trim(), nodes, edges), files);
 }
 
 static int Scan(string root, string outFile)
@@ -85,7 +86,7 @@ static int Scan(string root, string outFile)
     return 0;
 }
 
-static void WriteModel(Model model, string file) =>
+static void WriteModel(CodeModel model, string file) =>
     File.WriteAllText(file, JsonSerializer.Serialize(model, new JsonSerializerOptions
     {
         WriteIndented = true,
@@ -113,7 +114,7 @@ static async Task<int> Generate(string root, string outDir, bool ai)
 static int DiffCommand(string root, string? gitRef, bool enforce)
 {
     var config = Config.Load(root);
-    Model? before;
+    CodeModel? before;
     string baseline;
     if (gitRef is not null)
     {
@@ -128,7 +129,7 @@ static int DiffCommand(string root, string? gitRef, bool enforce)
             Console.Error.WriteLine($"no {fingerprint}; run docwizz generate first or pass a git ref");
             return 1;
         }
-        before = JsonSerializer.Deserialize<Model>(File.ReadAllText(fingerprint), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        before = JsonSerializer.Deserialize<CodeModel>(File.ReadAllText(fingerprint), new JsonSerializerOptions(JsonSerializerDefaults.Web));
         baseline = $"docs generated at {before?.Commit ?? "unknown"}";
     }
     if (before is null) return 1;
@@ -145,7 +146,7 @@ static int DiffCommand(string root, string? gitRef, bool enforce)
 }
 
 // Scans the tree as it was at <ref>, extracted from git into a temp dir.
-static Model? ModelAt(string root, string gitRef, Config config)
+static CodeModel? ModelAt(string root, string gitRef, Config config)
 {
     var prefix = Git(root, "rev-parse --show-prefix")?.Trim();
     var sha = Git(root, $"rev-parse --short {gitRef}")?.Trim();

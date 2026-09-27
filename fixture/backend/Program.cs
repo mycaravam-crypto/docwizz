@@ -15,3 +15,6 @@ app.Run();
 // Places an order for materials.
 app.MapPost("/orders", async (Fixture.Infrastructure.AppDbContext db) => { if (db is null) return; await Task.CompletedTask; });
 app.MapMethods("/api/materials/{id}", ["PATCH"], (int id) => id);
+
+var admin = app.MapGroup("/admin").RequireAuthorization();
+admin.MapDelete("/cache", () => Results.NoContent());

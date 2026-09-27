@@ -5,14 +5,6 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-record Node(string Id, string Kind, string Name, string File, int Line,
-    string? Visibility = null, string? Doc = null, int? Complexity = null,
-    int? Params = null, string? Hash = null, List<string>? Tags = null, string? Route = null, int? EndLine = null);
-
-record Edge(string From, string To, string Kind);
-
-record Model(string? Commit, List<Node> Nodes, List<Edge> Edges);
-
 static class CSharpScanner
 {
     static readonly SymbolDisplayFormat IdFormat = SymbolDisplayFormat.CSharpErrorMessageFormat;
@@ -50,6 +42,7 @@ static class CSharpScanner
                 if (HasAttr(decl.AttributeLists, "ApiController") || type.BaseType?.Name is "ControllerBase" or "Controller")
                     tags.Add("controller");
                 if (type.BaseType?.Name == "DbContext") tags.Add("dbcontext");
+                var classAuth = Auth(decl.AttributeLists);
 
                 nodes.Add(new Node(typeId, Kind(type), type.Name, rel, Line(decl),
                     Vis(type), Doc(type), Hash: Hash(decl), Tags: tags.Count > 0 ? tags : null,
@@ -70,7 +63,7 @@ static class CSharpScanner
                 var classRoute = RouteArg(decl.AttributeLists, "Route")
                     ?.Replace("[controller]", type.Name.Replace("Controller", ""), StringComparison.OrdinalIgnoreCase);
                 foreach (var member in td.Members)
-                    ScanMember(sm, member, typeId, classRoute, rel, nodes, edges);
+                    ScanMember(sm, member, typeId, classRoute, classAuth, rel, nodes, edges);
             }
 
             ScanRegistrations(sm, syntaxRoot, rel, nodes, edges);
@@ -81,7 +74,7 @@ static class CSharpScanner
     }
 
     static void ScanMember(SemanticModel sm, MemberDeclarationSyntax member, string typeId, string? classRoute,
-        string rel, List<Node> nodes, List<Edge> edges)
+        string? classAuth, string rel, List<Node> nodes, List<Edge> edges)
     {
         ISymbol? sym = member switch
         {
@@ -98,16 +91,20 @@ static class CSharpScanner
         if (member is MethodDeclarationSyntax md && HttpVerbs.FirstOrDefault(v => HasAttr(md.AttributeLists, v)) is { } verb)
         {
             tags = ["endpoint", verb[4..].ToUpperInvariant()];
+            if ((Auth(md.AttributeLists) ?? classAuth) is { } auth) tags.Add(auth);
             // Full route: [Route] on the class + the verb's template, unless the template is absolute.
             route = RouteArg(md.AttributeLists, verb) ?? "";
             if (classRoute is not null && !route.StartsWith('/') && !route.StartsWith("~/"))
                 route = route.Length == 0 ? classRoute : $"{classRoute}/{route}";
         }
         if (sym is IPropertySymbol { Type: INamedTypeSymbol { Name: "DbSet", TypeArguments: [var entity] } } && InSource(entity))
-            edges.Add(new(typeId, Id(entity), "dbset"));
+            edges.Add(new(typeId, Id(entity), "persists"));
 
+        var method = sym as IMethodSymbol;
         nodes.Add(new Node(id, Kind(sym), sym.Name, rel, Line(member), Vis(sym), Doc(sym),
-            Complexity(member), ps, Hash(member), tags, route, EndLine(member)));
+            Complexity(member), ps, Hash(member), tags, route, EndLine(member),
+            method?.Parameters.Select(Param).ToList() is { Count: > 0 } pl ? pl : null,
+            method is { MethodKind: not MethodKind.Constructor } ? Returns(method.ReturnType) : null, Throws(sm, member)));
         edges.Add(new(typeId, id, "contains"));
 
         AddCalls(sm, member, id, edges);
@@ -118,6 +115,17 @@ static class CSharpScanner
         foreach (var inv in Body(body).OfType<InvocationExpressionSyntax>())
             if (Resolve(sm.GetSymbolInfo(inv)) is IMethodSymbol target && InSource(target))
                 edges.Add(new(from, Id(target.ReducedFrom ?? target.OriginalDefinition), "calls"));
+
+        // C# events: `x.Changed += h` subscribes; any other use (Changed(..), Changed?.Invoke(..)) raises it.
+        foreach (var r in Body(body).OfType<IdentifierNameSyntax>())
+        {
+            if (sm.GetSymbolInfo(r).Symbol is not IEventSymbol ev || !InSource(ev)) continue;
+            ExpressionSyntax e = r.Parent is MemberAccessExpressionSyntax m && m.Name == r ? m : r;
+            var kind = e.Parent is AssignmentExpressionSyntax a && a.Left == e
+                ? a.IsKind(SyntaxKind.AddAssignmentExpression) ? "subscribes" : null
+                : "publishes";
+            if (kind is not null) edges.Add(new(from, Id(ev), kind));
+        }
     }
 
     // Minimal-API handlers inside Map*() belong to their endpoint node, not the enclosing method.
@@ -139,48 +147,85 @@ static class CSharpScanner
                 edges.Add(new(Id(it), Id(tt), "registers"));
 
             if (!IsMapCall(inv) || inv.ArgumentList.Arguments is not [{ Expression: LiteralExpressionSyntax lit }, _, ..]) continue;
+            var (prefix, groupAuth) = Group(sm, ma.Expression, 0);
+            var route = JoinRoute(prefix, lit.Token.ValueText);
             if (name != "MapMethods")
-                ScanMinimalEndpoint(sm, inv, inv.ArgumentList.Arguments[1].Expression, name[3..].ToUpperInvariant(), lit.Token.ValueText, rel, nodes, edges);
+                ScanMinimalEndpoint(sm, inv, inv.ArgumentList.Arguments[1].Expression, name[3..].ToUpperInvariant(), route, groupAuth, rel, nodes, edges);
             else if (inv.ArgumentList.Arguments.Count > 2)
                 // MapMethods("/route", ["PATCH", ...], handler)
                 foreach (var verb in inv.ArgumentList.Arguments[1].DescendantNodes().OfType<LiteralExpressionSyntax>())
-                    ScanMinimalEndpoint(sm, inv, inv.ArgumentList.Arguments[2].Expression, verb.Token.ValueText.ToUpperInvariant(), lit.Token.ValueText, rel, nodes, edges);
+                    ScanMinimalEndpoint(sm, inv, inv.ArgumentList.Arguments[2].Expression, verb.Token.ValueText.ToUpperInvariant(), route, groupAuth, rel, nodes, edges);
         }
     }
 
+    // `app.MapGroup("/api").MapGroup("/x")`, possibly via a local (`var g = app.MapGroup(..)`), → "/api/x";
+    // Auth is set when any group in the chain calls RequireAuthorization().
+    // ponytail: groups passed in as parameters stay unresolved; follow the call site if that matters.
+    static (string Prefix, bool Auth) Group(SemanticModel sm, ExpressionSyntax receiver, int depth)
+    {
+        if (depth > 8) return ("", false);
+        if (receiver is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax call } inv)
+        {
+            var (prefix, auth) = Group(sm, call.Expression, depth + 1);
+            auth |= call.Name.Identifier.Text == "RequireAuthorization";
+            return call.Name.Identifier.Text == "MapGroup" && inv.ArgumentList.Arguments is [{ Expression: LiteralExpressionSyntax l }, ..]
+                ? (JoinRoute(prefix, l.Token.ValueText), auth) : (prefix, auth);
+        }
+        if (sm.GetSymbolInfo(receiver).Symbol is ILocalSymbol local
+            && local.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is VariableDeclaratorSyntax { Initializer.Value: var init })
+            return Group(sm, init, depth + 1);
+        return ("", false);
+    }
+
+    static string JoinRoute(string prefix, string route) =>
+        prefix.Length == 0 ? route : "/" + string.Join('/', new[] { prefix, route }.Select(p => p.Trim('/')).Where(p => p.Length > 0));
+
     static void ScanMinimalEndpoint(SemanticModel sm, InvocationExpressionSyntax inv, ExpressionSyntax handler,
-        string verb, string route, string rel, List<Node> nodes, List<Edge> edges)
+        string verb, string route, bool groupAuth, string rel, List<Node> nodes, List<Edge> edges)
     {
         var id = $"cs:endpoint:{verb} {route}";
         string? doc = null;
+        IMethodSymbol? signature = null;
 
         if (handler is AnonymousFunctionExpressionSyntax lambda)
         {
             // Handler parameters are what minimal APIs inject.
             if (sm.GetSymbolInfo(lambda).Symbol is IMethodSymbol lm)
+            {
+                signature = lm;
                 foreach (var p in lm.Parameters.Where(p => InSource(p.Type)))
                     edges.Add(new(id, Id(p.Type), "injects"));
+            }
             AddCalls(sm, lambda, id, edges);
         }
         else if (Resolve(sm.GetSymbolInfo(handler)) is IMethodSymbol method && InSource(method))
         {
+            signature = method;
             edges.Add(new(id, Id(method), "calls"));
             doc = Doc(method);
         }
 
         // Docs: .WithSummary/.WithDescription in the fluent chain, else a comment above the statement.
         string? text = null;
+        var tags = new List<string> { "endpoint", verb, "minimal-api" };
+        if (groupAuth) tags.Add("authorize");
         for (SyntaxNode n = inv; n.Parent is MemberAccessExpressionSyntax { Parent: InvocationExpressionSyntax outer } ma; n = outer)
+        {
             if (ma.Name.Identifier.Text is "WithSummary" or "WithDescription"
                 && outer.ArgumentList.Arguments.FirstOrDefault()?.Expression is LiteralExpressionSyntax l)
                 text ??= l.Token.ValueText;
+            if (ma.Name.Identifier.Text == "RequireAuthorization") tags.Add("authorize");
+            if (ma.Name.Identifier.Text == "AllowAnonymous") tags.Add("anonymous");
+        }
         text ??= string.Join(" ", (inv.FirstAncestorOrSelf<StatementSyntax>()?.GetLeadingTrivia() ?? default)
             .Where(t => t.IsKind(SyntaxKind.SingleLineCommentTrivia) || t.IsKind(SyntaxKind.MultiLineCommentTrivia))
             .Select(t => t.ToString().TrimStart('/', '*', ' ').TrimEnd('*', '/', ' '))).Trim();
         if (text is { Length: > 0 }) doc ??= new XElement("member", new XElement("summary", text)).ToString();
 
         nodes.Add(new Node(id, "endpoint", $"{verb} {route}", rel, Line(inv), "public", doc,
-            Complexity(handler), Hash: Hash(inv), Tags: ["endpoint", verb, "minimal-api"], Route: route, EndLine: EndLine(inv)));
+            Complexity(handler), Hash: Hash(inv), Tags: tags, Route: route, EndLine: EndLine(inv),
+            Parameters: signature?.Parameters.Select(Param).ToList() is { Count: > 0 } pl ? pl : null,
+            Returns: signature is null ? null : Returns(signature.ReturnType), Throws: Throws(sm, handler)));
     }
 
     // 1 + decision points.
@@ -193,6 +238,35 @@ static class CSharpScanner
             or SyntaxKind.CoalesceExpression,
         _ => false
     });
+
+    static string? Auth(SyntaxList<AttributeListSyntax> lists) =>
+        HasAttr(lists, "AllowAnonymous") ? "anonymous" : HasAttr(lists, "Authorize") ? "authorize" : null;
+
+    static readonly SymbolDisplayFormat TypeFormat = SymbolDisplayFormat.MinimallyQualifiedFormat;
+
+    static string Param(IParameterSymbol p)
+    {
+        var from = (p.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() as ParameterSyntax)?.AttributeLists
+            .SelectMany(l => l.Attributes).Select(AttrName).FirstOrDefault(n => n.StartsWith("From") && n.Length > 4);
+        return $"{(from is null ? "" : $"[{from[4..].ToLowerInvariant()}] ")}{p.Name}: {p.Type.ToDisplayString(TypeFormat)}";
+    }
+
+    // Task<ActionResult<T>> → T. Task / void → null (nothing returned).
+    static string? Returns(ITypeSymbol t)
+    {
+        while (t is INamedTypeSymbol { Name: "Task" or "ValueTask" or "ActionResult", TypeArguments: [var inner] }) t = inner;
+        var name = t.ToDisplayString(TypeFormat);
+        return t.SpecialType == SpecialType.System_Void || t is INamedTypeSymbol { Name: "Task" or "ValueTask", Arity: 0 } || name.Length == 0
+            ? null : name;
+    }
+
+    // Exception types thrown directly in the body (`throw new X(..)`, `?? throw new X(..)`).
+    static List<string>? Throws(SemanticModel sm, SyntaxNode n)
+    {
+        var types = Body(n).Select(d => d switch { ThrowStatementSyntax s => s.Expression, ThrowExpressionSyntax e => e.Expression, _ => null })
+            .OfType<ExpressionSyntax>().Select(e => sm.GetTypeInfo(e).Type?.Name).OfType<string>().Where(t => t.Length > 0).Distinct().ToList();
+        return types.Count > 0 ? types : null;
+    }
 
     static bool HasAttr(SyntaxList<AttributeListSyntax> lists, string name) =>
         lists.SelectMany(l => l.Attributes).Any(a => AttrName(a) == name);

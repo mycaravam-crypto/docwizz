@@ -99,7 +99,7 @@ static class Analyzer
     static readonly string[] Analyzed = ["class", "record", "struct", "interface", "enum", "method", "endpoint",
         "component", "function", "store"];
 
-    public static List<Finding> Analyze(Model model, Config config)
+    public static List<Finding> Analyze(CodeModel model, Config config)
     {
         var nodes = model.Nodes.ToDictionary(n => n.Id);
         var parent = model.Edges.Where(e => e.Kind == "contains").ToDictionary(e => e.To, e => e.From);

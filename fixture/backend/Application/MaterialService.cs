@@ -4,6 +4,9 @@ namespace Fixture.Application;
 
 public class MaterialService(IMaterialRepository repository, IEventPublisher events) : IMaterialService
 {
+    /// <summary>Raised after a material is created, with its id.</summary>
+    public event Action<int>? Created;
+
     public Task<Material?> GetAsync(int id) => repository.FindAsync(id);
 
     // Complex, public, side effects (DB + event), undocumented: HIGH requirement
@@ -23,6 +26,7 @@ public class MaterialService(IMaterialRepository repository, IEventPublisher eve
             await events.PublishAsync("material-urgent", id);
         else
             await events.PublishAsync("material-created", id);
+        Created?.Invoke(id);
 
         return id;
     }

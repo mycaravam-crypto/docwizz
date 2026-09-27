@@ -9,9 +9,8 @@ static class Diff
     // Kinds worth reporting; properties/modules churn with every edit and carry no docs of their own.
     static readonly string[] Reported = ["class", "record", "struct", "interface", "enum", "method", "constructor",
         "endpoint", "component", "function", "store", "route"];
-    static readonly string[] DependencyKinds = ["calls", "injects", "implements", "inherits", "imports", "renders", "dbset", "http"];
 
-    public static DiffResult Compare(Model before, Model after, Config config)
+    public static DiffResult Compare(CodeModel before, CodeModel after, Config config)
     {
         var old = before.Nodes.Where(n => Reported.Contains(n.Kind)).ToDictionary(n => n.Id);
         var now = after.Nodes.Where(n => Reported.Contains(n.Kind)).ToDictionary(n => n.Id);
@@ -48,10 +47,10 @@ static class Diff
 
     static string Key(Violation v) => $"{v.Rule}|{v.FromFile}|{v.To}";
 
-    static HashSet<string> ModuleDeps(Model m)
+    static HashSet<string> ModuleDeps(CodeModel m)
     {
         var files = m.Nodes.ToDictionary(n => n.Id, n => Generator.Folder(n.File));
-        return m.Edges.Where(e => DependencyKinds.Contains(e.Kind) && files.ContainsKey(e.From) && files.ContainsKey(e.To))
+        return m.Edges.Where(e => CodeModel.DependencyKinds.Contains(e.Kind) && files.ContainsKey(e.From) && files.ContainsKey(e.To))
             .Select(e => (From: files[e.From], To: files[e.To])).Where(d => d.From != d.To)
             .Select(d => $"{d.From} → {d.To}").ToHashSet();
     }

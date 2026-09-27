@@ -1,4 +1,6 @@
 using Fixture.Application;
+using Fixture.Domain;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Fixture.Api;
@@ -8,7 +10,7 @@ namespace Fixture.Api;
 public class MaterialController(IMaterialService service) : ControllerBase
 {
     [HttpGet("{id}")]
-    public async Task<IActionResult> Get(int id) => Ok(await service.GetAsync(id));
+    public async Task<ActionResult<Material?>> Get(int id) => Ok(await service.GetAsync(id));
 
     // Undocumented public endpoint (should be flagged)
     [HttpPost]
@@ -17,4 +19,15 @@ public class MaterialController(IMaterialService service) : ControllerBase
         var id = await service.CreateAsync(name, quantity, unit, location, requestedBy, urgent);
         return CreatedAtAction(nameof(Get), new { id }, id);
     }
+
+    /// <summary>Renames a material.</summary>
+    /// <param name="id">Material id.</param>
+    /// <param name="request">The new name.</param>
+    [Authorize]
+    [HttpPut("{id}")]
+    public async Task<ActionResult<Material>> Rename(int id, [FromBody] RenameMaterialRequest request) =>
+        await service.GetAsync(id) ?? throw new KeyNotFoundException();
 }
+
+/// <summary>Request body for renaming a material.</summary>
+public record RenameMaterialRequest(string Name);

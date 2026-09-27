@@ -189,7 +189,7 @@ function scanRoutes(file, sf, imports, line) {
           const imp = c.body.getText(sf).match(/import\(\s*['"`]([^'"`]+)['"`]\s*\)/)
           if (imp) target = resolveImport(file, imp[1])
         }
-        if (target) edge(id, fileId(target), 'routes')
+        if (target) edge(id, fileId(target), 'routes-to')
       }
     }
     ts.forEachChild(n, walk)

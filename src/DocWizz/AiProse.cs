@@ -23,7 +23,7 @@ static class AiProse
 
     // Returns node id → summary, from cache and (when allowed) fresh API calls.
     public static async Task<Dictionary<string, string>> Summaries(
-        string root, Model model, List<Finding> findings, string cacheFile, bool call)
+        string root, CodeModel model, List<Finding> findings, string cacheFile, bool call)
     {
         var cache = Load(cacheFile);
         var targets = findings.Where(f => f.Missing.Contains("summary") && f.Node.Hash is not null)
@@ -105,7 +105,7 @@ static class AiProse
     }
 
     // Facts JSON for one symbol: what the graph knows, plus its own source lines.
-    class Facts(string root, Model model)
+    class Facts(string root, CodeModel model)
     {
         readonly Dictionary<string, Node> nodes = model.Nodes.ToDictionary(n => n.Id);
         readonly ILookup<string, Edge> outgoing = model.Edges.ToLookup(e => e.From);

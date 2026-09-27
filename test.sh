@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 model=$(mktemp)
 out=$(dotnet run --project src/DocWizz -- scan fixture "$model")
 echo "$out"
-grep -q "Files  13" <<<"$out"  # tests/ excluded
+grep -q "Files  14" <<<"$out"  # tests/ excluded
 
 python3 - "$model" <<'PY'
 import json, sys
@@ -22,7 +22,7 @@ for e in [
     ("injects", A + "MaterialService", A + "IEventPublisher"),
     ("calls", A + "MaterialService." + create, A + "IEventPublisher.PublishAsync(string, int)"),
     ("registers", A + "IMaterialService", A + "MaterialService"),
-    ("dbset", I + "AppDbContext", D + "Material"),
+    ("persists", I + "AppDbContext", D + "Material"),
     ("calls", D + "Material.Save(Fixture.Infrastructure.SqlMaterialRepository)", I + "SqlMaterialRepository.AddAsync(Fixture.Domain.Material)"),
 ]:
     assert e in edges, f"missing edge {e}"
@@ -37,6 +37,24 @@ assert "Places an order" in nodes["cs:endpoint:POST /orders"]["doc"]
 assert ("injects", "cs:endpoint:POST /orders", I + "AppDbContext") in edges
 assert not any("Tests" in n["id"] for n in nodes.values()), "tests/ not excluded"
 
+# Signatures and the API model
+create_svc = nodes[A + "MaterialService." + create]
+assert create_svc["returns"] == "int" and create_svc["throws"] == ["ArgumentException"], create_svc
+assert "urgent: bool" in create_svc["parameters"]
+rename = nodes[API + "MaterialController.Rename(int, Fixture.Api.RenameMaterialRequest)"]
+assert rename["route"] == "api/materials/{id}" and "authorize" in rename["tags"] and rename["returns"] == "Material", rename
+assert "[body] request: RenameMaterialRequest" in rename["parameters"]
+assert nodes[API + "MaterialController.Get(int)"]["returns"] == "Material?"
+grouped = nodes["cs:endpoint:DELETE /admin/cache"]  # MapGroup prefix + group-level RequireAuthorization
+assert "authorize" in grouped["tags"], grouped
+# C# events, EF, projects and packages
+assert ("publishes", A + "MaterialService." + create, A + "MaterialService.Created") in edges
+assert ("subscribes", A + "MaterialNotifier.Attach(Fixture.Application.MaterialService)", A + "MaterialService.Created") in edges
+assert nodes["proj:backend/Fixture.csproj"]["kind"] == "project"
+deps = {(e["from"], e["to"]) for e in m["edges"] if e["kind"] == "depends-on"}
+assert ("proj:backend/Fixture.csproj", "pkg:nuget:Microsoft.EntityFrameworkCore.SqlServer") in deps
+assert ("proj:frontend/package.json", "pkg:npm:pinia") in deps
+
 # Frontend → backend chain: component → store → api client → HTTP → controller endpoint
 F = "frontend/src/"
 for e in [
@@ -45,7 +63,7 @@ for e in [
     ("http", "ts:" + F + "api/materialApi.ts#createMaterial", API + "MaterialController.Create(string, int, string, string, string, bool)"),
     ("http", "ts:" + F + "api/materialApi.ts#getMaterial", API + "MaterialController.Get(int)"),
     ("renders", "vue:" + F + "components/MaterialTable.vue", "vue:" + F + "components/MaterialForm.vue"),
-    ("routes", "route:/materials", "vue:" + F + "components/MaterialTable.vue"),
+    ("routes-to", "route:/materials", "vue:" + F + "components/MaterialTable.vue"),
 ]:
     assert e in edges, f"missing edge {e}"
 form = nodes["vue:" + F + "components/MaterialForm.vue"]
@@ -82,6 +100,7 @@ for f in index.md architecture.md api.md frontend.md quality.md modules/backend-
   [ -f "$docs/$f" ] || { echo "missing $f"; exit 1; }
 done
 grep -q "| POST | \`/api/materials\` |.*\`createMaterial\`" "$docs/api.md"
+grep -q "| PUT | \`/api/materials/{id}\` | Renames a material. | \`id: int\`<br>\`\[body\] request: RenameMaterialRequest\` | \`Material\` | required |" "$docs/api.md"
 grep -q "ARCH-001 | domain → infrastructure" "$docs/architecture.md"
 grep -q "/materials\` | \[MaterialTable\]" "$docs/frontend.md"
 grep -q "n0 --> n1" "$docs/modules/backend-Application.md"
