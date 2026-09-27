@@ -55,7 +55,7 @@ ARCH-003 module cycle, ARCH-004 layer bypassed.
 
 ## Generated docs
 
-`index.md`, `architecture.md` (dependency view), `api.md`, `frontend.md`, `quality.md`, `modules/*`,
+`index.md` (technology from project files, building blocks by role, sizes), `architecture.md` (dependency view), `api.md`, `frontend.md`, `quality.md`, `modules/*`,
 `views/` (context, containers, components, data, deployment) and `architecture-description.md` (structured after
 ISO/IEC/IEEE 42010). Pages start with a marker and are regenerated; anything without it — including everything you
 write in `docs/architecture/` — is linked, never overwritten.

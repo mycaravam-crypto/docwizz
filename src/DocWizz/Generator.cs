@@ -52,8 +52,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         sb.AppendLine($"# {Path.GetFileName(Path.GetFullPath(root))}\n");
         sb.AppendLine($"Generated from commit `{model.Commit ?? "unknown"}`.\n");
         sb.AppendLine("| | |\n|---|---|");
-        foreach (var (label, kind) in new[] { ("Classes & records", "class"), ("Methods", "method"), ("API endpoints", "endpoint"),
-                     ("Vue components", "component"), ("Frontend functions", "function"), ("Routes", "route") })
+        foreach (var (label, kind) in new[] { ("Classes & records", "class"), ("Methods", "method"), ("Frontend functions", "function") })
         {
             var n = kind == "class" ? kinds.GetValueOrDefault("class") + kinds.GetValueOrDefault("record") : kinds.GetValueOrDefault(kind);
             if (n > 0) sb.AppendLine($"| {label} | {n} |");
@@ -65,9 +64,61 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             sb.AppendLine($"🤖 marks {drafts.Count} AI-drafted summaries for code that has no docs yet — review them, then move them into the code.\n");
         sb.AppendLine("- [Architecture description](architecture-description.md)\n- [Architecture](architecture.md)\n- [API endpoints](api.md)\n" +
             "- [Frontend](frontend.md)\n- [Quality](quality.md)\n");
+        if (Technology().ToList() is { Count: > 0 } tech)
+            sb.AppendLine("## Technology\n\n" + string.Join("\n", tech.Select(t => $"- {t}")) + "\n");
+        var blocks = Roles.Select(r => (r.Label, Count: model.Nodes.Count(n => n.Kind == r.Match || n.Tags?.Contains(r.Match) == true)))
+            .Where(r => r.Count > 0).ToList();
+        if (blocks.Count > 0)
+            sb.AppendLine("## Building blocks\n\n| Role | Count |\n|---|---|\n" + string.Join("\n", blocks.Select(b => $"| {b.Label} | {b.Count} |")) + "\n");
         sb.AppendLine("## Modules\n");
         foreach (var m in modules) sb.AppendLine($"- [{m}](modules/{Slug(m)}.md) — {Layer(m) ?? "no layer"}");
         return sb.ToString();
+    }
+
+    // Kind or tag → label, in reading order (backend, then frontend).
+    static readonly (string Label, string Match)[] Roles = [("Controllers", "controller"), ("API endpoints", "endpoint"),
+        ("Services", "service"), ("Repositories", "repository"), ("Entities", "entity"), ("DbContexts", "dbcontext"),
+        ("Background services", "background-service"), ("Middleware", "middleware"), ("SignalR hubs", "hub"), ("Options", "options"),
+        ("Vue components", "component"), ("Views", "view"), ("Stores", "store"), ("Composables", "composable"), ("Routes", "route")];
+
+    // Well-known packages → what they tell a reader about the stack. Anything else is in views/context.md.
+    // ponytail: a short curated list; extend it (or read it from config) when a project's stack goes unnamed.
+    static readonly (string Package, string Label)[] KnownPackages = [
+        ("Microsoft.EntityFrameworkCore.SqlServer", "Entity Framework Core, SQL Server"),
+        ("Npgsql.EntityFrameworkCore.PostgreSQL", "Entity Framework Core, PostgreSQL"),
+        ("Microsoft.EntityFrameworkCore.Sqlite", "Entity Framework Core, SQLite"),
+        ("Pomelo.EntityFrameworkCore.MySql", "Entity Framework Core, MySQL"),
+        ("Microsoft.EntityFrameworkCore", "Entity Framework Core"), ("Dapper", "Dapper"), ("Npgsql", "PostgreSQL"),
+        ("MediatR", "MediatR"), ("MassTransit", "MassTransit"), ("Hangfire.Core", "Hangfire"), ("Serilog", "Serilog"),
+        ("Swashbuckle.AspNetCore", "Swagger / OpenAPI"), ("Microsoft.AspNetCore.OpenApi", "OpenAPI"),
+        ("Microsoft.AspNetCore.SignalR", "SignalR"), ("vue", "Vue"), ("nuxt", "Nuxt"), ("pinia", "Pinia"), ("vuex", "Vuex"),
+        ("vue-router", "Vue Router"), ("axios", "axios"), ("vite", "Vite"), ("vuetify", "Vuetify"), ("quasar", "Quasar"),
+        ("primevue", "PrimeVue"), ("element-plus", "Element Plus"), ("typescript", "TypeScript")];
+
+    // From the project files only: SDK, target frameworks, well-known packages with their declared version.
+    IEnumerable<string> Technology()
+    {
+        foreach (var p in model.Nodes.Where(n => n.Kind == "project" && n.Tags?.Contains("dotnet") == true))
+        {
+            var sdk = p.Tags!.FirstOrDefault(t => t.StartsWith("Microsoft.NET.Sdk"));
+            var kind = sdk switch
+            {
+                "Microsoft.NET.Sdk.Web" => "ASP.NET Core", "Microsoft.NET.Sdk.Worker" => ".NET worker",
+                "Microsoft.NET.Sdk.Razor" => "Razor class library", "Microsoft.NET.Sdk.BlazorWebAssembly" => "Blazor WebAssembly",
+                _ => ".NET",
+            };
+            var tfms = p.Tags!.Where(t => t.StartsWith("net")).ToList();
+            yield return $"`{p.Name}`: {kind}{(tfms.Count > 0 ? $" on {string.Join(", ", tfms)}" : "")}";
+        }
+        var versions = model.Edges.Where(e => e.Kind == "depends-on").GroupBy(e => e.To).ToDictionary(g => g.Key, g => g.First().Label);
+        var packages = model.Nodes.Where(n => n.Kind == "package").ToDictionary(n => n.Name, n => n.Id);
+        var named = new List<string>();  // "Entity Framework Core, PostgreSQL" already names EF Core and PostgreSQL
+        foreach (var (package, label) in KnownPackages)
+            if (packages.TryGetValue(package, out var id) && !named.Any(l => l.Contains(label)))
+            {
+                named.Add(label);
+                yield return versions.GetValueOrDefault(id) is { } v ? $"{label} ({v})" : label;
+            }
     }
 
     string ArchitecturePage(List<string> modules)

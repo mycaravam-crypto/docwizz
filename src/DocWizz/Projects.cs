@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Xml.Linq;
 
-// .csproj and package.json → project nodes, `references` between projects, `depends-on` external packages.
+// .csproj and package.json → project nodes (tags: ecosystem, SDK, target frameworks), `references` between projects, `depends-on` external packages.
 static class Projects
 {
     public static (List<Node>, List<Edge>) Scan(string root, IEnumerable<string> files)
@@ -25,8 +25,10 @@ static class Projects
                 {
                     var xml = XDocument.Load(file);
                     var sdk = xml.Root?.Attribute("Sdk")?.Value;
+                    var frameworks = xml.Descendants().Where(e => e.Name.LocalName is "TargetFramework" or "TargetFrameworks")
+                        .SelectMany(e => e.Value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
                     nodes.Add(new Node(id, "project", Path.GetFileNameWithoutExtension(file), rel, 1,
-                        Tags: sdk is null ? ["dotnet"] : ["dotnet", sdk]));
+                        Tags: [.. (string[])(sdk is null ? ["dotnet"] : ["dotnet", sdk]), .. frameworks]));
                     foreach (var p in xml.Descendants("PackageReference"))
                         if (p.Attribute("Include")?.Value is { } name) Package(id, "nuget", name, p.Attribute("Version")?.Value, rel);
                     foreach (var p in xml.Descendants("ProjectReference"))

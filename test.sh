@@ -152,6 +152,10 @@ done
 grep -q "| POST | \`/api/materials\` |.*\`createMaterial\`" "$docs/api.md"
 grep -q "| PUT | \`/api/materials/{id}\` | Renames a material. | \`id: int\`<br>\`\[body\] request: RenameMaterialRequest\` | \`Material\` | required |" "$docs/api.md"
 grep -q "ARCH-001 | domain → infrastructure" "$docs/architecture.md"
+grep -q "^- \`Fixture\`: ASP.NET Core on net9.0" "$docs/index.md"
+grep -q "^- Entity Framework Core, SQL Server (9.0.0)" "$docs/index.md"
+grep -q "^- Vue (^3.5.0)" "$docs/index.md"
+grep -q "| Repositories | 1 |" "$docs/index.md" && grep -q "| Background services | 1 |" "$docs/index.md"
 grep "MaterialService.CreateAsync" "$docs/quality.md" | grep -q "| ✓ |"  # tested
 grep "MaterialController.Create(" "$docs/quality.md" | grep -q "| — |"  # untested
 grep -q "/materials\` | \[MaterialTable\]" "$docs/frontend.md"
