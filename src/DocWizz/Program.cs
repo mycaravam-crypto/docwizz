@@ -10,7 +10,7 @@ var opts = new Dictionary<string, string>();
 var pos = new List<string>();
 for (var i = 0; i < args.Length; i++)
 {
-    if (args[i] == "--ai") opts["ai"] = "";
+    if (args[i] is "--ai" or "--html") opts[args[i][2..]] = "";
     else if (args[i].StartsWith("--") && valued.Contains(args[i][2..]) && i + 1 < args.Length) opts[args[i][2..]] = args[++i];
     else if (args[i].StartsWith("--")) return Usage($"unknown option {args[i]}");
     else pos.Add(args[i]);
@@ -48,7 +48,7 @@ switch (cmd)
     case "architecture":
         return ArchitectureCommand(path, config, json);
     case "generate":
-        return await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"));
+        return await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html"));
     default:
         return Usage($"unknown command {cmd}");
 }
@@ -82,6 +82,7 @@ static int Usage(string? error)
           docwizz architecture <dir>        layers, dependencies, violations; exit 1 above check thresholds
           docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
             [--ai]                          draft missing summaries with a local Ollama (cached per code hash)
+            [--html]                        also write an HTML page next to every Markdown page
         options:
           --profile <name|file.yaml>        documentation profile: {string.Join(", ", Profiles.Names)}, or your own file
           --format console|json             analyze/check/architecture output
@@ -191,7 +192,7 @@ static object DocumentationJson(CodeModel model, Config config, List<Documentati
     };
 }
 
-static async Task<int> Generate(string root, string outDir, Config config, bool ai)
+static async Task<int> Generate(string root, string outDir, Config config, bool ai, bool html = false)
 {
     var model = BuildModel(root, config).Model;
     var findings = Analyzer.Analyze(model, config);
@@ -210,7 +211,7 @@ static async Task<int> Generate(string root, string outDir, Config config, bool 
     }
     var summaries = drafts.Where(d => !d.Key.StartsWith("module:") && d.Value.Text.Length > 0).ToDictionary(d => d.Key, d => d.Value.Text);
     var overviews = drafts.Where(d => d.Key.StartsWith("module:")).ToDictionary(d => d.Key["module:".Length..], d => d.Value);
-    var (pages, changed) = new Generator(root, outDir, model, findings, arch, config, summaries, overviews).Run();
+    var (pages, changed) = new Generator(root, outDir, model, findings, arch, config, summaries, overviews) { WriteHtml = html }.Run();
 
     // Fingerprint for `docwizz diff`: the model these docs were generated from.
     Directory.CreateDirectory(Path.Combine(outDir, ".docwizz"));

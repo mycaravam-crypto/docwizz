@@ -11,6 +11,7 @@ docwizz check <dir>               # report, exit 1 if thresholds fail (CI)
 docwizz architecture <dir>        # layers, layer dependencies, violations, cycles
 docwizz generate <dir> [out]      # Markdown + Mermaid docs (default <dir>/docs)
 docwizz generate <dir> --ai       # + summaries for undocumented items, drafted by a self-hosted Ollama
+docwizz generate <dir> --html     # + an HTML page next to every Markdown page (links, anchors, Mermaid, search)
 docwizz diff <dir> [ref]          # changed symbols + affected doc pages (default baseline: docs/.docwizz/model.json)
 docwizz diff [dir] <base> <head>  # same, between two git refs (docwizz diff HEAD~1 HEAD)
 docwizz check <dir> --since <ref> # CI: fail only on critical gaps / violations introduced since <ref>

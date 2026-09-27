@@ -10,5 +10,4 @@ or human-written. AI runs on a self-hosted model only; code is never sent to a p
 
 ## Eventually
 
-- HTML output.
 - More languages and frameworks: SQL (stored procedures, migrations), React/Angular, Java/Spring.

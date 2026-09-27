@@ -416,6 +416,18 @@ if grep -q "views/deployment.md" <<<"$changed"; then echo "unaffected page rewri
 [ "$(stat -c %Y "$inc/docs/views/deployment.md")" = "$(date -d '2000-01-01' +%s)" ] || { echo "unchanged page touched"; exit 1; }
 rm -rf "$inc"
 
+# HTML output: a twin next to every page, links between generated pages rewritten, anchors kept, search as a script
+html=$(mktemp -d)
+dw generate fixture "$html" --html >/dev/null 2>&1
+for f in index api architecture modules/backend-Application views/deployment; do [ -f "$html/$f.html" ] || { echo "missing $f.html"; exit 1; }; done
+grep -q '<td>GET</td>' "$html/api.html" && grep -q 'id="flows"' "$html/api.html"
+grep -q 'href="../api.html#flows"' "$html/modules/backend-Application.html" && grep -q 'id="materialservice"' "$html/modules/backend-Application.html"
+grep -q 'class="mermaid"' "$html/architecture.html"
+grep -q '^window.docwizzSearch = \[' "$html/search.js"
+dw generate fixture "$html" >/dev/null 2>&1   # without --html the twins go, like any stale generated page
+[ ! -f "$html/index.html" ] || { echo "stale HTML kept"; exit 1; }
+rm -rf "$html"
+
 # Architecture risks: coupling table, entities in API responses, logic in the API layer, external packages in the domain
 risk=$(mktemp -d); cp -r fixture/. "$risk"
 cat > "$risk/backend/Api/PricingController.cs" <<'CS'
