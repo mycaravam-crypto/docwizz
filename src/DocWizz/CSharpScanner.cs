@@ -7,7 +7,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 record Node(string Id, string Kind, string Name, string File, int Line,
     string? Visibility = null, string? Doc = null, int? Complexity = null,
-    int? Params = null, string? Hash = null, List<string>? Tags = null, string? Route = null);
+    int? Params = null, string? Hash = null, List<string>? Tags = null, string? Route = null, int? EndLine = null);
 
 record Edge(string From, string To, string Kind);
 
@@ -53,7 +53,7 @@ static class CSharpScanner
 
                 nodes.Add(new Node(typeId, Kind(type), type.Name, rel, Line(decl),
                     Vis(type), Doc(type), Hash: Hash(decl), Tags: tags.Count > 0 ? tags : null,
-                    Route: RouteArg(decl.AttributeLists, "Route")));
+                    Route: RouteArg(decl.AttributeLists, "Route"), EndLine: EndLine(decl)));
 
                 if (type.BaseType is { } bt && InSource(bt)) edges.Add(new(typeId, Id(bt), "inherits"));
                 foreach (var i in type.Interfaces.Where(InSource)) edges.Add(new(typeId, Id(i), "implements"));
@@ -107,7 +107,7 @@ static class CSharpScanner
             edges.Add(new(typeId, Id(entity), "dbset"));
 
         nodes.Add(new Node(id, Kind(sym), sym.Name, rel, Line(member), Vis(sym), Doc(sym),
-            Complexity(member), ps, Hash(member), tags, route));
+            Complexity(member), ps, Hash(member), tags, route, EndLine(member)));
         edges.Add(new(typeId, id, "contains"));
 
         AddCalls(sm, member, id, edges);
@@ -180,7 +180,7 @@ static class CSharpScanner
         if (text is { Length: > 0 }) doc ??= new XElement("member", new XElement("summary", text)).ToString();
 
         nodes.Add(new Node(id, "endpoint", $"{verb} {route}", rel, Line(inv), "public", doc,
-            Complexity(handler), Hash: Hash(inv), Tags: ["endpoint", verb, "minimal-api"], Route: route));
+            Complexity(handler), Hash: Hash(inv), Tags: ["endpoint", verb, "minimal-api"], Route: route, EndLine: EndLine(inv)));
     }
 
     // 1 + decision points.
@@ -213,6 +213,7 @@ static class CSharpScanner
     static bool InSource(ISymbol s) => s.Locations.Any(l => l.IsInSource);
     static string Id(ISymbol s) => "cs:" + s.ToDisplayString(IdFormat);
     static int Line(SyntaxNode n) => n.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+    static int EndLine(SyntaxNode n) => n.GetLocation().GetLineSpan().EndLinePosition.Line + 1;
     static string Vis(ISymbol s) => s.DeclaredAccessibility.ToString().ToLowerInvariant();
 
     static string? Doc(ISymbol s)

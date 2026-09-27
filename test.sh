@@ -120,4 +120,21 @@ grep -q "✓ architecture.md" <<<"$impact"
 grep -q "Introduced: 0 critical, 1 other documentation gaps, 1 architecture violations" <<<"$impact"
 grep -q "ARCH-001  domain → infrastructure  backend/Domain/Audit.cs" <<<"$impact"
 rm -rf "$repo"
+
+# AI drafts: served from the cache per (symbol, body hash), marked, never over a written summary
+docs=$(mktemp -d)
+dotnet run --project src/DocWizz -- generate fixture "$docs" >/dev/null 2>&1
+python3 - "$docs" <<'PY'
+import json, sys
+d = sys.argv[1]
+nodes = {n["id"]: n for n in json.load(open(d + "/.docwizz/model.json"))["nodes"]}
+get = "cs:Fixture.Api.MaterialController.Get(int)"
+json.dump({f"{get}@{nodes[get]['hash']}": "Returns one material by id.",
+           "cs:Fixture.Api.MaterialController.Get(int)@stale": "outdated draft"}, open(d + "/.docwizz/ai-cache.json", "w"))
+PY
+dotnet run --project src/DocWizz -- generate fixture "$docs" >/dev/null 2>&1
+grep -q "| GET | \`/api/materials/{id}\` | 🤖 _Returns one material by id._ |" "$docs/api.md"
+grep -q "🤖 marks 1 AI-drafted" "$docs/index.md"
+if grep -q "outdated draft" -r "$docs"/*.md; then echo "stale draft used"; exit 1; fi
+rm -rf "$docs"
 echo PASS

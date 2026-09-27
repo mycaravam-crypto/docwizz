@@ -5,6 +5,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 // ponytail: hand-rolled arg switch; move to System.CommandLine once commands grow options
+var ai = args.Contains("--ai");
+args = args.Where(a => a != "--ai").ToArray();
 var cmd = args.ElementAtOrDefault(0);
 var path = args.ElementAtOrDefault(1) ?? ".";
 
@@ -27,7 +29,7 @@ switch (cmd)
     case "diff":
         return DiffCommand(path, args.ElementAtOrDefault(2), enforce: false);
     case "generate":
-        return Generate(path, args.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"));
+        return await Generate(path, args.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), ai);
     default:
         Console.Error.WriteLine("""
             usage:
@@ -37,6 +39,7 @@ switch (cmd)
               docwizz check <dir> --since <ref> exit 1 only on gaps/violations introduced since <ref>
               docwizz diff <dir> [ref]          what changed vs <ref> (default: docs/.docwizz/model.json)
               docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
+                [--ai]                          draft missing summaries with Claude (cached per code hash)
             """);
         return 1;
 }
@@ -90,13 +93,15 @@ static void WriteModel(Model model, string file) =>
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     }));
 
-static int Generate(string root, string outDir)
+static async Task<int> Generate(string root, string outDir, bool ai)
 {
     var config = Config.Load(root);
     var model = BuildModel(root, config).Model;
     var findings = Analyzer.Analyze(model, config);
     var arch = Architecture.Check(model, config.Architecture);
-    var written = new Generator(root, outDir, model, findings, arch, config.Architecture).Run();
+    // Cached drafts are always used; new ones are only requested with --ai.
+    var drafts = await AiProse.Summaries(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-cache.json"), ai);
+    var written = new Generator(root, outDir, model, findings, arch, config.Architecture, drafts).Run();
 
     // Fingerprint for `docwizz diff`: the model these docs were generated from.
     Directory.CreateDirectory(Path.Combine(outDir, ".docwizz"));

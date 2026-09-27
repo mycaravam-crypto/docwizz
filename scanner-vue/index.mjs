@@ -127,7 +127,8 @@ function scanScript(file, sf, owner, lineOffset, component) {
     const id = `${fileId(file)}#${name}`
     const tags = isStore ? ['store'] : name.startsWith('use') ? ['composable'] : undefined
     nodes.push({
-      id, kind: isStore ? 'store' : 'function', name, file: rel(file), line: line(decl), visibility: 'public',
+      id, kind: isStore ? 'store' : 'function', name, file: rel(file), line: line(decl),
+      endLine: sf.getLineAndCharacterOfPosition(decl.getEnd()).line + 1 + lineOffset, visibility: 'public',
       doc: jsDoc(decl), complexity: complexity(fn), params: isStore ? undefined : fn.parameters.length,
       hash: hash(fn.getText(sf)), tags,
     })
@@ -221,7 +222,8 @@ for (const file of files) {
       const block = descriptor.scriptSetup ?? descriptor.script
       const component = { emits: false }
       const node = {
-        id, kind: 'component', name: path.basename(file, '.vue'), file: rel(file), line: 1, visibility: 'public',
+        id, kind: 'component', name: path.basename(file, '.vue'), file: rel(file), line: 1,
+        endLine: src.split('\n').length, visibility: 'public',
         hash: hash(src), tags: rel(file).includes('/views/') ? ['view'] : undefined,
       }
       nodes.push(node)
