@@ -17,20 +17,14 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     readonly ILookup<string, string> implOf = model.Edges.Where(e => e.Kind == "implements").ToLookup(e => e.From, e => e.To);
     readonly Dictionary<string, DocumentationItem> findingOf = findings.ToDictionary(f => f.Node.Id);
 
-    public List<string> Run()
+    // Renders every page, then writes only those whose content changed and removes generated pages that are gone:
+    // unchanged pages keep their file (and timestamp), so regenerating after a small change touches only what it affects.
+    public (List<string> Pages, List<string> Changed) Run()
     {
         Directory.CreateDirectory(Path.Combine(outDir, "modules"));
         Directory.CreateDirectory(Path.Combine(outDir, "views"));
-        // Remove only pages we generated earlier, so renamed/deleted modules don't linger.
-        foreach (var f in Directory.EnumerateFiles(outDir, "*.md", SearchOption.AllDirectories))
-            if (File.ReadLines(f).FirstOrDefault() == Marker) File.Delete(f);
-
-        var written = new List<string>();
-        void Write(string rel, string body)
-        {
-            File.WriteAllText(Path.Combine(outDir, rel), $"{Marker}\n{body}");
-            written.Add(rel);
-        }
+        var pages = new Dictionary<string, string>();
+        void Write(string rel, string body) => pages[rel] = $"{Marker}\n{body}";
 
         var modules = model.Nodes.Where(n => n.Kind is not ("route" or "project" or "package" or "external" or "config") || parent.ContainsKey(n.Id))
             .GroupBy(n => Folder(n.File)).OrderBy(g => g.Key).ToList();
@@ -42,9 +36,20 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         Write("quality.md", Quality());
         foreach (var (page, _, body) in Views()) Write($"views/{page}.md", body());
         Write("architecture-description.md", DescriptionPage());
-        File.WriteAllText(Path.Combine(outDir, "search.json"), SearchIndex());
-        written.Add("search.json");
-        return written;
+        pages["search.json"] = SearchIndex();
+
+        // Only pages we generated earlier are removed, so renamed/deleted modules don't linger and hand-written ones stay.
+        foreach (var f in Directory.EnumerateFiles(outDir, "*.md", SearchOption.AllDirectories))
+            if (!pages.ContainsKey(Path.GetRelativePath(outDir, f).Replace('\\', '/')) && File.ReadLines(f).FirstOrDefault() == Marker) File.Delete(f);
+        var changed = new List<string>();
+        foreach (var (rel, content) in pages)
+        {
+            var file = Path.Combine(outDir, rel);
+            if (File.Exists(file) && File.ReadAllText(file) == content) continue;
+            File.WriteAllText(file, content);
+            changed.Add(rel);
+        }
+        return ([.. pages.Keys], changed);
     }
 
     // Everything a reader might look up, with the page (and anchor) that documents it: for search boxes and tooling.

@@ -403,6 +403,19 @@ echo "architecture: { severity: { ARCH-001: extreme } }" > "$repo/docwizz.yaml"
 if dw architecture "$repo" >/dev/null 2>&1; then echo "bad severity accepted"; exit 1; fi
 rm -rf "$repo"
 
+# Incremental regeneration: unchanged pages are not rewritten; a change rewrites only the pages it affects
+inc=$(mktemp -d); cp -r fixture/. "$inc"
+dw generate "$inc" "$inc/docs" >/dev/null 2>&1
+touch -d '2000-01-01' "$inc/docs/views/deployment.md"
+again=$(dw generate "$inc" "$inc/docs" 2>/dev/null)
+grep -q ": 0 changed$" <<<"$again" || { echo "$again"; exit 1; }
+sed -i 's|/// <summary>Stock for one article.</summary>|/// <summary>Stock for one article, from the ERP.</summary>|' "$inc/backend/Api/StockController.cs"
+changed=$(dw generate "$inc" "$inc/docs" 2>/dev/null)
+grep -q "changed (.*modules/backend-Api.md" <<<"$changed" || { echo "$changed"; exit 1; }
+if grep -q "views/deployment.md" <<<"$changed"; then echo "unaffected page rewritten: $changed"; exit 1; fi
+[ "$(stat -c %Y "$inc/docs/views/deployment.md")" = "$(date -d '2000-01-01' +%s)" ] || { echo "unchanged page touched"; exit 1; }
+rm -rf "$inc"
+
 # Architecture risks: coupling table, entities in API responses, logic in the API layer, external packages in the domain
 risk=$(mktemp -d); cp -r fixture/. "$risk"
 cat > "$risk/backend/Api/PricingController.cs" <<'CS'

@@ -85,7 +85,8 @@ key components by use, API, data and persistence, external systems, flows throug
 observations with their reason — each only when the code has something to say — then the per-component reference,
 with backlinks to the flows that reach each component and the configuration it reads),
 `views/` (context, containers, components, data, deployment), `architecture-description.md` (structured after
-ISO/IEC/IEEE 42010) and `search.json` (every component, endpoint, route, configuration key and module with its page). Pages start with a marker and are regenerated; anything without it — including everything you
+ISO/IEC/IEEE 42010) and `search.json` (every component, endpoint, route, configuration key and module with its page).
+Regenerating writes only the pages whose content changed and says which; unchanged pages keep their files. Pages start with a marker and are regenerated; anything without it — including everything you
 write in `docs/architecture/` — is linked, never overwritten.
 
 `--ai` sends each undocumented item's facts (graph neighbours, signature, derived sections, side effects) and its own

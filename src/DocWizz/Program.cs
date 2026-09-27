@@ -200,14 +200,15 @@ static async Task<int> Generate(string root, string outDir, Config config, bool 
     var drafts = await AiProse.Summaries(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-cache.json"), ai);
     foreach (var f in findings)
         if (drafts.TryGetValue(f.Node.Id, out var draft)) f.Sections["summary"] = new(Origin.Ai, draft.Text, draft.Sources);
-    var written = new Generator(root, outDir, model, findings, arch, config, drafts.ToDictionary(d => d.Key, d => d.Value.Text)).Run();
+    var (pages, changed) = new Generator(root, outDir, model, findings, arch, config, drafts.ToDictionary(d => d.Key, d => d.Value.Text)).Run();
 
     // Fingerprint for `docwizz diff`: the model these docs were generated from.
     Directory.CreateDirectory(Path.Combine(outDir, ".docwizz"));
     WriteModel(model, Path.Combine(outDir, ".docwizz", "model.json"));
     File.WriteAllText(Path.Combine(outDir, ".docwizz", "documentation.json"),
         JsonSerializer.Serialize(DocumentationJson(model, config, findings), JsonOptions()));
-    Console.WriteLine($"{written.Count} pages → {outDir} (commit {model.Commit ?? "unknown"})");
+    Console.WriteLine($"{pages.Count} pages → {outDir} (commit {model.Commit ?? "unknown"}): {changed.Count} changed" +
+        (changed.Count is > 0 and <= 10 ? $" ({string.Join(", ", changed.Order())})" : ""));
     return 0;
 }
 
