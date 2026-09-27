@@ -1,118 +1,125 @@
 # docwizz
-Small tool, creates documentation. Builds a semantic model of the code first; documentation is one output of it.
-Finds the code that *needs* docs and doesn't have them, and checks the architecture while it's at it.
+
+**Point it at a repository and find out what's undocumented, what breaks the architecture, and how a request travels
+through the code.** It then writes the docs that can be derived from the code itself.
+
+docwizz reads C#, Java/Spring, Vue, React, Angular, TypeScript, SQL and deployment files. It builds a model of the code
+(symbols, endpoints, calls, dependencies, external systems) and reports on it. Everything it says comes from the code.
+It never guesses intent, and it marks whether each item is *detected*, *inferred* or *AI-drafted*.
+
+- **Gaps:** which public, complex or side-effecting code has no docs, ranked by how much it needs them.
+- **Architecture:** layer violations, cycles and risky patterns (for example, a controller talking to the database).
+- **Docs:** Markdown/HTML pages with Mermaid diagrams: API tables, request flows, system context, data, deployment.
+- **CI:** fails a pull request only on problems *that change introduces*.
+
 How it works: [ARCHITECTURE.md](ARCHITECTURE.md). What's next: [ROADMAP.md](ROADMAP.md).
 
+## Quick start
+
+Needs the [.NET 10 SDK](https://dotnet.microsoft.com/download). For Vue, React, Angular or TypeScript code you also
+need Node.
+
 ```bash
-docwizz init [dir]                # write a starter docwizz.yaml (the defaults, to edit)
-docwizz scan <dir> [model.json]   # write the code model (nodes + edges: facts only)
-docwizz analyze <dir>             # documentation report
-docwizz check <dir>               # report, exit 1 if thresholds fail (CI)
-docwizz architecture <dir>        # layers, layer dependencies, violations, cycles
-docwizz generate <dir> [out]      # Markdown + Mermaid docs (default <dir>/docs)
-docwizz generate <dir> --ai       # + summaries for undocumented items, drafted by a self-hosted Ollama
-docwizz generate <dir> --html     # + an HTML page next to every Markdown page (links, anchors, Mermaid, search)
-docwizz diff <dir> [ref]          # changed symbols + affected doc pages (default baseline: docs/.docwizz/model.json)
-docwizz diff [dir] <base> <head>  # same, between two git refs (docwizz diff HEAD~1 HEAD)
-docwizz check <dir> --since <ref> # CI: fail only on critical gaps / violations introduced since <ref>
-  --profile <name|file.yaml>      # documentation profile (see below)
-  --format json                   # analyze/check/architecture as JSON
-./test.sh                         # smoke test against fixture/ and fixture-legacy/
+git clone https://github.com/mycaravam-crypto/docwizz && cd docwizz
+dotnet build src/DocWizz -c Release
+npm ci --prefix scanner-vue        # only needed for Vue/React/Angular/TypeScript
+alias docwizz="dotnet $PWD/src/DocWizz/bin/Release/net10.0/DocWizz.dll"
+
+docwizz analyze fixture            # try it on the bundled sample app
 ```
 
-Vue/TS support needs Node and a one-time `npm ci` in [scanner-vue/](scanner-vue/) (C# works without it).
+## Examples
 
-## Pipeline
+All output below is real, from the sample app in [fixture/](fixture/). It is an ASP.NET API with a Vue and React
+frontend and some deliberate mistakes.
 
-Source → analyzers (Roslyn for C#, TypeScript + Vue compiler for `.vue`/`.ts`/`.js`, `.csproj`/`package.json`) →
-**code model** ([CodeModel.cs](src/DocWizz/CodeModel.cs)) → documentation analysis + architecture rules →
-**documentation model** → generators (Markdown/Mermaid, JSON). Analyzers never write Markdown.
+### What's missing docs?
 
-The code model holds facts only: symbols, signatures, endpoints (route, input, response, authorization), props/emits,
-projects and packages, and relationships (`contains`, `calls`, `implements`, `inherits`, `injects`, `creates`, `registers`,
-`imports`, `renders`, `routes-to`, `persists`, `publishes`, `subscribes`, `http`, `references`, `depends-on`, `tests`, `connects`,
-`accesses` — a member using an injected dependency of its own type, which is how a request reaches a `DbContext` —,
-`reads`, `binds`).
-External systems (databases, caches, message brokers, HTTP APIs, identity providers, storage, e-mail — see
-[Externals.cs](src/DocWizz/Externals.cs)) are `external` nodes tagged with their category and certainty: `detected`
-(a call shows it: `UseNpgsql`, `AddHttpClient<T>` with a base address, `fetch('https://…')`), `inferred` (only a package
-reference or a single candidate points to it) or `unknown` (a `DbContext` whose database the code doesn't name).
-Configuration keys from `appsettings*.json`, `.env` files, Kubernetes ConfigMaps (`configmap/<name>`) and the env blocks of
-a Helm chart's `values*.yaml` (`helm`) are `config` nodes tagged with the environments that define them; code that reads a key (`config["A:B"]`, `GetSection`, `GetConnectionString`, `GetEnvironmentVariable`) or binds it
-(`Configure<T>`, `AddOptions<T>().BindConfiguration`) points at it (`reads`, `binds`). Values are never stored — only the
-host of a URL, which also names a typed `HttpClient` whose address comes from configuration. `views/deployment.md` lists
-every key with its status: defined and read, set by the deployment (compose/Kubernetes `environment`), read but
-not defined in the repository (unknown), or defined but unread.
+```console
+$ docwizz analyze fixture
+Profile: default
+Documentation  ███████░░░░░░░░░░░░░ 37%
 
-`views/deployment.md` reads the descriptors themselves: compose services (image or build → the project it builds, ports,
-environment variable *names*, `depends_on`, volumes, networks, and the known system an image runs), Kubernetes workloads and Services,
-Dockerfile base images and exposed ports, Terraform/Bicep resource types with the known system each provisions, CI pipelines (GitHub Actions, GitLab, Azure Pipelines, Jenkins, Bitbucket, CircleCI) as descriptors (also
-shown as "provisioned by" in `views/context.md`) — and lists what none of them can tell.
-SQL scripts add stored procedures, functions, views and tables (with the tables each routine touches and the code that
-calls it) and schema migrations in order, shown in `views/data.md`.
-React and Angular frontends are read like Vue: components, props, hooks, routes, and HTTP calls linked to the endpoints
-they reach. Java/Spring code (controllers, services, repositories, entities, `@*Mapping` endpoints, injection, `application.yml`)
-is read into the same model, so flows, API tables and checks work across C# and Java.
-Every node records its `language` (csharp, vue, typescript, javascript, sql, java, msbuild, maven, gradle, npm); C# types carry roles as tags
-(controller, service, repository, entity, dbcontext, background-service, middleware, hub, options).
-Test code (`tests:` globs) only contributes `tests` edges.
+  controller         33%  (3)
+  endpoint           35%  (10)
+  service            50%  (2)
 
-Each documentation item records which sections its profile requires and where each present section comes from:
-`written` (doc comment; with `comment_docs: true`, also a plain `//` block directly above a C# member), `fact` (derived from the model: dependencies, endpoint, input, output, authorization, events,
-state — a Vue component's refs, computed values and watchers),
-`inferred` (heuristics: side effects) or `ai` (drafts — shown with 🤖, never close a gap), plus the source symbols it
-was derived from, with their source locations as `evidence` (`file:line-endLine`; module pages show it too).
-`generate` writes it to `docs/.docwizz/documentation.json`.
+Critical (10)
+────────────────────────────────────────
+  backend/Api/MaterialController.cs:18  Fixture.Api.MaterialController.Create(string, int, string, string, string, bool)
+    undocumented, missing: summary, param  [public; 6 params; side effects: db, event; pattern endpoint]
+  backend/Application/MaterialService.cs:13  Fixture.Application.MaterialService.CreateAsync(...)
+    partial, missing: param  [public; complexity 13; 6 params; side effects: db, event]
+  ...
+```
 
-## Profiles
+Each line tells you where the item is, what is missing, and *why* it needs docs. Trivial code, such as a
+two-line getter, is never flagged.
 
-`default`, `software`, `aspnet`, `vue`, `api`, `architecture`, `technical-publication`, `iso-42010`, `iso-15289` —
-see [Profiles.cs](src/DocWizz/Profiles.cs) — or your organisation's own: a YAML file with the same shape
-(`patterns:`, `architecture_sections:`), passed as `--profile team.yaml` or `profile: team.yaml`. Reports state coverage *against the profile*; nothing claims compliance
-with a standard. `iso-42010`/`iso-15289` also expect human-authored pages in `docs/architecture/`
-(stakeholders, concerns, decisions, …) and fail `check` while they are missing.
+### Does the code follow the architecture?
 
-## Config
+```console
+$ docwizz architecture fixture
+Architecture (3 violations, 1 cycles)
+────────────────────────────────────────
+  ARCH-001  domain → infrastructure  [high]
+    backend/Domain/Material.cs → backend/Infrastructure/SqlMaterialRepository.cs
+    (Fixture.Domain.Material.Save calls Fixture.Infrastructure.SqlMaterialRepository.AddAsync)
+  ARCH-002  ui → http  [medium]
+    frontend/src/components/MaterialTable.vue → GET /api/materials  (MaterialTable calls HTTP directly)
+  ARCH-003  cycle: backend/Domain ↔ backend/Infrastructure
+```
 
-`docwizz.yaml` in the scanned dir (or cwd). Without one, `Config.Default` in [Analyzer.cs](src/DocWizz/Analyzer.cs)
-applies — copy it as a starting point. `profile:` picks the profile; `patterns:` replaces its patterns. Sections are
-XML doc tag names (`summary`, `param`, `returns`, `exception`, `example`, `remarks`, any custom tag) or the derived
-ones above. Architecture rules: `layers` (path globs) and `allow`; ARCH-001 forbidden direction, ARCH-002 direct HTTP,
-ARCH-003 module cycle, ARCH-004 layer bypassed. Violations carry a severity (ARCH-001 high, ARCH-002 medium, ARCH-004 low;
-override with `architecture.severity`); `check.fail_on` sets the lowest severity that fails, `check.max_complexity` fails
-on any symbol above that cyclomatic complexity.
+### Write the docs
 
-## Generated docs
+```console
+$ docwizz generate fixture docs --html
+32 pages → docs (commit af4fd7c): 32 changed
+```
 
-`index.md` (technology from project files, building blocks by role, sizes), `architecture.md` (dependency view), `api.md` (endpoints and
-their flows: handler → services, through interfaces → DbContext → database / external systems), `frontend.md` (components, and
-each route's flow: page → children → stores → API client → endpoint), `quality.md`, `modules/*` (one page per folder: role,
-key components by use, API, data and persistence, external systems, flows through it, documentation gaps and architecture
-observations with their reason — each only when the code has something to say — then the per-component reference,
-with backlinks to the flows that reach each component and the configuration it reads),
-`views/` (context, containers, components, data, deployment), `architecture-description.md` (structured after
-ISO/IEC/IEEE 42010) and `search.json` (every component, endpoint, route, configuration key and module with its page).
-Regenerating writes only the pages whose content changed and says which; unchanged pages keep their files. Pages start with a marker and are regenerated; anything without it — including everything you
-write in `docs/architecture/` — is linked, never overwritten.
+That writes `index`, `architecture`, `api`, `frontend` and `quality` pages, one page per folder under `modules/`, and
+`views/` for context, containers, components, data and deployment. With `--html` you also get a browsable site with
+search. For example, `api.md` traces every endpoint to where it ends up:
 
-`--ai` sends each undocumented item's facts (graph neighbours, signature, derived sections, side effects) and its own
-source lines to a **self-hosted [Ollama](https://ollama.com)** — never to a public AI service — and drafts its summary,
-responsibilities, behaviour, side effects, errors and usage, plus an overview per module. Every drafted sentence cites
-the facts it rests on; a sentence that cites nothing in the facts is dropped, and the rest keep their citations in
-`documentation.json`. Drafts fill only what is missing, never a written or derived section. `OLLAMA_HOST` picks the
-server (default `localhost:11434`), `DOCWIZZ_MODEL` the model (default `qwen2.5-coder:7b`; `ollama pull` it first).
-Every connection is checked on its resolved address and must go to loopback or a private network (10/8, 172.16/12,
-192.168/16, IPv6 unique-local); proxies are bypassed, and Ollama's `…-cloud` models, which run on ollama.com, are
-refused. Drafts are marked 🤖, never replace written docs, and are cached in `docs/.docwizz/ai-cache.json` by
-symbol + body hash together with the symbols they were generated from, so unchanged code is never sent again.
-Without `--ai`, cached drafts are still used and nothing is sent.
+```markdown
+| GET | `/api/stock/{sku}` | Stock for one article. | `sku: string` | `string` | — | StockController.cs:12 | `level` |
 
-## CI
+- `GET /api/stock/{sku}`: StockController → ErpClient → erp.example.com
+- `PUT /api/materials/{id}`: MaterialController → MaterialService → SqlMaterialRepository → AppDbContext → SQL Server (inferred)
+```
 
-The repository is a GitHub Action: on a pull request it runs `docwizz check --since <base>` and posts the result as one
-comment, updated on every push, including ADR candidates (a new external system or layer dependency the change
-introduces, for a human to record), and fails the job when the change introduces critical gaps, failing violations or
-too-complex code.
+Regenerating rewrites only the pages that changed. Pages you write yourself, such as anything in `docs/architecture/`,
+are linked and never overwritten.
+
+### What does my change affect?
+
+```console
+$ docwizz diff . HEAD~2 HEAD
+Documentation impact (vs HEAD~2, at HEAD)
+
+Changed (11)
+  ~ CSharpScanner.Doc(Microsoft.CodeAnalysis.ISymbol)
+  ~ Generator.DeploymentView()
+  ...
+Added (3)
+  + Generator.HostKind(System.Collections.Generic.List<string>)
+```
+
+### Gate pull requests
+
+`docwizz check` exits with 1 when thresholds fail. With `--since`, it fails only on what the change *introduces*, so
+an old codebase can adopt it without fixing everything first:
+
+```console
+$ docwizz check fixture
+check: FAIL — coverage 37% < 80%; 10 critical > 0; 3 violations > 0; 1 cycles > 0
+
+$ docwizz check . --since origin/main
+check: FAIL — introduced 0 critical gaps, 1 violations
+```
+
+As a GitHub Action, it posts the result as one comment on the pull request and updates it on every push. The comment
+also lists ADR candidates: a new external system or layer dependency, for a human to record.
 
 ```yaml
 on: pull_request
@@ -130,3 +137,122 @@ jobs:
           # comment: 'false'              # only the job summary
           # fail: 'false'                 # report, never fail
 ```
+
+### Draft the missing summaries with a local AI
+
+```bash
+ollama pull qwen2.5-coder:7b
+docwizz generate . --ai
+```
+
+Drafts are marked 🤖, cite the facts they rest on, and never close a gap or replace what a human wrote.
+See [AI drafts](#ai-drafts) for the privacy rules.
+
+## Commands
+
+| Command | Does |
+|---|---|
+| `docwizz init [dir]` | Write a starter `docwizz.yaml` with every default, ready to edit |
+| `docwizz analyze <dir>` | Documentation report |
+| `docwizz architecture <dir>` | Layers, layer dependencies, violations, cycles |
+| `docwizz check <dir> [--since <ref>]` | Report; exit 1 if thresholds fail (only on new problems with `--since`) |
+| `docwizz generate <dir> [out] [--html] [--ai]` | Write the docs (default `<dir>/docs`) |
+| `docwizz diff <dir> [ref]` | Changed symbols and affected pages vs the last `generate` (or a git ref) |
+| `docwizz diff [dir] <base> <head>` | The same, between two git refs |
+| `docwizz scan <dir> [model.json]` | Dump the raw code model (nodes and edges) |
+
+Options: `--profile <name|file.yaml>` picks what counts as documented. `--format json` gives machine-readable
+`analyze`/`check`/`architecture` output. Run `./test.sh` to smoke-test against `fixture/`.
+
+## Configuration
+
+Run `docwizz init` and edit the `docwizz.yaml` it writes. docwizz looks for the file in the scanned directory first,
+then in the current one. This repository's own [docwizz.yaml](docwizz.yaml) is a working example. The settings people
+change most:
+
+```yaml
+profile: aspnet                     # what needs docs; see Profiles
+check:
+  min_coverage: 80                  # % of items that need docs and have them
+  max_critical: 0
+  fail_on: medium                   # lowest violation severity that fails check
+  max_complexity: 20                # optional: fail on any symbol above this
+architecture:
+  layers:                           # path globs, first match wins
+    api: ["*/Api/*.cs", "*/Controllers/*.cs"]
+    domain: ["*/Domain/*.cs"]
+  allow:                            # who may depend on whom; `http` = calling HTTP directly
+    api: [application, domain, infrastructure]
+    domain: []
+tests: ["tests/*", "*.Tests/*"]     # only used to link tests to the code they exercise
+exclude: ["legacy/*"]               # left out entirely
+comment_docs: true                  # count a // comment above a C# member as its summary
+```
+
+A pattern lists the sections an item needs. Sections are XML doc tags (`summary`, `param`, `returns`, `exception`,
+`example`, `remarks`, or any custom tag) or derived ones that the code itself provides (`dependencies`, `endpoint`,
+`input`, `output`, `authorization`, `events`, `state`, `side_effects`).
+
+### Architecture rules
+
+| Rule | Fires when | Default severity |
+|---|---|---|
+| ARCH-001 | a layer depends on one it may not (`allow`) | high |
+| ARCH-002 | UI code calls HTTP directly instead of through a client | medium |
+| ARCH-003 | two modules depend on each other (cycle) | — |
+| ARCH-004 | a forbidden dependency that the allowed layers could have routed (a layer was skipped) | low |
+
+Change a severity with `architecture.severity`. Pages also list *risks*, which break no rule but tend to hurt: entities
+returned from the API, business logic in controllers, and domain code bound to external packages.
+
+### Profiles
+
+| Profile | For |
+|---|---|
+| `default` | general code: endpoints, controllers, services and components by role, a summary for everything else |
+| `software` | developer reference: full signatures, returns, exceptions, effects |
+| `aspnet` | ASP.NET Core backends: endpoints and the building blocks around them |
+| `vue` | Vue frontends: component contracts (props, emits, state), stores, composables |
+| `api` | consumers of the HTTP API: every endpoint's contract |
+| `architecture` | building blocks and how they connect, rather than every member |
+| `technical-publication` | task-oriented docs for readers outside the code; examples required |
+| `iso-42010`, `iso-15289` | also expect hand-written pages in `docs/architecture/` (stakeholders, concerns, decisions, …) and fail `check` while they are missing |
+
+Pass your organisation's own profile as `--profile team.yaml` or `profile: team.yaml`. It uses the same shape
+(`patterns:`, `architecture_sections:`) as [Profiles.cs](src/DocWizz/Profiles.cs). Coverage is measured *against the
+profile*; docwizz never claims compliance with a standard.
+
+## What it reads
+
+| Source | What it gets |
+|---|---|
+| C# (Roslyn) | types, members, doc comments, complexity, calls, DI, controllers and minimal APIs (routes, inputs, responses, auth), middleware, EF `DbContext`s |
+| Java / Spring | controllers, services, repositories, entities, `@*Mapping` endpoints, injection, `application.yml` |
+| Vue, React, Angular, TS/JS | components, props, emits, hooks, state, stores, routes, HTTP calls linked to the endpoints they reach |
+| SQL | tables, stored procedures, functions, views (which tables each routine touches, which code calls it), migrations in order |
+| Projects | `.csproj`/`.sln`, `package.json`, `pom.xml`, Gradle: packages, frameworks, what is executable |
+| Configuration | `appsettings*.json`, `.env`, Kubernetes ConfigMaps, Helm `values*.yaml`: key *names* and who reads them, never values |
+| Deployment | compose, Kubernetes, Dockerfiles, Terraform/Bicep, Helm, CI pipelines |
+
+External systems (databases, caches, brokers, HTTP APIs, identity, storage, e-mail) are labelled by certainty.
+*Detected* means a call shows it (`UseNpgsql`, `fetch('https://…')`). *Inferred* means only a package or a single
+candidate points to it. *Unknown* means something is there but the code doesn't say what.
+
+`generate` also writes `docs/.docwizz/documentation.json`. For every item, it lists the required sections, where each
+present section comes from (`written`, `fact`, `inferred` or `ai`), and the evidence (`file:line-endLine`).
+`search.json` indexes every component, endpoint, route, key and module.
+
+## AI drafts
+
+`--ai` asks a **self-hosted [Ollama](https://ollama.com)** to draft what's missing: summary, responsibilities,
+behaviour, side effects, errors and usage for each item, plus an overview per module.
+
+- **Only local or private addresses.** The resolved address must be loopback, 10/8, 172.16/12, 192.168/16 or an IPv6
+  unique-local address. Proxies are bypassed, and Ollama `…-cloud` models are refused.
+- **Grounded.** Each sentence cites the facts it rests on, and sentences that cite nothing are dropped.
+- **Never authoritative.** Drafts are marked 🤖, fill only empty sections and never close a gap.
+- **Sent once.** Drafts are cached in `docs/.docwizz/ai-cache.json` by symbol and code hash, so unchanged code isn't
+  sent again. Without `--ai`, cached drafts are still used and nothing is sent.
+
+`OLLAMA_HOST` picks the server (default `localhost:11434`). `DOCWIZZ_MODEL` picks the model (default
+`qwen2.5-coder:7b`).
