@@ -16,6 +16,8 @@ for (var i = 0; i < args.Length; i++)
     else pos.Add(args[i]);
 }
 var cmd = pos.ElementAtOrDefault(0);
+// `docwizz diff HEAD~1 HEAD`: no directory given, refs only.
+if (cmd == "diff" && pos.Count >= 2 && !Directory.Exists(pos[1])) pos.Insert(1, ".");
 var path = pos.ElementAtOrDefault(1) ?? ".";
 if (opts.GetValueOrDefault("format") is { } format && format is not ("console" or "json")) return Usage($"unknown format {format}");
 var json = opts.GetValueOrDefault("format") == "json";
@@ -41,7 +43,7 @@ switch (cmd)
     case "check":
         return Analyze(path, config, enforce: true, json);
     case "diff":
-        return DiffCommand(path, pos.ElementAtOrDefault(2), config, enforce: false);
+        return DiffCommand(path, pos.ElementAtOrDefault(2), config, enforce: false, head: pos.ElementAtOrDefault(3));
     case "architecture":
         return ArchitectureCommand(path, config, json);
     case "generate":
@@ -60,6 +62,7 @@ static int Usage(string? error)
           docwizz check <dir>               report + exit 1 if thresholds fail (CI)
           docwizz check <dir> --since <ref> exit 1 only on gaps/violations introduced since <ref>
           docwizz diff <dir> [ref]          what changed vs <ref> (default: docs/.docwizz/model.json)
+          docwizz diff [dir] <base> <head>  what changed between two git refs
           docwizz architecture <dir>        layers, dependencies, violations; exit 1 above check thresholds
           docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
             [--ai]                          draft missing summaries with Claude (cached per code hash)
@@ -168,7 +171,7 @@ static async Task<int> Generate(string root, string outDir, Config config, bool 
     return 0;
 }
 
-static int DiffCommand(string root, string? gitRef, Config config, bool enforce)
+static int DiffCommand(string root, string? gitRef, Config config, bool enforce, string? head = null)
 {
     CodeModel? before;
     string baseline;
@@ -190,8 +193,10 @@ static int DiffCommand(string root, string? gitRef, Config config, bool enforce)
     }
     if (before is null) return 1;
 
-    var result = Diff.Compare(before, BuildModel(root, config).Model, config);
-    Diff.Report(result, baseline, Console.Out);
+    var after = head is null ? BuildModel(root, config).Model : ModelAt(root, head, config);
+    if (after is null) return 1;
+    var result = Diff.Compare(before, after, config);
+    Diff.Report(result, head is null ? baseline : $"{baseline}, at {head}", Console.Out);
     if (!enforce) return 0;
 
     var critical = result.NewGaps.Count(Analyzer.IsCritical);

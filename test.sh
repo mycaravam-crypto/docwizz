@@ -193,6 +193,11 @@ grep -q "✓ modules/backend-Application.md" <<<"$impact"
 grep -q "✓ architecture.md" <<<"$impact"
 grep -q "Introduced: 0 critical, 1 other documentation gaps, 1 architecture violations" <<<"$impact"
 grep -q "ARCH-001  domain → infrastructure  backend/Domain/Audit.cs" <<<"$impact"
+# Two refs: commit the change, then compare HEAD~1..HEAD from inside the repo, without a dir argument
+git -C "$repo" add -A && git -C "$repo" -c user.name=t -c user.email=t@t commit -qm change
+refs=$(cd "$repo" && dotnet run --project "$OLDPWD/src/DocWizz" -- diff HEAD~1 HEAD)
+grep -q "vs HEAD~1, at HEAD" <<<"$refs"
+grep -q "+ Fixture.Domain.Audit" <<<"$refs"
 
 # ARCH-004: a dependency the rules allow only through another layer bypasses it
 cat > "$repo/docwizz.yaml" <<'YAML'
