@@ -151,6 +151,11 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             yield return $"`{p.Name}`: {kind}{(tfms.Count > 0 ? $" on {string.Join(", ", tfms)}" : "")}" +
                 (role is null ? "" : $" — {role}") + (folder is null ? "" : $", solution folder `{folder}`");
         }
+        foreach (var p in model.Nodes.Where(n => n.Kind == "project" && n.Tags?.Any(t => t is "maven" or "gradle") == true))
+        {
+            var spring = model.Edges.Any(e => e.Kind == "depends-on" && e.From == p.Id && e.To.Contains(":org.springframework.boot:"));
+            yield return $"`{p.Name}`: {(spring ? "Spring Boot" : "Java")} ({p.Tags![0]}) — {p.Tags.ElementAtOrDefault(1) ?? "library"}";
+        }
         var versions = model.Edges.Where(e => e.Kind == "depends-on").GroupBy(e => e.To).ToDictionary(g => g.Key, g => g.First().Label);
         var packages = model.Nodes.Where(n => n.Kind == "package").ToDictionary(n => n.Name, n => n.Id);
         var named = new List<string>();  // "Entity Framework Core, PostgreSQL" already names EF Core and PostgreSQL

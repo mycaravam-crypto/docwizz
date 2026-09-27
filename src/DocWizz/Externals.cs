@@ -9,18 +9,18 @@ static class Externals
     // ponytail: a curated list; extend it when a project's dependencies go unnamed.
     public static readonly Known[] All =
     [
-        new("sqlserver", "SQL Server", "database", ["Microsoft.EntityFrameworkCore.SqlServer", "Microsoft.Data.SqlClient", "System.Data.SqlClient"], ["UseSqlServer", "SqlConnection"]),
-        new("postgresql", "PostgreSQL", "database", ["Npgsql.EntityFrameworkCore.PostgreSQL", "Npgsql"], ["UseNpgsql", "NpgsqlConnection", "NpgsqlDataSource.Create"]),
+        new("sqlserver", "SQL Server", "database", ["Microsoft.EntityFrameworkCore.SqlServer", "Microsoft.Data.SqlClient", "System.Data.SqlClient", "com.microsoft.sqlserver:mssql-jdbc"], ["UseSqlServer", "SqlConnection"]),
+        new("postgresql", "PostgreSQL", "database", ["Npgsql.EntityFrameworkCore.PostgreSQL", "Npgsql", "org.postgresql:postgresql"], ["UseNpgsql", "NpgsqlConnection", "NpgsqlDataSource.Create"]),
         new("sqlite", "SQLite", "database", ["Microsoft.EntityFrameworkCore.Sqlite", "Microsoft.Data.Sqlite"], ["UseSqlite", "SqliteConnection"]),
-        new("mysql", "MySQL", "database", ["Pomelo.EntityFrameworkCore.MySql", "MySql.Data", "MySqlConnector"], ["UseMySql", "MySqlConnection"]),
+        new("mysql", "MySQL", "database", ["Pomelo.EntityFrameworkCore.MySql", "MySql.Data", "MySqlConnector", "com.mysql:mysql-connector-j", "mysql:mysql-connector-java"], ["UseMySql", "MySqlConnection"]),
         new("oracle", "Oracle", "database", ["Oracle.EntityFrameworkCore", "Oracle.ManagedDataAccess.Core"], ["UseOracle", "OracleConnection"]),
         new("cosmos", "Azure Cosmos DB", "database", ["Microsoft.EntityFrameworkCore.Cosmos", "Microsoft.Azure.Cosmos"], ["UseCosmos", "CosmosClient"]),
-        new("mongodb", "MongoDB", "database", ["MongoDB.Driver"], ["MongoClient"]),
-        new("redis", "Redis", "cache", ["StackExchange.Redis", "Microsoft.Extensions.Caching.StackExchangeRedis"], ["AddStackExchangeRedisCache", "ConnectionMultiplexer.Connect"]),
-        new("rabbitmq", "RabbitMQ", "messaging", ["RabbitMQ.Client", "MassTransit.RabbitMQ"], ["UsingRabbitMq"]),
-        new("kafka", "Kafka", "messaging", ["Confluent.Kafka"], ["ProducerBuilder", "ConsumerBuilder"]),
+        new("mongodb", "MongoDB", "database", ["MongoDB.Driver", "org.springframework.boot:spring-boot-starter-data-mongodb"], ["MongoClient"]),
+        new("redis", "Redis", "cache", ["StackExchange.Redis", "Microsoft.Extensions.Caching.StackExchangeRedis", "org.springframework.boot:spring-boot-starter-data-redis"], ["AddStackExchangeRedisCache", "ConnectionMultiplexer.Connect"]),
+        new("rabbitmq", "RabbitMQ", "messaging", ["RabbitMQ.Client", "MassTransit.RabbitMQ", "org.springframework.boot:spring-boot-starter-amqp"], ["UsingRabbitMq"]),
+        new("kafka", "Kafka", "messaging", ["Confluent.Kafka", "org.springframework.kafka:spring-kafka"], ["ProducerBuilder", "ConsumerBuilder"]),
         new("servicebus", "Azure Service Bus", "messaging", ["Azure.Messaging.ServiceBus", "MassTransit.Azure.ServiceBus.Core"], ["ServiceBusClient", "UsingAzureServiceBus"]),
-        new("smtp", "SMTP server", "email", ["MailKit"], ["SmtpClient"]),
+        new("smtp", "SMTP server", "email", ["MailKit", "org.springframework.boot:spring-boot-starter-mail"], ["SmtpClient"]),
         new("sendgrid", "SendGrid", "email", ["SendGrid"], ["SendGridClient"]),
         new("entra", "Microsoft Entra ID", "identity", ["Microsoft.Identity.Web", "@azure/msal-browser", "@azure/msal-node"], ["AddMicrosoftIdentityWebApi", "AddMicrosoftIdentityWebApp"]),
         new("keycloak", "Keycloak", "identity", ["keycloak-js", "Keycloak.AuthServices.Authentication"], []),
@@ -101,7 +101,11 @@ static class Externals
         var linked = edges.Where(e => e.Kind == "connects" && databases.Any(d => d.Id == e.To)).Select(e => e.From).ToHashSet();
         foreach (var ctx in nodes.Where(n => n.Tags?.Contains("dbcontext") == true && !linked.Contains(n.Id)).ToList())
         {
-            if (databases.Count == 1) edges.Add(new(ctx.Id, databases[0].Id, "connects", "inferred"));
+            // Candidates: the databases the context's own project uses (another project's driver says nothing about it).
+            var project = global::Projects.Of(projects, ctx.File)?.Id;
+            var own = databases.Where(d => edges.Any(e => e.Kind == "connects" && e.From == project && e.To == d.Id)).ToList();
+            var candidates = own.Count > 0 ? own : databases;
+            if (candidates.Count == 1) edges.Add(new(ctx.Id, candidates[0].Id, "connects", "inferred"));
             else
             {
                 Add(Node("database", "Database (type unknown)", "database", "unknown", ctx.File, ctx.Line));

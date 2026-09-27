@@ -31,10 +31,10 @@ class Config
             ui: ["*.vue"]
             state: ["*/stores/*.ts", "*/composables/*.ts"]
             client: ["*/api/*.ts", "*/services/*.ts"]
-            api: ["*/Api/*.cs", "*.Api/*.cs", "*/Controllers/*.cs", "*/Endpoints/*.cs"]
-            application: ["*/Application/*.cs", "*.Application/*.cs"]
-            domain: ["*/Domain/*.cs", "*.Domain/*.cs", "*.Core/*.cs"]
-            infrastructure: ["*/Infrastructure/*.cs", "*.Infrastructure/*.cs", "*/Persistence/*.cs"]
+            api: ["*/Api/*.cs", "*.Api/*.cs", "*/Controllers/*.cs", "*/Endpoints/*.cs", "*/controller/*.java", "*/web/*.java"]
+            application: ["*/Application/*.cs", "*.Application/*.cs", "*/service/*.java"]
+            domain: ["*/Domain/*.cs", "*.Domain/*.cs", "*.Core/*.cs", "*/domain/*.java", "*/model/*.java", "*/entity/*.java"]
+            infrastructure: ["*/Infrastructure/*.cs", "*.Infrastructure/*.cs", "*/Persistence/*.cs"]   # Spring Data repositories are ports: no layer by default
           allow:                # `http` = calling HTTP directly
             ui: [state, client]
             state: [client]
@@ -45,7 +45,7 @@ class Config
             infrastructure: [application, domain]
           severity: {}          # rule → high/medium/low; defaults ARCH-001 high, ARCH-002 medium, ARCH-004 low
         # Test code (path globs): scanned only to link tests to the code they exercise; never analyzed or documented.
-        tests: ["tests/*", "test/*", "*.Tests/*", "*.Test/*", "*/__tests__/*", "*.test.ts", "*.spec.ts", "*/e2e/*"]
+        tests: ["tests/*", "test/*", "*.Tests/*", "*.Test/*", "*/__tests__/*", "*.test.ts", "*.spec.ts", "*/e2e/*", "*/src/test/*"]
         # Path globs (relative, `/`-separated) left out of the model entirely.
         exclude: []
         """;

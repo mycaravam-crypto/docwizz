@@ -93,6 +93,11 @@ The model separates what the code states from what DocWizz concludes:
   enums, imports and calls, and router routes. HTTP calls are `fetch`/`axios`, and calls through wrappers: an
   `axios.create({ baseURL })` instance, or a helper that passes its parameters on as URL and method (`request('POST',
   url)`). A pre-pass finds the wrappers in every file, so they resolve across imports.
+- **[JavaScanner](src/DocWizz/JavaScanner.cs)** reads Java without a parser (comments and strings masked, then
+  regexes): types and members with Javadoc, Spring roles, `@*Mapping` endpoints with parameter sources, auth and the
+  unwrapped return type, constructor/`@Autowired`/Lombok injection, calls through injected fields (overloads by name
+  and argument count), method-level `implements`, and `@Value`/`@ConfigurationProperties` reads. Projects come from
+  `pom.xml`/`build.gradle`, configuration from `application*.yml|properties`.
 - **[Sql](src/DocWizz/Sql.cs)** reads `.sql` files: procedures, functions, views, triggers and tables (doc from the
   comment above, `@parameters`), the tables each routine touches and the procedures it EXECs, and migration files
   (a `migrations/` folder or Flyway names). C# literals that EXEC a procedure, or name it next to

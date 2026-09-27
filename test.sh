@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 model=$(mktemp)
 out=$(dotnet run --project src/DocWizz -- scan fixture "$model")
 echo "$out"
-grep -q "Files  21" <<<"$out"  # tests/ excluded
+grep -q "Files  26" <<<"$out"  # tests/ excluded
 
 python3 - "$model" <<'PY'
 import json, sys
@@ -31,7 +31,7 @@ roles = lambda i: nodes[i].get("tags") or []
 assert "entity" in roles(D + "Material") and "service" in roles(A + "MaterialService") and "repository" in roles(I + "SqlMaterialRepository")
 assert "background-service" in roles(I + "MaterialCleanup") and "middleware" in roles(I + "TimingMiddleware") and "options" in roles(I + "MaterialOptions")
 assert nodes[I + "MaterialChanged"]["kind"] == "delegate" and nodes[I + "MaterialChanged"]["parameters"] == ["id: int"]
-assert {n.get("language") for n in nodes.values() if n["kind"] not in ("external", "config")} == {"csharp", "vue", "typescript", "sql", "msbuild", "npm"}, {n.get("language") for n in nodes.values()}
+assert {n.get("language") for n in nodes.values() if n["kind"] not in ("external", "config")} == {"csharp", "vue", "typescript", "sql", "java", "msbuild", "maven", "npm"}, {n.get("language") for n in nodes.values()}
 assert nodes["vue:frontend/src/components/MaterialForm.vue"]["language"] == "vue"
 assert ("injects", D + "Material", D + "Material") not in edges, "record copy ctor leaked as injection"
 assert "controller" in nodes[API + "MaterialController"]["tags"]
@@ -63,6 +63,21 @@ for e in [("accesses", "sql:dbo.getlowstock", "sql:dbo.materials"), ("accesses",
           ("calls", "sql:dbo.resetstock", "sql:dbo.getlowstock"), ("calls", I + "SqlMaterialRepository.LowStockAsync(int)", "sql:dbo.getlowstock")]:
     assert e in edges, e
 assert "sql:dbo.ignored" not in nodes and not any(e[2] == "sql:dbo.ignored" for e in edges)
+# Java / Spring: roles, endpoints (route, parameter sources, auth, unwrapped return), injection, calls, dispatch, config
+Jv = "java:com.example.inventory."
+low, get = nodes[Jv + "controller.InventoryController.low(int)"], nodes[Jv + "controller.InventoryController.get(Long)"]
+assert low["tags"] == ["endpoint", "GET"] and low["route"] == "api/inventory/low" and low["parameters"] == ["[query] max: int"], low
+assert "Items running low." in low["doc"] and get["tags"] == ["endpoint", "GET", "authorize"] and get["returns"] == "Item", get
+assert nodes[Jv + "domain.Item"]["tags"] == ["entity"] and nodes[Jv + "repository.ItemRepository"]["tags"] == ["repository"]
+for e in [("injects", Jv + "controller.InventoryController", Jv + "service.InventoryService"),
+          ("injects", Jv + "service.DefaultInventoryService", Jv + "repository.ItemRepository"),
+          ("calls", Jv + "controller.InventoryController.get(Long)", Jv + "service.InventoryService.find(Long)"),
+          ("implements", Jv + "service.DefaultInventoryService.find(Long)", Jv + "service.InventoryService.find(Long)"),
+          ("calls", Jv + "service.DefaultInventoryService.lowStock()", Jv + "repository.ItemRepository.findByQuantityLessThan(int)"),
+          ("reads", Jv + "service.DefaultInventoryService", "config:inventory.low-stock"),
+          ("connects", "proj:java/pom.xml", "ext:postgresql")]:
+    assert e in edges, e
+assert not any("InventoryControllerTest" in n for n in nodes), "src/test is test code"
 assert not any("Tests" in n["id"] for n in nodes.values() if n["kind"] != "project"), "test code in the model"
 assert ("tests", "cs:Fixture.Tests.MaterialServiceTests.CreateAsync_Creates(Fixture.Application.MaterialService)", A + "MaterialService." + create) in edges
 
@@ -117,7 +132,7 @@ assert not any(e[0] == "accesses" and e[2] == D + "Material" for e in edges), "m
 
 # External systems: detected from calls, inferred from packages, attributed to the code (or project) that uses them
 ext = {n["id"]: n["tags"] for n in nodes.values() if n["kind"] == "external"}
-assert ext == {"ext:http:erp.example.com": ["http-api", "detected"], "ext:redis": ["cache", "detected"],
+assert ext == {"ext:http:erp.example.com": ["http-api", "detected"], "ext:redis": ["cache", "detected"], "ext:postgresql": ["database", "inferred"],
                "ext:http:rates.example.org": ["http-api", "detected"], "ext:sqlserver": ["database", "inferred"],
                "ext:oidc": ["identity", "inferred"], "ext:http:WarehouseClient": ["http-api", "detected"]}, ext  # relative /api/... calls are not external
 connects = {(e["from"], e["to"], e.get("label")) for e in m["edges"] if e["kind"] == "connects"}
@@ -138,7 +153,8 @@ reads = {(e["kind"], e["from"], e["to"]) for e in m["edges"] if e["kind"] in ("r
 assert reads == {("reads", I + "WarehouseClient", "config:warehouse:baseurl"),  # AddHttpClient<WarehouseClient>(.. config["Warehouse:BaseUrl"])
                  ("binds", I + "MaterialOptions", "config:materials"),        # Configure<MaterialOptions>(GetSection("Materials"))
                  ("reads", "proj:backend/Fixture.csproj", "config:materials:beta"),
-                 ("reads", "proj:backend/Fixture.csproj", "config:audit_endpoint")}, reads  # GetEnvironmentVariable("MATERIALS__BETA")
+                 ("reads", "proj:backend/Fixture.csproj", "config:audit_endpoint"),
+                 ("reads", "java:com.example.inventory.service.DefaultInventoryService", "config:inventory.low-stock")}, reads  # GetEnvironmentVariable("MATERIALS__BETA")
 assert nodes["ext:http:WarehouseClient"]["name"] == "warehouse.example.net"  # typed client named by its configured URL
 PY
 
@@ -211,7 +227,7 @@ grep -q "ARCH-001  domain → infrastructure  \[high\]" <<<"$arch" && grep -q "A
 grep -q "dependencies: .*domain → infrastructure 1 ✗" <<<"$arch"
 set +e; dw architecture fixture --format json > "$model.arch" 2>/dev/null; code=$?; set -e
 [ "$code" -eq 1 ] || { echo "architecture should fail on violations"; exit 1; }
-python3 -c "import json,sys; a=json.load(open(sys.argv[1])); assert {'from':'api','to':'application','count':4,'allowed':True} in a['layerDependencies'], a" "$model.arch"
+python3 -c "import json,sys; a=json.load(open(sys.argv[1])); assert {'from':'api','to':'application','count':7,'allowed':True} in a['layerDependencies'], a" "$model.arch"   # 4 C# + 3 Java (inject, 2 calls)
 grep -q "Architecture (2 violations, 1 cycles)" <<<"$arch"
 
 # Docs generation: pages, cross-links, and safe regeneration
@@ -234,6 +250,9 @@ grep -q "^- \`Fixture\`: ASP.NET Core on net9.0" "$docs/index.md"
 # project roles from metadata, solution folders from Fixture.sln (nested: Backend/API)
 grep -q "^- \`Fixture\`: ASP.NET Core on net9.0 — executable, solution folder \`Backend/API\`" "$docs/index.md"
 grep -q "^- \`Fixture.Tests\`: .NET on net9.0 — test, solution folder \`Tests\`" "$docs/index.md"
+grep -q "^- \`inventory\`: Spring Boot (maven) — executable" "$docs/index.md"
+grep -q "| GET | \`/api/inventory/{id}\` | — | \`\[route\] id: Long\` | \`Item\` | required |" "$docs/api.md"
+grep -qF -- '- `GET /api/inventory/low`: InventoryController → DefaultInventoryService → ItemRepository' "$docs/api.md"   # through the interface
 # .slnx: folders from <Folder Name="/…/">
 slnx=$(mktemp -d); cp -r fixture/. "$slnx"; rm "$slnx/Fixture.sln"
 cat > "$slnx/Fixture.slnx" <<'XML'

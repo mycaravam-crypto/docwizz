@@ -11,7 +11,10 @@ static class Configuration
 {
     public static bool IsConfigFile(string file) =>
         Path.GetFileName(file) is var n && (n == ".env" || n.EndsWith(".env") || Regex.IsMatch(n, @"^appsettings(\.[\w-]+)?\.json$", RegexOptions.IgnoreCase)
-            || IsHelmValues(file) || IsConfigMap(file));
+            || IsSpring(file) || IsHelmValues(file) || IsConfigMap(file));
+
+    // Spring Boot: application.yml / application-prod.properties; keys are dotted (server.port).
+    static bool IsSpring(string file) => Regex.IsMatch(Path.GetFileName(file), @"^application(-[\w-]+)?\.(ya?ml|properties)$");
 
     static bool IsYaml(string file) => file.EndsWith(".yaml") || file.EndsWith(".yml");
     static bool IsHelmValues(string file) => Regex.IsMatch(Path.GetFileName(file), @"^values([.-][\w-]+)?\.ya?ml$")
@@ -20,6 +23,7 @@ static class Configuration
 
     static string Environment(string file) =>
         Regex.Match(Path.GetFileName(file), @"^appsettings\.([\w-]+)\.json$", RegexOptions.IgnoreCase) is { Success: true } m ? m.Groups[1].Value
+            : IsSpring(file) ? Regex.Match(Path.GetFileName(file), @"^application-([\w-]+)\.") is { Success: true } sp ? sp.Groups[1].Value : "default"
             : IsYaml(file) ? Regex.Match(Path.GetFileName(file), @"^values[.-]([\w-]+)\.ya?ml$") is { Success: true } v ? $"helm-{v.Groups[1].Value}" : "helm"
             : file.EndsWith(".json") ? "default" : Path.GetFileName(file);
 
@@ -62,6 +66,28 @@ static class Configuration
                     using var doc = JsonDocument.Parse(string.Join('\n', lines),
                         new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
                     if (doc.RootElement.ValueKind == JsonValueKind.Object) Walk(doc.RootElement, "");
+                }
+                else if (IsSpring(file) && file.EndsWith(".properties"))
+                {
+                    for (var i = 0; i < lines.Length; i++)
+                        if (Regex.Match(lines[i], @"^\s*([\w.\-\[\]]+)\s*[=:]\s*(.*)$") is { Success: true } m && !lines[i].TrimStart().StartsWith('#'))
+                            Define(m.Groups[1].Value, rel, i + 1, env, m.Groups[2].Value.Trim());
+                }
+                else if (IsSpring(file))
+                {
+                    var yaml = new YamlStream();
+                    yaml.Load(new StringReader(string.Join('\n', lines)));
+                    void Walk(YamlNode n, string prefix)
+                    {
+                        if (n is YamlMappingNode m)
+                            foreach (var (k, v) in m.Children)
+                            {
+                                var key = prefix.Length == 0 ? Scalar(k) : $"{prefix}.{Scalar(k)}";
+                                if (v is YamlMappingNode) Walk(v, key!);
+                                else Define(key!, rel, (int)k.Start.Line, env, Scalar(v));
+                            }
+                    }
+                    foreach (var doc in yaml.Documents) Walk(doc.RootNode, "");
                 }
                 else if (IsYaml(file))
                 {

@@ -10,4 +10,4 @@ or human-written. AI runs on a self-hosted model only; code is never sent to a p
 
 ## Eventually
 
-- More languages and frameworks: React/Angular, Java/Spring.
+- More languages and frameworks: React/Angular.

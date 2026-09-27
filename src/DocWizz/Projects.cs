@@ -1,3 +1,4 @@
+using RxMatch = System.Text.RegularExpressions.Match;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -51,6 +52,27 @@ static class Projects
                             var target = Path.GetRelativePath(root, Path.GetFullPath(Path.Combine(Path.GetDirectoryName(file)!, inc.Replace('\\', '/'))));
                             edges.Add(new(id, $"proj:{target.Replace('\\', '/')}", "references"));
                         }
+                }
+                else if (Path.GetFileName(file) == "pom.xml")
+                {
+                    // Maven: artifactId, dependencies (test scope left out); spring-boot-maven-plugin builds an executable jar.
+                    var xml = XDocument.Load(file);
+                    XElement? El(XElement? e, string name) => e?.Elements().FirstOrDefault(x => x.Name.LocalName == name);
+                    var executable = xml.Descendants().Any(e => e.Name.LocalName == "artifactId" && e.Value == "spring-boot-maven-plugin");
+                    nodes.Add(new Node(id, "project", El(xml.Root, "artifactId")?.Value ?? Path.GetFileName(Path.GetDirectoryName(file)) ?? rel, rel, 1,
+                        Tags: ["maven", executable ? "executable" : El(xml.Root, "packaging")?.Value == "war" ? "executable" : "library"]));
+                    foreach (var d in El(xml.Root, "dependencies")?.Elements().Where(e => e.Name.LocalName == "dependency") ?? [])
+                        if (El(d, "scope")?.Value != "test" && El(d, "groupId")?.Value is { } g && El(d, "artifactId")?.Value is { } a)
+                            Package(id, "maven", $"{g}:{a}", El(d, "version")?.Value, rel);
+                }
+                else if (Path.GetFileName(file) is "build.gradle" or "build.gradle.kts")
+                {
+                    // Gradle: `implementation 'g:a:v'` / `implementation("g:a")`; the Spring Boot plugin builds an executable jar.
+                    var text = File.ReadAllText(file);
+                    nodes.Add(new Node(id, "project", Path.GetFileName(Path.GetDirectoryName(Path.GetFullPath(file))) ?? rel, rel, 1,
+                        Tags: ["gradle", text.Contains("org.springframework.boot") ? "executable" : "library"]));
+                    foreach (RxMatch m in Regex.Matches(text, @"\b(?:implementation|api|runtimeOnly|compileOnly)\s*\(?\s*[""']([\w.\-]+):([\w.\-]+)(?::([\w.\-]+))?[""']"))
+                        Package(id, "maven", $"{m.Groups[1].Value}:{m.Groups[2].Value}", m.Groups[3].Success ? m.Groups[3].Value : null, rel);
                 }
                 else
                 {
