@@ -608,7 +608,10 @@ class H(http.server.BaseHTTPRequestHandler):
         assert self.path == "/api/chat" and req["model"] == "local:7b" and not req["stream"] and req["format"] == "json", req
         facts = json.loads(req["messages"][1]["content"])
         S = lambda text, *cites: {"text": text, "from": list(cites)}
-        if "module" in facts:  # module overview: one supported sentence, one citing nothing in the facts
+        if req["messages"][0]["content"].startswith("You review"):  # assessing written docs
+            reply = {"score": 2, "missing": ["purpose", "side effects", "vibes"], "note": "Says what, not why."} \
+                if facts["existingDocs"] else "not json"
+        elif "module" in facts:  # module overview: one supported sentence, one citing nothing in the facts
             reply = {"summary": [S(f"Module for {facts['module']}.", facts["members"][0]["name"])], "responsibilities": [S("Owns pricing.", "NotInFacts")]}
         elif facts["symbol"].startswith("Fixture.Api.MaterialController.Create("):
             reply = {"summary": [S("Creates a material.", "source")], "behaviour": [S("Delegates to the service.", facts["calls"][0])],
@@ -636,11 +639,19 @@ b = i["sections"]["behaviour"]
 assert b["origin"] == "ai" and b["sentences"][0]["from"][0].startswith("cs:Fixture.Application.IMaterialService.CreateAsync("), b
 assert "exception" not in i["sections"] and "summary" in i["missing"], i
 PY2
+# assessments of written docs: listed in quality.md (unknown gaps dropped), cached, never part of doc quality
+grep -q '| \[`Fixture.Api.MaterialController.Rename(int, Fixture.Api.RenameMaterialRequest)`\](.*) | 2 | purpose, side effects | Says what, not why. |' "$docs/quality.md" \
+    || { grep -A5 "Usefulness" "$docs/quality.md"; exit 1; }
+grep -q "AI-assessed and advisory: not part of doc quality" "$docs/quality.md"
+grep -q '"score": 2' "$docs/.docwizz/ai-assessments.json"
 public=$(OLLAMA_HOST=8.8.8.8 dw generate fixture "$(mktemp -d)" --ai 2>&1 >/dev/null)
 grep -q "8.8.8.8 is not a local or private address" <<<"$public" || { echo "$public"; exit 1; }
 cloud=$(OLLAMA_HOST="127.0.0.1:$(cat "$port_file")" DOCWIZZ_MODEL=gpt-oss:120b-cloud dw generate fixture "$(mktemp -d)" --ai 2>&1 >/dev/null)
 grep -q "gpt-oss:120b-cloud is an Ollama cloud model" <<<"$cloud" || { echo "$cloud"; exit 1; }
-kill $fake; rm -rf "$docs" "$port_file"
+kill $fake
+dw generate fixture "$docs" >/dev/null 2>&1   # no --ai, no server: from the cache
+grep -q '| 2 | purpose, side effects | Says what, not why. |' "$docs/quality.md"
+rm -rf "$docs" "$port_file"
 
 # Legacy project: no doc comments, no docwizz.yaml, controller talks to the DbContext and holds the logic
 legacy=$(mktemp -d)
@@ -672,6 +683,104 @@ doc = next(n for n in m["nodes"] if n["id"].startswith("cs:Fixture.Application.M
 assert "HIGH requirement" in doc, doc
 PY
 rm -rf "$own" "$out"
+
+# Doc quality: written docs that contradict the code are flagged (facts), counted in doc quality %, gated by min_quality
+dq=$(mktemp -d)
+printf '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Library</OutputType></PropertyGroup></Project>\n' > "$dq/Dq.csproj"
+cat > "$dq/Stock.cs" <<'CS'
+namespace Dq;
+public class Stock
+{
+    /// <summary>Moves stock between two warehouses and records who did it.</summary>
+    /// <param name="from">Source warehouse.</param>
+    /// <param name="target">Renamed long ago.</param>
+    /// <returns>The new balance.</returns>
+    public void Move(string from, string to) { }
+
+    /// <summary>Balance of one article across all warehouses, in pieces.</summary>
+    /// <param name="article">Article number.</param>
+    /// <returns>Pieces on hand.</returns>
+    public int Balance(string article) => 0;
+
+    /// <summary>Gets the stock level for an article.</summary>
+    public int GetStockLevel(string article) => 0;
+
+    /// <summary>TODO: describe</summary>
+    public void Reset() { }
+}
+CS
+cat > "$dq/docwizz.yaml" <<'YAML'
+patterns:
+  all: { match: { kind: method }, level: medium, sections: [summary, param, returns] }
+check: { min_coverage: 0, min_quality: 60 }
+YAML
+set +e; q=$(dw check "$dq" 2>/dev/null); code=$?; set -e
+grep -q "^Doc quality    .* 25%  (4 with written docs)" <<<"$q" || { echo "$q"; exit 1; }
+grep -q "param-drift: documents parameter \`target\`, which doesn't exist" <<<"$q"
+grep -q "returns-on-void: documents a return value, but returns nothing" <<<"$q"
+grep -A1 "  Dq.Stock.Move(string, string)" <<<"$q" | grep -q "partial, missing: param"   # `to` has no <param>, whatever the count says
+grep -q "echo (inferred): summary only restates the name: \"Gets the stock level for an article.\"" <<<"$q"
+grep -q "placeholder (inferred): summary is a placeholder: \"TODO: describe\"" <<<"$q"
+grep -q "doc quality 25% < 60%" <<<"$q" && [ "$code" -eq 1 ] || { echo "min_quality not enforced"; exit 1; }
+if grep -q "Dq.Stock.Balance" <<<"$(sed -n '/^Doc quality (/,$p' <<<"$q")"; then echo "correct docs flagged"; exit 1; fi
+dw analyze "$dq" --format json 2>/dev/null | python3 -c '
+import json, sys
+d = json.load(sys.stdin)["documentation"]
+assert d["quality"] == 25.0, d["quality"]
+i = {i["id"]: i for i in d["items"]}
+assert [f["rule"] for f in i["cs:Dq.Stock.Move(string, string)"]["flags"]] == ["param-drift", "returns-on-void"], i
+assert i["cs:Dq.Stock.Move(string, string)"]["flags"][0]["origin"] == "fact"
+assert i["cs:Dq.Stock.Balance(string)"].get("flags") is None
+assert i["cs:Dq.Stock.Reset()"]["flags"] == [{"rule": "placeholder", "origin": "inferred", "detail": "summary is a placeholder: \"TODO: describe\""}], i'
+out=$(mktemp -d); dw generate "$dq" "$out" >/dev/null 2>&1
+grep -q "^Doc quality: \*\*25%\*\* of 4 items" "$out/quality.md"
+grep -q "| echo | inferred | summary only restates the name" "$out/quality.md"
+grep -q "| param-drift | fact | documents parameter \`target\`" "$out/quality.md"
+grep -q "| Doc quality (written docs without quality flags) | 25% |" "$out/index.md"
+# check --since: a changed contract under an unchanged doc is possibly stale (reported); a new contradiction fails
+git -C "$dq" init -q && git -C "$dq" add -A && git -C "$dq" -c user.name=t -c user.email=t@t commit -qm base
+sed -i 's|public int Balance(string article) => 0;|public long Balance(string article, bool reserved) => 0;|' "$dq/Stock.cs"
+stale=$(dw check "$dq" --since HEAD 2>/dev/null) || { echo "$stale"; echo "stale docs failed check"; exit 1; }
+grep -q "! Stock.cs:[0-9]*  Dq.Stock.Balance(string, bool)  changed: parameters, return type" <<<"$stale" || { echo "$stale"; exit 1; }
+if grep -q "! .*Dq.Stock.Move" <<<"$stale"; then echo "unchanged contract reported stale"; exit 1; fi
+sed -i 's|/// <summary>Gets the stock level for an article.</summary>|&\n    /// <param name="sku">Article.</param>|' "$dq/Stock.cs"
+set +e; drift=$(dw check "$dq" --since HEAD 2>/dev/null); code=$?; set -e
+[ "$code" -eq 1 ] || { echo "$drift"; echo "introduced contradiction passed check --since"; exit 1; }
+grep -q "param-drift  Stock.cs:[0-9]*  Dq.Stock.GetStockLevel(string)  documents parameter \`sku\`" <<<"$drift"
+grep -q "check: FAIL — .*, 1 docs contradicting the code" <<<"$drift"
+if grep -q "param-drift .*Dq.Stock.Move" <<<"$drift"; then echo "pre-existing flag reported as introduced"; exit 1; fi
+rm -rf "$dq" "$out"
+
+# <inheritdoc/> documents something only when there is something to inherit: an external base counts, nothing doesn't
+ih=$(mktemp -d)
+printf '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Library</OutputType></PropertyGroup></Project>\n' > "$ih/Ih.csproj"
+cat > "$ih/Clock.cs" <<'CS'
+namespace Ih;
+public interface IClock { int Now(); }
+public interface ITimer
+{
+    /// <summary>Milliseconds since the timer started.</summary>
+    int Elapsed();
+}
+public class Clock : IClock, ITimer
+{
+    /// <inheritdoc/>
+    public int Now() => 0;
+    /// <inheritdoc/>
+    public int Elapsed() => 0;
+    /// <inheritdoc/>
+    public int Tick() => 0;
+    /// <inheritdoc/>
+    public override string ToString() => "clock";
+}
+CS
+printf 'patterns:\n  all: { match: { kind: method, type: Clock }, level: medium, sections: [summary] }\n' > "$ih/docwizz.yaml"
+inh=$(dw analyze "$ih" 2>/dev/null)
+grep -A1 "  Ih.Clock.Tick()$" <<<"$inh" | grep -q "empty-inheritdoc: \`<inheritdoc/>\`, but there is nothing to inherit from" || { echo "$inh"; exit 1; }
+grep -A1 "  Ih.Clock.Now()$" <<<"$inh" | grep -q "empty-inheritdoc: \`<inheritdoc/>\` from \`Ih.IClock.Now()\`, which has no docs"
+if grep -q "Ih.Clock.ToString()\|Ih.Clock.Elapsed()" <<<"$inh"; then echo "inheritdoc with a source flagged"; exit 1; fi
+grep -q "^Doc quality    .* 50%  (4 with written docs)" <<<"$inh"
+rm -rf "$ih"
 
 # A console app with no layers or endpoints: no empty diagrams or tables, not called a web host
 tiny=$(mktemp -d); out=$(mktemp -d)

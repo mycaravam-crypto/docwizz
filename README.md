@@ -108,7 +108,9 @@ Added (3)
 ### Gate pull requests
 
 `docwizz check` exits with 1 when thresholds fail. With `--since`, it fails only on what the change *introduces*, so
-an old codebase can adopt it without fixing everything first:
+an old codebase can adopt it without fixing everything first. That covers critical gaps, violations and docs that
+now contradict the code (fact quality flags). Docs that are *possibly stale* are listed but don't fail the check:
+a symbol whose parameters, return type, exceptions or route changed while its doc comment stayed the same.
 
 ```console
 $ docwizz check fixture
@@ -174,6 +176,7 @@ change most:
 profile: aspnet                     # what needs docs; see Profiles
 check:
   min_coverage: 80                  # % of items that need docs and have them
+  min_quality: 90                   # optional: % of written docs with no quality flags
   max_critical: 0
   fail_on: medium                   # lowest violation severity that fails check
   max_complexity: 20                # optional: fail on any symbol above this
@@ -198,6 +201,20 @@ Besides XML doc and JSDoc comments, docwizz reads these plain comments:
 - a minimal-API endpoint: a comment above the `Map*` statement, or above an `if` whose only statement it is
 - a Vue component: an HTML comment before the first block, or a comment in the `<script>` before its first function
 - a Vue prop: a `/** */` or `//` comment directly above it in `defineProps`
+
+### Doc quality
+
+Coverage says a section exists. Doc quality says whether written docs can be trusted: the share of items with written
+docs that have no quality flag. `analyze` and `quality.md` list each flag and whether it is a *fact* (the doc
+contradicts the code) or *inferred* (a heuristic).
+
+| Flag | Basis | Fires when |
+|---|---|---|
+| `param-drift` | fact | a `<param name>` that isn't one of the parameters (parameters are also matched by name for coverage) |
+| `returns-on-void` | fact | a C#/Java method documents `<returns>` but returns nothing (`void`, `Task`) |
+| `empty-inheritdoc` | fact | a C# `<inheritdoc/>` with nothing to inherit from, or only from interface members without docs; it then counts as no docs |
+| `placeholder` | inferred | the summary is TODO/FIXME/TBD, template boilerplate, or under three words |
+| `echo` | inferred | every meaningful word of the summary is already in the name, its type or a parameter ("Gets the stock level" on `GetStockLevel`) |
 
 ### Architecture rules
 
@@ -259,6 +276,10 @@ behaviour, side effects, errors and usage for each item, plus an overview per mo
 - **Never authoritative.** Drafts are marked 🤖, fill only empty sections and never close a gap.
 - **Sent once.** Drafts are cached in `docs/.docwizz/ai-cache.json` by symbol and code hash, so unchanged code isn't
   sent again. Without `--ai`, cached drafts are still used and nothing is sent.
+- **Rates written docs too.** The same model scores each written doc from 1 (says nothing the name doesn't) to 5
+  (purpose, constraints, side effects, errors) and names what is missing. The scores are listed under *Usefulness 🤖*
+  in `quality.md`. They are advisory: not part of doc quality %, never used by `check`. They are cached in
+  `docs/.docwizz/ai-assessments.json` by symbol, doc and code hash.
 
 `OLLAMA_HOST` picks the server (default `localhost:11434`). `DOCWIZZ_MODEL` picks the model (default
 `qwen2.5-coder:7b`).

@@ -195,11 +195,13 @@ static object DocumentationJson(CodeModel model, Config config, List<Documentati
         profile = config.Profile,
         note = $"coverage against the '{config.Profile}' profile; not a statement of standards compliance",
         coverage = Math.Round(Analyzer.Coverage(items), 1),
+        quality = Math.Round(Analyzer.Quality(items), 1),
         items = items.Select(i => new
         {
             id = i.Node.Id, kind = i.Node.Kind, file = i.Node.File, line = i.Node.Line,
             level = i.Level, status = i.Status, pattern = i.Pattern, required = i.Required,
             sections = i.Sections, missing = i.Missing, reasons = i.Reasons, sources = i.Sources, evidence = Evidence(i), tested = i.Tested,
+            flags = i.Flags is { Count: > 0 } ? i.Flags : null,
         }),
     };
 }
@@ -223,7 +225,9 @@ static async Task<int> Generate(string root, string outDir, Config config, bool 
     }
     var summaries = drafts.Where(d => !d.Key.StartsWith("module:") && d.Value.Text.Length > 0).ToDictionary(d => d.Key, d => d.Value.Text);
     var overviews = drafts.Where(d => d.Key.StartsWith("module:")).ToDictionary(d => d.Key["module:".Length..], d => d.Value);
-    var (pages, changed) = new Generator(root, outDir, model, findings, arch, config, summaries, overviews)
+    // Advisory ratings of written docs: shown in quality.md, never part of doc quality % or check.
+    var assessments = await AiProse.Assessments(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-assessments.json"), ai);
+    var (pages, changed) = new Generator(root, outDir, model, findings, arch, config, summaries, overviews, assessments)
     {
         WriteHtml = html,
         Files = [.. RepoFiles(root, config, [".github", ".circleci"]).Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))],
@@ -270,9 +274,12 @@ static int DiffCommand(string root, string? gitRef, Config config, bool enforce,
     var critical = result.NewGaps.Count(Analyzer.IsCritical);
     var violations = Architecture.Failing(result.NewViolations, config.Check).Count;
     var complex = TooComplex(result.Added.Concat(result.Changed), config.Check);
-    var ok = critical == 0 && violations == 0 && complex.Count == 0;
+    // Docs that now contradict the code fail; inferred flags and possibly stale docs are reported only.
+    var contradictions = result.NewFlags.Count(x => x.Flag.Origin == Origin.Fact);
+    var ok = critical == 0 && violations == 0 && complex.Count == 0 && contradictions == 0;
     Console.WriteLine();
     Console.WriteLine(ok ? "check: PASS" : $"check: FAIL — introduced {critical} critical gaps, {violations} violations" +
+        (contradictions > 0 ? $", {contradictions} docs contradicting the code" : "") +
         (complex.Count > 0 ? $", {complex.Count} symbols over complexity {config.Check.MaxComplexity}" : ""));
     return ok ? 0 : 1;
 }
@@ -318,6 +325,8 @@ static int Analyze(string root, Config config, bool enforce, bool json)
     var critical = findings.Count(Analyzer.IsCritical);
     var failures = new List<string>();
     if (coverage < config.Check.MinCoverage) failures.Add($"coverage {coverage:0}% < {config.Check.MinCoverage}%");
+    if (config.Check.MinQuality is { } minQuality && Analyzer.Quality(findings) is var quality && quality < minQuality)
+        failures.Add($"doc quality {quality:0}% < {minQuality}%");
     if (critical > config.Check.MaxCritical) failures.Add($"{critical} critical > {config.Check.MaxCritical}");
     if (violations.Count > config.Check.MaxViolations) failures.Add($"{violations.Count} violations > {config.Check.MaxViolations}");
     if (cycles.Count > config.Check.MaxCycles) failures.Add($"{cycles.Count} cycles > {config.Check.MaxCycles}");
