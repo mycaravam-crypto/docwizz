@@ -123,7 +123,7 @@ record DocumentationItem(Node Node, string Profile, string Pattern, Level Level,
     Dictionary<string, Section> Sections, List<string> Missing, Status Status, List<string> Reasons,
     List<string> Sources, bool Tested = false, List<QualityFlag>? Flags = null);
 
-static class Analyzer
+static partial class Analyzer
 {
     static readonly string[] Analyzed = ["class", "record", "struct", "interface", "type", "enum", "method", "endpoint",
         "component", "function", "store", "delegate", "procedure", "sql-function", "sql-view", "trigger"];
@@ -271,7 +271,7 @@ static class Analyzer
             var status = missing.Count == 0 ? Status.Documented
                 : sections.Values.Any(x => x.Origin == Origin.Written) ? Status.Partial : Status.Undocumented;
             items.Add(new(node, config.Profile, patternName ?? "", level, required, sections, missing, status, reasons,
-                sources.Distinct().ToList(), Tested(node.Id), Flags(xml, node, names)));
+                sources.Distinct().ToList(), Tested(node.Id), Flags(xml, node, names, typeName)));
         }
         return items;
     }
@@ -311,8 +311,8 @@ static class Analyzer
         return names.All(x => Regex.IsMatch(x, @"^[\w$]+$")) ? names : null;
     }
 
-    // FACT: written documentation that contradicts the code.
-    static List<QualityFlag> Flags(XElement? xml, Node n, List<string>? names)
+    // Written docs that contradict the code (facts), or that look like they add nothing (inferred).
+    static List<QualityFlag> Flags(XElement? xml, Node n, List<string>? names, string? typeName)
     {
         var flags = new List<QualityFlag>();
         if (xml is null) return flags;
@@ -324,7 +324,47 @@ static class Analyzer
         if (n.Kind == "method" && n.Language is "csharp" or "java" && n.Returns is null
             && xml.Element("returns") is { } r && !string.IsNullOrWhiteSpace(Text(r)))
             flags.Add(new("returns-on-void", Origin.Fact, "documents a return value, but returns nothing"));
+        if (xml.Element("summary") is { } s && Text(s) is { Length: > 0 } summary)
+        {
+            if (Placeholder().IsMatch(summary))
+                flags.Add(new("placeholder", Origin.Inferred, $"summary is a placeholder: \"{summary}\""));
+            else if (Words(summary).Count < 3)
+                flags.Add(new("placeholder", Origin.Inferred, $"summary is too short to explain anything: \"{summary}\""));
+            else if (Echoes(summary, [n.Name, typeName ?? "", .. names ?? []]))
+                flags.Add(new("echo", Origin.Inferred, $"summary only restates the name: \"{summary}\""));
+        }
         return flags;
+    }
+
+    // INFERENCE: TODO markers, generator boilerplate, "summary" left in by a template.
+    // ponytail: extend the list as real repos show more.
+    [GeneratedRegex(@"^\W*(todo|fixme|tbd|xxx|hack)\b|^\W*(summary|description)\W*$|^\W*add (a )?(summary|description)\b|^\W*initializes a new instance of\b|\b(todo|fixme)\b:",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex Placeholder();
+
+    static List<string> Words(string text) => Regex.Matches(text, @"[\p{L}\p{N}]+").Select(m => m.Value).ToList();
+
+    // Words that carry no meaning of their own in a summary: articles, glue, and the generic verbs every accessor uses.
+    static readonly HashSet<string> Filler = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "a", "an", "the", "this", "that", "these", "its", "it", "of", "for", "to", "from", "by", "with", "in", "on", "at",
+        "as", "and", "or", "is", "are", "be", "given", "specified", "provided", "current", "method", "function", "class",
+        "property", "value", "object", "instance", "get", "return", "retrieve", "fetch", "set", "handle", "perform", "do",
+        "call", "invoke", "execute", "run", "async", "asynchronously", "new",
+    };
+
+    // Crude stem: case and a plural/third-person "s", so "Gets materials" meets GetMaterial.
+    static string Stem(string w)
+    {
+        w = w.ToLowerInvariant();
+        return w.EndsWith("ies") && w.Length > 4 ? w[..^3] + "y" : w.Length > 3 && w.EndsWith('s') && !w.EndsWith("ss") ? w[..^1] : w;
+    }
+
+    // INFERENCE: every meaningful word of the summary is already in the name, the type's name or a parameter's.
+    static bool Echoes(string summary, IEnumerable<string> known)
+    {
+        var have = known.SelectMany(k => Regex.Split(k, @"(?<=[a-z0-9])(?=[A-Z])|[^\p{L}\p{N}]+")).Where(w => w.Length > 0).Select(Stem).ToHashSet();
+        return Words(summary).Where(w => !Filler.Contains(w) && !Filler.Contains(Stem(w))).Select(Stem).All(have.Contains);
     }
 
     // A doc element's text with <see cref/>, <paramref name/> etc. rendered as their target (`XElement.Value` drops them).

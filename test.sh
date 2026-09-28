@@ -641,6 +641,12 @@ public class Stock
     /// <param name="article">Article number.</param>
     /// <returns>Pieces on hand.</returns>
     public int Balance(string article) => 0;
+
+    /// <summary>Gets the stock level for an article.</summary>
+    public int GetStockLevel(string article) => 0;
+
+    /// <summary>TODO: describe</summary>
+    public void Reset() { }
 }
 CS
 cat > "$dq/docwizz.yaml" <<'YAML'
@@ -649,24 +655,28 @@ patterns:
 check: { min_coverage: 0, min_quality: 60 }
 YAML
 set +e; q=$(dw check "$dq" 2>/dev/null); code=$?; set -e
-grep -q "^Doc quality    .* 50%  (2 with written docs)" <<<"$q" || { echo "$q"; exit 1; }
+grep -q "^Doc quality    .* 25%  (4 with written docs)" <<<"$q" || { echo "$q"; exit 1; }
 grep -q "param-drift: documents parameter \`target\`, which doesn't exist" <<<"$q"
 grep -q "returns-on-void: documents a return value, but returns nothing" <<<"$q"
 grep -A1 "  Dq.Stock.Move(string, string)" <<<"$q" | grep -q "partial, missing: param"   # `to` has no <param>, whatever the count says
-grep -q "doc quality 50% < 60%" <<<"$q" && [ "$code" -eq 1 ] || { echo "min_quality not enforced"; exit 1; }
+grep -q "echo (inferred): summary only restates the name: \"Gets the stock level for an article.\"" <<<"$q"
+grep -q "placeholder (inferred): summary is a placeholder: \"TODO: describe\"" <<<"$q"
+grep -q "doc quality 25% < 60%" <<<"$q" && [ "$code" -eq 1 ] || { echo "min_quality not enforced"; exit 1; }
 if grep -q "Dq.Stock.Balance" <<<"$(sed -n '/^Doc quality (/,$p' <<<"$q")"; then echo "correct docs flagged"; exit 1; fi
 dw analyze "$dq" --format json 2>/dev/null | python3 -c '
 import json, sys
 d = json.load(sys.stdin)["documentation"]
-assert d["quality"] == 50.0, d["quality"]
+assert d["quality"] == 25.0, d["quality"]
 i = {i["id"]: i for i in d["items"]}
 assert [f["rule"] for f in i["cs:Dq.Stock.Move(string, string)"]["flags"]] == ["param-drift", "returns-on-void"], i
 assert i["cs:Dq.Stock.Move(string, string)"]["flags"][0]["origin"] == "fact"
-assert i["cs:Dq.Stock.Balance(string)"].get("flags") is None'
+assert i["cs:Dq.Stock.Balance(string)"].get("flags") is None
+assert i["cs:Dq.Stock.Reset()"]["flags"] == [{"rule": "placeholder", "origin": "inferred", "detail": "summary is a placeholder: \"TODO: describe\""}], i'
 out=$(mktemp -d); dw generate "$dq" "$out" >/dev/null 2>&1
-grep -q "^Doc quality: \*\*50%\*\* of 2 items" "$out/quality.md"
+grep -q "^Doc quality: \*\*25%\*\* of 4 items" "$out/quality.md"
+grep -q "| echo | inferred | summary only restates the name" "$out/quality.md"
 grep -q "| param-drift | fact | documents parameter \`target\`" "$out/quality.md"
-grep -q "| Doc quality (written docs without quality flags) | 50% |" "$out/index.md"
+grep -q "| Doc quality (written docs without quality flags) | 25% |" "$out/index.md"
 rm -rf "$dq" "$out"
 
 # A console app with no layers or endpoints: no empty diagrams or tables, not called a web host

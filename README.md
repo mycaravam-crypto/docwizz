@@ -204,6 +204,8 @@ contradicts the code) or *inferred* (a heuristic).
 |---|---|---|
 | `param-drift` | fact | a `<param name>` that isn't one of the parameters (parameters are also matched by name for coverage) |
 | `returns-on-void` | fact | a C#/Java method documents `<returns>` but returns nothing (`void`, `Task`) |
+| `placeholder` | inferred | the summary is TODO/FIXME/TBD, template boilerplate, or under three words |
+| `echo` | inferred | every meaningful word of the summary is already in the name, its type or a parameter ("Gets the stock level" on `GetStockLevel`) |
 
 ### Architecture rules
 
