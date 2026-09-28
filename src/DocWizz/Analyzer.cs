@@ -1,4 +1,5 @@
 using System.IO.Enumeration;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -22,6 +23,7 @@ class Config
         profile: default
         check:
           min_coverage: 80
+          # min_quality: 90     # fail when fewer % of items with written docs are free of quality flags
           max_critical: 0
           max_violations: 0
           max_cycles: 0
@@ -98,6 +100,8 @@ class CheckConfig
     public string FailOn { get; set; } = "low";
     // Fail when any symbol's cyclomatic complexity exceeds this (unset = no limit).
     public int? MaxComplexity { get; set; }
+    // Minimum doc quality % (share of documented items with no quality flags); unset = no gate.
+    public double? MinQuality { get; set; }
 }
 
 enum Level { None, Low, Medium, High }
@@ -110,11 +114,14 @@ enum Origin { Written, Fact, Inferred, Ai }
 // From: for AI drafts, the symbols whose facts the draft was generated from; Sentences: each sentence with its own.
 record Section(Origin Origin, string Text, List<string>? From = null, List<AiProse.Sentence>? Sentences = null);
 
+// A problem with documentation that exists: it contradicts the code (Fact) or looks useless (Inferred, a heuristic).
+record QualityFlag(string Rule, Origin Origin, string Detail);
+
 // One entry of the documentation model: what a symbol must document under the selected profile, what it has
 // (and where each part comes from), and the code it was derived from (Sources) for traceability.
 record DocumentationItem(Node Node, string Profile, string Pattern, Level Level, List<string> Required,
     Dictionary<string, Section> Sections, List<string> Missing, Status Status, List<string> Reasons,
-    List<string> Sources, bool Tested = false);
+    List<string> Sources, bool Tested = false, List<QualityFlag>? Flags = null);
 
 static class Analyzer
 {
@@ -248,11 +255,12 @@ static class Analyzer
                 sources.Add(iface);
             }
             var xml = ParseDoc(doc);
+            var names = ParamNames(node);
             var required = pattern.Sections.Select(Canonical).Distinct().Where(s => Applies(s, node)).ToList();
             var sections = new Dictionary<string, Section>();
             foreach (var s in required)
             {
-                if (Written(xml, s, node.Params ?? 0) is { } text) sections[s] = new(Origin.Written, text);
+                if (Written(xml, s, node.Params ?? 0, names) is { } text) sections[s] = new(Origin.Written, text);
                 else if (Derive(s, node) is var (section, from))
                 {
                     sections[s] = section;
@@ -263,7 +271,7 @@ static class Analyzer
             var status = missing.Count == 0 ? Status.Documented
                 : sections.Values.Any(x => x.Origin == Origin.Written) ? Status.Partial : Status.Undocumented;
             items.Add(new(node, config.Profile, patternName ?? "", level, required, sections, missing, status, reasons,
-                sources.Distinct().ToList(), Tested(node.Id)));
+                sources.Distinct().ToList(), Tested(node.Id), Flags(xml, node, names)));
         }
         return items;
     }
@@ -276,17 +284,47 @@ static class Analyzer
     }
 
     // The written text of a section, or null. <inheritdoc/> covers everything.
-    static string? Written(XElement? xml, string section, int paramCount)
+    static string? Written(XElement? xml, string section, int paramCount, List<string>? names)
     {
         if (xml is null) return null;
         if (xml.Element("inheritdoc") is not null) return "inherited";
         if (section == "param")
         {
-            var documented = xml.Elements("param").Count(e => !string.IsNullOrWhiteSpace(e.Value));
-            return documented >= paramCount ? $"{documented} documented" : null;
+            var documented = DocumentedParams(xml);
+            // By name when the scanner knows the names, so a doc left over from a renamed parameter doesn't count.
+            if (names is not null) return names.All(documented.Contains) ? $"{names.Count} documented" : null;
+            return documented.Count >= paramCount ? $"{documented.Count} documented" : null;
         }
         var text = xml.Element(section) is { } e ? Text(e) : null;
         return string.IsNullOrWhiteSpace(text) ? null : text;
+    }
+
+    static HashSet<string> DocumentedParams(XElement xml) => xml.Elements("param")
+        .Where(e => !string.IsNullOrWhiteSpace(e.Value)).Select(e => (string?)e.Attribute("name") ?? "").ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    // Parameter names from "[source] name: Type" (C#, Java), "@name: type" (SQL), "name?: type" (TS props); null when
+    // any isn't a plain identifier (a destructured TS parameter), so callers fall back to counting.
+    static List<string>? ParamNames(Node n)
+    {
+        if (n.Parameters is null) return null;
+        var names = n.Parameters.Select(p => Regex.Replace(p, @"^\[[^\]]*\]\s*", "").Split(':')[0].Trim().TrimStart('@').TrimEnd('?')).ToList();
+        return names.All(x => Regex.IsMatch(x, @"^[\w$]+$")) ? names : null;
+    }
+
+    // FACT: written documentation that contradicts the code.
+    static List<QualityFlag> Flags(XElement? xml, Node n, List<string>? names)
+    {
+        var flags = new List<QualityFlag>();
+        if (xml is null) return flags;
+        if (names is not null)
+            foreach (var p in xml.Elements("param").Select(e => (string?)e.Attribute("name")).OfType<string>()
+                         .Where(p => !names.Contains(p, StringComparer.OrdinalIgnoreCase)).Distinct())
+                flags.Add(new("param-drift", Origin.Fact, $"documents parameter `{p}`, which doesn't exist"));
+        // Only where scanners record every return type: C# and Java methods (Task and void → null).
+        if (n.Kind == "method" && n.Language is "csharp" or "java" && n.Returns is null
+            && xml.Element("returns") is { } r && !string.IsNullOrWhiteSpace(Text(r)))
+            flags.Add(new("returns-on-void", Origin.Fact, "documents a return value, but returns nothing"));
+        return flags;
     }
 
     // A doc element's text with <see cref/>, <paramref name/> etc. rendered as their target (`XElement.Value` drops them).
@@ -309,17 +347,42 @@ static class Analyzer
     public static double Coverage(IEnumerable<DocumentationItem> fs) =>
         fs.Any() ? 100 * fs.Sum(f => f.Status switch { Status.Documented => 1, Status.Partial => 0.5, _ => 0 }) / fs.Count() : 100;
 
+    // Items with any written documentation: the ones doc quality is measured on.
+    public static List<DocumentationItem> WithWrittenDocs(IEnumerable<DocumentationItem> fs) =>
+        fs.Where(f => f.Sections.Values.Any(s => s.Origin == Origin.Written)).ToList();
+
+    // Doc quality: the share of items with written documentation that carries no quality flag.
+    public static double Quality(IEnumerable<DocumentationItem> fs) =>
+        WithWrittenDocs(fs) is { Count: > 0 } w ? 100.0 * w.Count(f => f.Flags is not { Count: > 0 }) / w.Count : 100;
+
     public static void Report(List<DocumentationItem> findings, TextWriter o)
     {
         var cov = Coverage(findings);
         var bar = (int)Math.Round(cov / 5);
         o.WriteLine($"Documentation  {new string('█', bar)}{new string('░', 20 - bar)} {cov:0}%");
+        var quality = Quality(findings);
+        var qbar = (int)Math.Round(quality / 5);
+        o.WriteLine($"Doc quality    {new string('█', qbar)}{new string('░', 20 - qbar)} {quality:0}%  ({WithWrittenDocs(findings).Count} with written docs)");
         o.WriteLine();
         foreach (var g in findings.GroupBy(f => f.Pattern).OrderBy(g => g.Key))
             o.WriteLine($"  {(g.Key == "" ? "(none)" : g.Key),-16} {Coverage(g),4:0}%  ({g.Count()})");
 
         Section("Critical", findings.Where(IsCritical));
         Section("Warnings", findings.Where(f => f.Level == Level.Medium && f.Status != Status.Documented));
+
+        var flagged = findings.Where(f => f.Flags is { Count: > 0 }).ToList();
+        if (flagged.Count > 0)
+        {
+            o.WriteLine();
+            o.WriteLine($"Doc quality ({flagged.Count})");
+            o.WriteLine(new string('─', 40));
+            foreach (var f in flagged)
+            {
+                o.WriteLine($"  {f.Node.File}:{f.Node.Line}  {f.Node.Id[(f.Node.Id.IndexOf(':') + 1)..]}");
+                foreach (var q in f.Flags!)
+                    o.WriteLine($"    {q.Rule}{(q.Origin == Origin.Inferred ? " (inferred)" : "")}: {q.Detail}");
+            }
+        }
 
         o.WriteLine();
         o.WriteLine($"{findings.Count(f => f.Status == Status.Documented)} documented, " +

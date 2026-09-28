@@ -97,6 +97,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             if (n > 0) sb.AppendLine($"| {label} | {n} |");
         }
         sb.AppendLine($"| Documentation coverage (profile `{config.Profile}`) | {Analyzer.Coverage(findings):0}% |");
+        sb.AppendLine($"| Doc quality (written docs without quality flags) | {Analyzer.Quality(findings):0}% |");
         sb.AppendLine($"| Critical documentation gaps | {findings.Count(Analyzer.IsCritical)} |");
         sb.AppendLine($"| Architecture violations / cycles | {arch.Violations.Count} / {arch.Cycles.Count} |\n");
         if (drafts.Count > 0)
@@ -361,11 +362,22 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         var sb = new StringBuilder("# Quality\n\n");
         sb.AppendLine($"Documentation coverage against the `{config.Profile}` profile: **{Analyzer.Coverage(findings):0}%** of {findings.Count} items that need docs. " +
             "This measures the profile's rules, not compliance with any standard.\n");
+        var written = Analyzer.WithWrittenDocs(findings);
+        sb.AppendLine($"Doc quality: **{Analyzer.Quality(findings):0}%** of {written.Count} items with written docs have no quality flags.\n");
         var open = findings.Where(f => f.Status != Status.Documented).OrderByDescending(f => f.Level).ThenBy(f => f.Node.File).ToList();
         sb.AppendLine($"## Undocumented ({open.Count})\n");
         sb.AppendLine("| Level | Item | Status | Missing | Why it needs docs | Tested |\n|---|---|---|---|---|---|");
         foreach (var f in open)
             sb.AppendLine($"| {f.Level} | {SourceLink(f.Node.File, f.Node.Line, $"`{Esc(Display(f.Node))}`")} | {f.Status} | {string.Join(", ", f.Missing)} | {Esc(string.Join("; ", f.Reasons))} | {(f.Tested ? "✓" : "—")} |");
+        var flagged = findings.Where(f => f.Flags is { Count: > 0 }).OrderBy(f => f.Node.File).ThenBy(f => f.Node.Line).ToList();
+        if (flagged.Count > 0)
+        {
+            sb.AppendLine($"\n## Doc quality ({flagged.Count})\n\nWritten documentation that contradicts the code (fact) or looks like it adds nothing (inferred).\n");
+            sb.AppendLine("| Item | Rule | Basis | Problem |\n|---|---|---|---|");
+            foreach (var f in flagged)
+                foreach (var q in f.Flags!)
+                    sb.AppendLine($"| {SourceLink(f.Node.File, f.Node.Line, $"`{Esc(Display(f.Node))}`")} | {q.Rule} | {(q.Origin == Origin.Fact ? "fact" : "inferred")} | {Esc(q.Detail)} |");
+        }
         var ai = findings.Where(f => f.Sections.GetValueOrDefault("summary")?.Origin == Origin.Ai).ToList();
         if (ai.Count > 0)
         {

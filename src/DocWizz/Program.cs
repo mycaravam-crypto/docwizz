@@ -192,11 +192,13 @@ static object DocumentationJson(CodeModel model, Config config, List<Documentati
         profile = config.Profile,
         note = $"coverage against the '{config.Profile}' profile; not a statement of standards compliance",
         coverage = Math.Round(Analyzer.Coverage(items), 1),
+        quality = Math.Round(Analyzer.Quality(items), 1),
         items = items.Select(i => new
         {
             id = i.Node.Id, kind = i.Node.Kind, file = i.Node.File, line = i.Node.Line,
             level = i.Level, status = i.Status, pattern = i.Pattern, required = i.Required,
             sections = i.Sections, missing = i.Missing, reasons = i.Reasons, sources = i.Sources, evidence = Evidence(i), tested = i.Tested,
+            flags = i.Flags is { Count: > 0 } ? i.Flags : null,
         }),
     };
 }
@@ -315,6 +317,8 @@ static int Analyze(string root, Config config, bool enforce, bool json)
     var critical = findings.Count(Analyzer.IsCritical);
     var failures = new List<string>();
     if (coverage < config.Check.MinCoverage) failures.Add($"coverage {coverage:0}% < {config.Check.MinCoverage}%");
+    if (config.Check.MinQuality is { } minQuality && Analyzer.Quality(findings) is var quality && quality < minQuality)
+        failures.Add($"doc quality {quality:0}% < {minQuality}%");
     if (critical > config.Check.MaxCritical) failures.Add($"{critical} critical > {config.Check.MaxCritical}");
     if (violations.Count > config.Check.MaxViolations) failures.Add($"{violations.Count} violations > {config.Check.MaxViolations}");
     if (cycles.Count > config.Check.MaxCycles) failures.Add($"{cycles.Count} cycles > {config.Check.MaxCycles}");

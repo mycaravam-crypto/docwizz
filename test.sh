@@ -624,6 +624,51 @@ assert "HIGH requirement" in doc, doc
 PY
 rm -rf "$own" "$out"
 
+# Doc quality: written docs that contradict the code are flagged (facts), counted in doc quality %, gated by min_quality
+dq=$(mktemp -d)
+printf '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Library</OutputType></PropertyGroup></Project>\n' > "$dq/Dq.csproj"
+cat > "$dq/Stock.cs" <<'CS'
+namespace Dq;
+public class Stock
+{
+    /// <summary>Moves stock between two warehouses and records who did it.</summary>
+    /// <param name="from">Source warehouse.</param>
+    /// <param name="target">Renamed long ago.</param>
+    /// <returns>The new balance.</returns>
+    public void Move(string from, string to) { }
+
+    /// <summary>Balance of one article across all warehouses, in pieces.</summary>
+    /// <param name="article">Article number.</param>
+    /// <returns>Pieces on hand.</returns>
+    public int Balance(string article) => 0;
+}
+CS
+cat > "$dq/docwizz.yaml" <<'YAML'
+patterns:
+  all: { match: { kind: method }, level: medium, sections: [summary, param, returns] }
+check: { min_coverage: 0, min_quality: 60 }
+YAML
+set +e; q=$(dw check "$dq" 2>/dev/null); code=$?; set -e
+grep -q "^Doc quality    .* 50%  (2 with written docs)" <<<"$q" || { echo "$q"; exit 1; }
+grep -q "param-drift: documents parameter \`target\`, which doesn't exist" <<<"$q"
+grep -q "returns-on-void: documents a return value, but returns nothing" <<<"$q"
+grep -A1 "  Dq.Stock.Move(string, string)" <<<"$q" | grep -q "partial, missing: param"   # `to` has no <param>, whatever the count says
+grep -q "doc quality 50% < 60%" <<<"$q" && [ "$code" -eq 1 ] || { echo "min_quality not enforced"; exit 1; }
+if grep -q "Dq.Stock.Balance" <<<"$(sed -n '/^Doc quality (/,$p' <<<"$q")"; then echo "correct docs flagged"; exit 1; fi
+dw analyze "$dq" --format json 2>/dev/null | python3 -c '
+import json, sys
+d = json.load(sys.stdin)["documentation"]
+assert d["quality"] == 50.0, d["quality"]
+i = {i["id"]: i for i in d["items"]}
+assert [f["rule"] for f in i["cs:Dq.Stock.Move(string, string)"]["flags"]] == ["param-drift", "returns-on-void"], i
+assert i["cs:Dq.Stock.Move(string, string)"]["flags"][0]["origin"] == "fact"
+assert i["cs:Dq.Stock.Balance(string)"].get("flags") is None'
+out=$(mktemp -d); dw generate "$dq" "$out" >/dev/null 2>&1
+grep -q "^Doc quality: \*\*50%\*\* of 2 items" "$out/quality.md"
+grep -q "| param-drift | fact | documents parameter \`target\`" "$out/quality.md"
+grep -q "| Doc quality (written docs without quality flags) | 50% |" "$out/index.md"
+rm -rf "$dq" "$out"
+
 # A console app with no layers or endpoints: no empty diagrams or tables, not called a web host
 tiny=$(mktemp -d); out=$(mktemp -d)
 printf '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType></PropertyGroup></Project>\n' > "$tiny/Tiny.csproj"

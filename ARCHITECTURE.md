@@ -118,7 +118,9 @@ The model separates what the code states from what DocWizz concludes:
 - **[Analyzer](src/DocWizz/Analyzer.cs)** decides per symbol whether it needs documentation. That decision uses
   visibility, complexity, parameters, fan-in, side effects and the profile's pattern level. It then records which
   sections the profile requires and where each present one comes from: `written` (doc comment), `fact` (derived
-  from the model), `inferred` (side effects) or `ai`. AI drafts never close a gap.
+  from the model), `inferred` (side effects) or `ai`. AI drafts never close a gap. Written docs also get quality
+  flags: facts where they contradict the model (a `<param>` for a parameter that doesn't exist), inferences where a
+  heuristic says they add nothing. Doc quality % is the share of items with written docs and no flags.
 - **[Profiles](src/DocWizz/Profiles.cs)** are YAML documentation patterns: match on kind, name, type, tag or
   visibility, then list the sections required. Reports say "coverage against profile X", never "compliant with".
 - **[Architecture](src/DocWizz/Architecture.cs)** covers path-glob layers, allowed dependencies, violations

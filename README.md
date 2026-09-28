@@ -174,6 +174,7 @@ change most:
 profile: aspnet                     # what needs docs; see Profiles
 check:
   min_coverage: 80                  # % of items that need docs and have them
+  min_quality: 90                   # optional: % of written docs with no quality flags
   max_critical: 0
   fail_on: medium                   # lowest violation severity that fails check
   max_complexity: 20                # optional: fail on any symbol above this
@@ -192,6 +193,17 @@ comment_docs: true                  # count a // comment above a C# member as it
 A pattern lists the sections an item needs. Sections are XML doc tags (`summary`, `param`, `returns`, `exception`,
 `example`, `remarks`, or any custom tag) or derived ones that the code itself provides (`dependencies`, `endpoint`,
 `input`, `output`, `authorization`, `events`, `state`, `side_effects`).
+
+### Doc quality
+
+Coverage says a section exists. Doc quality says whether written docs can be trusted: the share of items with written
+docs that have no quality flag. `analyze` and `quality.md` list each flag and whether it is a *fact* (the doc
+contradicts the code) or *inferred* (a heuristic).
+
+| Flag | Basis | Fires when |
+|---|---|---|
+| `param-drift` | fact | a `<param name>` that isn't one of the parameters (parameters are also matched by name for coverage) |
+| `returns-on-void` | fact | a C#/Java method documents `<returns>` but returns nothing (`void`, `Task`) |
 
 ### Architecture rules
 
