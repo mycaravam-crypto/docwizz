@@ -269,9 +269,12 @@ static int DiffCommand(string root, string? gitRef, Config config, bool enforce,
     var critical = result.NewGaps.Count(Analyzer.IsCritical);
     var violations = Architecture.Failing(result.NewViolations, config.Check).Count;
     var complex = TooComplex(result.Added.Concat(result.Changed), config.Check);
-    var ok = critical == 0 && violations == 0 && complex.Count == 0;
+    // Docs that now contradict the code fail; inferred flags and possibly stale docs are reported only.
+    var contradictions = result.NewFlags.Count(x => x.Flag.Origin == Origin.Fact);
+    var ok = critical == 0 && violations == 0 && complex.Count == 0 && contradictions == 0;
     Console.WriteLine();
     Console.WriteLine(ok ? "check: PASS" : $"check: FAIL — introduced {critical} critical gaps, {violations} violations" +
+        (contradictions > 0 ? $", {contradictions} docs contradicting the code" : "") +
         (complex.Count > 0 ? $", {complex.Count} symbols over complexity {config.Check.MaxComplexity}" : ""));
     return ok ? 0 : 1;
 }

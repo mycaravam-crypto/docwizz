@@ -677,6 +677,18 @@ grep -q "^Doc quality: \*\*25%\*\* of 4 items" "$out/quality.md"
 grep -q "| echo | inferred | summary only restates the name" "$out/quality.md"
 grep -q "| param-drift | fact | documents parameter \`target\`" "$out/quality.md"
 grep -q "| Doc quality (written docs without quality flags) | 25% |" "$out/index.md"
+# check --since: a changed contract under an unchanged doc is possibly stale (reported); a new contradiction fails
+git -C "$dq" init -q && git -C "$dq" add -A && git -C "$dq" -c user.name=t -c user.email=t@t commit -qm base
+sed -i 's|public int Balance(string article) => 0;|public long Balance(string article, bool reserved) => 0;|' "$dq/Stock.cs"
+stale=$(dw check "$dq" --since HEAD 2>/dev/null) || { echo "$stale"; echo "stale docs failed check"; exit 1; }
+grep -q "! Stock.cs:[0-9]*  Dq.Stock.Balance(string, bool)  changed: parameters, return type" <<<"$stale" || { echo "$stale"; exit 1; }
+if grep -q "! .*Dq.Stock.Move" <<<"$stale"; then echo "unchanged contract reported stale"; exit 1; fi
+sed -i 's|/// <summary>Gets the stock level for an article.</summary>|&\n    /// <param name="sku">Article.</param>|' "$dq/Stock.cs"
+set +e; drift=$(dw check "$dq" --since HEAD 2>/dev/null); code=$?; set -e
+[ "$code" -eq 1 ] || { echo "$drift"; echo "introduced contradiction passed check --since"; exit 1; }
+grep -q "param-drift  Stock.cs:[0-9]*  Dq.Stock.GetStockLevel(string)  documents parameter \`sku\`" <<<"$drift"
+grep -q "check: FAIL — .*, 1 docs contradicting the code" <<<"$drift"
+if grep -q "param-drift .*Dq.Stock.Move" <<<"$drift"; then echo "pre-existing flag reported as introduced"; exit 1; fi
 rm -rf "$dq" "$out"
 
 # A console app with no layers or endpoints: no empty diagrams or tables, not called a web host

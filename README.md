@@ -108,7 +108,9 @@ Added (3)
 ### Gate pull requests
 
 `docwizz check` exits with 1 when thresholds fail. With `--since`, it fails only on what the change *introduces*, so
-an old codebase can adopt it without fixing everything first:
+an old codebase can adopt it without fixing everything first. That covers critical gaps, violations and docs that
+now contradict the code (fact quality flags). Docs that are *possibly stale* are listed but don't fail the check:
+a symbol whose parameters, return type, exceptions or route changed while its doc comment stayed the same.
 
 ```console
 $ docwizz check fixture
