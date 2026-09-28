@@ -392,6 +392,40 @@ grep -q '| stakeholders | \[present\](architecture/stakeholders.md) |' "$docs/ar
 [ ! -f "$docs/stale.md" ] || { echo "stale generated page kept"; exit 1; }
 rm -rf "$docs"
 
+# Plain comments: above an `if` holding a minimal-API endpoint, in a Vue setup preamble, `//` above a Vue prop
+plain=$(mktemp -d)
+cat > "$plain/Program.cs" <<'CS'
+var app = WebApplication.CreateBuilder(args).Build();
+// Resets the demo data.
+if (app.Environment.IsDevelopment()) { app.MapPost("/dev/reset", () => Results.NoContent()); }
+// Not the else branch's doc.
+if (app.Environment.IsProduction()) { } else { app.MapGet("/dev/ping", () => "pong"); }
+CS
+cat > "$plain/Toasts.vue" <<'VUE'
+<script setup lang="ts">
+import { useToasts } from './toasts'
+const props = defineProps<{
+  // Milliseconds before a toast hides.
+  timeout: number
+}>()
+const toasts = useToasts()
+// Stacked notifications in the corner of the page.
+const visible = toasts.list
+function dismiss() { toasts.clear() }
+</script>
+<template><div>{{ visible }}</div></template>
+VUE
+dw scan "$plain" "$plain/model.json" >/dev/null
+python3 - "$plain/model.json" <<'PY'
+import json, sys
+nodes = {n["id"]: n for n in json.load(open(sys.argv[1]))["nodes"]}
+assert "Resets the demo data." in nodes["cs:endpoint:POST /dev/reset"]["doc"], nodes["cs:endpoint:POST /dev/reset"]
+assert not nodes["cs:endpoint:GET /dev/ping"].get("doc"), nodes["cs:endpoint:GET /dev/ping"]
+doc = nodes["vue:Toasts.vue"]["doc"]
+assert "<summary>Stacked notifications in the corner of the page.</summary>" in doc and '<param name="timeout">Milliseconds before a toast hides.</param>' in doc, doc
+PY
+rm -rf "$plain"
+
 # Change impact: only what a change introduces fails `check --since`
 repo=$(mktemp -d)
 cp -r fixture/. "$repo"

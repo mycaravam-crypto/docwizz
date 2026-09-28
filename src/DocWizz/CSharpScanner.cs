@@ -542,9 +542,13 @@ static class CSharpScanner
             if (ma.Name.Identifier.Text == "RequireAuthorization") tags.Add("authorize");
             if (ma.Name.Identifier.Text == "AllowAnonymous") tags.Add("anonymous");
         }
-        text ??= string.Join(" ", (inv.FirstAncestorOrSelf<StatementSyntax>()?.GetLeadingTrivia() ?? default)
-            .Where(t => t.IsKind(SyntaxKind.SingleLineCommentTrivia) || t.IsKind(SyntaxKind.MultiLineCommentTrivia))
-            .Select(t => t.ToString().TrimStart('/', '*', ' ').TrimEnd('*', '/', ' '))).Trim();
+        // A statement alone in an `if` (`if (env.IsDevelopment()) { app.MapPost(..) }`) takes the comment above the `if`.
+        for (var st = inv.FirstAncestorOrSelf<StatementSyntax>(); st is not null && text is not { Length: > 0 };
+             st = (st.Parent is BlockSyntax { Statements.Count: 1 } b ? b : st).Parent is IfStatementSyntax ifs
+                 && ifs.Statement == (st.Parent as BlockSyntax ?? st) ? ifs : null)
+            text = string.Join(" ", st.GetLeadingTrivia()
+                .Where(t => t.IsKind(SyntaxKind.SingleLineCommentTrivia) || t.IsKind(SyntaxKind.MultiLineCommentTrivia))
+                .Select(t => t.ToString().TrimStart('/', '*', ' ').TrimEnd('*', '/', ' '))).Trim();
         if (text is { Length: > 0 }) doc ??= new XElement("member", new XElement("summary", text)).ToString();
 
         // A method group's handler: its own attributes, return type and body.
