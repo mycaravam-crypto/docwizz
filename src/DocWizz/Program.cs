@@ -103,6 +103,9 @@ static List<string> RepoFiles(string root, Config config, string[]? dotDirs = nu
         .Where(f => !config.Exclude.Any(g =>
             FileSystemName.MatchesSimpleExpression(g, Path.GetRelativePath(root, f).Replace('\\', '/'))))
         .Distinct()
+        // Sorted: a directory walk (a `git archive`d ref) and `git ls-files` must yield the same order, or which
+        // declaration of a multi-file symbol wins below would differ between the two sides of a diff.
+        .OrderBy(f => Path.GetRelativePath(root, f).Replace('\\', '/'), StringComparer.Ordinal)
         .ToList();
 }
 
@@ -127,9 +130,9 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
         .Where(f => config.Tests.Any(g => FileSystemName.MatchesSimpleExpression(g, f))
             || Projects.Of(projNodes, f)?.Tags?.Contains("test") == true).ToHashSet(); // test projects: by metadata, not only by path
     // Same id from test and production code (a test router's `route:/login`): production wins.
-    nodes = nodes.OrderBy(n => testFiles.Contains(n.File)).DistinctBy(n => n.Id).ToList();
+    nodes = CodeModel.MergeHashes(nodes, n => testFiles.Contains(n.File)).OrderBy(n => testFiles.Contains(n.File)).DistinctBy(n => n.Id).ToList();
     var ids = nodes.Select(n => n.Id).ToHashSet();
-    nodes.AddRange(feNodes.OrderBy(n => testFiles.Contains(n.File)).Concat(javaNodes.OrderBy(n => testFiles.Contains(n.File))).Concat(sqlNodes).Concat(projNodes).Concat(settings).Where(n => ids.Add(n.Id)));
+    nodes.AddRange(CodeModel.MergeHashes(feNodes.Concat(javaNodes).Concat(sqlNodes), n => testFiles.Contains(n.File)).OrderBy(n => testFiles.Contains(n.File)).Concat(projNodes).Concat(settings).Where(n => ids.Add(n.Id)));
     edges = Frontend.LinkHttp(nodes, Sql.Link(nodes, [.. edges, .. feEdges, .. javaEdges, .. sqlEdges, .. projEdges]));
     Externals.Link(nodes, edges);
     Configuration.Link(nodes, edges);

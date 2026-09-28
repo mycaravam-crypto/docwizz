@@ -25,4 +25,13 @@ record CodeModel(string? Commit, List<Node> Nodes, List<Edge> Edges)
     // `creates`: From instantiates To (`new T(..)`).
     public static readonly string[] DependencyKinds = ["calls", "injects", "implements", "inherits", "imports", "renders",
         "routes-to", "persists", "publishes", "subscribes", "http", "creates"];
+
+    // A symbol declared in several files (partial class, the same table in two scripts) is kept as one node, the first.
+    // Give every declaration a hash over all of them, so the survivor changes when any declaration does and doesn't depend
+    // on which one comes first. `side` keeps groups apart that must not mix (test vs production code).
+    public static IEnumerable<Node> MergeHashes(IEnumerable<Node> nodes, Func<Node, bool>? side = null) =>
+        nodes.GroupBy(n => (n.Id, side?.Invoke(n) ?? false)).SelectMany(g => g.Skip(1).Any() && g.Any(n => n.Hash is not null)
+            ? g.Select(n => n with { Hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(
+                string.Join("|", g.Select(x => x.Hash ?? "").Order(StringComparer.Ordinal)))))[..12].ToLowerInvariant() })
+            : g);
 }

@@ -71,7 +71,7 @@ static class Sql
             foreach (var p in Exec.Matches(code).Select(x => Resolve(byName, x.Groups[1].Value)).OfType<Node>().Where(n => n.Kind == "procedure").DistinctBy(n => n.Id))
                 edges.Add(new(id, p.Id, "calls"));
         }
-        return (nodes.DistinctBy(n => n.Id).ToList(), edges.Distinct().ToList());
+        return (CodeModel.MergeHashes(nodes).DistinctBy(n => n.Id).ToList(), edges.Distinct().ToList());
     }
 
     // Code → procedure: `sqlref:<name>` edges point at the procedure node, or are dropped when there is none.

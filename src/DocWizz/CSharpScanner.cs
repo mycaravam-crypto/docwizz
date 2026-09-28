@@ -101,7 +101,7 @@ static class CSharpScanner
         edges.RemoveAll(e => e.Kind == "uses-namespace" && (own.Contains(e.To[3..]) || e.To[3..] is "System" || e.To.StartsWith("ns:System.")));
 
         // Partial types/methods declare the same symbol more than once; keep the first.
-        return (nodes.DistinctBy(n => n.Id).ToList(), edges.Distinct().ToList());
+        return (CodeModel.MergeHashes(nodes).DistinctBy(n => n.Id).ToList(), edges.Distinct().ToList());
     }
 
     // Framework concepts and roles. Base types and interfaces outside the source (ASP.NET, EF, hosting) are unresolved,
