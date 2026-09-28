@@ -256,11 +256,21 @@ static partial class Analyzer
             }
             var xml = ParseDoc(doc);
             var names = ParamNames(node);
+            // FACT: a bare <inheritdoc/> with nothing behind it (the scanner records what it can inherit from), or only
+            // interfaces in the model that have no docs themselves. It documents nothing.
+            var inherit = xml?.Element("inheritdoc") is { } ih && ih.Attribute("cref") is null ? (string?)ih.Attribute("source") : null;
+            var emptyInherit = inherit switch
+            {
+                "none" => "`<inheritdoc/>`, but there is nothing to inherit from",
+                "interface" when implOf[node.Id].Any() && !implOf[node.Id].Any(i => nodes.GetValueOrDefault(i)?.Doc is not null)
+                    => $"`<inheritdoc/>` from `{Generator.Display(nodes[implOf[node.Id].First()])}`, which has no docs",
+                _ => null,
+            };
             var required = pattern.Sections.Select(Canonical).Distinct().Where(s => Applies(s, node)).ToList();
             var sections = new Dictionary<string, Section>();
             foreach (var s in required)
             {
-                if (Written(xml, s, node.Params ?? 0, names) is { } text) sections[s] = new(Origin.Written, text);
+                if (Written(xml, s, node.Params ?? 0, names, emptyInherit is null) is { } text) sections[s] = new(Origin.Written, text);
                 else if (Derive(s, node) is var (section, from))
                 {
                     sections[s] = section;
@@ -270,8 +280,10 @@ static partial class Analyzer
             var missing = required.Where(s => !sections.ContainsKey(s)).ToList();
             var status = missing.Count == 0 ? Status.Documented
                 : sections.Values.Any(x => x.Origin == Origin.Written) ? Status.Partial : Status.Undocumented;
+            var flags = Flags(xml, node, names, typeName);
+            if (emptyInherit is not null) flags.Insert(0, new("empty-inheritdoc", Origin.Fact, emptyInherit));
             items.Add(new(node, config.Profile, patternName ?? "", level, required, sections, missing, status, reasons,
-                sources.Distinct().ToList(), Tested(node.Id), Flags(xml, node, names, typeName)));
+                sources.Distinct().ToList(), Tested(node.Id), flags));
         }
         return items;
     }
@@ -283,11 +295,11 @@ static partial class Analyzer
         catch { return null; }
     }
 
-    // The written text of a section, or null. <inheritdoc/> covers everything.
-    static string? Written(XElement? xml, string section, int paramCount, List<string>? names)
+    // The written text of a section, or null. <inheritdoc/> covers everything, when there is something to inherit.
+    static string? Written(XElement? xml, string section, int paramCount, List<string>? names, bool inherits = true)
     {
         if (xml is null) return null;
-        if (xml.Element("inheritdoc") is not null) return "inherited";
+        if (xml.Element("inheritdoc") is not null && inherits) return "inherited";
         if (section == "param")
         {
             var documented = DocumentedParams(xml);
@@ -387,9 +399,10 @@ static partial class Analyzer
     public static double Coverage(IEnumerable<DocumentationItem> fs) =>
         fs.Any() ? 100 * fs.Sum(f => f.Status switch { Status.Documented => 1, Status.Partial => 0.5, _ => 0 }) / fs.Count() : 100;
 
-    // Items with any written documentation: the ones doc quality is measured on.
+    // Items with any written documentation (flagged docs count, even an <inheritdoc/> that documents nothing): the
+    // ones doc quality is measured on.
     public static List<DocumentationItem> WithWrittenDocs(IEnumerable<DocumentationItem> fs) =>
-        fs.Where(f => f.Sections.Values.Any(s => s.Origin == Origin.Written)).ToList();
+        fs.Where(f => f.Sections.Values.Any(s => s.Origin == Origin.Written) || f.Flags is { Count: > 0 }).ToList();
 
     // Doc quality: the share of items with written documentation that carries no quality flag.
     public static double Quality(IEnumerable<DocumentationItem> fs) =>

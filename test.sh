@@ -691,6 +691,37 @@ grep -q "check: FAIL — .*, 1 docs contradicting the code" <<<"$drift"
 if grep -q "param-drift .*Dq.Stock.Move" <<<"$drift"; then echo "pre-existing flag reported as introduced"; exit 1; fi
 rm -rf "$dq" "$out"
 
+# <inheritdoc/> documents something only when there is something to inherit: an external base counts, nothing doesn't
+ih=$(mktemp -d)
+printf '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Library</OutputType></PropertyGroup></Project>\n' > "$ih/Ih.csproj"
+cat > "$ih/Clock.cs" <<'CS'
+namespace Ih;
+public interface IClock { int Now(); }
+public interface ITimer
+{
+    /// <summary>Milliseconds since the timer started.</summary>
+    int Elapsed();
+}
+public class Clock : IClock, ITimer
+{
+    /// <inheritdoc/>
+    public int Now() => 0;
+    /// <inheritdoc/>
+    public int Elapsed() => 0;
+    /// <inheritdoc/>
+    public int Tick() => 0;
+    /// <inheritdoc/>
+    public override string ToString() => "clock";
+}
+CS
+printf 'patterns:\n  all: { match: { kind: method, type: Clock }, level: medium, sections: [summary] }\n' > "$ih/docwizz.yaml"
+inh=$(dw analyze "$ih" 2>/dev/null)
+grep -A1 "  Ih.Clock.Tick()$" <<<"$inh" | grep -q "empty-inheritdoc: \`<inheritdoc/>\`, but there is nothing to inherit from" || { echo "$inh"; exit 1; }
+grep -A1 "  Ih.Clock.Now()$" <<<"$inh" | grep -q "empty-inheritdoc: \`<inheritdoc/>\` from \`Ih.IClock.Now()\`, which has no docs"
+if grep -q "Ih.Clock.ToString()\|Ih.Clock.Elapsed()" <<<"$inh"; then echo "inheritdoc with a source flagged"; exit 1; fi
+grep -q "^Doc quality    .* 50%  (4 with written docs)" <<<"$inh"
+rm -rf "$ih"
+
 # A console app with no layers or endpoints: no empty diagrams or tables, not called a web host
 tiny=$(mktemp -d); out=$(mktemp -d)
 printf '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType></PropertyGroup></Project>\n' > "$tiny/Tiny.csproj"

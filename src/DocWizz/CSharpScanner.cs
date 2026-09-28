@@ -625,11 +625,37 @@ static class CSharpScanner
     static string? Doc(ISymbol s)
     {
         var xml = s.GetDocumentationCommentXml();
-        if (!string.IsNullOrWhiteSpace(xml)) return xml.Trim();
+        if (!string.IsNullOrWhiteSpace(xml)) return InheritSource(s, xml.Trim());
         if (!commentDocs) return null;
         // `comment_docs: true`: a plain `//` block directly above the declaration (no blank line in between) is its summary.
         var text = s.DeclaringSyntaxReferences.Select(r => LeadingComment(r.GetSyntax())).FirstOrDefault(t => t.Length > 0);
         return text is null ? null : new XElement("member", new XElement("summary", text)).ToString();
+    }
+
+    // FACT: what a bare <inheritdoc/> can inherit from, recorded on it as source="none|interface|base" so the analyzer
+    // can tell an empty one apart (an external base, like ControllerBase, isn't in the model but still has docs).
+    static string InheritSource(ISymbol s, string xml)
+    {
+        if (!xml.Contains("inheritdoc")) return xml;
+        XElement doc;
+        try { doc = XElement.Parse(xml); }
+        catch { return xml; }
+        if (doc.Element("inheritdoc") is not { } inherit || inherit.Attribute("cref") is not null) return xml;
+        var type = s as INamedTypeSymbol ?? s.ContainingType;
+        var fromBase = s switch
+        {
+            INamedTypeSymbol t => t.BaseType is { SpecialType: not (SpecialType.System_Object or SpecialType.System_ValueType
+                or SpecialType.System_Enum or SpecialType.System_MulticastDelegate) },
+            IMethodSymbol m => m.IsOverride || m.MethodKind == MethodKind.Constructor,
+            IPropertySymbol p => p.IsOverride,
+            IEventSymbol e => e.IsOverride,
+            _ => true,
+        };
+        var fromInterface = s is INamedTypeSymbol nt ? nt.AllInterfaces.Length > 0
+            : type is not null && type.AllInterfaces.SelectMany(i => i.GetMembers())
+                .Any(im => SymbolEqualityComparer.Default.Equals(type.FindImplementationForInterfaceMember(im), s));
+        inherit.SetAttributeValue("source", fromBase ? "base" : fromInterface ? "interface" : "none");
+        return doc.ToString();
     }
 
     static string LeadingComment(SyntaxNode n)
