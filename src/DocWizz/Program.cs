@@ -222,7 +222,9 @@ static async Task<int> Generate(string root, string outDir, Config config, bool 
     }
     var summaries = drafts.Where(d => !d.Key.StartsWith("module:") && d.Value.Text.Length > 0).ToDictionary(d => d.Key, d => d.Value.Text);
     var overviews = drafts.Where(d => d.Key.StartsWith("module:")).ToDictionary(d => d.Key["module:".Length..], d => d.Value);
-    var (pages, changed) = new Generator(root, outDir, model, findings, arch, config, summaries, overviews)
+    // Advisory ratings of written docs: shown in quality.md, never part of doc quality % or check.
+    var assessments = await AiProse.Assessments(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-assessments.json"), ai);
+    var (pages, changed) = new Generator(root, outDir, model, findings, arch, config, summaries, overviews, assessments)
     {
         WriteHtml = html,
         Files = [.. RepoFiles(root, config, [".github", ".circleci"]).Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))],

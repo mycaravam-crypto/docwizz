@@ -559,7 +559,10 @@ class H(http.server.BaseHTTPRequestHandler):
         assert self.path == "/api/chat" and req["model"] == "local:7b" and not req["stream"] and req["format"] == "json", req
         facts = json.loads(req["messages"][1]["content"])
         S = lambda text, *cites: {"text": text, "from": list(cites)}
-        if "module" in facts:  # module overview: one supported sentence, one citing nothing in the facts
+        if req["messages"][0]["content"].startswith("You review"):  # assessing written docs
+            reply = {"score": 2, "missing": ["purpose", "side effects", "vibes"], "note": "Says what, not why."} \
+                if facts["existingDocs"] else "not json"
+        elif "module" in facts:  # module overview: one supported sentence, one citing nothing in the facts
             reply = {"summary": [S(f"Module for {facts['module']}.", facts["members"][0]["name"])], "responsibilities": [S("Owns pricing.", "NotInFacts")]}
         elif facts["symbol"].startswith("Fixture.Api.MaterialController.Create("):
             reply = {"summary": [S("Creates a material.", "source")], "behaviour": [S("Delegates to the service.", facts["calls"][0])],
@@ -587,11 +590,19 @@ b = i["sections"]["behaviour"]
 assert b["origin"] == "ai" and b["sentences"][0]["from"][0].startswith("cs:Fixture.Application.IMaterialService.CreateAsync("), b
 assert "exception" not in i["sections"] and "summary" in i["missing"], i
 PY2
+# assessments of written docs: listed in quality.md (unknown gaps dropped), cached, never part of doc quality
+grep -q '| \[`Fixture.Api.MaterialController.Rename(int, Fixture.Api.RenameMaterialRequest)`\](.*) | 2 | purpose, side effects | Says what, not why. |' "$docs/quality.md" \
+    || { grep -A5 "Usefulness" "$docs/quality.md"; exit 1; }
+grep -q "AI-assessed and advisory: not part of doc quality" "$docs/quality.md"
+grep -q '"score": 2' "$docs/.docwizz/ai-assessments.json"
 public=$(OLLAMA_HOST=8.8.8.8 dw generate fixture "$(mktemp -d)" --ai 2>&1 >/dev/null)
 grep -q "8.8.8.8 is not a local or private address" <<<"$public" || { echo "$public"; exit 1; }
 cloud=$(OLLAMA_HOST="127.0.0.1:$(cat "$port_file")" DOCWIZZ_MODEL=gpt-oss:120b-cloud dw generate fixture "$(mktemp -d)" --ai 2>&1 >/dev/null)
 grep -q "gpt-oss:120b-cloud is an Ollama cloud model" <<<"$cloud" || { echo "$cloud"; exit 1; }
-kill $fake; rm -rf "$docs" "$port_file"
+kill $fake
+dw generate fixture "$docs" >/dev/null 2>&1   # no --ai, no server: from the cache
+grep -q '| 2 | purpose, side effects | Says what, not why. |' "$docs/quality.md"
+rm -rf "$docs" "$port_file"
 
 # Legacy project: no doc comments, no docwizz.yaml, controller talks to the DbContext and holds the logic
 legacy=$(mktemp -d)

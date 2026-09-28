@@ -39,6 +39,22 @@ static class AiProse
         don't support it; don't guess.
         """;
 
+    const string AssessInstructions = """
+        You review the existing documentation of one symbol for a developer who has to call or change it. You get facts
+        from static analysis, its source, and its doc comment as `existingDocs`. Answer with one JSON object and nothing
+        else: {"score": 1, "missing": [], "note": ""}
+        score: 1 = says nothing the name doesn't; 2 = restates the signature; 3 = says what it does, not when or why;
+        4 = also the purpose and the constraints a caller must respect; 5 = also the side effects and errors the facts show.
+        missing: what a caller needs that the docs leave out, each one of "purpose", "constraints", "side effects",
+        "errors", "usage"; name only what the facts or source show exists. note: one plain sentence on the biggest gap,
+        or "" when there is none. Judge only `existingDocs`; don't rewrite them.
+        """;
+
+    static readonly string[] Gaps = ["purpose", "constraints", "side effects", "errors", "usage"];
+
+    // An AI rating of a written doc comment. Advisory: never counted in doc quality, never fails a check.
+    public record Assessment(int Score, List<string> Missing, string Note);
+
     // Sections a symbol draft may fill, in page order; `errors` fills the profile's `exception` section.
     public static readonly string[] SectionNames = ["summary", "responsibilities", "behaviour", "side_effects", "errors", "usage"];
 
@@ -72,13 +88,7 @@ static class AiProse
 
         if (call && misses.Count + moduleMisses.Count > 0)
         {
-            var name = Environment.GetEnvironmentVariable("DOCWIZZ_MODEL") is { Length: > 0 } m ? m : DefaultModel;
-            // Ollama's `…-cloud` / `…:cloud` models run on ollama.com: that would send the code out.
-            if (name.Split(':').Last().EndsWith("cloud", StringComparison.OrdinalIgnoreCase))
-            {
-                Console.Error.WriteLine($"docwizz: AI summaries skipped — {name} is an Ollama cloud model; use a local one");
-                return result;
-            }
+            if (LocalModel("summaries") is not { } name) return result;
             using var client = LocalOnly(OllamaUri());
             Console.Error.WriteLine($"docwizz: drafting {misses.Count} symbols and {moduleMisses.Count} module overviews with {name} at {client.BaseAddress} " +
                 $"({targets.Count - misses.Count} cached)");
@@ -128,6 +138,68 @@ static class AiProse
             Console.Error.WriteLine($"docwizz: {misses.Count} items lack docs; pass --ai to draft summaries");
 
         return result;
+    }
+
+    // Rates the written docs of items that have them, from cache and (when allowed) fresh calls, keyed by symbol, doc
+    // and body: a doc or code change asks again.
+    public static async Task<Dictionary<string, Assessment>> Assessments(
+        string root, CodeModel model, List<DocumentationItem> findings, string cacheFile, bool call)
+    {
+        Dictionary<string, Assessment> cache;
+        try { cache = File.Exists(cacheFile) ? JsonSerializer.Deserialize<Dictionary<string, Assessment>>(File.ReadAllText(cacheFile), Web) ?? [] : []; }
+        catch (JsonException) { cache = []; }
+        static string Key(Node n) => $"{n.Id}@{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes($"{n.Doc}|{n.Hash}")))[..12].ToLowerInvariant()}";
+        var targets = findings.Where(f => f.Node.Doc is not null && f.Sections.GetValueOrDefault("summary")?.Origin == Origin.Written).ToList();
+        var result = targets.Where(f => cache.ContainsKey(Key(f.Node))).ToDictionary(f => f.Node.Id, f => cache[Key(f.Node)]);
+        var misses = targets.Where(f => !cache.ContainsKey(Key(f.Node))).ToList();
+        if (!call || misses.Count == 0 || LocalModel("assessments") is not { } name) return result;
+
+        using var client = LocalOnly(OllamaUri());
+        Console.Error.WriteLine($"docwizz: assessing {misses.Count} written docs with {name} at {client.BaseAddress} ({result.Count} cached)");
+        var facts = new Facts(root, model);
+        foreach (var f in misses)
+        {
+            try
+            {
+                if (ParseAssessment(await Create(client, name, AssessInstructions, facts.For(f.Node, f).Json)) is { } a)
+                    result[f.Node.Id] = cache[Key(f.Node)] = a;
+            }
+            catch (HttpRequestException e) { Console.Error.WriteLine($"docwizz: AI assessments skipped — {e.InnerException?.Message ?? e.Message}"); break; }
+            catch (Exception e) { Console.Error.WriteLine($"docwizz: AI assessment failed for {f.Node.Id}: {e.Message}"); }
+        }
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(cacheFile))!);
+        File.WriteAllText(cacheFile, JsonSerializer.Serialize(new SortedDictionary<string, Assessment>(cache), new JsonSerializerOptions(Web) { WriteIndented = true }));
+        return result;
+    }
+
+    static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
+
+    // {"score", "missing", "note"}; anything else (not JSON, score outside 1-5) is no assessment.
+    static Assessment? ParseAssessment(string? reply)
+    {
+        try
+        {
+            var json = JsonDocument.Parse(reply ?? "").RootElement;
+            if (json.ValueKind != JsonValueKind.Object || !json.TryGetProperty("score", out var s) || !s.TryGetInt32(out var score) || score is < 1 or > 5)
+                return null;
+            var missing = json.TryGetProperty("missing", out var m) && m.ValueKind == JsonValueKind.Array
+                ? m.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!.Trim().ToLowerInvariant())
+                    .Where(Gaps.Contains).Distinct().ToList() : [];
+            var note = json.TryGetProperty("note", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString()!.Trim() : "";
+            return new(score, missing, note);
+        }
+        catch (JsonException) { return null; }
+    }
+
+    // DOCWIZZ_MODEL (default qwen2.5-coder:7b), or null when it's one of Ollama's `…-cloud` / `…:cloud` models: they
+    // run on ollama.com, which would send the code out.
+    static string? LocalModel(string what)
+    {
+        var name = Environment.GetEnvironmentVariable("DOCWIZZ_MODEL") is { Length: > 0 } m ? m : DefaultModel;
+        if (!name.Split(':').Last().EndsWith("cloud", StringComparison.OrdinalIgnoreCase)) return name;
+        Console.Error.WriteLine($"docwizz: AI {what} skipped — {name} is an Ollama cloud model; use a local one");
+        return null;
     }
 
     static async Task<string?> Create(HttpClient client, string model, string instructions, string facts)

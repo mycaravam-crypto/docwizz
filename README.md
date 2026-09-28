@@ -270,6 +270,10 @@ behaviour, side effects, errors and usage for each item, plus an overview per mo
 - **Never authoritative.** Drafts are marked 🤖, fill only empty sections and never close a gap.
 - **Sent once.** Drafts are cached in `docs/.docwizz/ai-cache.json` by symbol and code hash, so unchanged code isn't
   sent again. Without `--ai`, cached drafts are still used and nothing is sent.
+- **Rates written docs too.** The same model scores each written doc from 1 (says nothing the name doesn't) to 5
+  (purpose, constraints, side effects, errors) and names what is missing. The scores are listed under *Usefulness 🤖*
+  in `quality.md`. They are advisory: not part of doc quality %, never used by `check`. They are cached in
+  `docs/.docwizz/ai-assessments.json` by symbol, doc and code hash.
 
 `OLLAMA_HOST` picks the server (default `localhost:11434`). `DOCWIZZ_MODEL` picks the model (default
 `qwen2.5-coder:7b`).

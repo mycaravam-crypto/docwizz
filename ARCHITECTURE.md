@@ -171,6 +171,9 @@ sends the repository, and it only talks to a self-hosted Ollama: every connectio
 loopback or private, proxies are bypassed and Ollama cloud models are refused, so code never reaches a public
 service. Drafts are cached per symbol and body hash in `docs/.docwizz/ai-cache.json`, together with
 the symbols they were drafted from (provenance). Drafts are marked 🤖 and never override written documentation.
+With the same facts and the doc comment, it also rates written docs (score 1–5, missing gaps, a note), cached per
+symbol, doc and body hash in `ai-assessments.json`; the rating is shown in `quality.md` only and never feeds doc
+quality % or `check`.
 
 ## Tests
 
