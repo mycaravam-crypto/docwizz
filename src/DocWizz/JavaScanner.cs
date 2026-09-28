@@ -175,7 +175,7 @@ static partial class JavaScanner
             foreach (var im in methodsOf.GetValueOrDefault(iface) ?? [])
                 if (methodsOf.GetValueOrDefault(impl)?.FirstOrDefault(m => m.Name == im.Name && m.Arity == im.Arity) is { Id: not null } found)
                     edges.Add(new(found.Id, im.Id, "implements"));
-        return (nodes.DistinctBy(n => n.Id).ToList(), edges.Distinct().ToList());
+        return (CodeModel.MergeHashes(nodes).DistinctBy(n => n.Id).ToList(), edges.Distinct().ToList());
     }
 
     // Comments and string/char contents blanked (same length, newlines kept), so braces and keywords can be matched.

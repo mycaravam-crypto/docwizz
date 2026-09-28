@@ -130,7 +130,7 @@ jobs:
   docwizz:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }          # the base commit must be in the checkout
       - uses: mycaravam-crypto/docwizz@main
         with:
@@ -195,6 +195,12 @@ comment_docs: true                  # count a // comment above a C# member as it
 A pattern lists the sections an item needs. Sections are XML doc tags (`summary`, `param`, `returns`, `exception`,
 `example`, `remarks`, or any custom tag) or derived ones that the code itself provides (`dependencies`, `endpoint`,
 `input`, `output`, `authorization`, `events`, `state`, `side_effects`).
+
+Besides XML doc and JSDoc comments, docwizz reads these plain comments:
+
+- a minimal-API endpoint: a comment above the `Map*` statement, or above an `if` whose only statement it is
+- a Vue component: an HTML comment before the first block, or a comment in the `<script>` before its first function
+- a Vue prop: a `/** */` or `//` comment directly above it in `defineProps`
 
 ### Doc quality
 

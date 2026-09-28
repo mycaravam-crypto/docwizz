@@ -375,9 +375,27 @@ function propsOf(call, sf) {
   return members.filter(m => m.name).map(m => {
     const docs = ts.getJSDocCommentsAndTags(m).filter(ts.isJSDoc)
     const type = m.type?.getText(sf) ?? (ts.isPropertyAssignment(m) ? m.initializer.getText(sf) : null)
-    return { name: m.name.getText(sf), type, doc: docs.map(d => ts.getTextOfJSDocComment(d.comment) ?? '').join(' ').trim() }
+    const doc = docs.map(d => ts.getTextOfJSDocComment(d.comment) ?? '').join(' ').trim() || lineComment(m, sf)
+    return { name: m.name.getText(sf), type, doc }
   })
 }
+
+// A plain `//` block directly above a node (no blank line in between), as C# `comment_docs` reads it.
+function lineComment(node, sf) {
+  const ranges = ts.getLeadingCommentRanges(sf.text, node.getFullStart()) ?? []
+  const lines = []
+  for (let i = ranges.length - 1; i >= 0; i--) {
+    const r = ranges[i]
+    const gap = sf.text.slice(r.end, i === ranges.length - 1 ? node.getStart(sf) : ranges[i + 1].pos)
+    if (r.kind !== ts.SyntaxKind.SingleLineCommentTrivia || (gap.match(/\n/g) ?? []).length > 1) break
+    lines.unshift(sf.text.slice(r.pos + 2, r.end).trim())
+  }
+  return lines.join(' ').trim()
+}
+
+// A function or class declaration, or `const f = () => …` / `function () {…}`.
+const isFunctionLike = st => ts.isFunctionDeclaration(st) || ts.isClassDeclaration(st) || (ts.isVariableStatement(st)
+  && st.declarationList.declarations.some(d => d.initializer && (ts.isArrowFunction(d.initializer) || ts.isFunctionExpression(d.initializer))))
 
 // defineEmits<{ created: [id: number] }>(), defineEmits<{ (e: 'created', id: number): void }>() or defineEmits(['created'])
 function emitsOf(call, sf) {
@@ -580,11 +598,15 @@ for (const file of files) {
 
       // Component docs: an HTML comment before the first block, or a leading comment in the script.
       const html = src.match(/^\s*<!--([\s\S]*?)-->/)?.[1]
-      // Leading comment of the first statement, or of the first one after the imports.
-      const leadText = sf && [sf.statements[0], sf.statements.find(s => !ts.isImportDeclaration(s))]
+      // Leading comment of the first statement, of the first one after the imports, or else of any statement in the
+      // setup preamble (before the first function, which carries its own doc). Tool directives don't count.
+      const functionAt = sf ? sf.statements.findIndex(isFunctionLike) : -1
+      const preamble = sf ? sf.statements.slice(0, functionAt < 0 ? undefined : functionAt) : []
+      const leadText = sf && [...new Set([sf.statements[0], sf.statements.find(s => !ts.isImportDeclaration(s)), ...preamble])]
         .filter(Boolean)
         .map(s => (ts.getLeadingCommentRanges(sf.text, s.getFullStart()) ?? [])
-          .map(r => sf.text.slice(r.pos, r.end).replace(/^\/\*\*?|\*\/$|^\s*\/\/ ?|^\s*\* ?/gm, '').trim()).join(' ').trim())
+          .map(r => sf.text.slice(r.pos, r.end).replace(/^\/\*\*?|\*\/$|^\s*\/\/ ?|^\s*\* ?/gm, '').trim())
+          .filter(t => !/^(eslint|@ts-|prettier|istanbul|c8|global\b)/.test(t)).join(' ').trim())
         .find(Boolean)
       const summary = (html || leadText || '').trim()
       const params = (props ?? []).filter(p => p.doc).map(p => `<param name="${esc(p.name)}">${esc(p.doc)}</param>`)

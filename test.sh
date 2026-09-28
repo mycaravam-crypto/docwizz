@@ -392,11 +392,58 @@ grep -q '| stakeholders | \[present\](architecture/stakeholders.md) |' "$docs/ar
 [ ! -f "$docs/stale.md" ] || { echo "stale generated page kept"; exit 1; }
 rm -rf "$docs"
 
+# Plain comments: above an `if` holding a minimal-API endpoint, in a Vue setup preamble, `//` above a Vue prop
+plain=$(mktemp -d)
+cat > "$plain/Program.cs" <<'CS'
+var app = WebApplication.CreateBuilder(args).Build();
+// Resets the demo data.
+if (app.Environment.IsDevelopment()) { app.MapPost("/dev/reset", () => Results.NoContent()); }
+// Not the else branch's doc.
+if (app.Environment.IsProduction()) { } else { app.MapGet("/dev/ping", () => "pong"); }
+CS
+cat > "$plain/Toasts.vue" <<'VUE'
+<script setup lang="ts">
+import { useToasts } from './toasts'
+const props = defineProps<{
+  // Milliseconds before a toast hides.
+  timeout: number
+}>()
+const toasts = useToasts()
+// Stacked notifications in the corner of the page.
+const visible = toasts.list
+function dismiss() { toasts.clear() }
+</script>
+<template><div>{{ visible }}</div></template>
+VUE
+dw scan "$plain" "$plain/model.json" >/dev/null
+python3 - "$plain/model.json" <<'PY'
+import json, sys
+nodes = {n["id"]: n for n in json.load(open(sys.argv[1]))["nodes"]}
+assert "Resets the demo data." in nodes["cs:endpoint:POST /dev/reset"]["doc"], nodes["cs:endpoint:POST /dev/reset"]
+assert not nodes["cs:endpoint:GET /dev/ping"].get("doc"), nodes["cs:endpoint:GET /dev/ping"]
+doc = nodes["vue:Toasts.vue"]["doc"]
+assert "<summary>Stacked notifications in the corner of the page.</summary>" in doc and '<param name="timeout">Milliseconds before a toast hides.</param>' in doc, doc
+PY
+rm -rf "$plain"
+
 # Change impact: only what a change introduces fails `check --since`
 repo=$(mktemp -d)
 cp -r fixture/. "$repo"
+# a partial class over two files: its hash must not depend on the order files are enumerated in
+cat > "$repo/backend/Application/Report.A.cs" <<'CS'
+namespace Fixture.Application;
+/// <summary>Summarises stock for the monthly report.</summary>
+public partial class Report { public int Total() => 1; }
+CS
+cat > "$repo/backend/Application/Report.B.cs" <<'CS'
+namespace Fixture.Application;
+public partial class Report { int Extra() => 2; }
+CS
 git -C "$repo" init -q && git -C "$repo" add -A && git -C "$repo" -c user.name=t -c user.email=t@t commit -qm base
 dw check "$repo" --since HEAD | grep -q "check: PASS"
+for args in "HEAD" "HEAD HEAD"; do
+    if dw diff "$repo" $args | grep -q "^Changed"; then echo "unchanged symbols reported as changed (diff $args)"; exit 1; fi
+done
 python3 - "$repo/backend/Application/MaterialService.cs" <<'PY'
 import sys; p = sys.argv[1]; s = open(p).read()
 s = s.replace("    // Trivial: should NOT be flagged", """    public int Score(int a, int b, int c, int d)
@@ -410,6 +457,7 @@ s = s.replace("    // Trivial: should NOT be flagged", """    public int Score(i
 open(p, "w").write(s)
 PY
 sed -i 's/FindAsync(id).AsTask()/FindAsync(id + 0).AsTask()/' "$repo/backend/Infrastructure/SqlMaterialRepository.cs"
+sed -i 's/=> 2;/=> 3;/' "$repo/backend/Application/Report.B.cs"
 cat > "$repo/backend/Domain/Audit.cs" <<'CS'
 namespace Fixture.Domain;
 public class Audit { public void Log(Fixture.Infrastructure.SqlMaterialRepository r) => r.FindAsync(1); }
@@ -427,6 +475,7 @@ grep -q "✓ modules/backend-Application.md" <<<"$impact"
 grep -q "✓ architecture.md" <<<"$impact"
 # the changed repository method is reached by the endpoints' flows: their pages are affected too
 grep -q "~ Fixture.Infrastructure.SqlMaterialRepository.FindAsync(int)" <<<"$impact"
+grep -q "~ Fixture.Application.Report$" <<<"$impact"  # changed in the declaration that doesn't win
 grep -q "✓ api.md" <<<"$impact"
 grep -q "✓ modules/backend-Api.md" <<<"$impact"
 grep -q "Introduced: 0 critical, 1 other documentation gaps, 1 architecture violations" <<<"$impact"
