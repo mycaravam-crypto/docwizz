@@ -177,7 +177,17 @@ quality % or `check`.
 
 ## Tests
 
-[test.sh](test.sh) runs the CLI against [fixture/](fixture/), a small ASP.NET + EF Core + Vue project with
+Three layers, so a failure points at the part that broke. CI ([test.yml](.github/workflows/test.yml)) runs each as
+its own step.
+
+| Layer | Where | What it covers | Run |
+|---|---|---|---|
+| Unit | [tests/DocWizz.Tests/Unit](tests/DocWizz.Tests/Unit/) | `Analyzer`, `Architecture`, `Diff`, `CodeModel` on small in-memory models | `dotnet test --project tests/DocWizz.Tests --filter-namespace DocWizz.Tests.Unit` |
+| Component | [tests/DocWizz.Tests/Component](tests/DocWizz.Tests/Component/) | one scanner on a few source snippets → nodes and edges, incl. past regressions per backend language | `… --filter-namespace DocWizz.Tests.Component` |
+| End-to-end | [test.sh](test.sh) | repository → model → reports → generated pages, on the fixtures | `./test.sh` |
+
+`test.sh` runs the CLI against [fixture/](fixture/), a small ASP.NET + EF Core + Vue project with
 deliberate gaps, violations, external systems, configuration and deployment descriptors. It asserts facts in the
 model JSON and lines in the generated pages. When a feature is added, extend the fixture with the smallest case
-that exercises it, and assert both the model and the page.
+that exercises it, and assert both the model and the page. Rules and analysis logic get a unit test as well, and a
+scanner fix gets a component test with the snippet that broke it.

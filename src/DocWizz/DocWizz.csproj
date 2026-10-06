@@ -12,4 +12,7 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="DocWizz.Tests" />
+  </ItemGroup>
 </Project>

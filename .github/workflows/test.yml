@@ -1,0 +1,31 @@
+# DocWizz's own tests, one step per layer so a red check names the layer that broke:
+# unit (rules and analysis on in-memory models) → component (scanner → code model) → end-to-end (test.sh on the fixtures).
+name: test
+on:
+  pull_request:
+  push: { branches: [main] }
+permissions:
+  contents: read
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with: { dotnet-version: 10.0.x }
+      - run: dotnet build tests/DocWizz.Tests --nologo -v q
+      - name: Unit tests
+        run: dotnet test --project tests/DocWizz.Tests --no-build --filter-namespace DocWizz.Tests.Unit
+      - name: Component tests
+        run: dotnet test --project tests/DocWizz.Tests --no-build --filter-namespace DocWizz.Tests.Component
+  end-to-end:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with: { dotnet-version: 10.0.x }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: 22, cache: npm, cache-dependency-path: scanner-vue/package-lock.json }
+      - run: npm ci --prefix scanner-vue --silent
+      - name: End-to-end tests
+        run: ./test.sh

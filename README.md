@@ -164,7 +164,8 @@ See [AI drafts](#ai-drafts) for the privacy rules.
 | `docwizz scan <dir> [model.json]` | Dump the raw code model (nodes and edges) |
 
 Options: `--profile <name|file.yaml>` picks what counts as documented. `--format json` gives machine-readable
-`analyze`/`check`/`architecture` output. Run `./test.sh` to smoke-test against `fixture/`.
+`analyze`/`check`/`architecture` output. Run `dotnet test --project tests/DocWizz.Tests` for the unit and component tests and `./test.sh` for the end-to-end
+tests against `fixture/` (see [ARCHITECTURE.md](ARCHITECTURE.md#tests)).
 
 ## Configuration
 
