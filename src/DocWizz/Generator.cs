@@ -26,6 +26,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     readonly ILookup<string, string> children = model.Edges.Where(e => e.Kind == "contains").ToLookup(e => e.From, e => e.To);
     readonly ILookup<string, string> implOf = model.Edges.Where(e => e.Kind == "implements").ToLookup(e => e.From, e => e.To);
     readonly Dictionary<string, DocumentationItem> findingOf = findings.ToDictionary(f => f.Node.Id);
+    readonly TestLinks testLinks = new(model);
 
     // Renders every page, then writes only those whose content changed and removes generated pages that are gone:
     // unchanged pages keep their file (and timestamp), so regenerating after a small change touches only what it affects.
@@ -382,6 +383,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         sb.AppendLine($"Doc quality: **{Analyzer.Quality(findings):0}%** of {written.Count} items with written docs have no quality flags.\n");
         var open = findings.Where(f => f.Status != Status.Documented).OrderByDescending(f => f.Level).ThenBy(f => f.Node.File).ToList();
         sb.AppendLine($"## Undocumented ({open.Count})\n");
+        sb.AppendLine("_Tested_: test code is linked to the item, directly or through its interface, an implementation or a member. " +
+            "That is a structural link, not code coverage.\n");
         sb.AppendLine("| Level | Item | Status | Missing | Why it needs docs | Tested |\n|---|---|---|---|---|---|");
         foreach (var f in open)
             sb.AppendLine($"| {f.Level} | {SourceLink(f.Node.File, f.Node.Line, $"`{Esc(Display(f.Node))}`")} | {f.Status} | {string.Join(", ", f.Missing)} | {Esc(string.Join("; ", f.Reasons))} | {(f.Tested ? "✓" : "—")} |");

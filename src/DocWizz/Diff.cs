@@ -3,7 +3,10 @@ record DiffResult(
     List<string> Pages,
     List<string> DepsAdded, List<string> DepsRemoved,
     List<DocumentationItem> NewGaps, List<Violation> NewViolations, List<string> Decisions,
-    List<StaleDoc> Stale, List<(DocumentationItem Item, QualityFlag Flag)> NewFlags);
+    List<StaleDoc> Stale, List<(DocumentationItem Item, QualityFlag Flag)> NewFlags, List<TestTrace> Tests);
+
+// An added or changed symbol and the test code linked to it (TestLinks); Level is its documentation level (None if it needs no docs).
+record TestTrace(Node Symbol, bool Added, Level Level, List<LinkedTest> Tests);
 
 // A symbol whose contract changed while its doc comment stayed exactly the same.
 record StaleDoc(Node Before, Node After, List<string> Changes);
@@ -11,6 +14,9 @@ record StaleDoc(Node Before, Node After, List<string> Changes);
 static class Diff
 {
     // Kinds worth reporting; properties/modules churn with every edit and carry no docs of their own.
+    // Kinds that tests don't link to (data and routing declarations), left out of test traceability.
+    static readonly string[] Untraced = ["route", "table", "migration", "sql-view", "trigger"];
+
     static readonly string[] Reported = ["class", "record", "struct", "interface", "type", "enum", "method", "constructor",
         "endpoint", "component", "function", "store", "route", "procedure", "sql-function", "sql-view", "trigger", "table", "migration"];
 
@@ -78,7 +84,15 @@ static class Diff
             pages.Add("architecture-description.md");
         if (newGaps.Count > 0 || pages.Count > 0) pages.Add("quality.md");
 
-        return new(added, removed, changed, [.. pages], depsAdded, depsRemoved, newGaps, newViolations, decisions, stale, newFlags);
+        // Test traceability of what the change touches, in the new model.
+        var links = new TestLinks(after);
+        var levels = itemsAfter.ToDictionary(i => i.Node.Id, i => i.Level);
+        var tests = added.Select(n => (Node: n, Added: true)).Concat(changed.Select(n => (Node: n, Added: false)))
+            .Where(x => !Untraced.Contains(x.Node.Kind))
+            .Select(x => new TestTrace(x.Node, x.Added, levels.GetValueOrDefault(x.Node.Id), links.Of(x.Node.Id)))
+            .OrderBy(t => t.Symbol.File).ThenBy(t => t.Symbol.Line).ToList();
+
+        return new(added, removed, changed, [.. pages], depsAdded, depsRemoved, newGaps, newViolations, decisions, stale, newFlags, tests);
     }
 
     static IEnumerable<(Node, Node)> SameName(List<Node> removed, List<Node> added)
@@ -145,6 +159,21 @@ static class Diff
             o.WriteLine($"Possibly stale docs ({d.Stale.Count}) — the contract changed, the doc comment didn't");
             foreach (var s in d.Stale.OrderBy(s => s.After.File).ThenBy(s => s.After.Line))
                 o.WriteLine($"  ! {s.After.File}:{s.After.Line}  {Generator.Display(s.After)}  changed: {string.Join(", ", s.Changes)}");
+        }
+        if (d.Tests.Count > 0)
+        {
+            o.WriteLine();
+            o.WriteLine($"Test traceability ({d.Tests.Count(t => t.Tests.Count > 0)} of {d.Tests.Count} changed symbols linked) — {TestLinks.Note}");
+            foreach (var t in d.Tests.Where(t => t.Tests.Count > 0))
+                o.WriteLine($"  {(t.Added ? "+" : "~")} {Generator.Display(t.Symbol)}  ← " + string.Join(", ", t.Tests.Select(l =>
+                    TestLinks.Name(l.Test) + (l.Via is null ? "" : $" (via {TestLinks.Name(l.Via)})"))));
+            var none = d.Tests.Where(t => t.Tests.Count == 0).ToList();
+            if (none.Count > 0)
+            {
+                o.WriteLine($"  No linked test ({none.Count})");
+                foreach (var t in none.OrderByDescending(t => t.Level))
+                    o.WriteLine($"    {(t.Added ? "+" : "~")} {Generator.Display(t.Symbol)}{(t.Level >= Level.Medium ? $"  [{t.Level.ToString().ToLowerInvariant()}]" : "")}");
+            }
         }
         o.WriteLine();
         o.WriteLine($"Introduced: {d.NewGaps.Count(Analyzer.IsCritical)} critical, " +

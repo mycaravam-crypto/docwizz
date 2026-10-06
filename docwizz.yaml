@@ -8,6 +8,7 @@ check:
   max_cycles: 0
   fail_on: low          # minimum violation severity that fails check: low, medium, high
   # max_complexity: 20  # fail when a symbol's cyclomatic complexity exceeds this
+  # require_tests: high # check --since: fail when the change adds a symbol at this level or above with no linked test
 architecture:
   layers:               # path globs, first match wins; unmatched files have no layer
     ui: ["*.vue", "*.tsx", "*.jsx", "*.component.ts"]

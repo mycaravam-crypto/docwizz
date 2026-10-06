@@ -140,7 +140,9 @@ The model separates what the code states from what DocWizz concludes:
 - **[Diff](src/DocWizz/Diff.cs)** compares two models by symbol id and body hash. It reports changed, added and
   removed symbols, the affected pages, and the gaps and violations a change introduced. A touched symbol also marks
   every flow passing through it: `api.md` / `frontend.md` and the module pages along that flow. New external systems
-  and new layer dependencies are listed as ADR candidates: decisions to record, not decisions DocWizz makes.
+  and new layer dependencies are listed as ADR candidates: decisions to record, not decisions DocWizz makes. Every added
+  and changed symbol also gets its linked tests ([TestLinks](src/DocWizz/TestLinks.cs): `tests` edges to it, its
+  interface, an implementation or a member — the same rule as the analyzer's "tested"), or is listed as unlinked.
 
 ## Generation
 

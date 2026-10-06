@@ -40,11 +40,11 @@ switch (cmd)
     case "analyze":
         return Analyze(path, config, enforce: false, json);
     case "check" when opts.GetValueOrDefault("since") is { } since:
-        return DiffCommand(path, since, config, enforce: true);
+        return DiffCommand(path, since, config, enforce: true, json: json);
     case "check":
         return Analyze(path, config, enforce: true, json);
     case "diff":
-        return DiffCommand(path, pos.ElementAtOrDefault(2), config, enforce: false, head: pos.ElementAtOrDefault(3));
+        return DiffCommand(path, pos.ElementAtOrDefault(2), config, enforce: false, head: pos.ElementAtOrDefault(3), json: json);
     case "architecture":
         return ArchitectureCommand(path, config, json);
     case "generate":
@@ -85,7 +85,7 @@ static int Usage(string? error)
             [--html]                        also write an HTML page next to every Markdown page
         options:
           --profile <name|file.yaml>        documentation profile: {string.Join(", ", Profiles.Names)}, or your own file
-          --format console|json             analyze/check/architecture output
+          --format console|json             analyze/check/architecture/diff output
         """);
     return 1;
 }
@@ -243,7 +243,7 @@ static async Task<int> Generate(string root, string outDir, Config config, bool 
     return 0;
 }
 
-static int DiffCommand(string root, string? gitRef, Config config, bool enforce, string? head = null)
+static int DiffCommand(string root, string? gitRef, Config config, bool enforce, string? head = null, bool json = false)
 {
     CodeModel? before;
     string baseline;
@@ -268,20 +268,61 @@ static int DiffCommand(string root, string? gitRef, Config config, bool enforce,
     var after = head is null ? BuildModel(root, config).Model : ModelAt(root, head, config);
     if (after is null) return 1;
     var result = Diff.Compare(before, after, config);
-    Diff.Report(result, head is null ? baseline : $"{baseline}, at {head}", Console.Out);
-    if (!enforce) return 0;
+    var against = head is null ? baseline : $"{baseline}, at {head}";
+    if (!json) Diff.Report(result, against, Console.Out);
+    if (!enforce)
+    {
+        if (json) Console.WriteLine(JsonSerializer.Serialize(DiffJson(result, against, null), JsonOptions()));
+        return 0;
+    }
 
     var critical = result.NewGaps.Count(Analyzer.IsCritical);
     var violations = Architecture.Failing(result.NewViolations, config.Check).Count;
     var complex = TooComplex(result.Added.Concat(result.Changed), config.Check);
     // Docs that now contradict the code fail; inferred flags and possibly stale docs are reported only.
     var contradictions = result.NewFlags.Count(x => x.Flag.Origin == Origin.Fact);
-    var ok = critical == 0 && violations == 0 && complex.Count == 0 && contradictions == 0;
-    Console.WriteLine();
-    Console.WriteLine(ok ? "check: PASS" : $"check: FAIL — introduced {critical} critical gaps, {violations} violations" +
+    // New symbols at or above check.require_tests with no linked test code (structural, not coverage).
+    var untested = config.Check.RequireTests is { } rt && Enum.Parse<Level>(rt, true) is var min
+        ? result.Tests.Where(t => t.Added && t.Tests.Count == 0 && t.Level >= min).ToList() : [];
+    var ok = critical == 0 && violations == 0 && complex.Count == 0 && contradictions == 0 && untested.Count == 0;
+    var summary = ok ? "check: PASS" : $"check: FAIL — introduced {critical} critical gaps, {violations} violations" +
         (contradictions > 0 ? $", {contradictions} docs contradicting the code" : "") +
-        (complex.Count > 0 ? $", {complex.Count} symbols over complexity {config.Check.MaxComplexity}" : ""));
+        (complex.Count > 0 ? $", {complex.Count} symbols over complexity {config.Check.MaxComplexity}" : "") +
+        (untested.Count > 0 ? $", {untested.Count} new {config.Check.RequireTests!.ToLowerInvariant()}-level symbols without linked tests ({string.Join(", ", untested.Select(t => Generator.Display(t.Symbol)))})" : "");
+    if (json) Console.WriteLine(JsonSerializer.Serialize(DiffJson(result, against, new { pass = ok, summary }), JsonOptions()));
+    else
+    {
+        Console.WriteLine();
+        Console.WriteLine(summary);
+    }
     return ok ? 0 : 1;
+}
+
+// `diff`/`check --since` as data: symbols by id and location, and test traceability with its caveat spelled out.
+static object DiffJson(DiffResult d, string baseline, object? check)
+{
+    static object Symbol(Node n) => new { id = n.Id, kind = n.Kind, location = CodeModel.Location(n) };
+    return new
+    {
+        baseline,
+        added = d.Added.Select(Symbol), changed = d.Changed.Select(Symbol), removed = d.Removed.Select(Symbol),
+        pages = d.Pages, dependencies = new { added = d.DepsAdded, removed = d.DepsRemoved }, decisions = d.Decisions,
+        stale = d.Stale.Select(s => new { id = s.After.Id, location = CodeModel.Location(s.After), changes = s.Changes }),
+        introduced = new
+        {
+            gaps = d.NewGaps.Select(f => new { id = f.Node.Id, location = CodeModel.Location(f.Node), level = f.Level, critical = Analyzer.IsCritical(f), missing = f.Missing }),
+            violations = d.NewViolations,
+            flags = d.NewFlags.Select(x => new { id = x.Item.Node.Id, x.Flag.Rule, basis = x.Flag.Origin, x.Flag.Detail }),
+        },
+        tests = new
+        {
+            note = TestLinks.Note,
+            linked = d.Tests.Where(t => t.Tests.Count > 0).Select(t => new { id = t.Symbol.Id, location = CodeModel.Location(t.Symbol), change = t.Added ? "added" : "changed",
+                level = t.Level, tests = t.Tests.Select(l => new { test = l.Test, link = l.Via is null ? "direct" : "indirect", via = l.Via }) }),
+            unlinked = d.Tests.Where(t => t.Tests.Count == 0).Select(t => new { id = t.Symbol.Id, location = CodeModel.Location(t.Symbol), change = t.Added ? "added" : "changed", level = t.Level }),
+        },
+        check,
+    };
 }
 
 // Scans the tree as it was at <ref>, extracted from git into a temp dir.

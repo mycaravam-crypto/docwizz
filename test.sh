@@ -332,6 +332,8 @@ grep -qF -- '- `SqlMaterialRepository` uses `AppDbContext`' "$M/backend-Infrastr
 grep -qF -- '- erp.example.com (http-api, detected) — used by `ErpClient`' "$M/backend-Infrastructure.md"
 grep -qF -- '- `GET /api/stock/{sku}`: StockController → ErpClient → erp.example.com' "$M/backend-Infrastructure.md"
 grep -q '^- ARCH-003: part of a dependency cycle' "$M/backend-Infrastructure.md"
+grep -qF '_Linked tests:_ `MaterialServiceTests.CreateAsync_Creates` (via `MaterialService.CreateAsync(string, int, string, string, string, bool)`) — test code that uses it, not coverage' "$M/backend-Application.md"
+grep -qF '_Linked tests:_ `MaterialTable.test.ts` — test code that uses it, not coverage' "$M/frontend-src-components.md"
 grep -qF '| `PUT /api/materials/{id}` | Renames a material. | required |' "$M/backend-Api.md"
 grep -q '^4 items need documentation (4 critical)' "$M/backend-Api.md"
 grep -qF -- '- `/materials` → MaterialTable →' "$M/frontend-src-components.md"
@@ -457,6 +459,7 @@ s = s.replace("    // Trivial: should NOT be flagged", """    public int Score(i
 open(p, "w").write(s)
 PY
 sed -i 's/FindAsync(id).AsTask()/FindAsync(id + 0).AsTask()/' "$repo/backend/Infrastructure/SqlMaterialRepository.cs"
+sed -i 's/"name required"/"a name is required"/' "$repo/backend/Application/MaterialService.cs"   # a directly tested method
 sed -i 's/=> 2;/=> 3;/' "$repo/backend/Application/Report.B.cs"
 cat > "$repo/backend/Domain/Audit.cs" <<'CS'
 namespace Fixture.Domain;
@@ -483,6 +486,27 @@ grep -q "ARCH-001  domain → infrastructure  backend/Domain/Audit.cs" <<<"$impa
 # ADR candidates: a new external system and a new layer dependency
 grep -q "? Adopt SMTP server (email, detected) — used by Fixture.Infrastructure.Notices.Send()" <<<"$impact"
 grep -q "? Let layer infrastructure depend on application (allowed by the rules)" <<<"$impact"
+# Test traceability: direct links, indirect ones (a type through its tested member), and changed code no test links to
+grep -q "^Test traceability ([0-9]* of [0-9]* changed symbols linked) — a link means test code uses the symbol; it is not code coverage" <<<"$impact"
+grep -qF "  ~ Fixture.Application.MaterialService.CreateAsync(string, int, string, string, string, bool)  ← Fixture.Tests.MaterialServiceTests.CreateAsync_Creates" <<<"$impact"
+grep -qF "  ~ Fixture.Application.MaterialService  ← Fixture.Tests.MaterialServiceTests.CreateAsync_Creates (via Fixture.Application.MaterialService.CreateAsync)" <<<"$impact"
+sed -n '/^  No linked test/,/^$/p' <<<"$impact" | grep -qF "    + Fixture.Application.MaterialService.Score(int, int, int, int)  [medium]"
+if sed -n '/^  No linked test/,/^$/p' <<<"$impact" | grep -q "CreateAsync"; then echo "tested method listed as unlinked"; exit 1; fi
+# check.require_tests: a new medium-level symbol without a linked test fails; JSON carries the same traceability
+dw init "$repo" >/dev/null && sed -i 's/^  # require_tests: high/  require_tests: medium/' "$repo/docwizz.yaml"
+set +e; gated=$(dw check "$repo" --since HEAD 2>/dev/null); dw check "$repo" --since HEAD --format json > "$repo.json" 2>/dev/null; set -e
+grep -q "new medium-level symbols without linked tests (.*Fixture.Application.MaterialService.Score(int, int, int, int)" <<<"$gated" || { tail -2 <<<"$gated"; exit 1; }
+python3 - "$repo.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1])); t = d["tests"]
+assert "not code coverage" in t["note"] and d["check"]["pass"] is False, d["check"]
+create = next(x for x in t["linked"] if x["id"].startswith("cs:Fixture.Application.MaterialService.CreateAsync"))
+assert create["change"] == "changed" and create["tests"] == [{"test": "cs:Fixture.Tests.MaterialServiceTests.CreateAsync_Creates(Fixture.Application.MaterialService)", "link": "direct"}], create
+svc = next(x for x in t["linked"] if x["id"] == "cs:Fixture.Application.MaterialService")
+assert svc["tests"][0]["link"] == "indirect" and svc["tests"][0]["via"].startswith("cs:Fixture.Application.MaterialService.CreateAsync"), svc
+assert {"id": "cs:Fixture.Application.MaterialService.Score(int, int, int, int)", "location": "backend/Application/MaterialService.cs:34-39", "change": "added", "level": "medium"} in t["unlinked"], t["unlinked"]
+PY
+rm "$repo/docwizz.yaml" "$repo.json"
 # Two refs: commit the change, then compare HEAD~1..HEAD from inside the repo, without a dir argument
 git -C "$repo" add -A && git -C "$repo" -c user.name=t -c user.email=t@t commit -qm change
 refs=$(cd "$repo" && dotnet run --project "$root/src/DocWizz" -- diff HEAD~1 HEAD)

@@ -103,14 +103,27 @@ Changed (11)
   ...
 Added (3)
   + Generator.HostKind(System.Collections.Generic.List<string>)
+...
+Test traceability (2 of 14 changed symbols linked) — a link means test code uses the symbol; it is not code coverage
+  ~ Orders  ← OrdersTests.Places (via Orders.Place)
+  ~ Orders.Place(int)  ← OrdersTests.Places
+  No linked test (12)
+    + Orders.Refund(int)  [high]
 ```
+
+Test traceability lists, for every added and changed symbol, the test code linked to it by `tests` edges: directly, or
+through its interface, an implementation or one of its members (*via*). Symbols no test code links to are listed
+apart, with their documentation level. A link only says test code *uses* the symbol, not that it covers or checks it.
+`--format json` gives the same report as data (`tests.linked`, `tests.unlinked`, each link `direct` or `indirect`).
+Module pages show the linked tests per component, and `quality.md` marks tested items.
 
 ### Gate pull requests
 
 `docwizz check` exits with 1 when thresholds fail. With `--since`, it fails only on what the change *introduces*, so
 an old codebase can adopt it without fixing everything first. That covers critical gaps, violations and docs that
 now contradict the code (fact quality flags). Docs that are *possibly stale* are listed but don't fail the check:
-a symbol whose parameters, return type, exceptions or route changed while its doc comment stayed the same.
+a symbol whose parameters, return type, exceptions or route changed while its doc comment stayed the same. With
+`check.require_tests: high` (or `medium`), a new symbol at that documentation level that no test code links to fails too.
 
 ```console
 $ docwizz check fixture
@@ -159,12 +172,12 @@ See [AI drafts](#ai-drafts) for the privacy rules.
 | `docwizz architecture <dir>` | Layers, layer dependencies, violations, cycles |
 | `docwizz check <dir> [--since <ref>]` | Report; exit 1 if thresholds fail (only on new problems with `--since`) |
 | `docwizz generate <dir> [out] [--html] [--ai]` | Write the docs (default `<dir>/docs`) |
-| `docwizz diff <dir> [ref]` | Changed symbols and affected pages vs the last `generate` (or a git ref) |
+| `docwizz diff <dir> [ref]` | Changed symbols, affected pages and linked tests vs the last `generate` (or a git ref) |
 | `docwizz diff [dir] <base> <head>` | The same, between two git refs |
 | `docwizz scan <dir> [model.json]` | Dump the raw code model (nodes and edges) |
 
 Options: `--profile <name|file.yaml>` picks what counts as documented. `--format json` gives machine-readable
-`analyze`/`check`/`architecture` output. Run `dotnet test --project tests/DocWizz.Tests` for the unit and component tests and `./test.sh` for the end-to-end
+`analyze`/`check`/`architecture`/`diff` output. Run `dotnet test --project tests/DocWizz.Tests` for the unit and component tests and `./test.sh` for the end-to-end
 tests against `fixture/` (see [ARCHITECTURE.md](ARCHITECTURE.md#tests)).
 
 ## Configuration
@@ -181,6 +194,7 @@ check:
   max_critical: 0
   fail_on: medium                   # lowest violation severity that fails check
   max_complexity: 20                # optional: fail on any symbol above this
+  require_tests: high               # optional: with --since, fail on new high-level symbols no test links to
 architecture:
   layers:                           # path globs, first match wins
     api: ["*/Api/*.cs", "*/Controllers/*.cs"]
