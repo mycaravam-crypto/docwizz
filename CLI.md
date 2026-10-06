@@ -207,6 +207,7 @@ or for building your own tooling on top. Everyday workflows don't need it.
 | `--force` | off | setup | replaces an existing `docwizz.yaml`; any other command rejects it | setup only |
 | `--timings` | off | all | time and peak memory per stage, on stderr | benchmarks |
 | `--help`, `-h` | — | all | prints the command's help and exits | — |
+| `--version`, `-v` | — | all | prints `docwizz <version> (commit <sha>, .NET <runtime>, <platform>)` and exits 0, whatever the command; `docwizz version` does the same | bug reports, CI logs |
 
 ## Precedence and conflicts
 
@@ -236,6 +237,7 @@ or for building your own tooling on top. Everyday workflows don't need it.
 | `diff` | done | no baseline (`generate` first or pass a ref), unknown ref |
 | `init` | written | `docwizz.yaml` exists |
 | no command | — | prints how to start |
+| `--version`, `version` | prints the version | — |
 
 Every command exits **2** when docwizz itself fails unexpectedly (a bug, a full disk, a permission error). It prints one
 line instead of a stack trace, so CI can tell "docwizz broke" from "the gate failed". Set `DOCWIZZ_DEBUG=1` for the

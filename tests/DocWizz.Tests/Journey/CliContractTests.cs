@@ -34,6 +34,19 @@ public class CliContractTests
     }
 
     [Theory]
+    [InlineData("--version")]
+    [InlineData("-v")]
+    [InlineData("version")]
+    [InlineData("check . --version")]
+    public void Version_is_one_line_on_stdout(string args)
+    {
+        var r = Docwizz.Run(args.Split(' '));
+        Assert.Equal(0, r.Exit);
+        Assert.Equal("", r.Err);
+        Assert.Matches(@"^docwizz \d+\.\d+\.\d+\S* \((commit [0-9a-f]{7}, )?\.NET \S+, \S+\)\r?\n$", r.Out);
+    }
+
+    [Theory]
     [InlineData("setup", "docwizz setup [dir]")]
     [InlineData("generate", "docwizz generate <dir> [out]")]
     [InlineData("check", "docwizz check <dir> [--since <ref>]")]

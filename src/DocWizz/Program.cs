@@ -19,6 +19,11 @@ static async Task<int> Dispatch(string[] args)
     var request = Cli.Parse(args);
     var (cmd, opts, pos) = (request.Command, request.Options, request.Positional);
     if (request.Error is not null) return Usage(request.Error, cmd);
+    if (cmd == "version" || opts.ContainsKey("version"))
+    {
+        Console.WriteLine(AppVersion.Line);
+        return 0;
+    }
     if (cmd == "help") return Help(pos.ElementAtOrDefault(1));
     if (opts.ContainsKey("help")) return Help(cmd);
     // `docwizz diff HEAD~1 HEAD`: no directory given, refs only.
@@ -166,6 +171,7 @@ static string Reference() => $"""
       --format console|json             analyze/check/architecture/diff/remediate output
       --timings                         time per stage and peak memory, on stderr (benchmarks)
       --help, -h                        help for a command: docwizz <command> --help
+      --version, -v                     version, commit and runtime (also: docwizz version)
 
     Every command, option and how they combine: CLI.md
     """;
@@ -508,7 +514,7 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
     ArchitectureResult? arch = null;
     string configStatus = "";
     bool? passed = null;
-    var version = typeof(Setup).Assembly.GetName().Version?.ToString(3) ?? "unknown";
+    var version = AppVersion.Number;
 
     Console.WriteLine($"docwizz setup {Path.GetFullPath(root)}");
     var results = Setup.Run(
