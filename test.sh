@@ -198,6 +198,11 @@ if grep -q "MaterialServiceTests" <<<"$report"; then echo "test code analyzed"; 
 # Documentation model: section provenance, sources, profiles, JSON
 dw() { dotnet run --project "$root/src/DocWizz" -- "$@"; }
 dw analyze fixture --format json 2>/dev/null > "$model"
+# --timings: one line per stage on stderr, stdout untouched (bench/run.py reads these)
+timings=$(dw analyze fixture --timings 2>&1 >/dev/null)
+for stage in files scan:csharp scan:frontend scan:sql scan:java link analyze architecture peak-memory-mb; do
+    grep -q "^timing $stage [0-9]*$" <<<"$timings" || { echo "missing timing $stage: $timings"; exit 1; }
+done
 dw analyze fixture --format json --profile software 2>/dev/null > "$model.software"
 dw analyze fixture --format json --profile api 2>/dev/null > "$model.api"
 dw analyze fixture --format json --profile architecture 2>/dev/null > "$model.arch-profile"
@@ -332,6 +337,8 @@ grep -qF -- '- `SqlMaterialRepository` uses `AppDbContext`' "$M/backend-Infrastr
 grep -qF -- '- erp.example.com (http-api, detected) — used by `ErpClient`' "$M/backend-Infrastructure.md"
 grep -qF -- '- `GET /api/stock/{sku}`: StockController → ErpClient → erp.example.com' "$M/backend-Infrastructure.md"
 grep -q '^- ARCH-003: part of a dependency cycle' "$M/backend-Infrastructure.md"
+grep -qF '_Linked tests:_ `MaterialServiceTests.CreateAsync_Creates` (via `MaterialService.CreateAsync(string, int, string, string, string, bool)`) — test code that uses it, not coverage' "$M/backend-Application.md"
+grep -qF '_Linked tests:_ `MaterialTable.test.ts` — test code that uses it, not coverage' "$M/frontend-src-components.md"
 grep -qF '| `PUT /api/materials/{id}` | Renames a material. | required |' "$M/backend-Api.md"
 grep -q '^4 items need documentation (4 critical)' "$M/backend-Api.md"
 grep -qF -- '- `/materials` → MaterialTable →' "$M/frontend-src-components.md"
@@ -457,6 +464,7 @@ s = s.replace("    // Trivial: should NOT be flagged", """    public int Score(i
 open(p, "w").write(s)
 PY
 sed -i 's/FindAsync(id).AsTask()/FindAsync(id + 0).AsTask()/' "$repo/backend/Infrastructure/SqlMaterialRepository.cs"
+sed -i 's/"name required"/"a name is required"/' "$repo/backend/Application/MaterialService.cs"   # a directly tested method
 sed -i 's/=> 2;/=> 3;/' "$repo/backend/Application/Report.B.cs"
 cat > "$repo/backend/Domain/Audit.cs" <<'CS'
 namespace Fixture.Domain;
@@ -483,6 +491,27 @@ grep -q "ARCH-001  domain → infrastructure  backend/Domain/Audit.cs" <<<"$impa
 # ADR candidates: a new external system and a new layer dependency
 grep -q "? Adopt SMTP server (email, detected) — used by Fixture.Infrastructure.Notices.Send()" <<<"$impact"
 grep -q "? Let layer infrastructure depend on application (allowed by the rules)" <<<"$impact"
+# Test traceability: direct links, indirect ones (a type through its tested member), and changed code no test links to
+grep -q "^Test traceability ([0-9]* of [0-9]* changed symbols linked) — a link means test code uses the symbol; it is not code coverage" <<<"$impact"
+grep -qF "  ~ Fixture.Application.MaterialService.CreateAsync(string, int, string, string, string, bool)  ← Fixture.Tests.MaterialServiceTests.CreateAsync_Creates" <<<"$impact"
+grep -qF "  ~ Fixture.Application.MaterialService  ← Fixture.Tests.MaterialServiceTests.CreateAsync_Creates (via Fixture.Application.MaterialService.CreateAsync)" <<<"$impact"
+sed -n '/^  No linked test/,/^$/p' <<<"$impact" | grep -qF "    + Fixture.Application.MaterialService.Score(int, int, int, int)  [medium]"
+if sed -n '/^  No linked test/,/^$/p' <<<"$impact" | grep -q "CreateAsync"; then echo "tested method listed as unlinked"; exit 1; fi
+# check.require_tests: a new medium-level symbol without a linked test fails; JSON carries the same traceability
+dw init "$repo" >/dev/null && sed -i 's/^  # require_tests: high/  require_tests: medium/' "$repo/docwizz.yaml"
+set +e; gated=$(dw check "$repo" --since HEAD 2>/dev/null); dw check "$repo" --since HEAD --format json > "$repo.json" 2>/dev/null; set -e
+grep -q "new medium-level symbols without linked tests (.*Fixture.Application.MaterialService.Score(int, int, int, int)" <<<"$gated" || { tail -2 <<<"$gated"; exit 1; }
+python3 - "$repo.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1])); t = d["tests"]
+assert "not code coverage" in t["note"] and d["check"]["pass"] is False, d["check"]
+create = next(x for x in t["linked"] if x["id"].startswith("cs:Fixture.Application.MaterialService.CreateAsync"))
+assert create["change"] == "changed" and create["tests"] == [{"test": "cs:Fixture.Tests.MaterialServiceTests.CreateAsync_Creates(Fixture.Application.MaterialService)", "link": "direct"}], create
+svc = next(x for x in t["linked"] if x["id"] == "cs:Fixture.Application.MaterialService")
+assert svc["tests"][0]["link"] == "indirect" and svc["tests"][0]["via"].startswith("cs:Fixture.Application.MaterialService.CreateAsync"), svc
+assert {"id": "cs:Fixture.Application.MaterialService.Score(int, int, int, int)", "location": "backend/Application/MaterialService.cs:34-39", "change": "added", "level": "medium"} in t["unlinked"], t["unlinked"]
+PY
+rm "$repo/docwizz.yaml" "$repo.json"
 # Two refs: commit the change, then compare HEAD~1..HEAD from inside the repo, without a dir argument
 git -C "$repo" add -A && git -C "$repo" -c user.name=t -c user.email=t@t commit -qm change
 refs=$(cd "$repo" && dotnet run --project "$root/src/DocWizz" -- diff HEAD~1 HEAD)
@@ -516,7 +545,74 @@ grep -q "complexity > 5: Fixture.Application.MaterialService.CreateAsync(.*) ([0
 if grep -q "violations >" <<<"$complex"; then echo "low violation counted"; exit 1; fi
 echo "architecture: { severity: { ARCH-001: extreme } }" > "$repo/docwizz.yaml"
 if dw architecture "$repo" >/dev/null 2>&1; then echo "bad severity accepted"; exit 1; fi
+# Custom rules: a forbidden package (C# using, Java import) and a forbidden target through a type's tag
+rm "$repo/docwizz.yaml" && dw init "$repo" >/dev/null
+python3 - "$repo/docwizz.yaml" <<'PY'
+import sys; p = sys.argv[1]; s = open(p).read()
+s = s.replace("  severity: {}", """  severity: {}
+  rules:
+    - id: ARCH-DOMAIN-001
+      severity: high
+      description: The domain stays persistence-ignorant.
+      from: { layer: domain }
+      forbid: { package: [jakarta.persistence, Microsoft.EntityFrameworkCore] }
+    - id: ARCH-API-001
+      from: { tag: controller }
+      forbid: { to: { layer: infrastructure } }""", 1)
+open(p, "w").write(s)
+PY
+sed -i '1i using Microsoft.EntityFrameworkCore;' "$repo/backend/Domain/IMaterialRepository.cs"
+set +e; custom=$(dw architecture "$repo" 2>&1); code=$?; set -e
+echo "$custom"
+[ "$code" -eq 1 ] || { echo "custom violations should fail architecture"; exit 1; }
+grep -A2 "ARCH-DOMAIN-001 (custom)  domain → package  \[high\]" <<<"$custom" | grep -q "backend/Domain/IMaterialRepository.cs → Microsoft.EntityFrameworkCore"
+grep -A2 "ARCH-DOMAIN-001 (custom)  domain → package  \[high\]" <<<"$custom" | grep -q "java/src/main/java/com/example/inventory/domain/Item.java → jakarta.persistence"
+grep -A1 "ARCH-API-001 (custom)  api → infrastructure  \[medium\]" <<<"$custom" | grep -q "backend/Api/StockController.cs → backend/Infrastructure/ErpClient.cs"
+grep -q "ARCH-001  domain → infrastructure  \[high\]" <<<"$custom"   # built-in rules unchanged
+set +e; dw architecture "$repo" --format json > "$repo.json" 2>/dev/null; set -e
+python3 -c "import json,sys; v=json.load(open(sys.argv[1]))['violations']; assert any(x['rule']=='ARCH-API-001' and x['custom'] for x in v) and not any(x['custom'] for x in v if x['rule'].startswith('ARCH-00')), v" "$repo.json"
+rm "$repo.json"
+cdocs=$(mktemp -d); dw generate "$repo" "$cdocs" >/dev/null 2>&1
+grep -q "^| ARCH-DOMAIN-001 | high | layer domain must not use jakarta.persistence, Microsoft.EntityFrameworkCore | The domain stays persistence-ignorant. | 2 |" "$cdocs/architecture.md"
+grep -q "^| ARCH-API-001 (custom) | api → infrastructure | medium |" "$cdocs/architecture.md"
+grep -q "^- ARCH-API-001 (custom, medium): Fixture.Api.StockController" "$cdocs/modules/backend-Api.md"
+rm -rf "$cdocs"
+# a custom violation the change introduces fails check --since; an invalid rule fails fast, naming it
+git -C "$repo" add -A && git -C "$repo" -c user.name=t -c user.email=t@t commit -qm rules
+cat > "$repo/backend/Api/ReportController.cs" <<'CS'
+namespace Fixture.Api;
+/// <summary>Stock reports.</summary>
+[Microsoft.AspNetCore.Mvc.ApiController]
+public class ReportController(Fixture.Infrastructure.ErpClient erp) : Microsoft.AspNetCore.Mvc.ControllerBase { }
+CS
+set +e; since=$(dw check "$repo" --since HEAD 2>&1); code=$?; set -e
+[ "$code" -eq 1 ] && grep -q "Introduced: .* 1 architecture violations" <<<"$since" || { echo "$since"; exit 1; }
+grep -q "ARCH-API-001  api → infrastructure  backend/Api/ReportController.cs → backend/Infrastructure/ErpClient.cs  \[medium\]" <<<"$since"
+sed -i 's/from: { layer: domain }/from: { layer: core }/' "$repo/docwizz.yaml"
+set +e; bad=$(dw architecture "$repo" 2>&1); code=$?; set -e
+[ "$code" -eq 1 ] && grep -q "architecture.rules\[0\] (ARCH-DOMAIN-001): unknown layer 'core'" <<<"$bad" || { echo "$bad"; exit 1; }
 rm -rf "$repo"
+
+# Security rules (opt-in): facts apart from risks, per rule, on the fixture's endpoints
+sec=$(mktemp -d); cp -r fixture/. "$sec"
+dw init "$sec" >/dev/null && sed -i 's/^  enabled: false/  enabled: true/' "$sec/docwizz.yaml"
+set +e; secout=$(dw architecture "$sec" 2>&1); set -e
+grep -q "^Security (11 findings) — for a security review; not a compliance assessment" <<<"$secout" || { echo "$secout"; exit 1; }
+grep -A1 "SEC-002  Mutating endpoint without authorization  \[high, integrity\]" <<<"$secout" | grep -q "backend/Api/MaterialController.cs  POST /api/materials changes state and declares no authorization  (fact)"
+grep -q "backend/Program.cs  POST /orders (no authorization declared) can reach SQL Server (inferred)  (inferred)" <<<"$secout"   # SEC-005
+grep -q "java/.*/InventoryController.java  GET /api/inventory/low declares neither authorization nor anonymous access  (fact)" <<<"$secout"
+grep -q "backend/Program.cs  POST /orders injects AppDbContext  (fact)" <<<"$secout"   # SEC-003
+grep -q "risk (inferred): Whoever can reach it can change state" <<<"$secout"
+if grep -q "PUT /api/materials/{id}\|GET /api/inventory/{id}" <<<"$secout"; then echo "authorized endpoint flagged"; exit 1; fi
+if grep -q "^  SEC-" <<<"$(sed -n '/^Architecture/,/^Security/p' <<<"$secout")"; then echo "security findings mixed into layer violations"; exit 1; fi
+set +e; dw architecture "$sec" --format json > "$sec.json" 2>/dev/null; set -e
+python3 -c "import json,sys; v=[x for x in json.load(open(sys.argv[1]))['violations'] if x['rule'].startswith('SEC-')]; assert len(v)==11 and all(x['basis'] in ('fact','inferred') and x['concern'] and x['risk'] for x in v), v" "$sec.json"
+secdocs=$(mktemp -d); dw generate "$sec" "$secdocs" >/dev/null 2>&1
+grep -q "not an ISO/IEC 27001 assessment" "$secdocs/architecture-description.md"
+grep -q "^| SEC-005 | Unprotected endpoint reaches a sensitive system | confidentiality | high | inferred |" "$secdocs/architecture-description.md"
+grep -q "^| Security findings (\[review\](architecture-description.md#security)) | 11 |" "$secdocs/index.md"
+grep -q "^## Violations (3)" "$secdocs/architecture.md"   # security findings are not layer violations
+rm -rf "$sec" "$sec.json" "$secdocs"
 
 # Incremental regeneration: unchanged pages are not rewritten; a change rewrites only the pages it affects
 inc=$(mktemp -d); cp -r fixture/. "$inc"

@@ -3,3 +3,4 @@ obj/
 node_modules/
 model.json
 staging/
+bench/results.json

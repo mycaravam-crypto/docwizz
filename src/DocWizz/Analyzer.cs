@@ -12,6 +12,7 @@ class Config
     public bool CommentDocs { get; set; }
     public List<string> Tests { get; set; } = [];
     public ArchitectureConfig Architecture { get; set; } = new();
+    public SecurityConfig Security { get; set; } = new();
     public string Profile { get; set; } = "default";
 
     // Human-authored architecture sections the profile expects under docs/architecture/<name>.md.
@@ -29,6 +30,7 @@ class Config
           max_cycles: 0
           fail_on: low          # minimum violation severity that fails check: low, medium, high
           # max_complexity: 20  # fail when a symbol's cyclomatic complexity exceeds this
+          # require_tests: high # check --since: fail when the change adds a symbol at this level or above with no linked test
         architecture:
           layers:               # path globs, first match wins; unmatched files have no layer
             ui: ["*.vue", "*.tsx", "*.jsx", "*.component.ts"]
@@ -47,6 +49,11 @@ class Config
             domain: []
             infrastructure: [application, domain]
           severity: {}          # rule → high/medium/low; defaults ARCH-001 high, ARCH-002 medium, ARCH-004 low
+          # rules:              # your own dependency rules (README: Custom rules)
+          #   - { id: ARCH-DOMAIN-001, severity: high, from: { layer: domain }, forbid: { package: [Microsoft.EntityFrameworkCore] } }
+        # Security rules SEC-001…005: findings for a security review, from code facts (README: Security rules). Off by default.
+        security:
+          enabled: false
         # Test code (path globs): scanned only to link tests to the code they exercise; never analyzed or documented.
         tests: ["tests/*", "test/*", "*.Tests/*", "*.Test/*", "*/__tests__/*", "*.test.ts", "*.spec.ts", "*/e2e/*", "*/src/test/*"]
         # Path globs (relative, `/`-separated) left out of the model entirely.
@@ -62,13 +69,19 @@ class Config
     public static Config Load(string dir, string? profile = null)
     {
         var file = new[] { Path.Combine(dir, "docwizz.yaml"), "docwizz.yaml" }.FirstOrDefault(File.Exists);
-        var config = Yaml.Deserialize<Config>(file is null ? Default : File.ReadAllText(file)) ?? new Config();
+        Config config;
+        try { config = Yaml.Deserialize<Config>(file is null ? Default : File.ReadAllText(file)) ?? new Config(); }
+        catch (YamlDotNet.Core.YamlException e) { throw new ArgumentException($"{file}: {e.Message}{(e.InnerException is { } inner ? $" {inner.Message}" : "")}"); }
         config.Profile = profile ?? config.Profile;
         var builtIn = Yaml.Deserialize<Config>(Profiles.Yaml(config.Profile, dir));
         if (profile is not null || config.Patterns.Count == 0) config.Patterns = builtIn.Patterns;
         if (config.ArchitectureSections.Count == 0) config.ArchitectureSections = builtIn.ArchitectureSections;
         // Fail fast on bad severities rather than mid-check.
         foreach (var s in config.Architecture.Severity.Values.Append(config.Check.FailOn)) global::Architecture.ParseSeverity(s);
+        global::Architecture.Validate(config.Architecture);
+        if (config.Check.RequireTests is { } rt && rt.ToLowerInvariant() is not ("high" or "medium"))
+            throw new ArgumentException($"check.require_tests: '{rt}' (high or medium; lower levels need no docs and aren't tracked)");
+        global::Security.Validate(config.Security);
         return config;
     }
 }
@@ -102,6 +115,9 @@ class CheckConfig
     public int? MaxComplexity { get; set; }
     // Minimum doc quality % (share of documented items with no quality flags); unset = no gate.
     public double? MinQuality { get; set; }
+    // `check --since`: fail when the change adds a symbol at this documentation level or above (high, medium) that no
+    // test code is linked to. Unset = report only.
+    public string? RequireTests { get; set; }
 }
 
 enum Level { None, Low, Medium, High }
@@ -151,9 +167,9 @@ static partial class Analyzer
         var inbound = model.Edges.Where(e => e.Kind is "calls" or "injects" or "renders" or "http").ToLookup(e => e.To, e => e.From);
         var outbound = model.Edges.Where(e => CodeModel.DependencyKinds.Contains(e.Kind)).ToLookup(e => e.From);
         var children = model.Edges.Where(e => e.Kind == "contains").ToLookup(e => e.From, e => e.To);
-        var tested = model.Edges.Where(e => e.Kind == "tests").Select(e => e.To).ToHashSet();
         // A test through the interface, an implementation, or any member counts.
-        bool Tested(string id) => tested.Contains(id) || implOf[id].Concat(implBy[id]).Concat(children[id]).Any(tested.Contains);
+        var links = new TestLinks(model);
+        bool Tested(string id) => links.Any(id);
         string Top(string id) => parent.TryGetValue(id, out var p) ? Top(p) : id;
 
         var effectsCache = new Dictionary<string, HashSet<string>>();

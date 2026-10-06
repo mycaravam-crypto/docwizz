@@ -61,6 +61,7 @@ Edge kinds:
 | `reads`, `binds` | code → configuration key; options type → bound section |
 | `references`, `depends-on` | project → project; project → package (label = version) |
 | `tests` | test code → code it exercises (the only trace test code leaves) |
+| `uses-namespace` | type → external namespace (`ns:<name>`) its file uses: C# `using`, Java `import` (own, `System.*`, `java.*` dropped) |
 
 `CodeModel.DependencyKinds` lists the edge kinds that count as a dependency for the architecture rules. `accesses`,
 `connects`, `reads` and `binds` are left out on purpose, so adding them didn't change any layer rule.
@@ -99,7 +100,7 @@ The model separates what the code states from what DocWizz concludes:
 - **[JavaScanner](src/DocWizz/JavaScanner.cs)** reads Java without a parser (comments and strings masked, then
   regexes): types and members with Javadoc, Spring roles, `@*Mapping` endpoints with parameter sources, auth and the
   unwrapped return type, constructor/`@Autowired`/Lombok injection, calls through injected fields (overloads by name
-  and argument count), method-level `implements`, and `@Value`/`@ConfigurationProperties` reads. Projects come from
+  and argument count), method-level `implements`, `@Value`/`@ConfigurationProperties` reads, and imported packages. Projects come from
   `pom.xml`/`build.gradle`, configuration from `application*.yml|properties`.
 - **[Sql](src/DocWizz/Sql.cs)** reads `.sql` files: procedures, functions, views, triggers and tables (doc from the
   comment above, `@parameters`), the tables each routine touches and the procedures it EXECs, and migration files
@@ -124,13 +125,24 @@ The model separates what the code states from what DocWizz concludes:
 - **[Profiles](src/DocWizz/Profiles.cs)** are YAML documentation patterns: match on kind, name, type, tag or
   visibility, then list the sections required. Reports say "coverage against profile X", never "compliant with".
 - **[Architecture](src/DocWizz/Architecture.cs)** covers path-glob layers, allowed dependencies, violations
-  ARCH-001/002/004 with severities, and folder cycles (ARCH-003). `architecture.md` adds coupling per module (fan-in,
+  ARCH-001/002/004 with severities, and folder cycles (ARCH-003). User-defined rules (`architecture.rules`) run over
+  the same edges: a selector for the source (layer, path, kind, tag, name; tags and kinds also match through the
+  containing type) and what it must not reach (a target selector, a package prefix or edge kinds). They are validated
+  when the config loads and produce the same `Violation`s, marked `Custom`, so `check`, `--since` and the pages need
+  nothing extra. `architecture.md` adds coupling per module (fan-in,
   fan-out, instability) and risks that break no rule: entities returned by endpoints, complex members in the API layer,
   and external namespaces used by the domain layer.
+- **[Security](src/DocWizz/Security.cs)** (opt-in) turns facts the model already has into findings for a security
+  review: endpoint auth tags, DbContext access from the API layer, framework namespaces in the domain, and flows from
+  unprotected endpoints to sensitive external systems (the generator's flow trace). A finding is a `Violation` with a
+  basis (fact or inferred detection), a CIA concern and the risk, kept apart from the detected fact. `Architecture.Check`
+  appends them when enabled, so `check`, `--since` and the pages treat them like violations but show them separately.
 - **[Diff](src/DocWizz/Diff.cs)** compares two models by symbol id and body hash. It reports changed, added and
   removed symbols, the affected pages, and the gaps and violations a change introduced. A touched symbol also marks
   every flow passing through it: `api.md` / `frontend.md` and the module pages along that flow. New external systems
-  and new layer dependencies are listed as ADR candidates: decisions to record, not decisions DocWizz makes.
+  and new layer dependencies are listed as ADR candidates: decisions to record, not decisions DocWizz makes. Every added
+  and changed symbol also gets its linked tests ([TestLinks](src/DocWizz/TestLinks.cs): `tests` edges to it, its
+  interface, an implementation or a member — the same rule as the analyzer's "tested"), or is listed as unlinked.
 
 ## Generation
 
@@ -177,7 +189,20 @@ quality % or `check`.
 
 ## Tests
 
-[test.sh](test.sh) runs the CLI against [fixture/](fixture/), a small ASP.NET + EF Core + Vue project with
+Three layers, so a failure points at the part that broke. CI ([test.yml](.github/workflows/test.yml)) runs each as
+its own step.
+
+| Layer | Where | What it covers | Run |
+|---|---|---|---|
+| Unit | [tests/DocWizz.Tests/Unit](tests/DocWizz.Tests/Unit/) | `Analyzer`, `Architecture`, `Diff`, `CodeModel` on small in-memory models | `dotnet test --project tests/DocWizz.Tests --filter-namespace DocWizz.Tests.Unit` |
+| Component | [tests/DocWizz.Tests/Component](tests/DocWizz.Tests/Component/) | one scanner on a few source snippets → nodes and edges, incl. past regressions per backend language | `… --filter-namespace DocWizz.Tests.Component` |
+| End-to-end | [test.sh](test.sh) | repository → model → reports → generated pages, on the fixtures | `./test.sh` |
+
+`test.sh` runs the CLI against [fixture/](fixture/), a small ASP.NET + EF Core + Vue project with
 deliberate gaps, violations, external systems, configuration and deployment descriptors. It asserts facts in the
 model JSON and lines in the generated pages. When a feature is added, extend the fixture with the smallest case
-that exercises it, and assert both the model and the page.
+that exercises it, and assert both the model and the page. Rules and analysis logic get a unit test as well, and a
+scanner fix gets a component test with the snippet that broke it.
+
+Performance is measured separately: [bench/](bench/README.md) generates synthetic repositories of three sizes and
+times every stage (`--timings`, [Timings.cs](src/DocWizz/Timings.cs)) against a committed baseline, on demand and weekly.

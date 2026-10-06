@@ -195,6 +195,10 @@ partial class Generator
         var keys = model.Edges.Where(e => e.Kind is "reads" or "binds" && (e.From == t.Id || Top(e.From) == t.Id) && nodes.ContainsKey(e.To))
             .Select(e => nodes[e.To].Name).Distinct().Order(StringComparer.OrdinalIgnoreCase).ToList();
         if (keys.Count > 0) parts.Add("_Configuration:_ " + string.Join(", ", keys.Select(k => $"[`{k}`](../views/deployment.md#configuration)")));
+        if (testLinks.Of(t.Id) is { Count: > 0 } tests)
+            parts.Add("_Linked tests:_ " + string.Join(", ", tests.Take(MaxListed).Select(l => $"`{TestLinks.Short(l.Test)}`" +
+                (l.Via is { } via && nodes.TryGetValue(via, out var v) ? $" (via `{Esc(ShortName(v))}`)" : ""))) +
+                (tests.Count > MaxListed ? $", +{tests.Count - MaxListed} more" : "") + " — test code that uses it, not coverage");
         return string.Join(" · ", parts);
     }
 
@@ -204,7 +208,9 @@ partial class Generator
     IEnumerable<string> Observations(string folder, List<Node> tops, List<(string From, string To)> deps)
     {
         foreach (var v in arch.Violations.Where(v => Folder(v.FromFile) == folder || Folder(v.To) == folder).OrderByDescending(v => v.Severity))
-            yield return $"{v.Rule} ({v.Severity.ToString().ToLowerInvariant()}): {v.FromLayer} → {v.ToLayer} is not allowed — {Esc(v.Example)} " +
+            yield return (v.Concern is not null ? $"{v.Rule} (security, {v.Severity.ToString().ToLowerInvariant()}): {Esc(v.Example)} — see [security](../architecture-description.md#security) "
+                : v.Custom ? $"{v.Rule} (custom, {v.Severity.ToString().ToLowerInvariant()}): {Esc(v.Example)} — see [rules](../architecture.md#custom-rules) "
+                    : $"{v.Rule} ({v.Severity.ToString().ToLowerInvariant()}): {v.FromLayer} → {v.ToLayer} is not allowed — {Esc(v.Example)} ") +
                 $"({SourceLink(v.FromFile, 0, Path.GetFileName(v.FromFile), sub: "modules")})";
         foreach (var c in arch.Cycles.Where(c => c.Contains(folder)))
             yield return $"ARCH-003: part of a dependency cycle {string.Join(" ↔ ", c.Select(m => $"[{m}]({Slug(m)}.md)"))} — these modules can't be understood or changed independently";

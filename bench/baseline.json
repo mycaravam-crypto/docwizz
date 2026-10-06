@@ -1,0 +1,181 @@
+{
+  "environment": {
+    "os": "Linux-6.18.44-fc-v70-x86_64-with-glibc2.39",
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+    "cpus": 4,
+    "dotnet": "10.0.112",
+    "node": "v22.22.0",
+    "python": "3.13.16"
+  },
+  "date": "2026-10-06",
+  "results": {
+    "small": {
+      "modules": 10,
+      "files": 103,
+      "scan": {
+        "seconds": 4.73,
+        "peak_mb": 201,
+        "stages_ms": {
+          "files": 33,
+          "scan:csharp": 2953,
+          "scan:frontend": 1244,
+          "scan:sql": 40,
+          "scan:java": 91,
+          "scan:projects": 12,
+          "scan:configuration": 8,
+          "link": 19,
+          "peak-memory-mb": 200
+        }
+      },
+      "analyze": {
+        "seconds": 4.17,
+        "peak_mb": 199,
+        "stages_ms": {
+          "files": 33,
+          "scan:csharp": 2559,
+          "scan:frontend": 1011,
+          "scan:sql": 28,
+          "scan:java": 85,
+          "scan:projects": 13,
+          "scan:configuration": 9,
+          "link": 21,
+          "analyze": 42,
+          "architecture": 27,
+          "peak-memory-mb": 199
+        }
+      },
+      "generate": {
+        "seconds": 4.73,
+        "peak_mb": 208,
+        "stages_ms": {
+          "files": 30,
+          "scan:csharp": 2646,
+          "scan:frontend": 1003,
+          "scan:sql": 38,
+          "scan:java": 99,
+          "scan:projects": 17,
+          "scan:configuration": 11,
+          "link": 23,
+          "analyze": 44,
+          "architecture": 24,
+          "generate": 396,
+          "peak-memory-mb": 208
+        }
+      },
+      "nodes": 331,
+      "edges": 665
+    },
+    "medium": {
+      "modules": 100,
+      "files": 955,
+      "scan": {
+        "seconds": 7.49,
+        "peak_mb": 249,
+        "stages_ms": {
+          "files": 56,
+          "scan:csharp": 5506,
+          "scan:frontend": 1185,
+          "scan:sql": 31,
+          "scan:java": 202,
+          "scan:projects": 19,
+          "scan:configuration": 11,
+          "link": 67,
+          "peak-memory-mb": 249
+        }
+      },
+      "analyze": {
+        "seconds": 8.53,
+        "peak_mb": 242,
+        "stages_ms": {
+          "files": 41,
+          "scan:csharp": 6413,
+          "scan:frontend": 1255,
+          "scan:sql": 30,
+          "scan:java": 164,
+          "scan:projects": 21,
+          "scan:configuration": 11,
+          "link": 56,
+          "analyze": 132,
+          "architecture": 64,
+          "peak-memory-mb": 242
+        }
+      },
+      "generate": {
+        "seconds": 10.42,
+        "peak_mb": 265,
+        "stages_ms": {
+          "files": 42,
+          "scan:csharp": 6505,
+          "scan:frontend": 1149,
+          "scan:sql": 33,
+          "scan:java": 167,
+          "scan:projects": 14,
+          "scan:configuration": 10,
+          "link": 58,
+          "analyze": 122,
+          "architecture": 56,
+          "generate": 1832,
+          "peak-memory-mb": 264
+        }
+      },
+      "nodes": 3183,
+      "edges": 6531
+    },
+    "large": {
+      "modules": 400,
+      "files": 3805,
+      "scan": {
+        "seconds": 15.1,
+        "peak_mb": 355,
+        "stages_ms": {
+          "files": 44,
+          "scan:csharp": 12192,
+          "scan:frontend": 1818,
+          "scan:sql": 42,
+          "scan:java": 265,
+          "scan:projects": 18,
+          "scan:configuration": 15,
+          "link": 241,
+          "peak-memory-mb": 354
+        }
+      },
+      "analyze": {
+        "seconds": 15.23,
+        "peak_mb": 312,
+        "stages_ms": {
+          "files": 49,
+          "scan:csharp": 11998,
+          "scan:frontend": 1768,
+          "scan:sql": 37,
+          "scan:java": 223,
+          "scan:projects": 14,
+          "scan:configuration": 13,
+          "link": 217,
+          "analyze": 403,
+          "architecture": 166,
+          "peak-memory-mb": 311
+        }
+      },
+      "generate": {
+        "seconds": 27.44,
+        "peak_mb": 315,
+        "stages_ms": {
+          "files": 60,
+          "scan:csharp": 13179,
+          "scan:frontend": 2073,
+          "scan:sql": 59,
+          "scan:java": 242,
+          "scan:projects": 17,
+          "scan:configuration": 15,
+          "link": 272,
+          "analyze": 379,
+          "architecture": 195,
+          "generate": 10294,
+          "peak-memory-mb": 315
+        }
+      },
+      "nodes": 12708,
+      "edges": 26106
+    }
+  }
+}

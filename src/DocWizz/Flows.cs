@@ -71,6 +71,9 @@ partial class Generator
     string Chain(FlowTrace t, int perLayer = 6) => string.Join(" → ", t.Layers.Select(l =>
         string.Join(", ", l.Take(perLayer).Select(UnitLabel)) + (l.Count > perLayer ? $", +{l.Count - perLayer} more" : "")));
 
+    // What the flow from `start` can reach, for checks outside the generator (security rules).
+    public IEnumerable<Node> ReachedFrom(string start, Func<Node, bool> match) => Reached(TraceOf(start), match);
+
     // What a flow ends up touching: DbContexts, and external systems.
     IEnumerable<Node> Reached(FlowTrace t, Func<Node, bool> match) =>
         t.Layers.SelectMany(l => l).Select(nodes.GetValueOrDefault).OfType<Node>().Where(match);
