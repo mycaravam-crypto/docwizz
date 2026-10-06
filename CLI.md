@@ -264,6 +264,27 @@ Versions follow [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`, 
 version is set in one place, `<Version>` in [src/DocWizz/DocWizz.csproj](src/DocWizz/DocWizz.csproj); the commit is
 added by the .NET SDK at build time.
 
+### Releases
+
+Every pull request merged into `main` is a release. The [release workflow](.github/workflows/release.yml) bumps
+`<Version>` according to the PR's label, commits `Release vX.Y.Z` to `main`, tags it, and creates a GitHub release
+with generated notes:
+
+| PR label | Release |
+|---|---|
+| none | patch: `0.1.0` → `0.1.1` |
+| `release:minor` | minor: `0.1.3` → `0.2.0` (new features) |
+| `release:major` | major: `0.4.2` → `1.0.0` (breaking changes) |
+| `release:none` | nothing (docs, CI); the next merge without it releases |
+
+- **A version without a tag is released as it is.** That covers the first release, and a version you set by hand,
+  for example `1.0.0-rc.1` for a pre-release. A tagged pre-release becomes the final version on the next release.
+- **Two release labels on one PR** fail the workflow instead of guessing. Remove one and re-run the job.
+- **Protected `main`:** if a branch rule stops the Actions bot from pushing, add a `RELEASE_TOKEN` repository secret
+  (a fine-grained token with contents: write on this repository); the workflow uses it when it is present.
+- The bump rule is [next-version.sh](.github/scripts/next-version.sh). [next-version.test.sh](.github/scripts/next-version.test.sh)
+  specifies it, and CI runs it on every pull request.
+
 ## Generated vs. your files
 
 | Path | Who owns it |

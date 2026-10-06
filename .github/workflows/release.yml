@@ -1,0 +1,65 @@
+# Every pull request merged into main is a release: <Version> in DocWizz.csproj is bumped by the PR's label (patch by
+# default, release:minor, release:major; release:none skips), committed to main, tagged vX.Y.Z and published as a
+# GitHub release with generated notes. The bump rule is .github/scripts/next-version.sh (specified by
+# next-version.test.sh). Pushing to a protected main needs a RELEASE_TOKEN secret (contents: write); see CLI.md#versioning.
+name: release
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+permissions:
+  contents: write
+  issues: write   # creates the release labels
+# One release at a time, in merge order: two quick merges can't claim the same number.
+concurrency: { group: release, cancel-in-progress: false }
+jobs:
+  release:
+    if: github.event.pull_request.merged
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main            # the latest main, which may already carry an earlier release commit
+          fetch-depth: 0       # tags, to tell a released version from a new one
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+      - name: Release labels
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          gh label create release:minor --color 1d76db --description "Merging releases a minor version (new features)" 2>/dev/null || true
+          gh label create release:major --color b60205 --description "Merging releases a major version (breaking changes)" 2>/dev/null || true
+          gh label create release:none --color cfd3d7 --description "Merging releases nothing (docs, CI)" 2>/dev/null || true
+      - name: Next version
+        id: next
+        env:
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          current=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/DocWizz/DocWizz.csproj)
+          tagged=false
+          git rev-parse -q --verify "refs/tags/v$current" >/dev/null && tagged=true
+          next=$(.github/scripts/next-version.sh "$current" "$LABELS" "$tagged")
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "csproj $current (tagged: $tagged), labels [$LABELS] → ${next:-no release}"
+      - name: Commit, tag, release
+        if: steps.next.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT: ${{ steps.next.outputs.current }}
+          VERSION: ${{ steps.next.outputs.version }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "$VERSION" != "$CURRENT" ]; then
+            sed -i "s:<Version>$CURRENT</Version>:<Version>$VERSION</Version>:" src/DocWizz/DocWizz.csproj
+            git commit -am "Release v$VERSION (#$PR)"
+          fi
+          # A merge that lands on main after the checkout rejects the push: replay the release commit on it and retry.
+          for attempt in 1 2 3; do
+            git tag -f -a "v$VERSION" -m "docwizz $VERSION"
+            git push --atomic origin HEAD:main "v$VERSION" && break
+            [ "$attempt" = 3 ] && exit 1
+            git pull --rebase -q origin main
+          done
+          prerelease=$([[ $VERSION == *-* ]] && echo --prerelease || true)
+          gh release create "v$VERSION" --verify-tag --generate-notes --title "docwizz $VERSION" $prerelease

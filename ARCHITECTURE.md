@@ -218,5 +218,8 @@ model JSON and lines in the generated pages. When a feature is added, extend the
 that exercises it, and assert both the model and the page. Rules and analysis logic get a unit test as well, and a
 scanner fix gets a component test with the snippet that broke it.
 
+The release version rule ([next-version.sh](.github/scripts/next-version.sh): which label bumps what) has its own
+table of cases in [next-version.test.sh](.github/scripts/next-version.test.sh), run as the first step of CI.
+
 Performance is measured separately: [bench/](bench/README.md) generates synthetic repositories of three sizes and
 times every stage (`--timings`, [Timings.cs](src/DocWizz/Timings.cs)) against a committed baseline, on demand and weekly.

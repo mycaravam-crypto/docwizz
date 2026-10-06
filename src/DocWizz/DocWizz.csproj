@@ -6,7 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>docwizz</ToolCommandName>
-    <!-- The one place the version lives (SemVer); docwizz version and setup read it. -->
+    <!-- The one place the version lives (SemVer); docwizz version and setup read it. Bumped on every merge to main by
+         .github/workflows/release.yml, from the PR's release label (CLI.md#releases). -->
     <Version>0.1.0</Version>
   </PropertyGroup>
   <ItemGroup>
