@@ -20,7 +20,7 @@ class Config
     public List<string> ArchitectureSections { get; set; } = [];
 
     public const string Default = """
-        # Documentation profile: default, software, api, architecture, technical-publication, iso-42010, iso-15289.
+        # Documentation profile: default, software, aspnet, vue, api, architecture, technical-publication, iso-42010, iso-15289.
         # `--profile` overrides it. Add `patterns:` (same shape as in Profiles.cs) to replace the profile's patterns.
         profile: default
         check:
@@ -78,9 +78,15 @@ class Config
     public static Config Load(string dir, string? profile = null)
     {
         var file = new[] { Path.Combine(dir, "docwizz.yaml"), "docwizz.yaml" }.FirstOrDefault(File.Exists);
+        return Parse(file is null ? Default : File.ReadAllText(file), dir, profile, file);
+    }
+
+    // A config from YAML text (`file` names it in errors), validated and with the profile's patterns applied.
+    public static Config Parse(string yaml, string dir, string? profile = null, string? file = null)
+    {
         Config config;
-        try { config = Yaml.Deserialize<Config>(file is null ? Default : File.ReadAllText(file)) ?? new Config(); }
-        catch (YamlDotNet.Core.YamlException e) { throw new ArgumentException($"{file}: {e.Message}{(e.InnerException is { } inner ? $" {inner.Message}" : "")}"); }
+        try { config = Yaml.Deserialize<Config>(yaml) ?? new Config(); }
+        catch (YamlDotNet.Core.YamlException e) { throw new ArgumentException($"{file ?? "docwizz.yaml"}: {e.Message}{(e.InnerException is { } inner ? $" {inner.Message}" : "")}"); }
         config.Profile = profile ?? config.Profile;
         var builtIn = Yaml.Deserialize<Config>(Profiles.Yaml(config.Profile, dir));
         if (profile is not null || config.Patterns.Count == 0) config.Patterns = builtIn.Patterns;
