@@ -514,7 +514,6 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
     ArchitectureResult? arch = null;
     string configStatus = "";
     bool? passed = null;
-    var version = AppVersion.Number;
 
     Console.WriteLine($"docwizz setup {Path.GetFullPath(root)}");
     var results = Setup.Run(
@@ -531,7 +530,7 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
         }, Required: true),
         new("config", () =>
         {
-            configStatus = existing ? "kept" : Setup.WriteConfig(root, Setup.Yaml(detection, version), force);
+            configStatus = existing ? "kept" : Setup.WriteConfig(root, Setup.Yaml(detection, AppVersion.Number), force);
             // The generated file only narrows layers and test globs to those files matched, so the model stands.
             if (!existing) config = Config.Load(root, profile);
             return $"{configStatus} {file}" + (existing ? " (--force to regenerate)" : $" ({detection.Layers.Count} layers, {detection.TestGlobs.Count} test globs inferred)");

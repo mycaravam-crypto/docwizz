@@ -6,6 +6,7 @@ New here? Run `docwizz setup .` and read what it prints. You only need this page
 - [Commands](#commands) and [options](#options): every command and flag
 - [Precedence and conflicts](#precedence-and-conflicts): what wins when settings overlap
 - [Exit codes](#exit-codes)
+- [Versioning](#versioning): what `docwizz --version` prints and how releases are numbered
 - [Generated vs. your files](#generated-vs-your-files)
 
 `docwizz help` lists the commands. `docwizz help <command>` or `docwizz <command> --help` shows one command's purpose,
@@ -32,6 +33,7 @@ an example and its options.
 | `--validate` | build and test remediations in a temporary copy | maintainers | optional |
 | `--force` | regenerate `docwizz.yaml` during setup | setup only | no |
 | `--timings` | time and memory per stage | benchmarks | advanced |
+| `--version`, `-v` | which build is installed | bug reports, CI logs | optional |
 
 ## Workflows by goal
 
@@ -217,8 +219,10 @@ or for building your own tooling on top. Everyday workflows don't need it.
   them unless `--profile` is given.
 - **Existing configuration:** `init` never overwrites. `setup` keeps the file unless you pass `--force`.
 - **Options a command doesn't use** (for example `--format` with `generate`, or `--html` with `analyze`) are
-  rejected, with the commands that do take them. An option is never silently ignored. Only `--help` and `--timings`
-  apply everywhere.
+  rejected, with the commands that do take them. An option is never silently ignored. Only `--help`, `--timings` and
+  `--version` apply everywhere.
+- **`--version` first:** with `--version` (or `-v`), docwizz prints the version and exits 0 instead of running the
+  command, even when `--help` is given too. Bad arguments are still reported first.
 - **Mistakes** (an unknown command or option, a missing value, `--format xml`, `--package` without `--to`) print one
   line saying what is wrong, with a suggestion for a likely typo, and where to find the command's options. Exit 1.
 - **`diff` arguments:** if the first argument is not a directory, it is a ref and the directory is `.`. One ref
@@ -242,6 +246,23 @@ or for building your own tooling on top. Everyday workflows don't need it.
 Every command exits **2** when docwizz itself fails unexpectedly (a bug, a full disk, a permission error). It prints one
 line instead of a stack trace, so CI can tell "docwizz broke" from "the gate failed". Set `DOCWIZZ_DEBUG=1` for the
 full trace.
+
+## Versioning
+
+```
+$ docwizz --version
+docwizz 0.1.0 (commit e4320bd, .NET 10.0.12, linux-x64)
+```
+
+The line names the docwizz version, the git commit it was built from, the .NET runtime and the platform: paste it into
+bug reports, and print it at the start of CI jobs so a result can be traced to the build that produced it. A build
+made outside a git checkout has no commit and leaves it out. `docwizz setup` writes the same version into the header
+of the `docwizz.yaml` it creates.
+
+Versions follow [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`, with a pre-release suffix such as
+`-rc.1` when needed. While the major version is `0`, a minor release may change command-line options or output. The
+version is set in one place, `<Version>` in [src/DocWizz/DocWizz.csproj](src/DocWizz/DocWizz.csproj); the commit is
+added by the .NET SDK at build time.
 
 ## Generated vs. your files
 
