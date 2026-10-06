@@ -204,7 +204,7 @@ public class SetupJourneyTests
         Assert.Equal(Docwizz.Snapshot(Path.Combine(a, "docs")), Docwizz.Snapshot(Path.Combine(b, "docs")));
 
         var keys = yaml.Split('\n').Where(l => !l.TrimStart().StartsWith('#') && l.Contains(':'))
-            .Select((l, i) => (Indent: l.Length - l.TrimStart().Length, Key: l.Trim().Split(':')[0]));
+            .Select(l => (Indent: l.Length - l.TrimStart().Length, Key: l.Trim().Split(':')[0]));
         // Under each parent, every key once: setup never appends to what it wrote.
         var path = new List<(int Indent, string Key)>();
         var seen = new HashSet<string>();

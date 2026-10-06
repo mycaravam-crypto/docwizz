@@ -184,8 +184,8 @@ or for building your own tooling on top. Everyday workflows don't need it.
 | `generate` | `docwizz generate <dir> [out] [--html] [--ai] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
 | `check` | `docwizz check <dir> [--since ref] [--format f] [--profile p]` | quality gate; exit 1 when thresholds fail | CI |
 | `analyze` | `docwizz analyze <dir> [--format f] [--profile p]` | documentation and architecture report, no gate | everyday |
-| `architecture` | `docwizz architecture <dir> [--format f]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
-| `diff` | `docwizz diff [dir] [base] [head] [--format f]` | change impact vs the last `generate` or git refs | reviews, CI |
+| `architecture` | `docwizz architecture <dir> [--format f] [--profile p]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
+| `diff` | `docwizz diff [dir] [base] [head] [--format f] [--profile p]` | change impact vs the last `generate` or git refs | reviews, CI |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
 | `init` | `docwizz init [dir]` | write a `docwizz.yaml` with every default; refuses to overwrite | manual setup |
 | `scan` | `docwizz scan <dir> [model.json]` | dump the raw code model | advanced |
