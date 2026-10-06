@@ -253,7 +253,8 @@ See [AI drafts](#ai-drafts) for the privacy rules.
 | `docwizz scan <dir> [model.json]` | Dump the raw code model (nodes and edges); for debugging |
 
 `docwizz help <command>` explains one command; `docwizz --version` (or `-v`) prints the version and the commit it was
-built from, for bug reports and CI logs ([versioning](CLI.md#versioning)). [CLI.md](CLI.md) is the full reference: every option, defaults,
+built from, for bug reports and CI logs. Every merge to `main` is released automatically, with a `release:minor` or
+`release:major` PR label for bigger bumps ([versioning and releases](CLI.md#versioning)). [CLI.md](CLI.md) is the full reference: every option, defaults,
 precedence and exit codes. Options: `--profile <name|file.yaml>` picks what counts as documented. `--format json` gives machine-readable
 `analyze`/`check`/`architecture`/`diff`/`remediate` output. Run `dotnet test --project tests/DocWizz.Tests` for the unit, component and journey tests (journeys run the CLI as a
 process; Vue/TS ones need `npm ci --prefix scanner-vue`) and `./test.sh` for the end-to-end
