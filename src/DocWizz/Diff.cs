@@ -3,7 +3,12 @@ record DiffResult(
     List<string> Pages,
     List<string> DepsAdded, List<string> DepsRemoved,
     List<DocumentationItem> NewGaps, List<Violation> NewViolations, List<string> Decisions,
-    List<StaleDoc> Stale, List<(DocumentationItem Item, QualityFlag Flag)> NewFlags, List<TestTrace> Tests);
+    List<StaleDoc> Stale, List<(DocumentationItem Item, QualityFlag Flag)> NewFlags, List<TestTrace> Tests,
+    List<PackageUpdate> Packages);
+
+// A package whose version a project changed between the two models, with what that touches (Remediations.Impact) and
+// whether that lies inside the change (Scope).
+record PackageUpdate(string Project, string Package, string Ecosystem, string Before, string After, string Kind, PackageImpact Impact, string Scope);
 
 // An added or changed symbol and the test code linked to it (TestLinks); Level is its documentation level (None if it needs no docs).
 record TestTrace(Node Symbol, bool Added, Level Level, List<LinkedTest> Tests);
@@ -92,7 +97,19 @@ static class Diff
             .Select(x => new TestTrace(x.Node, x.Added, levels.GetValueOrDefault(x.Node.Id), links.Of(x.Node.Id)))
             .OrderBy(t => t.Symbol.File).ThenBy(t => t.Symbol.Line).ToList();
 
-        return new(added, removed, changed, [.. pages], depsAdded, depsRemoved, newGaps, newViolations, decisions, stale, newFlags, tests);
+        // Package version changes: a remediation applied by this change, and whether the code it touches changed with it.
+        var versionsBefore = before.Edges.Where(e => e.Kind == "depends-on" && e.Label is not null).GroupBy(e => (e.From, e.To)).ToDictionary(g => g.Key, g => g.First().Label!);
+        var packageNodes = after.Nodes.Where(n => n.Kind == "package").ToDictionary(n => n.Id);
+        var packages = after.Edges.Where(e => e.Kind == "depends-on" && e.Label is not null && packageNodes.ContainsKey(e.To)
+                && versionsBefore.TryGetValue((e.From, e.To), out var v) && v != e.Label).DistinctBy(e => (e.From, e.To))
+            .Select(e =>
+            {
+                var impact = Remediations.Impact(after, config, packageNodes[e.To], [e.From]);
+                return new PackageUpdate(after.Nodes.FirstOrDefault(n => n.Id == e.From)?.File ?? e.From, packageNodes[e.To].Name, packageNodes[e.To].Tags?.FirstOrDefault() ?? "unknown",
+                    versionsBefore[(e.From, e.To)], e.Label!, Versions.Kind(versionsBefore[(e.From, e.To)], e.Label), impact, Remediations.Scope(impact, added.Concat(changed), after, config));
+            }).OrderBy(p => p.Package, StringComparer.OrdinalIgnoreCase).ThenBy(p => p.Project, StringComparer.Ordinal).ToList();
+
+        return new(added, removed, changed, [.. pages], depsAdded, depsRemoved, newGaps, newViolations, decisions, stale, newFlags, tests, packages);
     }
 
     static IEnumerable<(Node, Node)> SameName(List<Node> removed, List<Node> added)
@@ -159,6 +176,14 @@ static class Diff
             o.WriteLine($"Possibly stale docs ({d.Stale.Count}) — the contract changed, the doc comment didn't");
             foreach (var s in d.Stale.OrderBy(s => s.After.File).ThenBy(s => s.After.Line))
                 o.WriteLine($"  ! {s.After.File}:{s.After.Line}  {Generator.Display(s.After)}  changed: {string.Join(", ", s.Changes)}");
+        }
+        if (d.Packages.Count > 0)
+        {
+            o.WriteLine();
+            o.WriteLine($"Package updates ({d.Packages.Count}) — static impact; {Remediations.ImpactNote}");
+            foreach (var p in d.Packages)
+                o.WriteLine($"  {p.Package} {p.Before} → {p.After}  [{p.Kind}]  in {p.Project}: {p.Impact.Uses.Count} symbols, {p.Impact.Flows.Count} flows, " +
+                    $"{p.Impact.Tests.Count} linked tests; {p.Scope}");
         }
         if (d.Tests.Count > 0)
         {

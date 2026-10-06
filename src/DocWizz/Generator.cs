@@ -488,7 +488,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         return sb.Append("```\n").ToString();
     }
 
-    static string EndpointLabel(Node n) => $"{n.Tags![1]} /{n.Route?.TrimStart('/')}";
+    public static string EndpointLabel(Node n) => $"{n.Tags![1]} /{n.Route?.TrimStart('/')}";
     public static string Display(Node n) => n.Id[(n.Id.IndexOf(':') + 1)..];
     public static string Folder(string file) => Path.GetDirectoryName(file)?.Replace('\\', '/') is { Length: > 0 } d ? d : ".";
     public static string Slug(string folder) => folder == "." ? "root" : Regex.Replace(folder, @"[^A-Za-z0-9.\-]+", "-");

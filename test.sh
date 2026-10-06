@@ -912,4 +912,16 @@ if grep -q '```mermaid' "$out/architecture.md"; then echo "empty diagram rendere
 grep -q "No endpoints found." "$out/api.md"
 grep -q "Tiny.csproj) — executable" "$out/views/deployment.md"
 rm -rf "$tiny" "$out"
+
+# Remediation: an exact command for a project-local version, impact from the code graph, never validated by default
+rem=$(dw remediate fixture --package Microsoft.EntityFrameworkCore.SqlServer --to 10.0.0 --format json 2>/dev/null)
+python3 - "$rem" <<'PY2'
+import json, sys
+r, = json.loads(sys.argv[1])["remediations"]
+c, = r["changes"]
+assert c["command"] == "dotnet add backend/Fixture.csproj package Microsoft.EntityFrameworkCore.SqlServer --version 10.0.0", c
+assert (c["current"], r["kind"], r["status"], r["confidence"]) == ("9.0.0", "major", "unvalidated", "low"), r
+assert "cs:Fixture.Infrastructure.AppDbContext" in [s["id"] for s in r["impact"]["symbols"]], r["impact"]
+assert "POST /api/materials" in r["impact"]["flows"] and "validation" not in r and r["provenance"]["impact"] == "inferred"
+PY2
 echo PASS

@@ -17,7 +17,7 @@ CSharpScanner  scanner-vue (Node)  Projects  Configuration        ← facts only
             CodeModel (nodes + edges)            → docwizz scan
       ┌──────────┼───────────────┐
       ▼          ▼               ▼
-  Analyzer   Architecture       Diff             → analyze / check / architecture / diff
+  Analyzer   Architecture       Diff             → analyze / check / architecture / diff / remediate
       └────┬─────┘
            ▼
        Generator  (+ AiProse drafts, cached)     → generate
@@ -144,6 +144,18 @@ The model separates what the code states from what DocWizz concludes:
   and new layer dependencies are listed as ADR candidates: decisions to record, not decisions DocWizz makes. Every added
   and changed symbol also gets its linked tests ([TestLinks](src/DocWizz/TestLinks.cs): `tests` edges to it, its
   interface, an implementation or a member — the same rule as the analyzer's "tested"), or is listed as unlinked.
+  A project whose package version changed is listed with the update's kind and impact (see Remediation).
+- **[Remediation](src/DocWizz/Remediation.cs)** (`docwizz remediate`) turns package findings into suggestions. Targets
+  come from `--package/--to`, `remediation.targets`, or NuGet version drift (align on the highest version). Each
+  suggestion keeps three kinds of evidence apart. *Detected*: the declared version and the line that declares it
+  ([Projects.NuGet](src/DocWizz/Projects.cs) resolves `Directory.Packages.props` and `VersionOverride`), and from them a
+  `dotnet add package` command, or a one-line patch where versions are managed centrally. *Inferred*: types that
+  import the package's namespaces in the referencing projects (and in projects referencing those), the flows through
+  them (`Generator.FlowsThrough`), and their linked tests. *Validated*: only with `--validate`, which copies the
+  directory to a temporary folder, applies the edits there and runs the configured restore/build/test steps. A version
+  that isn't a literal (an MSBuild property, a range, `1.*`) gets no command. Status and confidence follow from the
+  evidence: a major update without validation is always low confidence, a failed step makes it potentially breaking,
+  and passing steps are evidence, never proof. Static mode runs nothing.
 
 ## Generation
 
@@ -195,8 +207,8 @@ its own step.
 
 | Layer | Where | What it covers | Run |
 |---|---|---|---|
-| Unit | [tests/DocWizz.Tests/Unit](tests/DocWizz.Tests/Unit/) | `Analyzer`, `Architecture`, `Diff`, `CodeModel` on small in-memory models | `dotnet test --project tests/DocWizz.Tests --filter-namespace DocWizz.Tests.Unit` |
-| Component | [tests/DocWizz.Tests/Component](tests/DocWizz.Tests/Component/) | one scanner on a few source snippets → nodes and edges, incl. past regressions per backend language | `… --filter-namespace DocWizz.Tests.Component` |
+| Unit | [tests/DocWizz.Tests/Unit](tests/DocWizz.Tests/Unit/) | `Analyzer`, `Architecture`, `Diff`, `CodeModel`, `Versions` on small in-memory models | `dotnet test --project tests/DocWizz.Tests --filter-namespace DocWizz.Tests.Unit` |
+| Component | [tests/DocWizz.Tests/Component](tests/DocWizz.Tests/Component/) | one scanner on a few source snippets → nodes and edges, incl. past regressions per backend language; project files → remediation suggestions and validation | `… --filter-namespace DocWizz.Tests.Component` |
 | End-to-end | [test.sh](test.sh) | repository → model → reports → generated pages, on the fixtures | `./test.sh` |
 
 `test.sh` runs the CLI against [fixture/](fixture/), a small ASP.NET + EF Core + Vue project with

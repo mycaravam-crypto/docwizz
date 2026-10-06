@@ -30,7 +30,7 @@ static class Projects
             {
                 if (file.EndsWith(".csproj"))
                 {
-                    var xml = XDocument.Load(file);
+                    var xml = XDocument.Load(file, LoadOptions.SetLineInfo);
                     var sdk = xml.Root?.Attribute("Sdk")?.Value;
                     var frameworks = xml.Descendants().Where(e => e.Name.LocalName is "TargetFramework" or "TargetFrameworks")
                         .SelectMany(e => e.Value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
@@ -44,8 +44,8 @@ static class Projects
                         : "library";
                     nodes.Add(new Node(id, "project", Path.GetFileNameWithoutExtension(file), rel, 1,
                         Tags: [.. (string[])(sdk is null ? ["dotnet"] : ["dotnet", sdk]), .. frameworks, role]));
-                    foreach (var p in xml.Descendants("PackageReference"))
-                        if (p.Attribute("Include")?.Value is { } name) Package(id, "nuget", name, p.Attribute("Version")?.Value, rel);
+                    // Versions as resolved: the project's own, a VersionOverride, or Directory.Packages.props (central management).
+                    foreach (var p in NuGet(root, file, xml)) Package(id, "nuget", p.Package, p.Version, rel);
                     foreach (var p in xml.Descendants("ProjectReference"))
                         if (p.Attribute("Include")?.Value is { } inc)
                         {
@@ -124,6 +124,54 @@ static class Projects
             ? FolderOf(p) is { Length: > 0 } up ? $"{up}/{name}" : name : "";
         foreach (var e in entries.Where(e => !folders.ContainsKey(e.Guid)))
             yield return (e.Path.Replace('\\', '/'), FolderOf(e.Guid));
+    }
+
+    // A NuGet PackageReference with the version it resolves to and the line that declares that version: the project's
+    // Version, its VersionOverride, or the PackageVersion in the nearest Directory.Packages.props when packages are
+    // managed centrally. Version is null when it can't be read as a literal (an MSBuild property, a missing entry), with
+    // Problem saying why; floating versions and ranges are kept as written.
+    public record NuGetReference(string Project, string Package, string? Version, string DeclaredIn, int Line, bool Central, string? Problem = null);
+
+    // The PackageReferences of one .csproj, resolved as above; `xml` saves a second parse when the caller has one.
+    public static List<NuGetReference> NuGet(string root, string file, XDocument? xml = null)
+    {
+        xml ??= XDocument.Load(file, LoadOptions.SetLineInfo);
+        string Rel(string f) => Path.GetRelativePath(root, f).Replace('\\', '/');
+        var project = Rel(file);
+        var props = CentralProps(root, file);
+        XDocument? central = null;
+        try { if (props is not null) central = XDocument.Load(props, LoadOptions.SetLineInfo); }
+        catch (System.Xml.XmlException) { }
+        static XElement? Switch(XDocument? d) => d?.Descendants().LastOrDefault(e => e.Name.LocalName == "ManagePackageVersionsCentrally");
+        // The project's own setting wins over the one in Directory.Packages.props.
+        var managed = (Switch(xml) ?? Switch(central))?.Value.Trim().Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+        static string? Value(XElement e, string name) => e.Attribute(name)?.Value ?? e.Elements().FirstOrDefault(x => x.Name.LocalName == name)?.Value.Trim();
+        static int Line(XElement e) => ((System.Xml.IXmlLineInfo)e).LineNumber;
+
+        var refs = new List<NuGetReference>();
+        foreach (var p in xml.Descendants().Where(e => e.Name.LocalName == "PackageReference"))
+        {
+            if (p.Attribute("Include")?.Value is not { } name) continue;
+            NuGetReference Ref(string? version, string declaredIn, int line, bool isCentral, string? problem = null) =>
+                version is not null && version.Contains("$(") ? new(project, name, null, declaredIn, line, isCentral, $"version comes from an MSBuild property ({version})")
+                : new(project, name, version, declaredIn, line, isCentral, version is null ? problem ?? "no version declared" : null);
+            if (Value(p, "VersionOverride") is { } over) refs.Add(Ref(over, project, Line(p), isCentral: true));
+            else if (!managed) refs.Add(Ref(Value(p, "Version"), project, Line(p), isCentral: false));
+            else if (central?.Descendants().LastOrDefault(e => e.Name.LocalName == "PackageVersion"
+                && string.Equals(e.Attribute("Include")?.Value, name, StringComparison.OrdinalIgnoreCase)) is { } pv)
+                refs.Add(Ref(Value(pv, "Version"), Rel(props!), Line(pv), isCentral: true));
+            else refs.Add(Ref(null, project, Line(p), isCentral: true, $"centrally managed, but no PackageVersion in {(props is null ? "a Directory.Packages.props" : Rel(props))}"));
+        }
+        return refs;
+    }
+
+    // The Directory.Packages.props MSBuild imports for a project: the nearest one in its folder or above, within root.
+    static string? CentralProps(string root, string file)
+    {
+        var top = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar);
+        for (var dir = Path.GetDirectoryName(Path.GetFullPath(file)); dir is not null && dir.Length >= top.Length; dir = Path.GetDirectoryName(dir))
+            if (Path.Combine(dir, "Directory.Packages.props") is var f && File.Exists(f)) return f;
+        return null;
     }
 
     // The project a source file belongs to: the nearest project file in one of its parent folders.

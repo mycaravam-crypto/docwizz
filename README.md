@@ -185,6 +185,45 @@ jobs:
           # fail: 'false'                 # report, never fail
 ```
 
+### Update a package, with evidence
+
+```console
+$ docwizz remediate . --package Newtonsoft.Json --to 13.0.3 --validate
+DEP-001  Newtonsoft.Json 12.0.3, 13.0.1 → 13.0.3  [major]  (nuget; requested)
+
+Suggested update:
+  dotnet add src/Worker/Worker.csproj package Newtonsoft.Json --version 13.0.3
+Suggested patch (versions are managed centrally; apply with git apply):
+  --- a/Directory.Packages.props
+  +++ b/Directory.Packages.props
+  @@ -4,5 +4,5 @@
+     </PropertyGroup>
+     <ItemGroup>
+  -    <PackageVersion Include="Newtonsoft.Json" Version="12.0.3" />
+  +    <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />
+       <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+       <PackageVersion Include="xunit" Version="2.9.2" />
+  src/Worker/Worker.csproj: 13.0.1 → 13.0.3 is a patch update
+
+Impact (static):
+  - projects: src/Api/Api.csproj, src/Worker/Worker.csproj; through project references: tests/Api.Tests/Api.Tests.csproj  [detected]
+  - 1 symbols import the package's namespaces (1 public): Api.Codec (src/Api/Codec.cs:3)  [inferred]
+  - 1 linked tests: Api.Tests.CodecTests.Writes  [inferred; a link means test code uses the symbol; it is not code coverage]
+  - test projects: tests/Api.Tests/Api.Tests.csproj  [detected]
+  - not assessed: APIs removed or changed between 12.0.3/13.0.1 and 13.0.3
+Static assessment: potentially breaking — a major version may remove or change APIs; not judged by version number alone; …
+
+Validation (executed in a temporary copy; passing restore, build and tests is evidence, not proof of behavioral compatibility):
+  - restore: pass  `dotnet restore Demo.slnx`  3.2s
+  - build: pass  `dotnet build Demo.slnx --no-restore`  5.5s
+  - test: pass, 1 passed, 0 failed  `dotnet test Demo.slnx --no-build`  2.2s
+Status: validated   Confidence: high
+```
+
+Without `--package`, `remediate` proposes the versions in `remediation.targets` (say, the fixed version from a
+security advisory) and aligns NuGet packages that projects reference at different versions on the highest one. See
+[Remediation](#remediation) for how suggestions are built and what each status means.
+
 ### Draft the missing summaries with a local AI
 
 ```bash
@@ -206,12 +245,13 @@ See [AI drafts](#ai-drafts) for the privacy rules.
 | `docwizz generate <dir> [out] [--html] [--ai]` | Write the docs (default `<dir>/docs`) |
 | `docwizz diff <dir> [ref]` | Changed symbols, affected pages and linked tests vs the last `generate` (or a git ref) |
 | `docwizz diff [dir] <base> <head>` | The same, between two git refs |
+| `docwizz remediate <dir> [--package <name> --to <version>] [--validate] [--since <ref>]` | Package update suggestions: command or patch, impact, confidence; `--validate` builds and tests them in a temporary copy |
 | `docwizz init [dir]` | Write a starter `docwizz.yaml` with every default, ready to edit |
 | `docwizz scan <dir> [model.json]` | Dump the raw code model (nodes and edges); for debugging |
 
 `docwizz help <command>` explains one command. [CLI.md](CLI.md) is the full reference: every option, defaults,
 precedence and exit codes. Options: `--profile <name|file.yaml>` picks what counts as documented. `--format json` gives machine-readable
-`analyze`/`check`/`architecture`/`diff` output. Run `dotnet test --project tests/DocWizz.Tests` for the unit and component tests and `./test.sh` for the end-to-end
+`analyze`/`check`/`architecture`/`diff`/`remediate` output. Run `dotnet test --project tests/DocWizz.Tests` for the unit and component tests and `./test.sh` for the end-to-end
 tests against `fixture/` (see [ARCHITECTURE.md](ARCHITECTURE.md#tests)). `--timings` prints the time per stage and
 peak memory; [bench/](bench/README.md) has reproducible benchmarks, the baseline, and advice for large repositories and
 monorepos.
@@ -338,6 +378,43 @@ Authorization comes from endpoint metadata: ASP.NET `[Authorize]`/`[AllowAnonymo
 chain) is invisible, which is why each risk says "unless". An explicitly anonymous read is a decision, not a finding.
 Findings appear in `architecture` (their own section), count for `check` and `check --since` like violations, and are
 listed under Security in `architecture-description.md`.
+
+### Remediation
+
+`docwizz remediate` suggests package updates. They are advisory: it never changes your working tree. Each suggestion
+(`DEP-001`, …) names the current and proposed versions, whether the update is a patch, minor or major one, and:
+
+- **the change**, copy/paste-ready. That is `dotnet add <project> package <name> --version <v>` for a version in the
+  project file, or a minimal patch to `Directory.Packages.props` (or to a `VersionOverride`) when versions are managed
+  centrally, where a project-local command would be wrong. There is no command when the layout can't be read with
+  confidence: a version from an MSBuild property, a floating version or range, a missing `PackageVersion`, or an
+  ecosystem other than NuGet (npm, Maven and Gradle are reported without one, for now).
+- **static impact**: the projects that reference the package, directly and through project references (*detected*);
+  the types that import its namespaces, the endpoints and routes whose flows pass through them, and their linked tests
+  (*inferred*). DocWizz doesn't read package contents, so APIs removed or changed between versions are not assessed.
+- **validation**, only with `--validate`: the directory is copied to a temporary folder, the change applied there, and
+  the configured steps run in order until one fails. Each step reports its command, exit status, duration, test counts
+  where `dotnet test` prints them, and the error lines as evidence. Validation runs your build and tests, so it runs
+  repository code (and restores packages from your configured feeds); static mode runs nothing.
+- **status and confidence**: `unvalidated`, `validated` (every step passed), `potentially-breaking` (a step failed) or
+  `not-actionable` (no command). Confidence is `high` only when tests ran and passed and every symbol using the package
+  has a linked test. A major update without validation is always `low`. Nothing is ever called safe: passing checks are
+  evidence, not proof of behavioral compatibility.
+
+With `--since <ref>`, each suggestion also says whether the code it touches lies inside what changed since `<ref>` or
+beyond it. `diff` and `check --since` list the package versions a change updated, with the same impact and scope; they
+report this but don't fail on it. `--format json` gives everything as data (`changes`, `impact`, `assessment`,
+`validation`, `status`, `confidence`, `provenance`), and `remediate` exits with 1 when a validation step failed.
+
+```yaml
+remediation:
+  targets: { Newtonsoft.Json: 13.0.3 }   # versions to propose
+  validate:                              # default: restore, build, test with dotnet
+    - { name: restore, run: "dotnet restore {target}" }   # {target}: the solution, else each affected project
+    - { name: build, run: "dotnet build {target} --no-restore -warnaserror" }
+    - { name: test, run: "dotnet test {tests} --no-build" }   # {tests}: the solution, else each affected test project
+  timeout_minutes: 20                    # per step
+```
 
 ### Profiles
 
