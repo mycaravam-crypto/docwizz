@@ -251,7 +251,8 @@ See [AI drafts](#ai-drafts) for the privacy rules.
 
 `docwizz help <command>` explains one command. [CLI.md](CLI.md) is the full reference: every option, defaults,
 precedence and exit codes. Options: `--profile <name|file.yaml>` picks what counts as documented. `--format json` gives machine-readable
-`analyze`/`check`/`architecture`/`diff`/`remediate` output. Run `dotnet test --project tests/DocWizz.Tests` for the unit and component tests and `./test.sh` for the end-to-end
+`analyze`/`check`/`architecture`/`diff`/`remediate` output. Run `dotnet test --project tests/DocWizz.Tests` for the unit, component and journey tests (journeys run the CLI as a
+process; Vue/TS ones need `npm ci --prefix scanner-vue`) and `./test.sh` for the end-to-end
 tests against `fixture/` (see [ARCHITECTURE.md](ARCHITECTURE.md#tests)). `--timings` prints the time per stage and
 peak memory; [bench/](bench/README.md) has reproducible benchmarks, the baseline, and advice for large repositories and
 monorepos.

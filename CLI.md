@@ -52,9 +52,18 @@ This runs every stage once, in this order, and prints one summary at the end:
 | 5 | generate | writes the docs to `<dir>/docs` | reported; the next stages still run |
 | 6 | check | the quality gate at the configured thresholds | reported |
 
-`setup` never prompts, so it works the same way in a terminal and in a script. It exits 1 only when a stage fails.
-A failing **check** does not fail `setup`: on a new repository it is the starting point. The summary says what
-failed and what to change.
+`setup` never prompts, so it works the same way in a terminal and in a script. The summary starts with a status
+that keeps problems in the repository apart from problems running docwizz:
+
+| Status | Means | Exit |
+|---|---|---|
+| `SUCCESS` | every stage ran; the check passes and there are no architecture or security findings | 0 |
+| `SUCCESS_WITH_FINDINGS` | every stage ran; the check fails or there are findings. On a new repository this is the starting point, not an error | 0 |
+| `FAILED` | a stage could not run (invalid `docwizz.yaml`, unreadable files, a scanner error); its error is listed | 1 |
+
+`setup` never contacts an AI endpoint without `--ai`. It never runs the repository's build, tests or package tools
+(`dotnet`, `npm`, `mvn`, `docker`, …): it only reads files. It never copies configuration values into
+`docwizz.yaml`.
 
 **The `docwizz.yaml` it writes** starts from the defaults (`docwizz init` writes the same defaults). It changes
 only what the repository shows evidence for:
@@ -206,8 +215,11 @@ or for building your own tooling on top. Everyday workflows don't need it.
 - **Profile:** `--profile` beats `profile:` in the file, which beats `default`. A file with its own `patterns:` uses
   them unless `--profile` is given.
 - **Existing configuration:** `init` never overwrites. `setup` keeps the file unless you pass `--force`.
-- **Options a command doesn't use** (for example `--format` with `generate`) are ignored, except `--force`, which is
-  rejected outside `setup` so that it never silently does nothing.
+- **Options a command doesn't use** (for example `--format` with `generate`, or `--html` with `analyze`) are
+  rejected, with the commands that do take them. An option is never silently ignored. Only `--help` and `--timings`
+  apply everywhere.
+- **Mistakes** (an unknown command or option, a missing value, `--format xml`, `--package` without `--to`) print one
+  line saying what is wrong, with a suggestion for a likely typo, and where to find the command's options. Exit 1.
 - **`diff` arguments:** if the first argument is not a directory, it is a ref and the directory is `.`. One ref
   compares against the working tree, two refs compare against each other, and none compares against the last
   `generate`.
@@ -216,7 +228,7 @@ or for building your own tooling on top. Everyday workflows don't need it.
 
 | Command | 0 | 1 |
 |---|---|---|
-| `setup` | every stage ran (even if the check fails) | a stage failed (others are still reported), or bad arguments |
+| `setup` | every stage ran (`SUCCESS` or `SUCCESS_WITH_FINDINGS`) | a stage failed (`FAILED`; the others are still reported), or bad arguments |
 | `check` | thresholds pass | thresholds fail, or bad arguments/config |
 | `architecture` | within `max_violations`/`max_cycles` | above them |
 | `analyze`, `generate`, `scan` | done | bad arguments or config |
@@ -224,6 +236,10 @@ or for building your own tooling on top. Everyday workflows don't need it.
 | `diff` | done | no baseline (`generate` first or pass a ref), unknown ref |
 | `init` | written | `docwizz.yaml` exists |
 | no command | — | prints how to start |
+
+Every command exits **2** when docwizz itself fails unexpectedly (a bug, a full disk, a permission error). It prints one
+line instead of a stack trace, so CI can tell "docwizz broke" from "the gate failed". Set `DOCWIZZ_DEBUG=1` for the
+full trace.
 
 ## Generated vs. your files
 

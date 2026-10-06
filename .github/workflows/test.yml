@@ -1,5 +1,6 @@
 # DocWizz's own tests, one step per layer so a red check names the layer that broke:
-# unit (rules and analysis on in-memory models) → component (scanner → code model) → end-to-end (test.sh on the fixtures).
+# unit (rules, analysis and CLI parsing, in-memory) → component (scanner → code model) → journey (the CLI as a process:
+# setup on small repositories, errors, safe defaults) → end-to-end (test.sh on the fixtures).
 name: test
 on:
   pull_request:
@@ -27,5 +28,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: 22, cache: npm, cache-dependency-path: scanner-vue/package-lock.json }
       - run: npm ci --prefix scanner-vue --silent
+      - name: Journey tests
+        run: dotnet test --project tests/DocWizz.Tests --filter-namespace DocWizz.Tests.Journey
       - name: End-to-end tests
         run: ./test.sh

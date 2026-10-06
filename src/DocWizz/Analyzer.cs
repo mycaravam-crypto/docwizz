@@ -64,7 +64,7 @@ class Config
           #   - { name: test, run: "dotnet test {tests} --no-build" }
           timeout_minutes: 20
         # Test code (path globs): scanned only to link tests to the code they exercise; never analyzed or documented.
-        tests: ["tests/*", "test/*", "*.Tests/*", "*.Test/*", "*/__tests__/*", "*.test.ts", "*.spec.ts", "*/e2e/*", "*/src/test/*"]
+        tests: ["tests/*", "test/*", "*.Tests/*", "*.Test/*", "*/__tests__/*", "*.test.ts", "*.spec.ts", "*/e2e/*", "*/src/test/*", "src/test/*"]
         # Path globs (relative, `/`-separated) left out of the model entirely.
         exclude: []
         # Count a plain // comment block directly above a C# member as its summary (for code that doesn't use /// XML docs).

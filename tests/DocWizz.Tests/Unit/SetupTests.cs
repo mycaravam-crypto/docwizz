@@ -154,4 +154,19 @@ public class SetupTests
         Assert.Equal(["failed", "skipped"], results.Select(r => r.Status));
         Assert.Equal("needs scan", results[1].Detail);
     }
+
+    [Fact]
+    public void Findings_are_a_successful_setup_and_only_a_stage_that_could_not_run_fails_it()
+    {
+        List<Setup.StageResult> ok = [new("scan", "ok", ""), new("check", "ok", "")];
+        var clean = new ArchitectureResult([], [], [], []);
+        var cycle = clean with { Cycles = [["a", "b"]] };
+
+        Assert.Equal(Setup.Status.Success, Setup.Outcome(ok, checkPassed: true, clean));
+        Assert.Equal(Setup.Status.SuccessWithFindings, Setup.Outcome(ok, checkPassed: false, clean));
+        Assert.Equal(Setup.Status.SuccessWithFindings, Setup.Outcome(ok, checkPassed: true, cycle));
+        Assert.Equal(Setup.Status.Failed, Setup.Outcome([.. ok, new("generate", "failed", "disk full")], checkPassed: true, clean));
+        Assert.Equal(Setup.Status.Failed, Setup.Outcome([new("scan", "failed", "bad yaml"), new("check", "skipped", "needs scan")], null, null));
+        Assert.Equal(["SUCCESS", "SUCCESS_WITH_FINDINGS", "FAILED"], Enum.GetValues<Setup.Status>().Select(Setup.Label));
+    }
 }
