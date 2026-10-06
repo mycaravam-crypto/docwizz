@@ -13,6 +13,7 @@ class Config
     public List<string> Tests { get; set; } = [];
     public ArchitectureConfig Architecture { get; set; } = new();
     public SecurityConfig Security { get; set; } = new();
+    public RemediationConfig Remediation { get; set; } = new();
     public string Profile { get; set; } = "default";
 
     // Human-authored architecture sections the profile expects under docs/architecture/<name>.md.
@@ -54,6 +55,14 @@ class Config
         # Security rules SEC-001…005: findings for a security review, from code facts (README: Security rules). Off by default.
         security:
           enabled: false
+        # Package remediation (`docwizz remediate`, README: Remediation). Suggestions are advisory; --validate builds a temporary copy.
+        remediation:
+          targets: {}           # package → version to propose, e.g. { Newtonsoft.Json: 13.0.3 }
+          # validate:           # --validate steps, in order; {target}: the solution or each affected project, {tests}: test projects
+          #   - { name: restore, run: "dotnet restore {target}" }
+          #   - { name: build, run: "dotnet build {target} --no-restore" }
+          #   - { name: test, run: "dotnet test {tests} --no-build" }
+          timeout_minutes: 20
         # Test code (path globs): scanned only to link tests to the code they exercise; never analyzed or documented.
         tests: ["tests/*", "test/*", "*.Tests/*", "*.Test/*", "*/__tests__/*", "*.test.ts", "*.spec.ts", "*/e2e/*", "*/src/test/*"]
         # Path globs (relative, `/`-separated) left out of the model entirely.

@@ -81,6 +81,16 @@ partial class Generator
 
 partial class Generator
 {
+    // Entry points (endpoints, frontend routes) whose flow starts at or passes through any of the touched symbols.
+    public static List<Node> FlowsThrough(CodeModel model, Config config, IEnumerable<string> touched)
+    {
+        var g = new Generator("", "", model, [], null!, config, []);
+        var units = touched.Where(g.nodes.ContainsKey).Select(g.Unit).ToHashSet();
+        return model.Nodes.Where(n => n.Kind == "route" || n.Tags?.Contains("endpoint") == true)
+            .Where(n => units.Contains(g.Unit(n.Id)) || g.TraceOf(n.Id).Layers.SelectMany(l => l).Any(units.Contains))
+            .OrderBy(n => n.File).ThenBy(n => n.Line).ToList();
+    }
+
     // Change impact: pages that show a flow passing through any touched symbol — api.md / frontend.md, and the module
     // page of every unit on that flow (module pages list each flow that starts or passes there).
     public static IEnumerable<string> FlowPages(CodeModel model, Config config, IEnumerable<string> touched)

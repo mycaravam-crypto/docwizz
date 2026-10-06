@@ -5,12 +5,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 // ponytail: hand-rolled arg parsing; move to System.CommandLine if options keep growing
-string[] valued = ["format", "profile", "since"];
+string[] valued = ["format", "profile", "since", "package", "to"];
 var opts = new Dictionary<string, string>();
 var pos = new List<string>();
 for (var i = 0; i < args.Length; i++)
 {
-    if (args[i] is "--ai" or "--html" or "--timings") opts[args[i][2..]] = "";
+    if (args[i] is "--ai" or "--html" or "--timings" or "--validate") opts[args[i][2..]] = "";
     else if (args[i].StartsWith("--") && valued.Contains(args[i][2..]) && i + 1 < args.Length) opts[args[i][2..]] = args[++i];
     else if (args[i].StartsWith("--")) return Usage($"unknown option {args[i]}");
     else pos.Add(args[i]);
@@ -52,6 +52,8 @@ switch (cmd)
         return DiffCommand(path, pos.ElementAtOrDefault(2), config, enforce: false, head: pos.ElementAtOrDefault(3), json: json);
     case "architecture":
         return ArchitectureCommand(path, config, json);
+    case "remediate":
+        return Remediate(path, config, opts.GetValueOrDefault("package"), opts.GetValueOrDefault("to"), opts.ContainsKey("validate"), opts.GetValueOrDefault("since"), json);
     case "generate":
         return await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html"));
     default:
@@ -85,12 +87,16 @@ static int Usage(string? error)
           docwizz diff <dir> [ref]          what changed vs <ref> (default: docs/.docwizz/model.json)
           docwizz diff [dir] <base> <head>  what changed between two git refs
           docwizz architecture <dir>        layers, dependencies, violations; exit 1 above check thresholds
+          docwizz remediate <dir>           package update suggestions: command or patch, impact, confidence
+            [--package <name> --to <ver>]   propose this update (default: remediation.targets and version drift)
+            [--validate]                    apply each in a temporary copy and run restore, build, tests
+            [--since <ref>]                 say whether each touches only what changed since <ref>
           docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
             [--ai]                          draft missing summaries with a local Ollama (cached per code hash)
             [--html]                        also write an HTML page next to every Markdown page
         options:
           --profile <name|file.yaml>        documentation profile: {string.Join(", ", Profiles.Names)}, or your own file
-          --format console|json             analyze/check/architecture/diff output
+          --format console|json             analyze/check/architecture/diff/remediate output
           --timings                         time per stage and peak memory, on stderr (benchmarks)
         """);
     return 1;
@@ -322,6 +328,8 @@ static object DiffJson(DiffResult d, string baseline, object? check)
             violations = d.NewViolations,
             flags = d.NewFlags.Select(x => new { id = x.Item.Node.Id, x.Flag.Rule, basis = x.Flag.Origin, x.Flag.Detail }),
         },
+        packages = d.Packages.Select(p => new { project = p.Project, package = p.Package, ecosystem = p.Ecosystem, before = p.Before, after = p.After, kind = p.Kind,
+            symbols = p.Impact.Uses.Select(u => u.Id), flows = p.Impact.Flows, tests = p.Impact.Tests, scope = p.Scope, note = Remediations.ImpactNote }),
         tests = new
         {
             note = TestLinks.Note,
@@ -409,6 +417,36 @@ static int Analyze(string root, Config config, bool enforce, bool json)
         }
     }
     return enforce && failures.Count > 0 ? 1 : 0;
+}
+
+// Package remediation: static by default; --validate runs the repository's build and tests in a temporary copy.
+static int Remediate(string root, Config config, string? package, string? to, bool validate, string? since, bool json)
+{
+    if ((package is null) != (to is null)) return Usage("--package and --to go together");
+    var model = BuildModel(root, config).Model;
+    List<Remediation> list;
+    try { list = Timings.Measure("remediate", () => Remediations.Plan(root, model, config, package is null ? null : (package, to!))); }
+    catch (ArgumentException e)
+    {
+        Console.Error.WriteLine(e.Message);
+        return 1;
+    }
+    if (since is not null)
+    {
+        if (ModelAt(root, since, config) is not { } before) return 1;
+        var diff = Diff.Compare(before, model, config);
+        list = [.. list.Select(r => r with { Scope = Remediations.Scope(r.Impact, diff.Added.Concat(diff.Changed), model, config) })];
+    }
+    if (validate)
+    {
+        // Explicit, and announced: validation executes the repository's build (and so its code), never in the working tree.
+        Console.Error.WriteLine("docwizz: --validate runs the configured restore/build/test commands in a temporary copy of " + root);
+        list = [.. list.Select(r => r.Actionable ? r with { Validation = Remediations.Validate(root, model, r, config.Remediation, Console.Error) } : r)];
+    }
+    if (json) Console.WriteLine(JsonSerializer.Serialize(Remediations.Json(list), JsonOptions()));
+    else Remediations.Report(list, root, Console.Out);
+    // Fails only when an executed check failed; suggestions alone never fail.
+    return list.Any(r => r.Validation is { Pass: false }) ? 1 : 0;
 }
 
 static int ArchitectureCommand(string root, Config config, bool json)
