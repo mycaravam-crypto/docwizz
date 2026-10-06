@@ -178,7 +178,9 @@ See [AI drafts](#ai-drafts) for the privacy rules.
 
 Options: `--profile <name|file.yaml>` picks what counts as documented. `--format json` gives machine-readable
 `analyze`/`check`/`architecture`/`diff` output. Run `dotnet test --project tests/DocWizz.Tests` for the unit and component tests and `./test.sh` for the end-to-end
-tests against `fixture/` (see [ARCHITECTURE.md](ARCHITECTURE.md#tests)).
+tests against `fixture/` (see [ARCHITECTURE.md](ARCHITECTURE.md#tests)). `--timings` prints the time per stage and
+peak memory; [bench/](bench/README.md) has reproducible benchmarks, the baseline, and advice for large repositories and
+monorepos.
 
 ## Configuration
 

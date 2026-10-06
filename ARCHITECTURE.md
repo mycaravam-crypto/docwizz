@@ -203,3 +203,6 @@ deliberate gaps, violations, external systems, configuration and deployment desc
 model JSON and lines in the generated pages. When a feature is added, extend the fixture with the smallest case
 that exercises it, and assert both the model and the page. Rules and analysis logic get a unit test as well, and a
 scanner fix gets a component test with the snippet that broke it.
+
+Performance is measured separately: [bench/](bench/README.md) generates synthetic repositories of three sizes and
+times every stage (`--timings`, [Timings.cs](src/DocWizz/Timings.cs)) against a committed baseline, on demand and weekly.

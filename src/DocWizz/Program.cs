@@ -10,7 +10,7 @@ var opts = new Dictionary<string, string>();
 var pos = new List<string>();
 for (var i = 0; i < args.Length; i++)
 {
-    if (args[i] is "--ai" or "--html") opts[args[i][2..]] = "";
+    if (args[i] is "--ai" or "--html" or "--timings") opts[args[i][2..]] = "";
     else if (args[i].StartsWith("--") && valued.Contains(args[i][2..]) && i + 1 < args.Length) opts[args[i][2..]] = args[++i];
     else if (args[i].StartsWith("--")) return Usage($"unknown option {args[i]}");
     else pos.Add(args[i]);
@@ -22,6 +22,11 @@ var path = pos.ElementAtOrDefault(1) ?? ".";
 if (opts.GetValueOrDefault("format") is { } format && format is not ("console" or "json")) return Usage($"unknown format {format}");
 var json = opts.GetValueOrDefault("format") == "json";
 
+if (opts.ContainsKey("timings"))
+{
+    Timings.Enabled = true;
+    AppDomain.CurrentDomain.ProcessExit += (_, _) => Timings.Report(Console.Error);
+}
 if (cmd is null) return Usage(null);
 if (!Directory.Exists(path))
 {
@@ -86,6 +91,7 @@ static int Usage(string? error)
         options:
           --profile <name|file.yaml>        documentation profile: {string.Join(", ", Profiles.Names)}, or your own file
           --format console|json             analyze/check/architecture/diff output
+          --timings                         time per stage and peak memory, on stderr (benchmarks)
         """);
     return 1;
 }
@@ -112,20 +118,21 @@ static List<string> RepoFiles(string root, Config config, string[]? dotDirs = nu
 static (CodeModel Model, List<string> Files) BuildModel(string root, Config config)
 {
     string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java"];
-    var candidates = RepoFiles(root, config);
+    var candidates = Timings.Measure("files", () => RepoFiles(root, config));
     var scanned = candidates.Where(f => exts.Contains(Path.GetExtension(f)) && !f.EndsWith(".d.ts") && !f.EndsWith(".min.js")
         && !f.Replace('\\', '/').Contains("/wwwroot/lib/")).ToList(); // ponytail: libman/bower vendor dir only; other vendored JS needs exclude:
 
-    var (nodes, edges) = CSharpScanner.Scan(root, scanned.Where(f => f.EndsWith(".cs")), config.CommentDocs);
-    var (feNodes, feEdges) = Frontend.Scan(root, scanned.Where(f => Path.GetExtension(f) is ".vue" or ".ts" or ".tsx" or ".js" or ".jsx" or ".mjs").ToList());
-    var (sqlNodes, sqlEdges) = Sql.Scan(root, scanned.Where(f => f.EndsWith(".sql")));
-    var (javaNodes, javaEdges) = JavaScanner.Scan(root, scanned.Where(f => f.EndsWith(".java")));
-    var (projNodes, projEdges) = Projects.Scan(root, candidates.Where(f => f.EndsWith(".csproj") || f.EndsWith(".sln") || f.EndsWith(".slnx")
-        || Path.GetFileName(f) is "package.json" or "pom.xml" or "build.gradle" or "build.gradle.kts"));
+    var (nodes, edges) = Timings.Measure("scan:csharp", () => CSharpScanner.Scan(root, scanned.Where(f => f.EndsWith(".cs")), config.CommentDocs));
+    var (feNodes, feEdges) = Timings.Measure("scan:frontend", () => Frontend.Scan(root, scanned.Where(f => Path.GetExtension(f) is ".vue" or ".ts" or ".tsx" or ".js" or ".jsx" or ".mjs").ToList()));
+    var (sqlNodes, sqlEdges) = Timings.Measure("scan:sql", () => Sql.Scan(root, scanned.Where(f => f.EndsWith(".sql"))));
+    var (javaNodes, javaEdges) = Timings.Measure("scan:java", () => JavaScanner.Scan(root, scanned.Where(f => f.EndsWith(".java"))));
+    var (projNodes, projEdges) = Timings.Measure("scan:projects", () => Projects.Scan(root, candidates.Where(f => f.EndsWith(".csproj") || f.EndsWith(".sln") || f.EndsWith(".slnx")
+        || Path.GetFileName(f) is "package.json" or "pom.xml" or "build.gradle" or "build.gradle.kts")));
     // Keys defined in configuration files win over the bare key nodes code reads create.
-    var settings = Configuration.Scan(root, candidates.Where(Configuration.IsConfigFile));
+    var settings = Timings.Measure("scan:configuration", () => Configuration.Scan(root, candidates.Where(Configuration.IsConfigFile)));
     var defined = settings.Select(n => n.Id).ToHashSet();
     nodes.RemoveAll(n => n.Kind == "config" && defined.Contains(n.Id));
+    var link = Timings.Stage("link");
     var testFiles = scanned.Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))
         .Where(f => config.Tests.Any(g => FileSystemName.MatchesSimpleExpression(g, f))
             || Projects.Of(projNodes, f)?.Tags?.Contains("test") == true).ToHashSet(); // test projects: by metadata, not only by path
@@ -144,6 +151,7 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
         .Select(e => testIds.Contains(e.From) ? new Edge(e.From, e.To, "tests") : e).Distinct().ToList();
 
     nodes = nodes.Select(n => n.Kind is "external" or "config" ? n : n with { Language = Language(n.File) }).ToList();
+    link.Dispose();
 
     var files = scanned.Where(f => !testFiles.Contains(Path.GetRelativePath(root, f).Replace('\\', '/'))).ToList();
     return (new CodeModel(Git(root, "rev-parse --short HEAD")?.Trim(), nodes, edges), files);
@@ -209,8 +217,8 @@ static object DocumentationJson(CodeModel model, Config config, List<Documentati
 static async Task<int> Generate(string root, string outDir, Config config, bool ai, bool html = false)
 {
     var model = BuildModel(root, config).Model;
-    var findings = Analyzer.Analyze(model, config);
-    var arch = Architecture.Check(model, config);
+    var findings = Timings.Measure("analyze", () => Analyzer.Analyze(model, config));
+    var arch = Timings.Measure("architecture", () => Architecture.Check(model, config));
     // Cached drafts are always used; new ones are only requested with --ai.
     var drafts = await AiProse.Summaries(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-cache.json"), ai);
     // A draft fills what is missing, never what is written or derived: the summary, and sections the item doesn't have.
@@ -227,11 +235,11 @@ static async Task<int> Generate(string root, string outDir, Config config, bool 
     var overviews = drafts.Where(d => d.Key.StartsWith("module:")).ToDictionary(d => d.Key["module:".Length..], d => d.Value);
     // Advisory ratings of written docs: shown in quality.md, never part of doc quality % or check.
     var assessments = await AiProse.Assessments(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-assessments.json"), ai);
-    var (pages, changed) = new Generator(root, outDir, model, findings, arch, config, summaries, overviews, assessments)
+    var (pages, changed) = Timings.Measure("generate", () => new Generator(root, outDir, model, findings, arch, config, summaries, overviews, assessments)
     {
         WriteHtml = html,
         Files = [.. RepoFiles(root, config, [".github", ".circleci"]).Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))],
-    }.Run();
+    }.Run());
 
     // Fingerprint for `docwizz diff`: the model these docs were generated from.
     Directory.CreateDirectory(Path.Combine(outDir, ".docwizz"));
@@ -267,7 +275,7 @@ static int DiffCommand(string root, string? gitRef, Config config, bool enforce,
 
     var after = head is null ? BuildModel(root, config).Model : ModelAt(root, head, config);
     if (after is null) return 1;
-    var result = Diff.Compare(before, after, config);
+    var result = Timings.Measure("diff", () => Diff.Compare(before, after, config));
     var against = head is null ? baseline : $"{baseline}, at {head}";
     if (!json) Diff.Report(result, against, Console.Out);
     if (!enforce)
@@ -356,8 +364,8 @@ static CodeModel? ModelAt(string root, string gitRef, Config config)
 static int Analyze(string root, Config config, bool enforce, bool json)
 {
     var model = BuildModel(root, config).Model;
-    var findings = Analyzer.Analyze(model, config);
-    var arch = Architecture.Check(model, config);
+    var findings = Timings.Measure("analyze", () => Analyzer.Analyze(model, config));
+    var arch = Timings.Measure("architecture", () => Architecture.Check(model, config));
     var (_, cycles, _, _) = arch;
     var violations = Architecture.Failing(arch.Violations, config.Check);
     var complex = TooComplex(model.Nodes, config.Check);
@@ -405,7 +413,8 @@ static int Analyze(string root, Config config, bool enforce, bool json)
 
 static int ArchitectureCommand(string root, Config config, bool json)
 {
-    var arch = Architecture.Check(BuildModel(root, config).Model, config);
+    var model = BuildModel(root, config).Model;
+    var arch = Timings.Measure("architecture", () => Architecture.Check(model, config));
     if (json) Console.WriteLine(JsonSerializer.Serialize(arch, JsonOptions()));
     else Architecture.Report(arch, Console.Out);
     return Architecture.Failing(arch.Violations, config.Check).Count > config.Check.MaxViolations || arch.Cycles.Count > config.Check.MaxCycles ? 1 : 0;
