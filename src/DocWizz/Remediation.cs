@@ -70,6 +70,8 @@ static class Versions
         return c > 0 ? "downgrade" : c == 0 ? "same" : a.Parts[0] != b.Parts[0] ? "major" : a.Parts[1] != b.Parts[1] ? "minor" : "patch";
     }
 
+    public static readonly IComparer<Version> Order = Comparer<Version>.Create(Compare);
+
     public static int Rank(string kind) => kind switch { "patch" => 1, "minor" => 2, "major" => 3, "downgrade" => 4, "unknown" => 5, _ => 0 };
 }
 
@@ -154,10 +156,10 @@ static class Remediations
                 if (Find(name) is { } p) wanted.Add((p, version, "configured target (remediation.targets)", "configured"));
             foreach (var p in packages.Where(p => p.Tags?.Contains("nuget") == true && wanted.All(w => w.Package.Id != p.Id)))
             {
-                var versions = nuget[p.Name].Select(x => x.Version).Where(v => Versions.Parse(v) is not null).Distinct().ToList();
+                var versions = nuget[p.Name].Select(x => x.Version).OfType<string>().Where(v => Versions.Parse(v) is not null).Distinct().ToList();
                 if (versions.Count < 2) continue;
-                var highest = versions.MaxBy(v => Versions.Parse(v)!, Comparer<Versions.Version>.Create(Versions.Compare))!;
-                wanted.Add((p, highest, $"version drift: {string.Join(", ", versions.OrderBy(v => Versions.Parse(v)!, Comparer<Versions.Version>.Create(Versions.Compare)))} " +
+                versions = [.. versions.OrderBy(v => Versions.Parse(v)!, Versions.Order)];
+                wanted.Add((p, versions[^1], $"version drift: {string.Join(", ", versions)} " +
                     $"across {nuget[p.Name].Select(x => x.Project).Distinct().Count()} projects", "detected"));
             }
         }
@@ -253,12 +255,14 @@ static class Remediations
                 [.. links.Of(g.Key).Select(l => l.Test)]))
             .OrderBy(u => u.Location, StringComparer.Ordinal).ToList();
         var flows = Generator.FlowsThrough(model, config, uses.Select(u => u.Id))
-            .Select(n => n.Kind == "route" ? $"route {n.Route ?? n.Name}" : Generator.EndpointLabel(n)).Distinct().ToList();
+            .Select(FlowLabel).Distinct().ToList();
         var testProjects = reach.Where(id => nodes[id].Tags?.Contains("test") == true).Select(id => nodes[id].File).Order(StringComparer.Ordinal).ToList();
         var tests = uses.SelectMany(u => u.Tests).Select(TestLinks.Name).Distinct().Order(StringComparer.Ordinal).ToList();
         return new([.. direct.Select(id => nodes[id].File)], [.. reach.Except(direct).Select(id => nodes[id].File).Order(StringComparer.Ordinal)],
             uses, flows, tests, testProjects, ImpactNote) { Public = uses.Count(u => nodes[u.Id].Visibility == "public") };
     }
+
+    static string FlowLabel(Node entry) => entry.Kind == "route" ? $"route {entry.Route ?? entry.Name}" : Generator.EndpointLabel(entry);
 
     // Risk from the kind of update and what the code shows; never "safe", whatever the version numbers say.
     static StaticAssessment Assess(string kind, string target, List<PackageChange> changes, PackageImpact impact)
@@ -300,7 +304,7 @@ static class Remediations
         string Top(string id) => parent.TryGetValue(id, out var p) ? Top(p) : id;
         var touched = changed.Select(n => n.Id).ToList();
         var types = touched.Select(Top).ToHashSet();
-        var flows = Generator.FlowsThrough(model, config, touched).Select(n => n.Kind == "route" ? $"route {n.Route ?? n.Name}" : Generator.EndpointLabel(n)).ToHashSet();
+        var flows = Generator.FlowsThrough(model, config, touched).Select(FlowLabel).ToHashSet();
         var outside = impact.Uses.Count(u => !types.Contains(Top(u.Id)));
         var outsideFlows = impact.Flows.Count(f => !flows.Contains(f));
         if (impact.Uses.Count + impact.Flows.Count == 0) return "no code DocWizz can see imports the package, inside the change or outside it";
@@ -463,7 +467,7 @@ static class Remediations
             }
             if (patches.Count > 0)
             {
-                o.WriteLine(r.Changes.Any(c => c.Edit is not null && c.Command is null && c.Edit.File.EndsWith("Directory.Packages.props"))
+                o.WriteLine(patches.Any(e => e.File.EndsWith("Directory.Packages.props"))
                     ? "Suggested patch (versions are managed centrally; apply with git apply):" : "Suggested patch (apply with git apply):");
                 foreach (var e in patches) foreach (var l in e.Patch.TrimEnd('\n').Split('\n')) o.WriteLine($"  {l}");
             }
