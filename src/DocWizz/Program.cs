@@ -4,67 +4,71 @@ using System.IO.Enumeration;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-// ponytail: hand-rolled arg parsing; move to System.CommandLine if options keep growing
-string[] valued = ["format", "profile", "since", "package", "to"];
-var opts = new Dictionary<string, string>();
-var pos = new List<string>();
-for (var i = 0; i < args.Length; i++)
+// An exception that escapes a command is a bug or an environment problem (disk, permissions), never a finding: one
+// line and exit 2, so CI can tell "docwizz broke" from "the gate failed" (1). DOCWIZZ_DEBUG=1 lets it through with the trace.
+try { return await Dispatch(args); }
+catch (Exception e) when (Environment.GetEnvironmentVariable("DOCWIZZ_DEBUG") is not { Length: > 0 })
 {
-    if (args[i] is "--ai" or "--html" or "--timings" or "--validate" or "--force" or "--help") opts[args[i][2..]] = "";
-    else if (args[i] == "-h") opts["help"] = "";
-    else if (args[i].StartsWith("--") && valued.Contains(args[i][2..]) && i + 1 < args.Length) opts[args[i][2..]] = args[++i];
-    else if (args[i].StartsWith("--")) return Usage($"unknown option {args[i]}");
-    else pos.Add(args[i]);
+    Console.Error.WriteLine($"docwizz: error: {e.Message}");
+    Console.Error.WriteLine("This is a problem running docwizz, not a finding about the repository. Set DOCWIZZ_DEBUG=1 for details.");
+    return 2;
 }
-var cmd = pos.ElementAtOrDefault(0);
-if (cmd == "help") return Help(pos.ElementAtOrDefault(1));
-if (opts.ContainsKey("help")) return Help(cmd);
-if (opts.ContainsKey("force") && cmd != "setup") return Usage($"--force only applies to setup (docwizz setup {pos.ElementAtOrDefault(1) ?? "."} --force)", cmd);
-// `docwizz diff HEAD~1 HEAD`: no directory given, refs only.
-if (cmd == "diff" && pos.Count >= 2 && !Directory.Exists(pos[1])) pos.Insert(1, ".");
-var path = pos.ElementAtOrDefault(1) ?? ".";
-if (opts.GetValueOrDefault("format") is { } format && format is not ("console" or "json")) return Usage($"unknown format {format}");
-var json = opts.GetValueOrDefault("format") == "json";
 
-if (opts.ContainsKey("timings"))
+static async Task<int> Dispatch(string[] args)
 {
-    Timings.Enabled = true;
-    AppDomain.CurrentDomain.ProcessExit += (_, _) => Timings.Report(Console.Error);
-}
-if (cmd is null) return Start();
-if (!Commands().ContainsKey(cmd)) return Usage($"unknown command {cmd}");
-if (!Directory.Exists(path))
-{
-    Console.Error.WriteLine($"not a directory: {path}");
-    return 1;
-}
-if (cmd == "init") return Init(path);
-if (cmd == "setup") return await SetupCommand(path, opts.GetValueOrDefault("profile"), opts.ContainsKey("force"), opts.ContainsKey("ai"), opts.ContainsKey("html"));
-Config config;
-try { config = Config.Load(path, opts.GetValueOrDefault("profile")); }
-catch (ArgumentException e) { return Usage(e.Message, cmd); }
+    var request = Cli.Parse(args);
+    var (cmd, opts, pos) = (request.Command, request.Options, request.Positional);
+    if (request.Error is not null) return Usage(request.Error, cmd);
+    if (cmd == "help") return Help(pos.ElementAtOrDefault(1));
+    if (opts.ContainsKey("help")) return Help(cmd);
+    // `docwizz diff HEAD~1 HEAD`: no directory given, refs only.
+    if (cmd == "diff" && pos.Count >= 2 && !Directory.Exists(pos[1])) pos.Insert(1, ".");
+    var path = pos.ElementAtOrDefault(1) ?? ".";
+    var json = opts.GetValueOrDefault("format") == "json";
 
-switch (cmd)
-{
-    case "scan":
-        return Scan(path, pos.ElementAtOrDefault(2) ?? "model.json", config);
-    case "analyze":
-        return Analyze(path, config, enforce: false, json);
-    case "check" when opts.GetValueOrDefault("since") is { } since:
-        return DiffCommand(path, since, config, enforce: true, json: json);
-    case "check":
-        return Analyze(path, config, enforce: true, json);
-    case "diff":
-        return DiffCommand(path, pos.ElementAtOrDefault(2), config, enforce: false, head: pos.ElementAtOrDefault(3), json: json);
-    case "architecture":
-        return ArchitectureCommand(path, config, json);
-    case "remediate":
-        return Remediate(path, config, opts.GetValueOrDefault("package"), opts.GetValueOrDefault("to"), opts.ContainsKey("validate"), opts.GetValueOrDefault("since"), json);
-    case "generate":
-        Console.WriteLine(await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html")));
-        return 0;
-    default:
-        return Usage($"unknown command {cmd}");
+    if (opts.ContainsKey("timings"))
+    {
+        Timings.Enabled = true;
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => Timings.Report(Console.Error);
+    }
+    if (cmd is null) return Start();
+    if (!Directory.Exists(path))
+    {
+        Console.Error.WriteLine($"not a directory: {path}");
+        return 1;
+    }
+    if (cmd == "init") return Init(path);
+    if (cmd == "setup") return await SetupCommand(path, opts.GetValueOrDefault("profile"), opts.ContainsKey("force"), opts.ContainsKey("ai"), opts.ContainsKey("html"));
+    Config config;
+    try { config = Config.Load(path, opts.GetValueOrDefault("profile")); }
+    catch (ArgumentException e)
+    {
+        Console.Error.WriteLine(e.Message);   // names the file or profile and what is wrong with it
+        return 1;
+    }
+
+    switch (cmd)
+    {
+        case "scan":
+            return Scan(path, pos.ElementAtOrDefault(2) ?? "model.json", config);
+        case "analyze":
+            return Analyze(path, config, enforce: false, json);
+        case "check" when opts.GetValueOrDefault("since") is { } since:
+            return DiffCommand(path, since, config, enforce: true, json: json);
+        case "check":
+            return Analyze(path, config, enforce: true, json);
+        case "diff":
+            return DiffCommand(path, pos.ElementAtOrDefault(2), config, enforce: false, head: pos.ElementAtOrDefault(3), json: json);
+        case "architecture":
+            return ArchitectureCommand(path, config, json);
+        case "remediate":
+            return Remediate(path, config, opts.GetValueOrDefault("package"), opts.GetValueOrDefault("to"), opts.ContainsKey("validate"), opts.GetValueOrDefault("since"), json);
+        case "generate":
+            Console.WriteLine(await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html")));
+            return 0;
+        default:
+            return Usage($"unknown command {cmd}");
+    }
 }
 
 // Starter config: the defaults, spelled out, to edit in place.
@@ -80,29 +84,6 @@ static int Init(string dir)
     Console.WriteLine($"→ {file}");
     return 0;
 }
-
-// One line per command, in the order a new user meets them; `Use` says who it's for (README: CLI.md has the full matrix).
-static Dictionary<string, (string Syntax, string Purpose, string Use, string Example, string Options)> Commands() => new()
-{
-    ["setup"] = ("setup [dir]", "first run: detect the stack, write docwizz.yaml, analyze, generate docs, check", "start here",
-        "docwizz setup .", "--force (overwrite docwizz.yaml), --html, --ai, --profile <name|file>"),
-    ["generate"] = ("generate <dir> [out]", "write Markdown docs (default <dir>/docs)", "everyday",
-        "docwizz generate . --html", "--html (HTML next to every page), --ai (local Ollama drafts), --profile"),
-    ["check"] = ("check <dir> [--since <ref>]", "quality gate: exit 1 when thresholds fail (only new problems with --since)", "CI",
-        "docwizz check . --since origin/main", "--since <ref>, --format json, --profile"),
-    ["analyze"] = ("analyze <dir>", "documentation report: gaps, coverage, quality, architecture", "everyday",
-        "docwizz analyze .", "--format json, --profile"),
-    ["architecture"] = ("architecture <dir>", "layers, layer dependencies, violations, cycles; exit 1 above check thresholds", "architects",
-        "docwizz architecture .", "--format json"),
-    ["diff"] = ("diff [dir] [base] [head]", "changed symbols, affected pages and linked tests vs the last generate or git refs", "reviews, CI",
-        "docwizz diff HEAD~1 HEAD", "--format json"),
-    ["remediate"] = ("remediate <dir>", "package update suggestions: command or patch, impact, confidence", "maintenance",
-        "docwizz remediate . --validate", "--package <name> --to <version>, --validate (build and test in a temporary copy), --since <ref>, --format json"),
-    ["init"] = ("init [dir]", "write a starter docwizz.yaml with every default (setup does this from evidence)", "manual setup",
-        "docwizz init .", ""),
-    ["scan"] = ("scan <dir> [model.json]", "dump the raw code model (nodes and edges)", "advanced, debugging",
-        "docwizz scan . model.json", ""),
-};
 
 // `docwizz` alone: the next useful action, not the full reference.
 static int Start()
@@ -125,8 +106,7 @@ static int Start()
 
 static int Help(string? command)
 {
-    var commands = Commands();
-    if (command is not null && commands.TryGetValue(command, out var c))
+    if (command is not null && Cli.Commands.TryGetValue(command, out var c))
     {
         Console.WriteLine($"""
             docwizz {c.Syntax}
@@ -149,9 +129,9 @@ static int Help(string? command)
 static int Usage(string? error, string? command = null)
 {
     if (error is not null) Console.Error.WriteLine(error);
-    Console.Error.WriteLine(command is not null && Commands().ContainsKey(command)
+    Console.Error.WriteLine(command is not null && Cli.Commands.ContainsKey(command)
         ? $"Run 'docwizz help {command}' for its options."
-        : Reference());
+        : "Run 'docwizz help' for all commands and options.");
     return 1;
 }
 
@@ -575,11 +555,18 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
 
     var failed = results.Where(r => !r.Ok).ToList();
     var rel = (string p) => "./" + Path.GetRelativePath(".", p).Replace('\\', '/');
+    var outcome = Setup.Outcome(results, passed, arch);
     Console.WriteLine();
     var skipped = failed.Count(r => r.Status == "skipped");
-    Console.WriteLine(failed.Count == 0 ? "Setup complete." : $"Setup incomplete: {string.Join(", ", failed.Where(r => r.Status == "failed").Select(r => r.Name))} failed" +
-        (skipped > 0 ? $", {skipped} stage{(skipped == 1 ? "" : "s")} skipped." : "."));
+    Console.WriteLine(outcome switch
+    {
+        Setup.Status.Success => "Setup complete.",
+        Setup.Status.SuccessWithFindings => "Setup complete, with findings: they are about the repository; docwizz itself ran without errors.",
+        _ => $"Setup incomplete: {string.Join(", ", failed.Where(r => r.Status == "failed").Select(r => r.Name))} failed" +
+            (skipped > 0 ? $", {skipped} stage{(skipped == 1 ? "" : "s")} skipped." : "."),
+    });
     Console.WriteLine();
+    Console.WriteLine($"Status:         {Setup.Label(outcome)}");
     if (detection is not null)
     {
         Console.WriteLine($"Stack:          {Setup.Stack(detection)}");
@@ -602,27 +589,15 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
         Console.WriteLine("Follow-up:");
         foreach (var t in Setup.FollowUp(detection, configStatus, config, passed != false)) Console.WriteLine($"  - {t}");
     }
-    var dir = root == "." ? "." : root;
     Console.WriteLine();
     Console.WriteLine("Next useful actions:");
-    if (failed.Count > 0)
-    {
-        Console.WriteLine($"  docwizz setup {dir}           # re-run after fixing the error above");
-        if (existing) Console.WriteLine($"  docwizz setup {dir} --force   # or replace docwizz.yaml with a generated one");
-    }
-    else
-    {
-        Console.WriteLine($"  docwizz generate {dir}       # refresh documentation");
-        Console.WriteLine($"  docwizz check {dir}          # run the quality gate");
-        Console.WriteLine($"  docwizz architecture {dir}   # inspect architecture findings");
-    }
+    foreach (var line in Setup.NextActions(root, outcome, existing)) Console.WriteLine(line);
     return failed.Count == 0 ? 0 : 1;
 }
 
 // Package remediation: static by default; --validate runs the repository's build and tests in a temporary copy.
 static int Remediate(string root, Config config, string? package, string? to, bool validate, string? since, bool json)
 {
-    if ((package is null) != (to is null)) return Usage("--package and --to go together");
     var model = BuildModel(root, config).Model;
     List<Remediation> list;
     try { list = Timings.Measure("remediate", () => Remediations.Plan(root, model, config, package is null ? null : (package, to!))); }

@@ -168,6 +168,36 @@ static class Setup
         return results;
     }
 
+    // FAILED: a stage could not run (a docwizz or configuration problem). SUCCESS_WITH_FINDINGS: everything ran and the
+    // repository has something to fix: the check fails, or there are architecture or security findings. Findings never
+    // make setup fail, so a first run on an imperfect repository is still a successful setup.
+    public enum Status { Success, SuccessWithFindings, Failed }
+
+    public static Status Outcome(IReadOnlyList<StageResult> results, bool? checkPassed, ArchitectureResult? arch) =>
+        results.Any(r => !r.Ok) ? Status.Failed
+        : checkPassed == false || arch is { Violations.Count: > 0 } or { Cycles.Count: > 0 } ? Status.SuccessWithFindings
+        : Status.Success;
+
+    public static string Label(Status s) => s switch
+    {
+        Status.Success => "SUCCESS",
+        Status.SuccessWithFindings => "SUCCESS_WITH_FINDINGS",
+        _ => "FAILED",
+    };
+
+    // The commands to run next, aligned, with why. After a failure: re-run (or regenerate a kept docwizz.yaml, which
+    // may be what failed); otherwise the everyday loop.
+    public static List<string> NextActions(string dir, Status outcome, bool configKept)
+    {
+        List<(string Command, string Why)> next = outcome == Status.Failed
+            ? [($"docwizz setup {dir}", "re-run after fixing the error above"),
+               .. configKept ? [($"docwizz setup {dir} --force", "or replace docwizz.yaml with a generated one")] : new List<(string, string)>()]
+            : [($"docwizz generate {dir}", "refresh documentation"), ($"docwizz check {dir}", "run the quality gate"),
+               ($"docwizz architecture {dir}", "inspect architecture findings")];
+        var width = next.Max(n => n.Command.Length) + 3;
+        return [.. next.Select(n => $"  {n.Command.PadRight(width)}# {n.Why}")];
+    }
+
     // One line: languages by symbol count, frameworks, and whether there is a backend, a frontend or both.
     public static string Stack(Detection d)
     {

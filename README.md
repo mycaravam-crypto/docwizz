@@ -37,8 +37,9 @@ architecture, generates the docs into `docs/` and runs the quality gate. It ends
 to run:
 
 ```console
-Setup complete.
+Setup complete, with findings: they are about the repository; docwizz itself ran without errors.
 
+Status:         SUCCESS_WITH_FINDINGS
 Stack:          csharp (45 symbols), java (15 symbols), …; ASP.NET Core, Entity Framework Core, Spring Boot, Vue, React, Angular; backend + frontend
 Layers:         ui (7), state (1), client (4), api (3), application (6), domain (3), infrastructure (3)
 Configuration:  ./docwizz.yaml (written)
@@ -56,8 +57,10 @@ Next useful actions:
   docwizz architecture .   # inspect architecture findings
 ```
 
-It never overwrites an existing `docwizz.yaml` without `--force`, and it never sends anything anywhere: `--ai` stays
-opt-in. To try it first, run `docwizz analyze fixture` on the bundled sample app. [CLI.md](CLI.md) has every
+A first run on a real repository usually ends `SUCCESS_WITH_FINDINGS` (exit 0): the gaps and violations are the
+starting point, not a failed setup. `FAILED` (exit 1) means a stage could not run, for example an invalid
+`docwizz.yaml`. It never overwrites an existing `docwizz.yaml` without `--force`, never runs your build, tests or
+package tools, and never sends anything anywhere: `--ai` stays opt-in. To try it first, run `docwizz analyze fixture` on the bundled sample app. [CLI.md](CLI.md) has every
 workflow by goal (docs, architecture, CI, AI, impact analysis), every command and flag, and how they combine.
 
 ## Examples
@@ -251,7 +254,8 @@ See [AI drafts](#ai-drafts) for the privacy rules.
 
 `docwizz help <command>` explains one command. [CLI.md](CLI.md) is the full reference: every option, defaults,
 precedence and exit codes. Options: `--profile <name|file.yaml>` picks what counts as documented. `--format json` gives machine-readable
-`analyze`/`check`/`architecture`/`diff`/`remediate` output. Run `dotnet test --project tests/DocWizz.Tests` for the unit and component tests and `./test.sh` for the end-to-end
+`analyze`/`check`/`architecture`/`diff`/`remediate` output. Run `dotnet test --project tests/DocWizz.Tests` for the unit, component and journey tests (journeys run the CLI as a
+process; Vue/TS ones need `npm ci --prefix scanner-vue`) and `./test.sh` for the end-to-end
 tests against `fixture/` (see [ARCHITECTURE.md](ARCHITECTURE.md#tests)). `--timings` prints the time per stage and
 peak memory; [bench/](bench/README.md) has reproducible benchmarks, the baseline, and advice for large repositories and
 monorepos.

@@ -154,4 +154,58 @@ public class SetupTests
         Assert.Equal(["failed", "skipped"], results.Select(r => r.Status));
         Assert.Equal("needs scan", results[1].Detail);
     }
+
+    [Fact]
+    public void Findings_are_a_successful_setup_and_only_a_stage_that_could_not_run_fails_it()
+    {
+        List<Setup.StageResult> ok = [new("scan", "ok", ""), new("check", "ok", "")];
+        var clean = new ArchitectureResult([], [], [], []);
+        var cycle = clean with { Cycles = [["a", "b"]] };
+
+        Assert.Equal(Setup.Status.Success, Setup.Outcome(ok, checkPassed: true, clean));
+        Assert.Equal(Setup.Status.SuccessWithFindings, Setup.Outcome(ok, checkPassed: false, clean));
+        Assert.Equal(Setup.Status.SuccessWithFindings, Setup.Outcome(ok, checkPassed: true, cycle));
+        Assert.Equal(Setup.Status.Failed, Setup.Outcome([.. ok, new("generate", "failed", "disk full")], checkPassed: true, clean));
+        Assert.Equal(Setup.Status.Failed, Setup.Outcome([new("scan", "failed", "bad yaml"), new("check", "skipped", "needs scan")], null, null));
+        Assert.Equal(["SUCCESS", "SUCCESS_WITH_FINDINGS", "FAILED"], Enum.GetValues<Setup.Status>().Select(Setup.Label));
+    }
+
+    [Fact]
+    public void Next_actions_follow_the_outcome_and_line_up()
+    {
+        Assert.Equal([
+            "  docwizz generate .       # refresh documentation",
+            "  docwizz check .          # run the quality gate",
+            "  docwizz architecture .   # inspect architecture findings",
+        ], Setup.NextActions(".", Setup.Status.SuccessWithFindings, configKept: false));
+        Assert.Equal(Setup.NextActions("app", Setup.Status.SuccessWithFindings, configKept: true),
+            Setup.NextActions("app", Setup.Status.Success, configKept: true));
+
+        // After a failure: re-run, and with a kept docwizz.yaml (which may be what failed) the way to regenerate it.
+        Assert.Equal(["  docwizz setup app   # re-run after fixing the error above"],
+            Setup.NextActions("app", Setup.Status.Failed, configKept: false));
+        Assert.Equal([
+            "  docwizz setup app           # re-run after fixing the error above",
+            "  docwizz setup app --force   # or replace docwizz.yaml with a generated one",
+        ], Setup.NextActions("app", Setup.Status.Failed, configKept: true));
+    }
+
+    [Fact]
+    public void Follow_up_is_in_a_fixed_order_and_only_asks_what_the_repository_did_not_show()
+    {
+        var empty = new Setup.Detection([], [], [], [], [], 0, []);
+        Assert.Equal([
+            "no supported source files found: check the directory, `exclude:` and .gitignore (README: What it reads)",
+            "no layers detected: set architecture.layers and architecture.allow in docwizz.yaml",
+            "no test code found by the default globs: set `tests:` so changes can be traced to tests",
+            $"pick a documentation profile if `default` doesn't fit ({string.Join(", ", Profiles.Names)})",
+            "security rules are off: set security.enabled: true for a security review (local, no network)",
+            "check fails at the current thresholds: fix the gaps, or adjust `check:` to a baseline you will raise over time",
+        ], Setup.FollowUp(empty, "written", Config(), checkPassed: false));
+
+        // A kept file is the user's: no advice to edit what setup didn't write, only how to compare with the defaults.
+        var kept = Setup.FollowUp(empty, "kept", Config(), checkPassed: true);
+        Assert.StartsWith("docwizz.yaml existed and was kept", kept[1]);
+        Assert.DoesNotContain(kept, t => t.StartsWith("no layers detected") || t.StartsWith("check fails"));
+    }
 }
