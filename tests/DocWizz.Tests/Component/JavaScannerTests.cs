@@ -61,4 +61,25 @@ public class JavaScannerTests
         Assert.Contains(J + "DefaultOrderService.count()", nodes.Keys);
         Assert.Contains(("implements", J + "DefaultOrderService.find(Long)", J + "OrderService.find(Long)"), edges);
     }
+
+    // Imports become uses-namespace edges per top-level type, like C# usings: own packages and java.* left out.
+    [Fact]
+    public void Imported_packages_are_namespace_edges()
+    {
+        var (_, edges) = Scan(Service, ("src/main/java/com/example/Order.java", """
+            package com.example;
+            import com.example.OrderService;
+            import jakarta.persistence.Entity;
+            import jakarta.persistence.*;
+            import java.util.List;
+            import static org.junit.Assert.assertEquals;
+            import org.springframework.data.jpa.repository.JpaRepository.Inner;
+            @Entity
+            public class Order { static class Line { } }
+            """));
+        var ns = edges.Where(e => e.Item1 == "uses-namespace").ToList();
+        Assert.Equal(["ns:jakarta.persistence", "ns:org.junit", "ns:org.springframework.data.jpa.repository"],
+            ns.Where(e => e.Item2 == J + "Order").Select(e => e.Item3).Order());
+        Assert.DoesNotContain(ns, e => e.Item2 == J + "Order.Line");
+    }
 }

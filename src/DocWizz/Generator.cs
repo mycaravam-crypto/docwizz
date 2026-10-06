@@ -18,6 +18,9 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     const int MaxDiagramEdges = 60;
 
     readonly ArchitectureConfig archConfig = config.Architecture;
+    // Layer and custom rule violations, and security findings (SEC-*, only with security.enabled), shown apart.
+    List<Violation> LayerViolations => arch.Violations.Where(v => v.Concern is null).ToList();
+    List<Violation> SecurityFindings => arch.Violations.Where(v => v.Concern is not null).ToList();
     readonly Dictionary<string, Node> nodes = model.Nodes.ToDictionary(n => n.Id);
     readonly Dictionary<string, string> parent = model.Edges.Where(e => e.Kind == "contains").ToDictionary(e => e.To, e => e.From);
     readonly ILookup<string, string> children = model.Edges.Where(e => e.Kind == "contains").ToLookup(e => e.From, e => e.To);
@@ -100,7 +103,9 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         sb.AppendLine($"| Documentation coverage (profile `{config.Profile}`) | {Analyzer.Coverage(findings):0}% |");
         sb.AppendLine($"| Doc quality (written docs without quality flags) | {Analyzer.Quality(findings):0}% |");
         sb.AppendLine($"| Critical documentation gaps | {findings.Count(Analyzer.IsCritical)} |");
-        sb.AppendLine($"| Architecture violations / cycles | {arch.Violations.Count} / {arch.Cycles.Count} |\n");
+        sb.AppendLine($"| Architecture violations / cycles | {LayerViolations.Count} / {arch.Cycles.Count} |");
+        if (config.Security.Enabled) sb.AppendLine($"| Security findings ([review](architecture-description.md#security)) | {SecurityFindings.Count} |");
+        sb.AppendLine();
         if (drafts.Count > 0)
             sb.AppendLine($"🤖 marks {drafts.Count} AI-drafted summaries for code that has no docs yet — review them, then move them into the code.\n");
         sb.AppendLine("- [Architecture description](architecture-description.md)\n- [Architecture](architecture.md)\n- [API endpoints](api.md)\n" +
@@ -192,13 +197,23 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             ? Mermaid("graph LR", moduleEdges, x => x)
             : $"_{moduleEdges.Count} module dependencies — too many to draw; see each module page._\n");
 
-        sb.AppendLine($"## Violations ({arch.Violations.Count})\n");
-        if (arch.Violations.Count == 0) sb.AppendLine("None.\n");
+        if (archConfig.Rules.Count > 0)
+        {
+            sb.AppendLine($"## Custom rules ({archConfig.Rules.Count})\n\nUser-defined in `docwizz.yaml` (`architecture.rules`), checked next to the built-in ARCH-001…004.\n");
+            sb.AppendLine("| Rule | Severity | Rule says | Why | Violations |\n|---|---|---|---|---|");
+            foreach (var r in archConfig.Rules)
+                sb.AppendLine($"| {r.Id} | {(archConfig.Severity.GetValueOrDefault(r.Id) ?? r.Severity ?? "medium").ToLowerInvariant()} | {Esc(Architecture.Describe(r))} | " +
+                    $"{Esc(r.Description ?? "—")} | {arch.Violations.Count(v => v.Rule == r.Id)} |");
+            sb.AppendLine();
+        }
+        var violations = LayerViolations;
+        sb.AppendLine($"## Violations ({violations.Count})\n");
+        if (violations.Count == 0) sb.AppendLine("None.\n");
         else
         {
             sb.AppendLine("| Rule | Layers | Severity | From | To | Example |\n|---|---|---|---|---|---|");
-            foreach (var v in arch.Violations.OrderByDescending(v => v.Severity))
-                sb.AppendLine($"| {v.Rule} | {v.FromLayer} → {v.ToLayer} | {v.Severity.ToString().ToLowerInvariant()} | {SourceLink(v.FromFile, "")} | `{v.To}` | {Esc(v.Example)} |");
+            foreach (var v in violations.OrderByDescending(v => v.Severity))
+                sb.AppendLine($"| {v.Rule}{(v.Custom ? " (custom)" : "")} | {v.FromLayer} → {v.ToLayer} | {v.Severity.ToString().ToLowerInvariant()} | {SourceLink(v.FromFile, "")} | `{v.To}` | {Esc(v.Example)} |");
             sb.AppendLine();
         }
         sb.AppendLine($"## Cycles ({arch.Cycles.Count})\n");

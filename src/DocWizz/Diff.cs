@@ -43,8 +43,8 @@ static class Diff
             if (o.Doc is not null && n.Doc is not null && DocBody(o.Doc) == DocBody(n.Doc) && ContractChanges(o, n) is { Count: > 0 } changes)
                 stale.Add(new(o, n, changes));
 
-        var archBefore = Architecture.Check(before, config.Architecture);
-        var archAfter = Architecture.Check(after, config.Architecture);
+        var archBefore = Architecture.Check(before, config);
+        var archAfter = Architecture.Check(after, config);
         var violationsBefore = archBefore.Violations.Select(Key).ToHashSet();
         var newViolations = archAfter.Violations.Where(v => !violationsBefore.Contains(Key(v))).ToList();
 

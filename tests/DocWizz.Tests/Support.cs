@@ -38,6 +38,10 @@ static class Models
     // which would pick up a docwizz.yaml in the working directory.
     public static Config Config() => Config(global::Config.Default);
 
+    // The default config with `architecture.rules` (YAML, indented under `rules:`) and optionally `architecture.severity`.
+    public static Config WithRules(string rules, string severity = "{}") => Config(System.Text.RegularExpressions.Regex.Replace(
+        global::Config.Default, @"(?m)^  severity: \{\}.*$", $"  severity: {severity}\n  rules:\n" + string.Join("\n", rules.Split('\n').Select(l => "    " + l))));
+
     // Default config with its YAML replaced, for rules under test.
     public static Config Config(string yaml)
     {

@@ -12,6 +12,7 @@ class Config
     public bool CommentDocs { get; set; }
     public List<string> Tests { get; set; } = [];
     public ArchitectureConfig Architecture { get; set; } = new();
+    public SecurityConfig Security { get; set; } = new();
     public string Profile { get; set; } = "default";
 
     // Human-authored architecture sections the profile expects under docs/architecture/<name>.md.
@@ -47,6 +48,11 @@ class Config
             domain: []
             infrastructure: [application, domain]
           severity: {}          # rule → high/medium/low; defaults ARCH-001 high, ARCH-002 medium, ARCH-004 low
+          # rules:              # your own dependency rules (README: Custom rules)
+          #   - { id: ARCH-DOMAIN-001, severity: high, from: { layer: domain }, forbid: { package: [Microsoft.EntityFrameworkCore] } }
+        # Security rules SEC-001…005: findings for a security review, from code facts (README: Security rules). Off by default.
+        security:
+          enabled: false
         # Test code (path globs): scanned only to link tests to the code they exercise; never analyzed or documented.
         tests: ["tests/*", "test/*", "*.Tests/*", "*.Test/*", "*/__tests__/*", "*.test.ts", "*.spec.ts", "*/e2e/*", "*/src/test/*"]
         # Path globs (relative, `/`-separated) left out of the model entirely.
@@ -62,13 +68,17 @@ class Config
     public static Config Load(string dir, string? profile = null)
     {
         var file = new[] { Path.Combine(dir, "docwizz.yaml"), "docwizz.yaml" }.FirstOrDefault(File.Exists);
-        var config = Yaml.Deserialize<Config>(file is null ? Default : File.ReadAllText(file)) ?? new Config();
+        Config config;
+        try { config = Yaml.Deserialize<Config>(file is null ? Default : File.ReadAllText(file)) ?? new Config(); }
+        catch (YamlDotNet.Core.YamlException e) { throw new ArgumentException($"{file}: {e.Message}{(e.InnerException is { } inner ? $" {inner.Message}" : "")}"); }
         config.Profile = profile ?? config.Profile;
         var builtIn = Yaml.Deserialize<Config>(Profiles.Yaml(config.Profile, dir));
         if (profile is not null || config.Patterns.Count == 0) config.Patterns = builtIn.Patterns;
         if (config.ArchitectureSections.Count == 0) config.ArchitectureSections = builtIn.ArchitectureSections;
         // Fail fast on bad severities rather than mid-check.
         foreach (var s in config.Architecture.Severity.Values.Append(config.Check.FailOn)) global::Architecture.ParseSeverity(s);
+        global::Architecture.Validate(config.Architecture);
+        global::Security.Validate(config.Security);
         return config;
     }
 }

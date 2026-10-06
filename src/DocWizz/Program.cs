@@ -210,7 +210,7 @@ static async Task<int> Generate(string root, string outDir, Config config, bool 
 {
     var model = BuildModel(root, config).Model;
     var findings = Analyzer.Analyze(model, config);
-    var arch = Architecture.Check(model, config.Architecture);
+    var arch = Architecture.Check(model, config);
     // Cached drafts are always used; new ones are only requested with --ai.
     var drafts = await AiProse.Summaries(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-cache.json"), ai);
     // A draft fills what is missing, never what is written or derived: the summary, and sections the item doesn't have.
@@ -316,7 +316,7 @@ static int Analyze(string root, Config config, bool enforce, bool json)
 {
     var model = BuildModel(root, config).Model;
     var findings = Analyzer.Analyze(model, config);
-    var arch = Architecture.Check(model, config.Architecture);
+    var arch = Architecture.Check(model, config);
     var (_, cycles, _, _) = arch;
     var violations = Architecture.Failing(arch.Violations, config.Check);
     var complex = TooComplex(model.Nodes, config.Check);
@@ -364,7 +364,7 @@ static int Analyze(string root, Config config, bool enforce, bool json)
 
 static int ArchitectureCommand(string root, Config config, bool json)
 {
-    var arch = Architecture.Check(BuildModel(root, config).Model, config.Architecture);
+    var arch = Architecture.Check(BuildModel(root, config).Model, config);
     if (json) Console.WriteLine(JsonSerializer.Serialize(arch, JsonOptions()));
     else Architecture.Report(arch, Console.Out);
     return Architecture.Failing(arch.Violations, config.Check).Count > config.Check.MaxViolations || arch.Cycles.Count > config.Check.MaxCycles ? 1 : 0;

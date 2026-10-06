@@ -229,6 +229,65 @@ contradicts the code) or *inferred* (a heuristic).
 Change a severity with `architecture.severity`. Pages also list *risks*, which break no rule but tend to hurt: entities
 returned from the API, business logic in controllers, and domain code bound to external packages.
 
+#### Custom rules
+
+Add your own fitness functions under `architecture.rules`. Each says what code (`from`) must not reach (`forbid`):
+
+```yaml
+architecture:
+  rules:
+    - id: ARCH-DOMAIN-001
+      severity: high                                   # default medium; architecture.severity overrides it
+      description: The domain stays persistence-ignorant.
+      from: { layer: domain }
+      forbid: { package: [Microsoft.EntityFrameworkCore, org.springframework.data] }   # C# using / Java import, by prefix
+    - id: ARCH-API-001
+      from: { tag: controller }
+      forbid: { to: { tag: dbcontext }, edge: [injects, accesses] }                     # only these edge kinds
+    - id: BC-ORDERING-001
+      from: { path: "src/Ordering/*" }
+      forbid: { to: { path: "src/Billing/*" } }
+      except: { path: "src/Billing/Contracts/*" }                                       # the declared contract stays allowed
+```
+
+- **Selectors** (`from`, `forbid.to`, `except`) match `layer`, `path` (glob), `kind`, `tag` and `name` (glob); every
+  field set must match. `kind`, `tag` and `name` also match through the containing type, so a controller's methods count
+  as the controller.
+- **`forbid`** takes `to` (a selector), `package` (namespace prefixes), or `edge` (edge kinds: by default the dependency
+  kinds; `accesses`, `connects`, `reads` and the others in [ARCHITECTURE.md](ARCHITECTURE.md#the-code-model) can be
+  named). `edge` alone forbids every edge of those kinds.
+- Findings carry the rule id, severity, source file, target and the edge that shows it. They count for `architecture`,
+  `check` and `check --since` like the built-in rules, and `architecture.md` lists the rules apart from the built-in ones.
+- A rule that can't work (no id, a reserved id, an unknown layer, edge kind or key) stops docwizz with a message naming it.
+
+### Security rules
+
+Opt in with `security: { enabled: true }` for findings a security review should look at. Each one keeps what the code
+shows (*detected*, with whether that detection is a fact or an inference) apart from the risk it may carry, and names
+the concern behind it. They support a review; they are not an ISO/IEC 27001 assessment and claim no compliance.
+
+| Rule | Fires when | Concern | Detection | Default severity |
+|---|---|---|---|---|
+| SEC-001 | a read endpoint declares neither authorization nor anonymous access | confidentiality | fact | medium |
+| SEC-002 | a mutating endpoint (POST/PUT/PATCH/DELETE) doesn't require authorization (none declared, or anonymous) | integrity | fact | high |
+| SEC-003 | API-layer code, a controller or an endpoint injects, accesses, calls or creates a DbContext | integrity | fact | medium |
+| SEC-004 | domain code imports a security or web framework (ASP.NET Core, Microsoft.Identity, Spring Security/Web, Servlet, JAX-RS) | integrity | fact | medium |
+| SEC-005 | an endpoint without required authorization can reach a sensitive external system (`security.sensitive`: database, storage, identity, email, messaging, cache) | confidentiality | inferred | high |
+
+```yaml
+security:
+  enabled: true
+  severity: { SEC-001: low }        # per-rule override
+  sensitive: [database, storage]    # categories SEC-005 treats as sensitive
+```
+
+Authorization comes from endpoint metadata: ASP.NET `[Authorize]`/`[AllowAnonymous]` on controllers and actions,
+`RequireAuthorization()`/`AllowAnonymous()` on minimal APIs and their `MapGroup`; Spring `@PreAuthorize`, `@Secured`,
+`@RolesAllowed`, `@PermitAll`. A policy configured elsewhere (an ASP.NET fallback policy, a Spring security filter
+chain) is invisible, which is why each risk says "unless". An explicitly anonymous read is a decision, not a finding.
+Findings appear in `architecture` (their own section), count for `check` and `check --since` like violations, and are
+listed under Security in `architecture-description.md`.
+
 ### Profiles
 
 | Profile | For |

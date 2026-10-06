@@ -516,7 +516,74 @@ grep -q "complexity > 5: Fixture.Application.MaterialService.CreateAsync(.*) ([0
 if grep -q "violations >" <<<"$complex"; then echo "low violation counted"; exit 1; fi
 echo "architecture: { severity: { ARCH-001: extreme } }" > "$repo/docwizz.yaml"
 if dw architecture "$repo" >/dev/null 2>&1; then echo "bad severity accepted"; exit 1; fi
+# Custom rules: a forbidden package (C# using, Java import) and a forbidden target through a type's tag
+rm "$repo/docwizz.yaml" && dw init "$repo" >/dev/null
+python3 - "$repo/docwizz.yaml" <<'PY'
+import sys; p = sys.argv[1]; s = open(p).read()
+s = s.replace("  severity: {}", """  severity: {}
+  rules:
+    - id: ARCH-DOMAIN-001
+      severity: high
+      description: The domain stays persistence-ignorant.
+      from: { layer: domain }
+      forbid: { package: [jakarta.persistence, Microsoft.EntityFrameworkCore] }
+    - id: ARCH-API-001
+      from: { tag: controller }
+      forbid: { to: { layer: infrastructure } }""", 1)
+open(p, "w").write(s)
+PY
+sed -i '1i using Microsoft.EntityFrameworkCore;' "$repo/backend/Domain/IMaterialRepository.cs"
+set +e; custom=$(dw architecture "$repo" 2>&1); code=$?; set -e
+echo "$custom"
+[ "$code" -eq 1 ] || { echo "custom violations should fail architecture"; exit 1; }
+grep -A2 "ARCH-DOMAIN-001 (custom)  domain → package  \[high\]" <<<"$custom" | grep -q "backend/Domain/IMaterialRepository.cs → Microsoft.EntityFrameworkCore"
+grep -A2 "ARCH-DOMAIN-001 (custom)  domain → package  \[high\]" <<<"$custom" | grep -q "java/src/main/java/com/example/inventory/domain/Item.java → jakarta.persistence"
+grep -A1 "ARCH-API-001 (custom)  api → infrastructure  \[medium\]" <<<"$custom" | grep -q "backend/Api/StockController.cs → backend/Infrastructure/ErpClient.cs"
+grep -q "ARCH-001  domain → infrastructure  \[high\]" <<<"$custom"   # built-in rules unchanged
+set +e; dw architecture "$repo" --format json > "$repo.json" 2>/dev/null; set -e
+python3 -c "import json,sys; v=json.load(open(sys.argv[1]))['violations']; assert any(x['rule']=='ARCH-API-001' and x['custom'] for x in v) and not any(x['custom'] for x in v if x['rule'].startswith('ARCH-00')), v" "$repo.json"
+rm "$repo.json"
+cdocs=$(mktemp -d); dw generate "$repo" "$cdocs" >/dev/null 2>&1
+grep -q "^| ARCH-DOMAIN-001 | high | layer domain must not use jakarta.persistence, Microsoft.EntityFrameworkCore | The domain stays persistence-ignorant. | 2 |" "$cdocs/architecture.md"
+grep -q "^| ARCH-API-001 (custom) | api → infrastructure | medium |" "$cdocs/architecture.md"
+grep -q "^- ARCH-API-001 (custom, medium): Fixture.Api.StockController" "$cdocs/modules/backend-Api.md"
+rm -rf "$cdocs"
+# a custom violation the change introduces fails check --since; an invalid rule fails fast, naming it
+git -C "$repo" add -A && git -C "$repo" -c user.name=t -c user.email=t@t commit -qm rules
+cat > "$repo/backend/Api/ReportController.cs" <<'CS'
+namespace Fixture.Api;
+/// <summary>Stock reports.</summary>
+[Microsoft.AspNetCore.Mvc.ApiController]
+public class ReportController(Fixture.Infrastructure.ErpClient erp) : Microsoft.AspNetCore.Mvc.ControllerBase { }
+CS
+set +e; since=$(dw check "$repo" --since HEAD 2>&1); code=$?; set -e
+[ "$code" -eq 1 ] && grep -q "Introduced: .* 1 architecture violations" <<<"$since" || { echo "$since"; exit 1; }
+grep -q "ARCH-API-001  api → infrastructure  backend/Api/ReportController.cs → backend/Infrastructure/ErpClient.cs  \[medium\]" <<<"$since"
+sed -i 's/from: { layer: domain }/from: { layer: core }/' "$repo/docwizz.yaml"
+set +e; bad=$(dw architecture "$repo" 2>&1); code=$?; set -e
+[ "$code" -eq 1 ] && grep -q "architecture.rules\[0\] (ARCH-DOMAIN-001): unknown layer 'core'" <<<"$bad" || { echo "$bad"; exit 1; }
 rm -rf "$repo"
+
+# Security rules (opt-in): facts apart from risks, per rule, on the fixture's endpoints
+sec=$(mktemp -d); cp -r fixture/. "$sec"
+dw init "$sec" >/dev/null && sed -i 's/^  enabled: false/  enabled: true/' "$sec/docwizz.yaml"
+set +e; secout=$(dw architecture "$sec" 2>&1); set -e
+grep -q "^Security (11 findings) — for a security review; not a compliance assessment" <<<"$secout" || { echo "$secout"; exit 1; }
+grep -A1 "SEC-002  Mutating endpoint without authorization  \[high, integrity\]" <<<"$secout" | grep -q "backend/Api/MaterialController.cs  POST /api/materials changes state and declares no authorization  (fact)"
+grep -q "backend/Program.cs  POST /orders (no authorization declared) can reach SQL Server (inferred)  (inferred)" <<<"$secout"   # SEC-005
+grep -q "java/.*/InventoryController.java  GET /api/inventory/low declares neither authorization nor anonymous access  (fact)" <<<"$secout"
+grep -q "backend/Program.cs  POST /orders injects AppDbContext  (fact)" <<<"$secout"   # SEC-003
+grep -q "risk (inferred): Whoever can reach it can change state" <<<"$secout"
+if grep -q "PUT /api/materials/{id}\|GET /api/inventory/{id}" <<<"$secout"; then echo "authorized endpoint flagged"; exit 1; fi
+if grep -q "^  SEC-" <<<"$(sed -n '/^Architecture/,/^Security/p' <<<"$secout")"; then echo "security findings mixed into layer violations"; exit 1; fi
+set +e; dw architecture "$sec" --format json > "$sec.json" 2>/dev/null; set -e
+python3 -c "import json,sys; v=[x for x in json.load(open(sys.argv[1]))['violations'] if x['rule'].startswith('SEC-')]; assert len(v)==11 and all(x['basis'] in ('fact','inferred') and x['concern'] and x['risk'] for x in v), v" "$sec.json"
+secdocs=$(mktemp -d); dw generate "$sec" "$secdocs" >/dev/null 2>&1
+grep -q "not an ISO/IEC 27001 assessment" "$secdocs/architecture-description.md"
+grep -q "^| SEC-005 | Unprotected endpoint reaches a sensitive system | confidentiality | high | inferred |" "$secdocs/architecture-description.md"
+grep -q "^| Security findings (\[review\](architecture-description.md#security)) | 11 |" "$secdocs/index.md"
+grep -q "^## Violations (3)" "$secdocs/architecture.md"   # security findings are not layer violations
+rm -rf "$sec" "$sec.json" "$secdocs"
 
 # Incremental regeneration: unchanged pages are not rewritten; a change rewrites only the pages it affects
 inc=$(mktemp -d); cp -r fixture/. "$inc"

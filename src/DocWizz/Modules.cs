@@ -204,7 +204,9 @@ partial class Generator
     IEnumerable<string> Observations(string folder, List<Node> tops, List<(string From, string To)> deps)
     {
         foreach (var v in arch.Violations.Where(v => Folder(v.FromFile) == folder || Folder(v.To) == folder).OrderByDescending(v => v.Severity))
-            yield return $"{v.Rule} ({v.Severity.ToString().ToLowerInvariant()}): {v.FromLayer} → {v.ToLayer} is not allowed — {Esc(v.Example)} " +
+            yield return (v.Concern is not null ? $"{v.Rule} (security, {v.Severity.ToString().ToLowerInvariant()}): {Esc(v.Example)} — see [security](../architecture-description.md#security) "
+                : v.Custom ? $"{v.Rule} (custom, {v.Severity.ToString().ToLowerInvariant()}): {Esc(v.Example)} — see [rules](../architecture.md#custom-rules) "
+                    : $"{v.Rule} ({v.Severity.ToString().ToLowerInvariant()}): {v.FromLayer} → {v.ToLayer} is not allowed — {Esc(v.Example)} ") +
                 $"({SourceLink(v.FromFile, 0, Path.GetFileName(v.FromFile), sub: "modules")})";
         foreach (var c in arch.Cycles.Where(c => c.Contains(folder)))
             yield return $"ARCH-003: part of a dependency cycle {string.Join(" ↔ ", c.Select(m => $"[{m}]({Slug(m)}.md)"))} — these modules can't be understood or changed independently";

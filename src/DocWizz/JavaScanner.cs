@@ -175,6 +175,15 @@ static partial class JavaScanner
             foreach (var im in methodsOf.GetValueOrDefault(iface) ?? [])
                 if (methodsOf.GetValueOrDefault(impl)?.FirstOrDefault(m => m.Name == im.Name && m.Arity == im.Arity) is { Id: not null } found)
                     edges.Add(new(found.Id, im.Id, "implements"));
+        // External packages each file's top-level types import, as C# `using`s are: own packages and java.* dropped.
+        var own = perFile.Select(f => PackageRe().Match(f.Code) is { Success: true } m ? m.Groups[1].Value : "").ToHashSet();
+        foreach (var (_, _, code, types) in perFile)
+        {
+            var packages = ImportRe().Matches(code).Select(m => string.Join(".", m.Groups[1].Value.Split('.').TakeWhile(s => !char.IsUpper(s[0]))))
+                .Where(p => p.Length > 0 && !own.Contains(p) && p != "java" && !p.StartsWith("java.")).Distinct().ToList();
+            foreach (var t in types.Where(t => t.Parent is null))
+                edges.AddRange(packages.Select(p => new Edge(t.Id, $"ns:{p}", "uses-namespace")));
+        }
         return (CodeModel.MergeHashes(nodes).DistinctBy(n => n.Id).ToList(), edges.Distinct().ToList());
     }
 
@@ -309,6 +318,7 @@ static partial class JavaScanner
     static string Hash(string s) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Regex.Replace(s, @"\s+", " ").Trim())))[..12].ToLowerInvariant();
 
     [GeneratedRegex(@"^\s*package\s+([\w.]+)\s*;", RegexOptions.Multiline)] private static partial Regex PackageRe();
+    [GeneratedRegex(@"^\s*import\s+(?:static\s+)?([\w.]+?)(?:\.\*)?\s*;", RegexOptions.Multiline)] private static partial Regex ImportRe();
     [GeneratedRegex(@"\b(class|interface|enum|record|@interface)\s+(\w+)[^;{()]*?(?:\([^)]*\)[^;{]*?)?\{")] private static partial Regex TypeRe();
     [GeneratedRegex(@"^\s*((?:(?:private|protected|public|static|final|transient|volatile)\s+)*)([\w.]+(?:<[^;=()]*>)?(?:\[\])*)\s+(\w+)\s*(?:=[^;]*)?;\s*$", RegexOptions.Singleline)] private static partial Regex FieldRe();
     [GeneratedRegex(@"(?:^|\s)((?:(?:public|protected|private|static|final|abstract|synchronized|default|native)\s+)*(?:<[^>]+>\s+)?)([\w.]+(?:<[^(){};]*>)?(?:\[\])*\s+)?(\w+)\s*\(((?:[^()]|\([^()]*\))*)\)\s*(?:throws\s+([\w.,\s]+?))?\s*[{;]")] private static partial Regex MethodRe();

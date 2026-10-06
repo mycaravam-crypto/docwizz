@@ -63,7 +63,7 @@ partial class Generator
 
         sb.AppendLine("## Dependencies _(derived)_\n");
         sb.AppendLine($"{arch.LayerDependencies.Count} layer dependencies ({arch.LayerDependencies.Count(d => !d.Allowed)} not allowed), " +
-            $"{arch.Violations.Count} violations, {arch.Cycles.Count} module cycles, {model.Nodes.Count(n => n.Kind == "package")} external packages — " +
+            $"{LayerViolations.Count} violations, {arch.Cycles.Count} module cycles, {model.Nodes.Count(n => n.Kind == "package")} external packages — " +
             "see [dependencies](architecture.md) and [context](views/context.md).\n");
 
         sb.AppendLine("## Data flow _(derived)_\n");
@@ -84,6 +84,7 @@ partial class Generator
             var open = auth.FirstOrDefault(g => g.Key == "none declared")?.ToList() ?? [];
             if (open.Count > 0) sb.AppendLine("Endpoints without declared authorization: " + string.Join(", ", open.Select(e => $"`{EndpointLabel(e)}`").Order()) + "\n");
         }
+        if (config.Security.Enabled) sb.Append(SecuritySection());
         sb.AppendLine(HumanLink("security", "Threat model, authentication scheme, data protection"));
 
         sb.AppendLine("## Architecture decisions\n");
@@ -93,6 +94,30 @@ partial class Generator
         if (adrs.Count > 0) sb.AppendLine();
         sb.AppendLine(HumanLink("decisions", "Decisions and their rationale (or keep ADRs in docs/adr/)"));
         return sb.ToString();
+    }
+
+    // Security rules (security.enabled): per rule what it looks for and the concern behind it, then every finding with
+    // what was detected in the code apart from the risk it may carry.
+    string SecuritySection()
+    {
+        var found = SecurityFindings;
+        var sb = new StringBuilder($"_Derived, security rules:_ {found.Count} findings from code facts, to support a security review. " +
+            "They are not an ISO/IEC 27001 assessment, nor a statement of compliance with any standard. Authorization configured outside " +
+            "the endpoints (a fallback policy, a security filter chain) is not visible to them.\n\n");
+        sb.AppendLine("| Rule | Looks for | Concern | Severity | Detection | Risk _(inferred)_ | Findings |\n|---|---|---|---|---|---|---|");
+        foreach (var r in Security.Rules)
+        {
+            var severity = config.Security.Severity.TryGetValue(r.Id, out var s) ? Architecture.ParseSeverity(s) : r.Severity;
+            sb.AppendLine($"| {r.Id} | {r.Title} | {r.Concern} | {severity.ToString().ToLowerInvariant()} | {r.Basis.ToString().ToLowerInvariant()} | " +
+                $"{Esc(r.Risk)} | {found.Count(v => v.Rule == r.Id)} |");
+        }
+        if (found.Count > 0)
+        {
+            sb.AppendLine("\n| Rule | Severity | Detected | Where |\n|---|---|---|---|");
+            foreach (var v in found.OrderByDescending(v => v.Severity).ThenBy(v => v.Rule).ThenBy(v => v.FromFile))
+                sb.AppendLine($"| {v.Rule} | {v.Severity.ToString().ToLowerInvariant()} | {Esc(v.Example)} | {SourceLink(v.FromFile, 0, v.FromFile)} |");
+        }
+        return sb.AppendLine().ToString();
     }
 
     string HumanLink(string section, string what) => HumanPage(section) is not null

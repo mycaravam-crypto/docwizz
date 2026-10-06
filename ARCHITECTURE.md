@@ -61,6 +61,7 @@ Edge kinds:
 | `reads`, `binds` | code → configuration key; options type → bound section |
 | `references`, `depends-on` | project → project; project → package (label = version) |
 | `tests` | test code → code it exercises (the only trace test code leaves) |
+| `uses-namespace` | type → external namespace (`ns:<name>`) its file uses: C# `using`, Java `import` (own, `System.*`, `java.*` dropped) |
 
 `CodeModel.DependencyKinds` lists the edge kinds that count as a dependency for the architecture rules. `accesses`,
 `connects`, `reads` and `binds` are left out on purpose, so adding them didn't change any layer rule.
@@ -99,7 +100,7 @@ The model separates what the code states from what DocWizz concludes:
 - **[JavaScanner](src/DocWizz/JavaScanner.cs)** reads Java without a parser (comments and strings masked, then
   regexes): types and members with Javadoc, Spring roles, `@*Mapping` endpoints with parameter sources, auth and the
   unwrapped return type, constructor/`@Autowired`/Lombok injection, calls through injected fields (overloads by name
-  and argument count), method-level `implements`, and `@Value`/`@ConfigurationProperties` reads. Projects come from
+  and argument count), method-level `implements`, `@Value`/`@ConfigurationProperties` reads, and imported packages. Projects come from
   `pom.xml`/`build.gradle`, configuration from `application*.yml|properties`.
 - **[Sql](src/DocWizz/Sql.cs)** reads `.sql` files: procedures, functions, views, triggers and tables (doc from the
   comment above, `@parameters`), the tables each routine touches and the procedures it EXECs, and migration files
@@ -124,9 +125,18 @@ The model separates what the code states from what DocWizz concludes:
 - **[Profiles](src/DocWizz/Profiles.cs)** are YAML documentation patterns: match on kind, name, type, tag or
   visibility, then list the sections required. Reports say "coverage against profile X", never "compliant with".
 - **[Architecture](src/DocWizz/Architecture.cs)** covers path-glob layers, allowed dependencies, violations
-  ARCH-001/002/004 with severities, and folder cycles (ARCH-003). `architecture.md` adds coupling per module (fan-in,
+  ARCH-001/002/004 with severities, and folder cycles (ARCH-003). User-defined rules (`architecture.rules`) run over
+  the same edges: a selector for the source (layer, path, kind, tag, name; tags and kinds also match through the
+  containing type) and what it must not reach (a target selector, a package prefix or edge kinds). They are validated
+  when the config loads and produce the same `Violation`s, marked `Custom`, so `check`, `--since` and the pages need
+  nothing extra. `architecture.md` adds coupling per module (fan-in,
   fan-out, instability) and risks that break no rule: entities returned by endpoints, complex members in the API layer,
   and external namespaces used by the domain layer.
+- **[Security](src/DocWizz/Security.cs)** (opt-in) turns facts the model already has into findings for a security
+  review: endpoint auth tags, DbContext access from the API layer, framework namespaces in the domain, and flows from
+  unprotected endpoints to sensitive external systems (the generator's flow trace). A finding is a `Violation` with a
+  basis (fact or inferred detection), a CIA concern and the risk, kept apart from the detected fact. `Architecture.Check`
+  appends them when enabled, so `check`, `--since` and the pages treat them like violations but show them separately.
 - **[Diff](src/DocWizz/Diff.cs)** compares two models by symbol id and body hash. It reports changed, added and
   removed symbols, the affected pages, and the gaps and violations a change introduced. A touched symbol also marks
   every flow passing through it: `api.md` / `frontend.md` and the module pages along that flow. New external systems

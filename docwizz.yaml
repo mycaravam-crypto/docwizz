@@ -26,6 +26,11 @@ architecture:
     domain: []
     infrastructure: [application, domain]
   severity: {}          # rule → high/medium/low; defaults ARCH-001 high, ARCH-002 medium, ARCH-004 low
+  # rules:              # your own dependency rules (README: Custom rules)
+  #   - { id: ARCH-DOMAIN-001, severity: high, from: { layer: domain }, forbid: { package: [Microsoft.EntityFrameworkCore] } }
+# Security rules SEC-001…005: findings for a security review, from code facts (README: Security rules). Off by default.
+security:
+  enabled: false
 # Test code (path globs): scanned only to link tests to the code they exercise; never analyzed or documented.
 tests: ["tests/*", "test/*", "*.Tests/*", "*.Test/*", "*/__tests__/*", "*.test.ts", "*.spec.ts", "*/e2e/*", "*/src/test/*"]
 # Path globs (relative, `/`-separated) left out of the model entirely.
