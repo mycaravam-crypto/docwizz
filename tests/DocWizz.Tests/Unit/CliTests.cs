@@ -37,6 +37,10 @@ public class CliTests
     [InlineData("init . --help", null)]
     [InlineData("", null)]
     [InlineData("help generate", null)]
+    [InlineData("--version", null)]
+    [InlineData("-v", null)]
+    [InlineData("version", null)]
+    [InlineData("check . --version", null)]
     // options a command doesn't use
     [InlineData("analyze . --html", "--html doesn't apply to analyze; it applies to setup, generate")]
     [InlineData("scan . --ai", "--ai doesn't apply to scan; it applies to setup, generate")]
@@ -77,6 +81,14 @@ public class CliTests
     {
         foreach (var (name, c) in Cli.Commands)
             Assert.All(c.Accepts, o => Assert.True(c.Options.Contains($"--{o}"), $"`docwizz help {name}` doesn't mention --{o}"));
+    }
+
+    [Fact]
+    public void Version_parses_from_the_flag_its_short_form_and_the_command()
+    {
+        Assert.Equal("", Parse("-v").Options["version"]);
+        Assert.Equal("", Parse("analyze . --version").Options["version"]);
+        Assert.Equal("version", Parse("version").Command);
     }
 
     [Fact]

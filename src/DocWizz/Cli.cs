@@ -8,7 +8,7 @@ static class Cli
 
     public record Request(string? Command, Dictionary<string, string> Options, List<string> Positional, string? Error);
 
-    public static readonly string[] Flags = ["ai", "html", "timings", "validate", "force", "help"];
+    public static readonly string[] Flags = ["ai", "html", "timings", "validate", "force", "help", "version"];
 
     // Valued option → what its value is, for the error when it is missing.
     public static readonly Dictionary<string, string> Valued = new()
@@ -18,7 +18,7 @@ static class Cli
     };
 
     // Meaningful for every command.
-    public static readonly string[] Global = ["help", "timings"];
+    public static readonly string[] Global = ["help", "timings", "version"];
 
     // One line per command, in the order a new user meets them; `Use` says who it's for (CLI.md has the full matrix).
     public static readonly Dictionary<string, Command> Commands = new()
@@ -54,6 +54,7 @@ static class Cli
         {
             var a = args[i];
             if (a == "-h") opts["help"] = "";
+            else if (a == "-v") opts["version"] = "";
             else if (!a.StartsWith("--")) pos.Add(a);
             else if (Flags.Contains(a[2..])) opts[a[2..]] = "";
             else if (Valued.TryGetValue(a[2..], out var what))
@@ -64,7 +65,7 @@ static class Cli
             else error ??= $"unknown option {a}" + Suggest(a[2..].Split('=')[0], [.. Flags, .. Valued.Keys], "--");
         }
         var cmd = pos.ElementAtOrDefault(0);
-        if (cmd is not null && cmd != "help" && !Commands.ContainsKey(cmd))
+        if (cmd is not null && cmd is not ("help" or "version") && !Commands.ContainsKey(cmd))
             error ??= $"unknown command {cmd}" + Suggest(cmd, Commands.Keys, "");
         if (opts.GetValueOrDefault("format") is { } format && format is not ("console" or "json"))
             error ??= $"unknown format {format}: use console or json";
