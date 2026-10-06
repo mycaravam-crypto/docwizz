@@ -25,6 +25,12 @@ public class CliContractTests
         Assert.Equal("", r.Err);
         Assert.StartsWith("usage: docwizz <command>", r.Out);
         Assert.All(Cli.Commands.Keys, c => Assert.Contains($"docwizz {c} ", r.Out));
+        Assert.All(Cli.Flags.Concat(Cli.Valued.Keys), o => Assert.Contains($"--{o}", r.Out));
+        // Commands a new user doesn't need come last, under their own heading.
+        var advanced = r.Out[r.Out.IndexOf("manual setup and debugging:", StringComparison.Ordinal)..];
+        Assert.Contains("docwizz init ", advanced);
+        Assert.Contains("docwizz scan ", advanced);
+        Assert.True(r.Out.IndexOf("docwizz setup ", StringComparison.Ordinal) < r.Out.IndexOf("docwizz generate ", StringComparison.Ordinal));
     }
 
     [Theory]

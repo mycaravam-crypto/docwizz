@@ -186,17 +186,9 @@ public class SetupJourneyTests
     public void The_same_repository_gives_the_same_config_and_docs_with_nothing_duplicated()
     {
         // Two copies under the same directory name: the name is part of the repository state (it names the system).
-        using var source = Repos.Mixed();
         using var parentA = new Sources();
         using var parentB = new Sources();
-        var (a, b) = (Path.Combine(parentA.Root, "shop"), Path.Combine(parentB.Root, "shop"));
-        foreach (var dir in new[] { a, b })
-            foreach (var f in Directory.EnumerateFiles(source.Root, "*", SearchOption.AllDirectories))
-            {
-                var to = Path.Combine(dir, Path.GetRelativePath(source.Root, f));
-                Directory.CreateDirectory(Path.GetDirectoryName(to)!);
-                File.Copy(f, to);
-            }
+        var (a, b) = (Repos.WriteTo(parentA.Root, Repos.MixedFiles), Repos.WriteTo(parentB.Root, Repos.MixedFiles));
         Assert.Equal(0, Docwizz.Run("setup", a).Exit);
         Assert.Equal(0, Docwizz.Run("setup", b).Exit);
         var yaml = File.ReadAllText(Path.Combine(a, "docwizz.yaml"));
@@ -226,6 +218,8 @@ public class SetupJourneyTests
         Assert.Equal("Status:         SUCCESS_WITH_FINDINGS", Line(r, "Status"));
         Assert.StartsWith("Check:          FAIL", Line(r, "Check"));
         Assert.DoesNotContain("Error:", r.Out);
+        Assert.EndsWith(string.Join("\n", ["Next useful actions:", .. global::Setup.NextActions(repo.Root, global::Setup.Status.SuccessWithFindings, false)]),
+            r.Out.TrimEnd());
     }
 
     [Fact]
@@ -251,7 +245,8 @@ public class SetupJourneyTests
         Assert.Contains("[1/6] scan         failed", r.Out);
         Assert.Contains("[6/6] check        skipped  needs scan", r.Out);
         Assert.StartsWith("Error:          scan: ", Line(r, "Error"));
-        Assert.Contains($"docwizz setup {repo.Root} --force", r.Out);
+        Assert.EndsWith(string.Join("\n", ["Next useful actions:", .. global::Setup.NextActions(repo.Root, global::Setup.Status.Failed, configKept: true)]),
+            r.Out.TrimEnd());   // re-run, or regenerate the file that broke
         Assert.Equal("check: [oops\n", Yaml(repo));   // a broken file is still the user's file
     }
 
@@ -270,6 +265,37 @@ public class SetupJourneyTests
         Line(r, "Architecture");
         Assert.StartsWith("Error:          generate: ", Line(r, "Error"));
         Assert.DoesNotContain("Documentation:", r.Out);         // and what didn't happen isn't claimed
+        Assert.DoesNotContain("--force", r.Out);                // the config was fine: nothing to regenerate
+    }
+
+    // Output can't depend on the order the filesystem lists files in: the same files, written in opposite orders,
+    // give the same summary, config, docs and JSON reports, and a second report run gives the same bytes again.
+    [Fact]
+    public void Output_does_not_depend_on_file_order_or_on_the_run()
+    {
+        Docwizz.RequireFrontendScanner();
+        using var parentA = new Sources();
+        using var parentB = new Sources();
+        var a = Repos.WriteTo(parentA.Root, Repos.MixedFiles);
+        var b = Repos.WriteTo(parentB.Root, Repos.MixedFiles.Reverse());
+        // Run from each parent on `shop`, as a user would from their checkout; only the absolute path in the header
+        // (`docwizz setup /tmp/…/shop`) names the parent.
+        Docwizz.Result Run(Sources parent, params string[] args)
+        {
+            var r = Docwizz.Run(parent.Root, null, args);
+            return r with { Out = r.Out.Replace(parent.Root, "<parent>") };
+        }
+
+        Assert.Equal(Run(parentA, "setup", "shop").Out, Run(parentB, "setup", "shop").Out);
+        Assert.Equal(File.ReadAllText(Path.Combine(a, "docwizz.yaml")), File.ReadAllText(Path.Combine(b, "docwizz.yaml")));
+        Assert.Equal(Docwizz.Snapshot(Path.Combine(a, "docs")), Docwizz.Snapshot(Path.Combine(b, "docs")));
+
+        foreach (var report in new[] { "analyze", "architecture" })
+        {
+            var first = Run(parentA, report, "shop", "--format", "json");
+            Assert.Equal(first.Out, Run(parentB, report, "shop", "--format", "json").Out);
+            Assert.Equal(first.Out, Run(parentA, report, "shop", "--format", "json").Out);
+        }
     }
 
     // AI is opt-in: a listener stands in for Ollama; without --ai nothing connects to it, with --ai something does

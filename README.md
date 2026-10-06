@@ -37,8 +37,9 @@ architecture, generates the docs into `docs/` and runs the quality gate. It ends
 to run:
 
 ```console
-Setup complete.
+Setup complete, with findings: they are about the repository; docwizz itself ran without errors.
 
+Status:         SUCCESS_WITH_FINDINGS
 Stack:          csharp (45 symbols), java (15 symbols), …; ASP.NET Core, Entity Framework Core, Spring Boot, Vue, React, Angular; backend + frontend
 Layers:         ui (7), state (1), client (4), api (3), application (6), domain (3), infrastructure (3)
 Configuration:  ./docwizz.yaml (written)
@@ -56,8 +57,10 @@ Next useful actions:
   docwizz architecture .   # inspect architecture findings
 ```
 
-It never overwrites an existing `docwizz.yaml` without `--force`, and it never sends anything anywhere: `--ai` stays
-opt-in. To try it first, run `docwizz analyze fixture` on the bundled sample app. [CLI.md](CLI.md) has every
+A first run on a real repository usually ends `SUCCESS_WITH_FINDINGS` (exit 0): the gaps and violations are the
+starting point, not a failed setup. `FAILED` (exit 1) means a stage could not run, for example an invalid
+`docwizz.yaml`. It never overwrites an existing `docwizz.yaml` without `--force`, never runs your build, tests or
+package tools, and never sends anything anywhere: `--ai` stays opt-in. To try it first, run `docwizz analyze fixture` on the bundled sample app. [CLI.md](CLI.md) has every
 workflow by goal (docs, architecture, CI, AI, impact analysis), every command and flag, and how they combine.
 
 ## Examples

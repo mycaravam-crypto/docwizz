@@ -207,9 +207,9 @@ its own step.
 
 | Layer | Where | What it covers | Run |
 |---|---|---|---|
-| Unit | [tests/DocWizz.Tests/Unit](tests/DocWizz.Tests/Unit/) | `Analyzer`, `Architecture`, `Diff`, `CodeModel`, `Versions` on small in-memory models; `Cli` parsing and the command/option compatibility matrix | `dotnet test --project tests/DocWizz.Tests --filter-namespace DocWizz.Tests.Unit` |
+| Unit | [tests/DocWizz.Tests/Unit](tests/DocWizz.Tests/Unit/) | `Analyzer`, `Architecture`, `Diff`, `CodeModel`, `Versions` on small in-memory models; `Cli` parsing and the command/option compatibility matrix; CLI.md and README checked against the command table (commands, options and where they apply, advanced commands, setup and CI workflows), so the docs can't drift | `dotnet test --project tests/DocWizz.Tests --filter-namespace DocWizz.Tests.Unit` |
 | Component | [tests/DocWizz.Tests/Component](tests/DocWizz.Tests/Component/) | one scanner on a few source snippets → nodes and edges, incl. past regressions per backend language; project files → remediation suggestions and validation | `… --filter-namespace DocWizz.Tests.Component` |
-| Journey | [tests/DocWizz.Tests/Journey](tests/DocWizz.Tests/Journey/) | the CLI as a process: `setup` on small C#, Java, Vue, mixed, console, partial and empty repositories; re-runs change nothing; findings vs failures; exit codes, stdout vs stderr, no stack traces; no AI without `--ai`, no secrets in `docwizz.yaml`, no repository code run | `… --filter-namespace DocWizz.Tests.Journey` (needs `npm ci --prefix scanner-vue`) |
+| Journey | [tests/DocWizz.Tests/Journey](tests/DocWizz.Tests/Journey/) | the CLI as a process: `setup` on small C#, Java, Vue, mixed, console, partial and empty repositories; re-runs change nothing and output doesn't depend on file order; findings vs failures and the next actions for each; exit codes, stdout vs stderr, no stack traces; no AI without `--ai`, no secrets in `docwizz.yaml`, no repository code run | `… --filter-namespace DocWizz.Tests.Journey` (needs `npm ci --prefix scanner-vue`) |
 | End-to-end | [test.sh](test.sh) | repository → model → reports → generated pages, on the fixtures | `./test.sh` |
 
 `test.sh` runs the CLI against [fixture/](fixture/), a small ASP.NET + EF Core + Vue project with

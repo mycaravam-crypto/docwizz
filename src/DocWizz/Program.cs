@@ -589,20 +589,9 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
         Console.WriteLine("Follow-up:");
         foreach (var t in Setup.FollowUp(detection, configStatus, config, passed != false)) Console.WriteLine($"  - {t}");
     }
-    var dir = root == "." ? "." : root;
     Console.WriteLine();
     Console.WriteLine("Next useful actions:");
-    if (failed.Count > 0)
-    {
-        Console.WriteLine($"  docwizz setup {dir}           # re-run after fixing the error above");
-        if (existing) Console.WriteLine($"  docwizz setup {dir} --force   # or replace docwizz.yaml with a generated one");
-    }
-    else
-    {
-        Console.WriteLine($"  docwizz generate {dir}       # refresh documentation");
-        Console.WriteLine($"  docwizz check {dir}          # run the quality gate");
-        Console.WriteLine($"  docwizz architecture {dir}   # inspect architecture findings");
-    }
+    foreach (var line in Setup.NextActions(root, outcome, existing)) Console.WriteLine(line);
     return failed.Count == 0 ? 0 : 1;
 }
 

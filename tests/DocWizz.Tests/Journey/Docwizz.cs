@@ -149,7 +149,22 @@ static class Repos
 
     public static Sources Frontend() => new(VueFiles);
 
-    public static Sources Mixed() => new([.. AspNetFiles, .. VueFiles]);
+    public static (string Path, string Text)[] MixedFiles => [.. AspNetFiles, .. VueFiles];
+
+    public static Sources Mixed() => new(MixedFiles);
+
+    // `files` written in this order to `<parent>/<name>`: the same repository at the same name, in a different place.
+    public static string WriteTo(string parent, IEnumerable<(string Path, string Text)> files, string name = "shop")
+    {
+        var root = Path.Combine(parent, name);
+        foreach (var (path, text) in files)
+        {
+            var full = Path.Combine(root, path);
+            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            File.WriteAllText(full, text);
+        }
+        return root;
+    }
 
     public static Sources ConsoleApp() => new(
         ("Tool.csproj", """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>"""),
