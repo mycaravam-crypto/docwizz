@@ -10,12 +10,16 @@ var opts = new Dictionary<string, string>();
 var pos = new List<string>();
 for (var i = 0; i < args.Length; i++)
 {
-    if (args[i] is "--ai" or "--html" or "--timings") opts[args[i][2..]] = "";
+    if (args[i] is "--ai" or "--html" or "--timings" or "--force" or "--help") opts[args[i][2..]] = "";
+    else if (args[i] == "-h") opts["help"] = "";
     else if (args[i].StartsWith("--") && valued.Contains(args[i][2..]) && i + 1 < args.Length) opts[args[i][2..]] = args[++i];
     else if (args[i].StartsWith("--")) return Usage($"unknown option {args[i]}");
     else pos.Add(args[i]);
 }
 var cmd = pos.ElementAtOrDefault(0);
+if (cmd == "help") return Help(pos.ElementAtOrDefault(1));
+if (opts.ContainsKey("help")) return Help(cmd);
+if (opts.ContainsKey("force") && cmd != "setup") return Usage($"--force only applies to setup (docwizz setup {pos.ElementAtOrDefault(1) ?? "."} --force)", cmd);
 // `docwizz diff HEAD~1 HEAD`: no directory given, refs only.
 if (cmd == "diff" && pos.Count >= 2 && !Directory.Exists(pos[1])) pos.Insert(1, ".");
 var path = pos.ElementAtOrDefault(1) ?? ".";
@@ -27,16 +31,18 @@ if (opts.ContainsKey("timings"))
     Timings.Enabled = true;
     AppDomain.CurrentDomain.ProcessExit += (_, _) => Timings.Report(Console.Error);
 }
-if (cmd is null) return Usage(null);
+if (cmd is null) return Start();
+if (!Commands().ContainsKey(cmd)) return Usage($"unknown command {cmd}");
 if (!Directory.Exists(path))
 {
     Console.Error.WriteLine($"not a directory: {path}");
     return 1;
 }
 if (cmd == "init") return Init(path);
+if (cmd == "setup") return await SetupCommand(path, opts.GetValueOrDefault("profile"), opts.ContainsKey("force"), opts.ContainsKey("ai"), opts.ContainsKey("html"));
 Config config;
 try { config = Config.Load(path, opts.GetValueOrDefault("profile")); }
-catch (ArgumentException e) { return Usage(e.Message); }
+catch (ArgumentException e) { return Usage(e.Message, cmd); }
 
 switch (cmd)
 {
@@ -53,7 +59,8 @@ switch (cmd)
     case "architecture":
         return ArchitectureCommand(path, config, json);
     case "generate":
-        return await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html"));
+        Console.WriteLine(await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html")));
+        return 0;
     default:
         return Usage($"unknown command {cmd}");
 }
@@ -72,29 +79,108 @@ static int Init(string dir)
     return 0;
 }
 
-static int Usage(string? error)
+// One line per command, in the order a new user meets them; `Use` says who it's for (README: CLI.md has the full matrix).
+static Dictionary<string, (string Syntax, string Purpose, string Use, string Example, string Options)> Commands() => new()
 {
-    if (error is not null) Console.Error.WriteLine(error);
-    Console.Error.WriteLine($"""
-        usage:
-          docwizz init [dir]                write a starter docwizz.yaml
-          docwizz scan <dir> [model.json]   write the code model
-          docwizz analyze <dir>             documentation report
-          docwizz check <dir>               report + exit 1 if thresholds fail (CI)
-          docwizz check <dir> --since <ref> exit 1 only on gaps/violations introduced since <ref>
-          docwizz diff <dir> [ref]          what changed vs <ref> (default: docs/.docwizz/model.json)
-          docwizz diff [dir] <base> <head>  what changed between two git refs
-          docwizz architecture <dir>        layers, dependencies, violations; exit 1 above check thresholds
-          docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
-            [--ai]                          draft missing summaries with a local Ollama (cached per code hash)
-            [--html]                        also write an HTML page next to every Markdown page
-        options:
-          --profile <name|file.yaml>        documentation profile: {string.Join(", ", Profiles.Names)}, or your own file
-          --format console|json             analyze/check/architecture/diff output
-          --timings                         time per stage and peak memory, on stderr (benchmarks)
+    ["setup"] = ("setup [dir]", "first run: detect the stack, write docwizz.yaml, analyze, generate docs, check", "start here",
+        "docwizz setup .", "--force (overwrite docwizz.yaml), --html, --ai, --profile <name|file>"),
+    ["generate"] = ("generate <dir> [out]", "write Markdown docs (default <dir>/docs)", "everyday",
+        "docwizz generate . --html", "--html (HTML next to every page), --ai (local Ollama drafts), --profile"),
+    ["check"] = ("check <dir> [--since <ref>]", "quality gate: exit 1 when thresholds fail (only new problems with --since)", "CI",
+        "docwizz check . --since origin/main", "--since <ref>, --format json, --profile"),
+    ["analyze"] = ("analyze <dir>", "documentation report: gaps, coverage, quality, architecture", "everyday",
+        "docwizz analyze .", "--format json, --profile"),
+    ["architecture"] = ("architecture <dir>", "layers, layer dependencies, violations, cycles; exit 1 above check thresholds", "architects",
+        "docwizz architecture .", "--format json"),
+    ["diff"] = ("diff [dir] [base] [head]", "changed symbols, affected pages and linked tests vs the last generate or git refs", "reviews, CI",
+        "docwizz diff HEAD~1 HEAD", "--format json"),
+    ["init"] = ("init [dir]", "write a starter docwizz.yaml with every default (setup does this from evidence)", "manual setup",
+        "docwizz init .", ""),
+    ["scan"] = ("scan <dir> [model.json]", "dump the raw code model (nodes and edges)", "advanced, debugging",
+        "docwizz scan . model.json", ""),
+};
+
+// `docwizz` alone: the next useful action, not the full reference.
+static int Start()
+{
+    Console.Error.WriteLine("""
+        No command specified.
+
+        For a new repository:
+          docwizz setup .
+
+        Common workflows:
+          docwizz generate .       # write or refresh the docs
+          docwizz check .          # quality gate (CI)
+          docwizz architecture .   # layers, violations, cycles
+
+        Run 'docwizz help' for all commands, 'docwizz help <command>' for one.
         """);
     return 1;
 }
+
+static int Help(string? command)
+{
+    var commands = Commands();
+    if (command is not null && commands.TryGetValue(command, out var c))
+    {
+        Console.WriteLine($"""
+            docwizz {c.Syntax}
+
+              {c.Purpose}
+              for: {c.Use}
+
+            example:
+              {c.Example}
+            """);
+        if (c.Options.Length > 0) Console.WriteLine($"\noptions:\n  {c.Options}\n");
+        Console.WriteLine("All commands, options and how they combine: CLI.md");
+        return 0;
+    }
+    if (command is not null && command != "help") return Usage($"unknown command {command}");
+    Console.WriteLine(Reference());
+    return 0;
+}
+
+static int Usage(string? error, string? command = null)
+{
+    if (error is not null) Console.Error.WriteLine(error);
+    Console.Error.WriteLine(command is not null && Commands().ContainsKey(command)
+        ? $"Run 'docwizz help {command}' for its options."
+        : Reference());
+    return 1;
+}
+
+static string Reference() => $"""
+    usage: docwizz <command> [dir] [options]
+
+    start here:
+      docwizz setup [dir]               detect the stack, write docwizz.yaml, analyze, generate docs, check
+        [--force]                       overwrite an existing docwizz.yaml
+
+    everyday:
+      docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
+        [--html]                        also write an HTML page next to every Markdown page
+        [--ai]                          draft missing summaries with a local Ollama (cached per code hash)
+      docwizz analyze <dir>             documentation report
+      docwizz check <dir>               report + exit 1 if thresholds fail (CI)
+      docwizz check <dir> --since <ref> exit 1 only on gaps/violations introduced since <ref>
+      docwizz architecture <dir>        layers, dependencies, violations; exit 1 above check thresholds
+      docwizz diff <dir> [ref]          what changed vs <ref> (default: docs/.docwizz/model.json)
+      docwizz diff [dir] <base> <head>  what changed between two git refs
+
+    manual setup and debugging:
+      docwizz init [dir]                write a starter docwizz.yaml with every default
+      docwizz scan <dir> [model.json]   write the raw code model
+
+    options:
+      --profile <name|file.yaml>        documentation profile: {string.Join(", ", Profiles.Names)}, or your own file
+      --format console|json             analyze/check/architecture/diff output
+      --timings                         time per stage and peak memory, on stderr (benchmarks)
+      --help, -h                        help for a command: docwizz <command> --help
+
+    Every command, option and how they combine: CLI.md
+    """;
 
 // Every file docwizz may read. Prefer git's view (honours .gitignore, skips nested worktrees); fall back to a directory walk.
 // Dot-directories are skipped except those named in `dotDirs` (CI descriptors live in .github/.circleci).
@@ -214,9 +300,10 @@ static object DocumentationJson(CodeModel model, Config config, List<Documentati
     };
 }
 
-static async Task<int> Generate(string root, string outDir, Config config, bool ai, bool html = false)
+// Writes the docs; returns the one-line result.
+static async Task<string> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null)
 {
-    var model = BuildModel(root, config).Model;
+    model ??= BuildModel(root, config).Model;
     var findings = Timings.Measure("analyze", () => Analyzer.Analyze(model, config));
     var arch = Timings.Measure("architecture", () => Architecture.Check(model, config));
     // Cached drafts are always used; new ones are only requested with --ai.
@@ -246,9 +333,8 @@ static async Task<int> Generate(string root, string outDir, Config config, bool 
     WriteModel(model, Path.Combine(outDir, ".docwizz", "model.json"));
     File.WriteAllText(Path.Combine(outDir, ".docwizz", "documentation.json"),
         JsonSerializer.Serialize(DocumentationJson(model, config, findings), JsonOptions()));
-    Console.WriteLine($"{pages.Count} pages → {outDir} (commit {model.Commit ?? "unknown"}): {changed.Count} changed" +
-        (changed.Count is > 0 and <= 10 ? $" ({string.Join(", ", changed.Order())})" : ""));
-    return 0;
+    return $"{pages.Count} pages → {outDir} (commit {model.Commit ?? "unknown"}): {changed.Count} changed" +
+        (changed.Count is > 0 and <= 10 ? $" ({string.Join(", ", changed.Order())})" : "");
 }
 
 static int DiffCommand(string root, string? gitRef, Config config, bool enforce, string? head = null, bool json = false)
@@ -366,25 +452,7 @@ static int Analyze(string root, Config config, bool enforce, bool json)
     var model = BuildModel(root, config).Model;
     var findings = Timings.Measure("analyze", () => Analyzer.Analyze(model, config));
     var arch = Timings.Measure("architecture", () => Architecture.Check(model, config));
-    var (_, cycles, _, _) = arch;
-    var violations = Architecture.Failing(arch.Violations, config.Check);
-    var complex = TooComplex(model.Nodes, config.Check);
-
-    var coverage = Analyzer.Coverage(findings);
-    var critical = findings.Count(Analyzer.IsCritical);
-    var failures = new List<string>();
-    if (coverage < config.Check.MinCoverage) failures.Add($"coverage {coverage:0}% < {config.Check.MinCoverage}%");
-    if (config.Check.MinQuality is { } minQuality && Analyzer.Quality(findings) is var quality && quality < minQuality)
-        failures.Add($"doc quality {quality:0}% < {minQuality}%");
-    if (critical > config.Check.MaxCritical) failures.Add($"{critical} critical > {config.Check.MaxCritical}");
-    if (violations.Count > config.Check.MaxViolations) failures.Add($"{violations.Count} violations > {config.Check.MaxViolations}");
-    if (cycles.Count > config.Check.MaxCycles) failures.Add($"{cycles.Count} cycles > {config.Check.MaxCycles}");
-    if (complex.Count > 0) failures.Add($"complexity > {config.Check.MaxComplexity}: " +
-        string.Join(", ", complex.Take(5).Select(n => $"{Generator.Display(n)} ({n.Complexity})")) + (complex.Count > 5 ? ", …" : ""));
-    // Human-authored architecture sections the profile requires (docs/architecture/<name>.md).
-    var missingSections = config.ArchitectureSections
-        .Where(s => !File.Exists(Path.Combine(root, "docs", "architecture", $"{s}.md"))).ToList();
-    if (missingSections.Count > 0) failures.Add($"missing architecture sections: {string.Join(", ", missingSections)}");
+    var (failures, missingSections) = CheckFailures(root, model, config, findings, arch);
 
     if (json)
         Console.WriteLine(JsonSerializer.Serialize(new
@@ -409,6 +477,136 @@ static int Analyze(string root, Config config, bool enforce, bool json)
         }
     }
     return enforce && failures.Count > 0 ? 1 : 0;
+}
+
+// The `check` thresholds against one analysis: what fails, and the profile's architecture sections that are missing.
+static (List<string> Failures, List<string> MissingSections) CheckFailures(string root, CodeModel model, Config config,
+    List<DocumentationItem> findings, ArchitectureResult arch)
+{
+    var violations = Architecture.Failing(arch.Violations, config.Check);
+    var complex = TooComplex(model.Nodes, config.Check);
+    var coverage = Analyzer.Coverage(findings);
+    var critical = findings.Count(Analyzer.IsCritical);
+    var failures = new List<string>();
+    if (coverage < config.Check.MinCoverage) failures.Add($"coverage {coverage:0}% < {config.Check.MinCoverage}%");
+    if (config.Check.MinQuality is { } minQuality && Analyzer.Quality(findings) is var quality && quality < minQuality)
+        failures.Add($"doc quality {quality:0}% < {minQuality}%");
+    if (critical > config.Check.MaxCritical) failures.Add($"{critical} critical > {config.Check.MaxCritical}");
+    if (violations.Count > config.Check.MaxViolations) failures.Add($"{violations.Count} violations > {config.Check.MaxViolations}");
+    if (arch.Cycles.Count > config.Check.MaxCycles) failures.Add($"{arch.Cycles.Count} cycles > {config.Check.MaxCycles}");
+    if (complex.Count > 0) failures.Add($"complexity > {config.Check.MaxComplexity}: " +
+        string.Join(", ", complex.Take(5).Select(n => $"{Generator.Display(n)} ({n.Complexity})")) + (complex.Count > 5 ? ", …" : ""));
+    // Human-authored architecture sections the profile requires (docs/architecture/<name>.md).
+    var missingSections = config.ArchitectureSections
+        .Where(s => !File.Exists(Path.Combine(root, "docs", "architecture", $"{s}.md"))).ToList();
+    if (missingSections.Count > 0) failures.Add($"missing architecture sections: {string.Join(", ", missingSections)}");
+    return (failures, missingSections);
+}
+
+// First run on a repository, in a fixed order: scan (and detect the stack) → config → analyze → architecture →
+// generate → check. A failed stage is reported and doesn't hide the others; scan and config are required by the rest.
+// Exit 1 only when a stage fails: a failing check is the baseline to improve on, reported with what to do next.
+static async Task<int> SetupCommand(string root, string? profile, bool force, bool ai, bool html)
+{
+    var file = Path.Combine(root, "docwizz.yaml");
+    var outDir = Path.Combine(root, "docs");
+    var existing = File.Exists(file) && !force;
+    Config config = null!;
+    CodeModel model = null!;
+    Setup.Detection detection = null!;
+    List<DocumentationItem>? findings = null;
+    ArchitectureResult? arch = null;
+    string configStatus = "";
+    bool? passed = null;
+    var version = typeof(Setup).Assembly.GetName().Version?.ToString(3) ?? "unknown";
+
+    Console.WriteLine($"docwizz setup {Path.GetFullPath(root)}");
+    var results = Setup.Run(
+    [
+        new("scan", () =>
+        {
+            // The repository's own docwizz.yaml when it is kept, else the built-in defaults (never one from the cwd).
+            config = existing ? Config.Load(root, profile) : Config.Parse(Config.Default, root, profile);
+            var (m, files) = BuildModel(root, config);
+            model = m;
+            var all = RepoFiles(root, config, [".github", ".circleci"]).Select(f => Path.GetRelativePath(root, f).Replace('\\', '/')).ToList();
+            detection = Setup.Detect(root, model, all, config);
+            return $"{files.Count} source files, {model.Nodes.Count} nodes; {Setup.Stack(detection)}";
+        }, Required: true),
+        new("config", () =>
+        {
+            configStatus = existing ? "kept" : Setup.WriteConfig(root, Setup.Yaml(detection, version), force);
+            // The generated file only narrows layers and test globs to those files matched, so the model stands.
+            if (!existing) config = Config.Load(root, profile);
+            return $"{configStatus} {file}" + (existing ? " (--force to regenerate)" : $" ({detection.Layers.Count} layers, {detection.TestGlobs.Count} test globs inferred)");
+        }, Required: true),
+        new("analyze", () =>
+        {
+            findings = Analyzer.Analyze(model, config);
+            return $"coverage {Analyzer.Coverage(findings):0}%, {findings.Count(Analyzer.IsCritical)} critical gaps, profile {config.Profile}";
+        }),
+        new("architecture", () =>
+        {
+            arch = Architecture.Check(model, config);
+            var security = arch.Violations.Count(v => v.Rule.StartsWith("SEC-"));
+            return $"{arch.Violations.Count - security} violations ({Architecture.Failing(arch.Violations, config.Check).Count - security} failing), {arch.Cycles.Count} cycles" +
+                (config.Security.Enabled ? $", {security} security findings" : ", security rules off");
+        }),
+        new("generate", () => Generate(root, outDir, config, ai, html, model).GetAwaiter().GetResult()),
+        new("check", () =>
+        {
+            findings ??= Analyzer.Analyze(model, config);
+            arch ??= Architecture.Check(model, config);
+            var (failures, _) = CheckFailures(root, model, config, findings, arch);
+            passed = failures.Count == 0;
+            return passed.Value ? "PASS" : "FAIL — " + string.Join("; ", failures);
+        }),
+    ], Console.Out);
+
+    var failed = results.Where(r => !r.Ok).ToList();
+    var rel = (string p) => "./" + Path.GetRelativePath(".", p).Replace('\\', '/');
+    Console.WriteLine();
+    var skipped = failed.Count(r => r.Status == "skipped");
+    Console.WriteLine(failed.Count == 0 ? "Setup complete." : $"Setup incomplete: {string.Join(", ", failed.Where(r => r.Status == "failed").Select(r => r.Name))} failed" +
+        (skipped > 0 ? $", {skipped} stage{(skipped == 1 ? "" : "s")} skipped." : "."));
+    Console.WriteLine();
+    if (detection is not null)
+    {
+        Console.WriteLine($"Stack:          {Setup.Stack(detection)}");
+        Console.WriteLine($"Projects:       {(detection.ProjectFiles.Count == 0 ? "none" : string.Join(", ", detection.ProjectFiles.Select(p => $"{p.Value} {p.Key}")))}");
+        Console.WriteLine($"Tests:          {(detection.TestGlobs.Count == 0 && detection.TestProjects == 0 ? "none found" : string.Join(", ", detection.TestGlobs.Select(t => $"{t.Key} ({t.Value} files)").Append(detection.TestProjects > 0 ? $"{detection.TestProjects} test projects" : null).OfType<string>()))}");
+        Console.WriteLine($"Deployment:     {(detection.Deployment.Count == 0 ? "none found" : string.Join(", ", detection.Deployment.Take(5)) + (detection.Deployment.Count > 5 ? $", … ({detection.Deployment.Count})" : ""))}");
+        Console.WriteLine($"Layers:         {(detection.Layers.Count == 0 ? "none detected" : string.Join(", ", detection.Layers.Select(l => $"{l.Key} ({l.Value.Files})")))}");
+    }
+    if (configStatus.Length > 0) Console.WriteLine($"Configuration:  {rel(file)} ({configStatus})");
+    if (results.Single(r => r.Name == "generate").Ok) Console.WriteLine($"Documentation:  {rel(outDir)}");
+    if (findings is not null) Console.WriteLine($"Coverage:       {Analyzer.Coverage(findings):0}% (profile {config.Profile})");
+    if (arch is not null) Console.WriteLine($"Architecture:   {arch.Violations.Count(v => !v.Rule.StartsWith("SEC-"))} findings, {arch.Cycles.Count} cycles");
+    if (arch is not null) Console.WriteLine($"Security:       {(config.Security.Enabled ? $"{arch.Violations.Count(v => v.Rule.StartsWith("SEC-"))} findings" : "off")}");
+    if (passed is not null) Console.WriteLine($"Check:          {results.Single(r => r.Name == "check").Detail}");
+    foreach (var r in failed.Where(r => r.Status == "failed")) Console.WriteLine($"Error:          {r.Name}: {r.Detail}");
+
+    if (detection is not null && configStatus.Length > 0)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Follow-up:");
+        foreach (var t in Setup.FollowUp(detection, configStatus, config, passed != false)) Console.WriteLine($"  - {t}");
+    }
+    var dir = root == "." ? "." : root;
+    Console.WriteLine();
+    Console.WriteLine("Next useful actions:");
+    if (failed.Count > 0)
+    {
+        Console.WriteLine($"  docwizz setup {dir}           # re-run after fixing the error above");
+        if (existing) Console.WriteLine($"  docwizz setup {dir} --force   # or replace docwizz.yaml with a generated one");
+    }
+    else
+    {
+        Console.WriteLine($"  docwizz generate {dir}       # refresh documentation");
+        Console.WriteLine($"  docwizz check {dir}          # run the quality gate");
+        Console.WriteLine($"  docwizz architecture {dir}   # inspect architecture findings");
+    }
+    return failed.Count == 0 ? 0 : 1;
 }
 
 static int ArchitectureCommand(string root, Config config, bool json)

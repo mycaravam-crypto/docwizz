@@ -25,7 +25,8 @@ CSharpScanner  scanner-vue (Node)  Projects  Configuration        ← facts only
    docs/*.md, docs/.docwizz/{model,documentation}.json
 ```
 
-`Program.cs` is the CLI and `BuildModel`, which runs the scanners and link steps in that order.
+`Program.cs` is the CLI and `BuildModel`, which runs the scanners and link steps in that order. [Setup.cs](src/DocWizz/Setup.cs) backs `docwizz setup`. It detects the stack from the model, narrows the default
+`docwizz.yaml` to the layers and test globs that files match, and runs the stages in order, isolating failures.
 
 ## The code model
 

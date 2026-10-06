@@ -214,9 +214,12 @@ partial class Generator
         .Select(m => m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value)];
 
     // From the scan's file list, so exclude: and .gitignore apply here too.
-    IEnumerable<string> FindDeploymentFiles() => Files.Where(rel =>
+    IEnumerable<string> FindDeploymentFiles() => Files.Where(rel => IsDeploymentFile(root, rel));
+
+    // A deployment descriptor by name, or a Kubernetes manifest by content. `rel` is relative to `root`, `/`-separated.
+    public static bool IsDeploymentFile(string root, string rel) =>
         DeploymentGlobs.Any(g => FileSystemName.MatchesSimpleExpression(g, g.Contains('/') ? rel : Path.GetFileName(rel)))
-        || IsKubernetes(Path.Combine(root, rel)));
+        || IsKubernetes(Path.Combine(root, rel));
 
     // Any other YAML file with a top-level apiVersion and kind.
     static bool IsKubernetes(string f)

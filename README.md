@@ -24,9 +24,41 @@ git clone https://github.com/mycaravam-crypto/docwizz && cd docwizz
 dotnet build src/DocWizz -c Release
 npm ci --prefix scanner-vue        # only needed for Vue/React/Angular/TypeScript
 alias docwizz="dotnet $PWD/src/DocWizz/bin/Release/net10.0/DocWizz.dll"
-
-docwizz analyze fixture            # try it on the bundled sample app
 ```
+
+Then, in your repository:
+
+```bash
+docwizz setup .
+```
+
+That one command detects the stack, writes a `docwizz.yaml` from what it finds, analyzes the code and the
+architecture, generates the docs into `docs/` and runs the quality gate. It ends with a summary and the next commands
+to run:
+
+```console
+Setup complete.
+
+Stack:          csharp (45 symbols), java (15 symbols), …; ASP.NET Core, Entity Framework Core, Spring Boot, Vue, React, Angular; backend + frontend
+Layers:         ui (7), state (1), client (4), api (3), application (6), domain (3), infrastructure (3)
+Configuration:  ./docwizz.yaml (written)
+Documentation:  ./docs
+Coverage:       37% (profile default)
+Architecture:   3 findings, 1 cycles
+Check:          FAIL — coverage 37% < 80%; 10 critical > 0; 3 violations > 0; 1 cycles > 0
+
+Follow-up:
+  - review architecture.allow: the allowed dependencies are defaults, not your architecture's intent
+  …
+Next useful actions:
+  docwizz generate .       # refresh documentation
+  docwizz check .          # run the quality gate
+  docwizz architecture .   # inspect architecture findings
+```
+
+It never overwrites an existing `docwizz.yaml` without `--force`, and it never sends anything anywhere: `--ai` stays
+opt-in. To try it first, run `docwizz analyze fixture` on the bundled sample app. [CLI.md](CLI.md) has every
+workflow by goal (docs, architecture, CI, AI, impact analysis), every command and flag, and how they combine.
 
 ## Examples
 
@@ -167,16 +199,18 @@ See [AI drafts](#ai-drafts) for the privacy rules.
 
 | Command | Does |
 |---|---|
-| `docwizz init [dir]` | Write a starter `docwizz.yaml` with every default, ready to edit |
+| `docwizz setup [dir] [--force]` | **First run:** detect the stack, write `docwizz.yaml` from evidence, analyze, generate the docs, check |
 | `docwizz analyze <dir>` | Documentation report |
 | `docwizz architecture <dir>` | Layers, layer dependencies, violations, cycles |
 | `docwizz check <dir> [--since <ref>]` | Report; exit 1 if thresholds fail (only on new problems with `--since`) |
 | `docwizz generate <dir> [out] [--html] [--ai]` | Write the docs (default `<dir>/docs`) |
 | `docwizz diff <dir> [ref]` | Changed symbols, affected pages and linked tests vs the last `generate` (or a git ref) |
 | `docwizz diff [dir] <base> <head>` | The same, between two git refs |
-| `docwizz scan <dir> [model.json]` | Dump the raw code model (nodes and edges) |
+| `docwizz init [dir]` | Write a starter `docwizz.yaml` with every default, ready to edit |
+| `docwizz scan <dir> [model.json]` | Dump the raw code model (nodes and edges); for debugging |
 
-Options: `--profile <name|file.yaml>` picks what counts as documented. `--format json` gives machine-readable
+`docwizz help <command>` explains one command. [CLI.md](CLI.md) is the full reference: every option, defaults,
+precedence and exit codes. Options: `--profile <name|file.yaml>` picks what counts as documented. `--format json` gives machine-readable
 `analyze`/`check`/`architecture`/`diff` output. Run `dotnet test --project tests/DocWizz.Tests` for the unit and component tests and `./test.sh` for the end-to-end
 tests against `fixture/` (see [ARCHITECTURE.md](ARCHITECTURE.md#tests)). `--timings` prints the time per stage and
 peak memory; [bench/](bench/README.md) has reproducible benchmarks, the baseline, and advice for large repositories and
@@ -184,7 +218,8 @@ monorepos.
 
 ## Configuration
 
-Run `docwizz init` and edit the `docwizz.yaml` it writes. docwizz looks for the file in the scanned directory first,
+`docwizz setup` writes a `docwizz.yaml` from what the repository shows (`docwizz init` writes the plain defaults).
+Edit it in place. docwizz looks for the file in the scanned directory first,
 then in the current one. This repository's own [docwizz.yaml](docwizz.yaml) is a working example. The settings people
 change most:
 
