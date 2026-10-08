@@ -55,7 +55,7 @@ static class Html
             header { position: sticky; top: 0; z-index: 10; display: flex; gap: .25rem; flex-wrap: wrap; align-items: center; padding: .5rem 1.25rem;
               background: color-mix(in srgb, var(--panel) 85%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
             header .brand { font-weight: 700; color: var(--fg); margin-right: 1rem; letter-spacing: -.01em; } header .brand span { color: var(--accent); }
-            header nav a { color: var(--muted); font-weight: 500; font-size: .9rem; padding: .35rem .7rem; border-radius: 6px; }
+            header nav { display: flex; max-width: 100%; overflow-x: auto; } header nav a { flex: none; color: var(--muted); font-weight: 500; font-size: .9rem; padding: .35rem .7rem; border-radius: 6px; }
             header nav a:hover { color: var(--fg); background: var(--code); text-decoration: none; }
             header nav a[aria-current] { color: var(--accent); background: var(--hover); }
             .search { position: relative; margin-left: auto; }
@@ -94,8 +94,9 @@ static class Html
             .side ul { list-style: none; margin: .25rem 0 0; padding: 0; } .side li { margin: 0; }
             .side a { display: block; padding: .25rem .5rem; border-radius: 6px; color: var(--fg); overflow-wrap: anywhere; }
             .side a:hover { background: var(--code); text-decoration: none; } .side a[aria-current] { color: var(--accent); background: var(--hover); font-weight: 600; }
-            @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } .side { position: static; max-height: none; } }
-            @media (max-width: 640px) { .layout { margin: 0; padding: 0; gap: 0; } .side { padding: .75rem 1rem; border-bottom: 1px solid var(--line); } }
+            /* Narrow screens: content first, the site map after it. */
+            @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } .side { order: 1; position: static; max-height: none; } }
+            @media (max-width: 640px) { .layout { margin: 0; padding: 0; gap: 0; } .side { padding: .75rem 1rem; border-top: 1px solid var(--line); } }
             @media print {
               :root { --bg: #fff; --panel: #fff; --fg: #000; --muted: #444; --line: #ccc; --link: #000; --code: #f4f4f4; --stripe: #fff; --hover: #fff; --shadow: none; }
               header, .side, .skip { display: none; } .layout { display: block; max-width: none; margin: 0; padding: 0; }
@@ -104,7 +105,7 @@ static class Html
             </style></head><body>
             <a class="skip" href="#content">Skip to content</a>
             <header><a class="brand" href="{{up}}index.html">Doc<span>Wizz</span></a><nav>{{nav}}</nav>
-            <div class="search"><input id="q" type="search" placeholder="Search components, endpoints, keys… (/)" aria-label="Search"
+            <div class="search"><input id="q" type="search" placeholder="Search code and endpoints (/)" aria-label="Search"
               role="combobox" aria-expanded="false" aria-controls="hits" aria-autocomplete="list" autocomplete="off"><ul id="hits" role="listbox"></ul></div></header>
             <div class="layout">
             <nav class="side" aria-label="Site">{{side}}</nav>
