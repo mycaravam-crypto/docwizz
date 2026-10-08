@@ -22,6 +22,7 @@ an example and its options.
 | `analyze` | documentation report | developers | yes |
 | `architecture` | architecture diagnostics | architects | optional |
 | `diff` | change impact | developers, CI | optional |
+| `sbom` | CycloneDX manifest SBOM | supply-chain inventory | optional |
 | `remediate` | package update suggestions | maintainers | optional |
 | `init` | blank config with every default | manual setup | no |
 | `scan` | raw code model | advanced, debugging | no |
@@ -178,6 +179,10 @@ docwizz scan . model.json
 This writes every node and edge the scanners found. It is useful when debugging why a symbol is or isn't reported,
 or for building your own tooling on top. Everyday workflows don't need it.
 
+## SBOM inventory
+
+`docwizz sbom .` writes `sbom.cdx.json` (or use `docwizz sbom . output.json`). The exporter reads NuGet, npm, Maven and Gradle **manifests only**. It records direct declared dependencies with a package URL (`purl`) and their version literals or expressions, not resolved or installed packages; ranges, wildcards and property references are kept as declared and left out of `version` and the purl. Project-to-project references appear in the dependency graph. Transitive dependencies, lockfiles, licenses and vulnerability analysis are intentionally outside the MVP. No restore, build or network access occurs. Output is deterministic for identical inputs.
+
 ## Commands
 
 | Command | Syntax | Purpose | Use |
@@ -188,6 +193,7 @@ or for building your own tooling on top. Everyday workflows don't need it.
 | `analyze` | `docwizz analyze <dir> [--format f] [--profile p]` | documentation and architecture report, no gate | everyday |
 | `architecture` | `docwizz architecture <dir> [--format f] [--profile p]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
 | `diff` | `docwizz diff [dir] [base] [head] [--format f] [--profile p]` | change impact vs the last `generate` or git refs | reviews, CI |
+| `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
 | `init` | `docwizz init [dir]` | write a `docwizz.yaml` with every default; refuses to overwrite | manual setup |
 | `scan` | `docwizz scan <dir> [model.json]` | dump the raw code model | advanced |
@@ -236,7 +242,7 @@ or for building your own tooling on top. Everyday workflows don't need it.
 | `setup` | every stage ran (`SUCCESS` or `SUCCESS_WITH_FINDINGS`) | a stage failed (`FAILED`; the others are still reported), or bad arguments |
 | `check` | thresholds pass | thresholds fail, or bad arguments/config |
 | `architecture` | within `max_violations`/`max_cycles` | above them |
-| `analyze`, `generate`, `scan` | done | bad arguments or config |
+| `analyze`, `generate`, `scan`, `sbom` | done | bad arguments or config |
 | `remediate` | done (suggestions alone never fail) | a `--validate` run failed, or bad arguments |
 | `diff` | done | no baseline (`generate` first or pass a ref), unknown ref |
 | `init` | written | `docwizz.yaml` exists |

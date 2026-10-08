@@ -11,6 +11,8 @@ It never guesses intent, and it marks whether each item is *detected*, *inferred
 - **Architecture:** layer violations, cycles and risky patterns (for example, a controller talking to the database).
 - **Docs:** Markdown/HTML pages with Mermaid diagrams: API tables, request flows, system context, data, deployment.
 - **CI:** fails a pull request only on problems *that change introduces*.
+- **SBOM:** a CycloneDX 1.6 inventory of the direct dependencies declared in NuGet, npm, Maven and Gradle manifests, with
+  package URLs; nothing is installed or resolved ([SBOM inventory](CLI.md#sbom-inventory)).
 
 How it works: [ARCHITECTURE.md](ARCHITECTURE.md). What's next: [ROADMAP.md](ROADMAP.md).
 
@@ -248,6 +250,7 @@ See [AI drafts](#ai-drafts) for the privacy rules.
 | `docwizz generate <dir> [out] [--html] [--ai]` | Write the docs (default `<dir>/docs`) |
 | `docwizz diff <dir> [ref]` | Changed symbols, affected pages and linked tests vs the last `generate` (or a git ref) |
 | `docwizz diff [dir] <base> <head>` | The same, between two git refs |
+| `docwizz sbom [dir] [out]` | Export CycloneDX 1.6 JSON from direct manifest dependencies (not resolved/transitive) |
 | `docwizz remediate <dir> [--package <name> --to <version>] [--validate] [--since <ref>]` | Package update suggestions: command or patch, impact, confidence; `--validate` builds and tests them in a temporary copy |
 | `docwizz init [dir]` | Write a starter `docwizz.yaml` with every default, ready to edit |
 | `docwizz scan <dir> [model.json]` | Dump the raw code model (nodes and edges); for debugging |

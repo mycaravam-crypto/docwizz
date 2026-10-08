@@ -54,6 +54,8 @@ static async Task<int> Dispatch(string[] args)
 
     switch (cmd)
     {
+        case "sbom":
+            return SbomCommand(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "sbom.cdx.json"), config);
         case "scan":
             return Scan(path, pos.ElementAtOrDefault(2) ?? "model.json", config);
         case "analyze":
@@ -74,6 +76,17 @@ static async Task<int> Dispatch(string[] args)
         default:
             return Usage($"unknown command {cmd}");
     }
+}
+
+static int SbomCommand(string root, string output, Config config)
+{
+    var files = RepoFiles(root, config);
+    var json = Sbom.Export(root, files);
+    var parent = Path.GetDirectoryName(Path.GetFullPath(output));
+    if (parent is not null) Directory.CreateDirectory(parent);
+    File.WriteAllText(output, json);
+    Console.WriteLine($"→ {output}");
+    return 0;
 }
 
 // Starter config: the defaults, spelled out, to edit in place.
@@ -157,6 +170,7 @@ static string Reference() => $"""
       docwizz architecture <dir>        layers, dependencies, violations; exit 1 above check thresholds
       docwizz diff <dir> [ref]          what changed vs <ref> (default: docs/.docwizz/model.json)
       docwizz diff [dir] <base> <head>  what changed between two git refs
+      docwizz sbom [dir] [out]          export direct manifest dependencies as CycloneDX JSON
       docwizz remediate <dir>           package update suggestions: command or patch, impact, confidence
         [--package <name> --to <ver>]   propose this update (default: remediation.targets and version drift)
         [--validate]                    apply each in a temporary copy and run restore, build, tests
