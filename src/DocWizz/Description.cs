@@ -32,7 +32,9 @@ partial class Generator
             ("[Dependencies](architecture.md)", "layering rules, violations, cycles"),
             ("[API](api.md)", "interfaces offered to clients"),
             ("[Data](views/data.md)", "persisted entities and state"),
-            ("[Deployment](views/deployment.md)", "where the units run") })
+            ("[Deployment](views/deployment.md)", "where the units run"),
+            ("[Packages](views/packages.md)", "declared third-party packages, versions and manifests") }
+            .Where(v => !v.Item1.Contains("views/packages.md") || Inventory.Libraries.Count > 0))
             sb.AppendLine($"| {view.Split(']')[0].TrimStart('[')} | {concern} | {view} |");
         sb.AppendLine();
 
