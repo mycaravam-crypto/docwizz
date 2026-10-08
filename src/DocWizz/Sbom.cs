@@ -31,10 +31,9 @@ static class Sbom
         {
             var package = packages[item.To];
             var ecosystem = package.Tags?.FirstOrDefault() ?? "unknown";
-            components.Add(new Dictionary<string, object?>
+            var component = new Dictionary<string, object?>
             {
                 ["type"] = "library", ["name"] = package.Name,
-                ["version"] = Exact(item.Version) ? item.Version : null,
                 ["bom-ref"] = Ref(item.To, item.Version ?? "unresolved"),
                 ["properties"] = new[]
                 {
@@ -42,7 +41,10 @@ static class Sbom
                     new { name = "docwizz:declaredVersion", value = item.Version ?? "(unspecified)" },
                     new { name = "docwizz:versionStatus", value = Exact(item.Version) ? "literal (not resolved)" : "unresolved" }
                 }
-            });
+            };
+            // Dictionary entries ignore JsonIgnoreCondition, so omit an unresolved version explicitly.
+            if (Exact(item.Version)) component["version"] = item.Version;
+            components.Add(component);
         }
         var dependencies = projects.Select(p => new
         {
