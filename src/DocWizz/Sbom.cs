@@ -21,21 +21,22 @@ static class Sbom
             !version.Any(c => "^~*<>[]() ${}".Contains(c)) && !version.StartsWith("latest", StringComparison.OrdinalIgnoreCase);
         var components = new List<object>();
         foreach (var project in projects)
-            components.Add(new
+            components.Add(new Dictionary<string, object?>
             {
-                type = "application", name = project.Name, bom_ref = Ref(project.Id),
-                properties = new[] { new { name = "docwizz:manifest", value = project.File } }
+                ["type"] = "application", ["name"] = project.Name, ["bom-ref"] = Ref(project.Id),
+                ["properties"] = new[] { new { name = "docwizz:manifest", value = project.File } }
             });
         foreach (var item in refs.Select(r => (r.To, r.Version)).Distinct()
             .OrderBy(r => r.To, StringComparer.Ordinal).ThenBy(r => r.Version, StringComparer.Ordinal))
         {
             var package = packages[item.To];
             var ecosystem = package.Tags?.FirstOrDefault() ?? "unknown";
-            components.Add(new
+            components.Add(new Dictionary<string, object?>
             {
-                type = "library", name = package.Name, version = Exact(item.Version) ? item.Version : null,
-                bom_ref = Ref(item.To, item.Version ?? "unresolved"),
-                properties = new[]
+                ["type"] = "library", ["name"] = package.Name,
+                ["version"] = Exact(item.Version) ? item.Version : null,
+                ["bom-ref"] = Ref(item.To, item.Version ?? "unresolved"),
+                ["properties"] = new[]
                 {
                     new { name = "docwizz:ecosystem", value = ecosystem },
                     new { name = "docwizz:declaredVersion", value = item.Version ?? "(unspecified)" },
