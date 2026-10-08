@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 // Manifest-derived inventory only: no restore, network, lockfile resolution or inferred transitives.
 static class Sbom
 {
+    // CycloneDX 1.6 JSON for the projects and direct declared packages in the given manifests, byte-identical for identical inputs.
     public static string Export(string root, IEnumerable<string> files)
     {
         var (nodes, edges) = Projects.Scan(root, files.Where(f =>
