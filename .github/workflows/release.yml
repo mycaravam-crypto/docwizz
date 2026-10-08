@@ -47,7 +47,8 @@ jobs:
           VERSION: ${{ steps.version.outputs.value }}
         run: |
           dotnet build src/DocWizz/DocWizz.csproj -c Release --nologo -p:Version="$VERSION"
-          dotnet test --project tests/DocWizz.Tests -c Release --nologo -p:Version="$VERSION"
+          # No --nologo here: on Microsoft.Testing.Platform it reaches the test app, which rejects it and runs zero tests.
+          dotnet test --project tests/DocWizz.Tests -c Release -p:Version="$VERSION"
       - name: Tag and publish
         if: steps.version.outputs.value != ''
         env:
