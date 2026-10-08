@@ -11,6 +11,8 @@ It never guesses intent, and it marks whether each item is *detected*, *inferred
 - **Architecture:** layer violations, cycles and risky patterns (for example, a controller talking to the database).
 - **Docs:** Markdown/HTML pages with Mermaid diagrams: API tables, request flows, system context, data, deployment.
 - **CI:** fails a pull request only on problems *that change introduces*.
+- **SBOM:** a CycloneDX 1.6 inventory of the direct dependencies declared in NuGet, npm, Maven and Gradle manifests, with
+  package URLs; nothing is installed or resolved ([SBOM inventory](CLI.md#sbom-inventory)).
 
 How it works: [ARCHITECTURE.md](ARCHITECTURE.md). What's next: [ROADMAP.md](ROADMAP.md).
 
