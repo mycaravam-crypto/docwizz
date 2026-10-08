@@ -6,9 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>docwizz</ToolCommandName>
-    <!-- The one place the version lives (SemVer); docwizz version and setup read it. Bumped on every merge to main by
-         .github/workflows/release.yml, from the PR's release label (CLI.md#releases). -->
-    <Version>0.1.0</Version>
+    <!-- Official release builds supply -p:Version from the immutable Git tag. -->
+    <Version Condition="'$(Version)' == ''">0.0.0-dev</Version>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Markdig" Version="1.4.0" />
