@@ -150,7 +150,9 @@ The model separates what the code states from what DocWizz concludes:
   dependency graph of project → package and project → project references. Only a plain literal (`1.2.3`) fills `version`
   and the purl's version; ranges, wildcards, properties and git/file specs stay as `docwizz:declaredVersion`, marked
   unresolved. Direct dependencies only: nothing is restored, no lockfile is read, no transitive is inferred. The output is
-  byte-identical for identical inputs.
+  byte-identical for identical inputs. The same inventory (`Sbom.Collect`) feeds the generated
+  `views/packages.md`: every package with its declared versions per project and manifest, the ones declared at more than
+  one version first; the page is left out when no manifest declares a package.
 - **[Remediation](src/DocWizz/Remediation.cs)** (`docwizz remediate`) turns package findings into suggestions. Targets
   come from `--package/--to`, `remediation.targets`, or NuGet version drift (align on the highest version). Each
   suggestion keeps three kinds of evidence apart. *Detected*: the declared version and the line that declares it

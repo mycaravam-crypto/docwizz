@@ -83,6 +83,28 @@ public class SbomTests
     }
 
     [Fact]
+    public void Inventory_groups_projects_per_declared_version_and_ignores_non_project_edges()
+    {
+        var nodes = new List<Node>
+        {
+            new("proj:a/package.json", "project", "a", "a/package.json", 1), new("proj:b/package.json", "project", "b", "b/package.json", 1),
+            new("pkg:npm:common", "package", "common", "a/package.json", 1, Tags: ["npm"]),
+        };
+        var edges = new List<Edge>
+        {
+            new("proj:b/package.json", "pkg:npm:common", "depends-on", "1.0.0"), new("proj:a/package.json", "pkg:npm:common", "depends-on", "1.0.0"),
+            new("proj:a/package.json", "pkg:npm:common", "depends-on", "^2.0.0"), new("class:Foo", "pkg:npm:common", "depends-on", "9.9.9"),
+        };
+        var inventory = Sbom.Collect(nodes, edges);
+        Assert.Equal(["1.0.0", "^2.0.0"], inventory.Libraries.Select(l => l.Declared));
+        Assert.Equal(["proj:a/package.json", "proj:b/package.json"], inventory.Libraries[0].Projects);
+        Assert.True(inventory.Libraries[0].Exact);
+        Assert.Equal("pkg:npm/common@1.0.0", inventory.Libraries[0].Purl);
+        Assert.False(inventory.Libraries[1].Exact);
+        Assert.Equal("pkg:npm/common", inventory.Libraries[1].Purl);
+    }
+
+    [Fact]
     public void Empty_repository_produces_an_empty_bom()
     {
         using var src = new Sources(("README.md", "# empty"));

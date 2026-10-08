@@ -8,14 +8,17 @@ partial class Generator
 {
     const int MaxViewNodes = 40;
 
+    // The packages view only exists when some manifest declares a package.
     IEnumerable<(string Page, string Title, Func<string> Body)> Views() =>
-    [
-        ("context", "System context", ContextView),
-        ("containers", "Containers", ContainerView),
-        ("components", "Components", ComponentView),
-        ("data", "Data", DataView),
-        ("deployment", "Deployment", DeploymentView),
-    ];
+        new (string Page, string Title, Func<string> Body)[]
+        {
+            ("context", "System context", ContextView),
+            ("containers", "Containers", ContainerView),
+            ("components", "Components", ComponentView),
+            ("data", "Data", DataView),
+            ("deployment", "Deployment", DeploymentView),
+            ("packages", "Packages", PackagesView),
+        }.Where(v => v.Page != "packages" || Inventory.Libraries.Count > 0);
 
     string SystemName => Path.GetFileName(Path.GetFullPath(root).TrimEnd('/'));
     List<Node> Projects => model.Nodes.Where(n => n.Kind == "project").ToList();
@@ -121,6 +124,7 @@ partial class Generator
             foreach (var g in packages.OrderBy(g => g.Key))
                 sb.AppendLine($"- **{g.Key}** ({g.Count()}): {string.Join(", ", g.Select(p => $"`{p.Name}`").Order())}");
             sb.AppendLine();
+            if (Inventory.Libraries.Count > 0) sb.AppendLine("Declared versions and the manifests that declare them: [packages](packages.md).\n");
         }
         return sb.ToString();
     }
