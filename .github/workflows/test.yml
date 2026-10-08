@@ -15,7 +15,9 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with: { dotnet-version: 10.0.x }
       - name: Release version rule
-        run: .github/scripts/next-version.test.sh
+        run: |
+          bash .github/scripts/next-version.test.sh
+          bash .github/scripts/semver-next.test.sh
       - run: dotnet build tests/DocWizz.Tests --nologo -v q
       - name: Unit tests
         run: dotnet test --project tests/DocWizz.Tests --no-build --filter-namespace DocWizz.Tests.Unit
