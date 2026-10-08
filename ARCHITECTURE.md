@@ -145,6 +145,12 @@ The model separates what the code states from what DocWizz concludes:
   and changed symbol also gets its linked tests ([TestLinks](src/DocWizz/TestLinks.cs): `tests` edges to it, its
   interface, an implementation or a member — the same rule as the analyzer's "tested"), or is listed as unlinked.
   A project whose package version changed is listed with the update's kind and impact (see Remediation).
+- **[Sbom](src/DocWizz/Sbom.cs)** (`docwizz sbom`) writes CycloneDX 1.6 JSON from the Projects scan: one `application`
+  component per project (with its manifest), one `library` per declared package and version, with a package URL, and a
+  dependency graph of project → package and project → project references. Only a plain literal (`1.2.3`) fills `version`
+  and the purl's version; ranges, wildcards, properties and git/file specs stay as `docwizz:declaredVersion`, marked
+  unresolved. Direct dependencies only: nothing is restored, no lockfile is read, no transitive is inferred. The output is
+  byte-identical for identical inputs.
 - **[Remediation](src/DocWizz/Remediation.cs)** (`docwizz remediate`) turns package findings into suggestions. Targets
   come from `--package/--to`, `remediation.targets`, or NuGet version drift (align on the highest version). Each
   suggestion keeps three kinds of evidence apart. *Detected*: the declared version and the line that declares it
