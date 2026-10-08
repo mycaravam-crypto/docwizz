@@ -181,7 +181,7 @@ or for building your own tooling on top. Everyday workflows don't need it.
 
 ## SBOM inventory
 
-`docwizz sbom .` writes `sbom.cdx.json` (or use `docwizz sbom . output.json`). The exporter reads NuGet, npm, Maven and Gradle **manifests only**. It records direct declared dependencies and their version literals or expressions, not resolved or installed packages. Transitive dependencies, lockfiles, licenses and vulnerability analysis are intentionally outside the MVP. No restore, build or network access occurs. Output is deterministic for identical inputs.
+`docwizz sbom .` writes `sbom.cdx.json` (or use `docwizz sbom . output.json`). The exporter reads NuGet, npm, Maven and Gradle **manifests only**. It records direct declared dependencies with a package URL (`purl`) and their version literals or expressions, not resolved or installed packages; ranges, wildcards and property references are kept as declared and left out of `version` and the purl. Project-to-project references appear in the dependency graph. Transitive dependencies, lockfiles, licenses and vulnerability analysis are intentionally outside the MVP. No restore, build or network access occurs. Output is deterministic for identical inputs.
 
 ## Commands
 
