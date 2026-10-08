@@ -34,6 +34,7 @@ public class CliTests
     [InlineData("remediate . --package Newtonsoft.Json --to 13.0.3 --format json", null)]
     [InlineData("remediate . --since main", null)]
     [InlineData("scan . --timings", null)]
+    [InlineData("sbom . out.json", null)]
     [InlineData("init . --help", null)]
     [InlineData("", null)]
     [InlineData("help generate", null)]
