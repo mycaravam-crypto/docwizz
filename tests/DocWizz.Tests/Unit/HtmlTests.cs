@@ -1,0 +1,74 @@
+namespace DocWizz.Tests.Unit;
+
+public class HtmlTests
+{
+    static readonly Dictionary<string, string> Pages = new()
+    {
+        ["index.md"] = "demo", ["api.md"] = "API endpoints", ["architecture-description.md"] = "Architecture description",
+        ["modules/src-Core.md"] = "src/Core", ["modules/src-Web.md"] = "src/Web", ["views/context.md"] = "System context",
+    };
+
+    [Fact]
+    public void Links_to_generated_pages_become_html_and_source_links_stay()
+    {
+        var html = Html.Page("modules/src-Core.md",
+            "# src/Core & co\n\nSee [API](../api.md#get-orders), [notes](../notes.md) and [source](../../src/Core/Order.cs).\n", Pages);
+        Assert.Contains("href=\"../api.html#get-orders\"", html);
+        Assert.Contains("href=\"../notes.md\"", html);
+        Assert.Contains("href=\"../../src/Core/Order.cs\"", html);
+        Assert.Contains("<title>src/Core &amp; co</title>", html);
+    }
+
+    [Fact]
+    public void Sidebar_reaches_every_page_relative_to_the_current_one()
+    {
+        var html = Html.Page("modules/src-Core.md", "# src/Core\n", Pages);
+        foreach (var page in Pages.Keys)
+            Assert.Contains($"href=\"../{Path.ChangeExtension(page, ".html")}\"", html);
+        Assert.Contains("href=\"../modules/src-Core.html\" aria-current=\"page\"", html);
+        // The group holding the current page is open, the others closed.
+        Assert.Contains("<details open><summary>Modules</summary>", html);
+        Assert.Contains("<details><summary>Views</summary>", html);
+
+        var index = Html.Page("index.md", "# demo\n", Pages);
+        Assert.Contains("href=\"modules/src-Web.html\"", index);
+        Assert.Contains("href=\"index.html\" aria-current=\"page\"", index);
+    }
+
+    [Fact]
+    public void Lists_the_sections_of_pages_with_three_or_more()
+    {
+        var many = Html.Page("api.md", "# API endpoints\n\n## Orders\n\n## Two `words`\n\n## Users\n", Pages);
+        Assert.Contains("On this page", many);
+        Assert.Contains("<a href=\"#orders\">Orders</a>", many);
+        Assert.Contains("<a href=\"#two-words\">Two words</a>", many);
+        Assert.Contains("<a href=\"#users\">Users</a>", many);
+
+        var few = Html.Page("api.md", "# API endpoints\n\n## Orders\n\n## Users\n", Pages);
+        Assert.DoesNotContain("On this page", few);
+    }
+
+    [Fact]
+    public void Mermaid_is_pinned_and_search_is_a_combobox()
+    {
+        var html = Html.Page("index.md", "# demo\n", Pages);
+        Assert.Matches(@"mermaid@\d+\.\d+\.\d+/", html);
+        Assert.Contains("role=\"combobox\"", html);
+        Assert.Contains("href=\"#content\"", html);
+        Assert.Contains("@media print", html);
+    }
+
+    [Fact]
+    public void Title_falls_back_to_the_file_name()
+    {
+        Assert.Equal("Quality", Html.Title("quality.md", "<!-- marker -->\n# Quality\n\ntext"));
+        Assert.Equal("context", Html.Title("views/context.md", "no heading"));
+    }
+
+    [Fact]
+    public void Same_pages_in_any_order_give_the_same_html()
+    {
+        var reversed = Pages.Reverse().ToDictionary(p => p.Key, p => p.Value);
+        Assert.Equal(Html.Page("index.md", "# demo\n", Pages), Html.Page("index.md", "# demo\n", reversed));
+    }
+}

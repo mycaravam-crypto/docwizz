@@ -50,8 +50,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         pages["search.json"] = SearchIndex();
         if (WriteHtml)
         {
-            var markdown = pages.Keys.Where(k => k.EndsWith(".md")).ToHashSet();
-            foreach (var rel in markdown) pages[Path.ChangeExtension(rel, ".html")] = Html.Page(rel, pages[rel], markdown);
+            var markdown = pages.Where(p => p.Key.EndsWith(".md")).ToDictionary(p => p.Key, p => Html.Title(p.Key, p.Value));
+            foreach (var rel in markdown.Keys) pages[Path.ChangeExtension(rel, ".html")] = Html.Page(rel, pages[rel], markdown);
             pages["search.js"] = $"window.docwizzSearch = {pages["search.json"]};\n";
         }
 
