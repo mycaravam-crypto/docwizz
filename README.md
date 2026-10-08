@@ -116,7 +116,7 @@ $ docwizz generate fixture docs --html
 
 That writes `index`, `architecture`, `api`, `frontend` and `quality` pages, one page per folder under `modules/`, and
 `views/` for context, containers, components, data and deployment. With `--html` you also get a browsable site with
-search. For example, `api.md` traces every endpoint to where it ends up:
+a sidebar to every page and keyboard search. For example, `api.md` traces every endpoint to where it ends up:
 
 ```markdown
 | GET | `/api/stock/{sku}` | Stock for one article. | `sku: string` | `string` | — | StockController.cs:12 | `level` |

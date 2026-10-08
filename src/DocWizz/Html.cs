@@ -4,25 +4,41 @@ using Markdig;
 // HTML twins of the generated Markdown, written next to it: the same tree, so relative links to sources keep working.
 // Links between generated pages go to their HTML twin; Mermaid blocks render with mermaid.js (from a CDN, the code stays
 // readable offline); search.js holds the search index as a script, which works from file:// where fetch() does not.
+// Every page carries the whole site in its sidebar, so each one stands alone and opens from disk.
 static class Html
 {
+    static readonly (string Page, string Label)[] Top =
+        [("index.md", "Overview"), ("architecture.md", "Architecture"), ("api.md", "API"), ("frontend.md", "Frontend"), ("quality.md", "Quality")];
+    // Pinned: a new Mermaid release must not change every diagram unannounced.
+    public const string MermaidUrl = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+
+    // The page's `# ` heading, else its file name.
+    public static string Title(string rel, string markdown)
+    {
+        var heading = Regex.Match(markdown, @"^# (.+)$", RegexOptions.Multiline);
+        return heading.Success ? heading.Groups[1].Value.Trim() : Path.GetFileNameWithoutExtension(rel);
+    }
+
     static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
         .UseAutoIdentifiers(Markdig.Extensions.AutoIdentifiers.AutoIdentifierOptions.GitHub) // same anchors as the Markdown links
         .UseAdvancedExtensions().Build();
 
-    public static string Page(string rel, string markdown, ISet<string> pages)
+    // `pages`: every generated Markdown page (relative, `/`-separated) and its title.
+    public static string Page(string rel, string markdown, IReadOnlyDictionary<string, string> pages)
     {
         var dir = Path.GetDirectoryName(rel)?.Replace('\\', '/') ?? "";
         var body = Markdown.ToHtml(markdown.Replace(Generator.Marker, ""), Pipeline);
         body = Regex.Replace(body, @"href=""([^""#:?]+)\.md(#[^""]*)?""", m =>
         {
             var target = Path.GetRelativePath(".", Path.Combine(dir, m.Groups[1].Value + ".md")).Replace('\\', '/');
-            return pages.Contains(target) ? $"href=\"{m.Groups[1].Value}.html{m.Groups[2].Value}\"" : m.Value;
+            return pages.ContainsKey(target) ? $"href=\"{m.Groups[1].Value}.html{m.Groups[2].Value}\"" : m.Value;
         });
         var up = string.Concat(Enumerable.Repeat("../", rel.Count(c => c == '/')));
-        var nav = string.Concat(new[] { ("index", "Overview"), ("architecture", "Architecture"), ("api", "API"), ("frontend", "Frontend"), ("quality", "Quality") }
-            .Select(n => $"<a href=\"{up}{n.Item1}.html\"{(rel == n.Item1 + ".md" ? " aria-current=\"page\"" : "")}>{n.Item2}</a>"));
-        var title = Regex.Match(markdown, @"^# (.+)$", RegexOptions.Multiline).Groups[1].Value.Trim();
+        string Link(string page, string label) =>
+            $"<a href=\"{up}{Path.ChangeExtension(page, ".html")}\"{(page == rel ? " aria-current=\"page\"" : "")}>{Enc(label)}</a>";
+        var nav = string.Concat(Top.Select(n => Link(n.Page, n.Label)));
+        var title = Title(rel, markdown);
+        var side = Sidebar(rel, body, pages, Link);
         return $$"""
             <!doctype html>
             {{Generator.Marker}}
@@ -39,7 +55,7 @@ static class Html
             header { position: sticky; top: 0; z-index: 10; display: flex; gap: .25rem; flex-wrap: wrap; align-items: center; padding: .5rem 1.25rem;
               background: color-mix(in srgb, var(--panel) 85%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
             header .brand { font-weight: 700; color: var(--fg); margin-right: 1rem; letter-spacing: -.01em; } header .brand span { color: var(--accent); }
-            header nav a { color: var(--muted); font-weight: 500; font-size: .9rem; padding: .35rem .7rem; border-radius: 6px; }
+            header nav { display: flex; max-width: 100%; overflow-x: auto; } header nav a { flex: none; color: var(--muted); font-weight: 500; font-size: .9rem; padding: .35rem .7rem; border-radius: 6px; }
             header nav a:hover { color: var(--fg); background: var(--code); text-decoration: none; }
             header nav a[aria-current] { color: var(--accent); background: var(--hover); }
             .search { position: relative; margin-left: auto; }
@@ -68,32 +84,104 @@ static class Html
             thead:not(:has(th:not(:empty))) { display: none; }
             tbody tr:nth-child(even) { background: var(--stripe); } tbody tr:hover { background: var(--hover); } tbody tr:last-child td { border-bottom: 0; }
             ul, ol { padding-left: 1.4rem; } li { margin: .2rem 0; }
+            #hits .none { padding: .35rem .6rem; color: var(--muted); } #hits [aria-selected=true] a { background: var(--hover); }
+            .skip { position: absolute; left: -999px; } .skip:focus { left: 1rem; top: .5rem; z-index: 20; padding: .4rem .75rem; background: var(--panel); border-radius: 6px; }
+            .layout { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 1.5rem; align-items: start; max-width: 94rem; margin: 1.5rem auto 3rem; padding: 0 1.25rem; }
+            .layout main { margin: 0; max-width: none; }
+            .side { position: sticky; top: 4rem; max-height: calc(100vh - 5rem); overflow-y: auto; font-size: .875rem; }
+            .side details { margin-bottom: .75rem; } .side summary { cursor: pointer; padding: .25rem .5rem; color: var(--muted); font-size: .75rem; font-weight: 600;
+              text-transform: uppercase; letter-spacing: .04em; }
+            .side ul { list-style: none; margin: .25rem 0 0; padding: 0; } .side li { margin: 0; }
+            .side a { display: block; padding: .25rem .5rem; border-radius: 6px; color: var(--fg); overflow-wrap: anywhere; }
+            .side a:hover { background: var(--code); text-decoration: none; } .side a[aria-current] { color: var(--accent); background: var(--hover); font-weight: 600; }
+            /* Narrow screens: content first, the site map after it. */
+            @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } .side { order: 1; position: static; max-height: none; } }
+            @media (max-width: 640px) { .layout { margin: 0; padding: 0; gap: 0; } .side { padding: .75rem 1rem; border-top: 1px solid var(--line); } }
+            @media print {
+              :root { --bg: #fff; --panel: #fff; --fg: #000; --muted: #444; --line: #ccc; --link: #000; --code: #f4f4f4; --stripe: #fff; --hover: #fff; --shadow: none; }
+              header, .side, .skip { display: none; } .layout { display: block; max-width: none; margin: 0; padding: 0; }
+              main { padding: 0; border: 0; box-shadow: none; } pre { white-space: pre-wrap; } h2, h3 { break-after: avoid; } tr, pre { break-inside: avoid; }
+            }
             </style></head><body>
+            <a class="skip" href="#content">Skip to content</a>
             <header><a class="brand" href="{{up}}index.html">Doc<span>Wizz</span></a><nav>{{nav}}</nav>
-            <div class="search"><input id="q" type="search" placeholder="Search components, endpoints, keys…" aria-label="Search"><ul id="hits"></ul></div></header>
-            <main>
+            <div class="search"><input id="q" type="search" placeholder="Search code and endpoints (/)" aria-label="Search"
+              role="combobox" aria-expanded="false" aria-controls="hits" aria-autocomplete="list" autocomplete="off"><ul id="hits" role="listbox"></ul></div></header>
+            <div class="layout">
+            <nav class="side" aria-label="Site">{{side}}</nav>
+            <main id="content">
             {{body}}
             </main>
+            </div>
             <script src="{{up}}search.js"></script>
             <script>
+            // Exact names first, then prefixes, then substrings; shorter names before longer ones.
             const q = document.getElementById('q'), hits = document.getElementById('hits');
-            q.addEventListener('input', () => {
+            let active = -1;
+            const rank = (name, t) => { const n = name.toLowerCase(); return n === t ? 0 : n.startsWith(t) ? 1 : n.includes(t) ? 2 : -1; };
+            function render() {
               const t = q.value.trim().toLowerCase();
-              hits.replaceChildren(...(t.length < 2 ? [] : (window.docwizzSearch || []).filter(e => e.name.toLowerCase().includes(t)).slice(0, 20).map(e => {
-                const li = document.createElement('li'), a = document.createElement('a'), k = document.createElement('small');
-                a.href = '{{up}}' + e.page.replace(/\.md(#|$)/, '.html$1'); a.textContent = e.name; k.textContent = ' ' + e.kind;
-                a.append(k); li.append(a); return li;
-              })));
+              active = -1; q.removeAttribute('aria-activedescendant');
+              const items = (t.length < 2 ? [] : (window.docwizzSearch || []).map(e => [rank(e.name, t), e]).filter(r => r[0] >= 0)
+                .sort((a, b) => a[0] - b[0] || a[1].name.length - b[1].name.length || a[1].name.localeCompare(b[1].name))
+                .slice(0, 20)).map(([, e], i) => {
+                  const li = document.createElement('li'), a = document.createElement('a'), k = document.createElement('small');
+                  li.id = 'hit-' + i; li.setAttribute('role', 'option'); li.setAttribute('aria-selected', 'false');
+                  a.href = '{{up}}' + e.page.replace(/\.md(#|$)/, '.html$1'); a.textContent = e.name; a.tabIndex = -1; k.textContent = ' ' + e.kind;
+                  a.append(k); li.append(a); return li;
+                });
+              if (t.length >= 2 && !items.length) {
+                const li = document.createElement('li'); li.className = 'none'; li.textContent = 'No matches'; items.push(li);
+              }
+              hits.replaceChildren(...items); q.setAttribute('aria-expanded', String(items.length > 0));
+            }
+            function select(i) {
+              const options = hits.querySelectorAll('[role=option]');
+              if (!options.length) return;
+              active = (i + options.length) % options.length;
+              options.forEach((o, j) => o.setAttribute('aria-selected', String(j === active)));
+              options[active].scrollIntoView({ block: 'nearest' }); q.setAttribute('aria-activedescendant', options[active].id);
+            }
+            q.addEventListener('input', render);
+            q.addEventListener('keydown', e => {
+              if (e.key === 'ArrowDown') { e.preventDefault(); select(active + 1); }
+              else if (e.key === 'ArrowUp') { e.preventDefault(); select(active < 0 ? -1 : active - 1); }
+              else if (e.key === 'Enter') { const a = hits.querySelectorAll('[role=option] a')[Math.max(active, 0)]; if (a) location.href = a.href; }
+              else if (e.key === 'Escape') { q.value = ''; render(); q.blur(); }
+            });
+            document.addEventListener('keydown', e => {
+              const el = document.activeElement;
+              if (e.key === '/' && el !== q && !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && !el.isContentEditable) { e.preventDefault(); q.focus(); }
             });
             </script>
             <script type="module">
             if (document.querySelector('.mermaid')) {
-              const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+              const { default: mermaid } = await import('{{MermaidUrl}}');
               mermaid.initialize({ startOnLoad: false, theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default' });
               await mermaid.run();
             }
             </script>
             </body></html>
             """;
+    }
+
+    static string Enc(string s) => System.Net.WebUtility.HtmlEncode(s);
+
+    // Pages, Views and Modules, the group holding this page open; above them this page's `##` sections when there are 3+.
+    static string Sidebar(string rel, string body, IReadOnlyDictionary<string, string> pages, Func<string, string, string> link)
+    {
+        string Group(string name, IReadOnlyList<(string Page, string Label)> items, bool open) => items.Count == 0 ? "" :
+            $"<details{(open || items.Any(i => i.Page == rel) ? " open" : "")}><summary>{name}</summary><ul>"
+            + string.Concat(items.Select(i => $"<li>{link(i.Page, i.Label)}</li>")) + "</ul></details>";
+        List<(string, string)> Under(string folder) => pages.Where(p => p.Key.StartsWith(folder + "/"))
+            .OrderBy(p => p.Value, StringComparer.Ordinal).ThenBy(p => p.Key, StringComparer.Ordinal).Select(p => (p.Key, p.Value)).ToList();
+        var topPages = Top.Where(t => pages.ContainsKey(t.Page))
+            .Concat(pages.Where(p => !p.Key.Contains('/') && Top.All(t => t.Page != p.Key)).OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => (p.Key, p.Value)))
+            .ToList();
+        // Markdig's auto identifiers: <h2 id="...">text</h2>; the text is already HTML, only tags are dropped.
+        var sections = Regex.Matches(body, @"<h2 id=""([^""]+)"">(.*?)</h2>")
+            .Select(m => $"<li><a href=\"#{m.Groups[1].Value}\">{Regex.Replace(m.Groups[2].Value, "<[^>]+>", "")}</a></li>").ToList();
+        var toc = sections.Count >= 3 ? $"<details open><summary>On this page</summary><ul>{string.Concat(sections)}</ul></details>" : "";
+        return toc + Group("Pages", topPages, true) + Group("Views", Under("views"), false) + Group("Modules", Under("modules"), false);
     }
 }

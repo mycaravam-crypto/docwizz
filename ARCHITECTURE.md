@@ -190,8 +190,11 @@ overwritten. `docs/architecture/*.md` and anything else written by hand is linke
 ## AI
 
 With `--html`, [Html](src/DocWizz/Html.cs) renders every page with Markdig next to its Markdown twin, so relative
-links to sources still work; links between generated pages point at the HTML, Mermaid renders client-side, and a
-search box reads the index from `search.js`.
+links to sources still work; links between generated pages point at the HTML, and Mermaid (a pinned version) renders
+client-side. Each page carries the whole site in a sidebar (pages, views, modules; the current group open) and lists its
+`##` sections when it has three or more, so every page stands alone and opens from disk. The search box reads the index
+from `search.js`, ranks exact names, then prefixes, then substrings, and works from the keyboard (`/`, arrows, Enter,
+Escape). A print stylesheet drops the navigation and prints light.
 
 [AiProse](src/DocWizz/AiProse.cs) drafts documentation for items that still lack a summary (summary, responsibilities,
 behaviour, side effects, errors, usage) and an overview per module. The model answers in JSON, one list of sentences
