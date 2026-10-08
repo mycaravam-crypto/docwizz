@@ -47,7 +47,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.value }}
         run: |
           dotnet build src/DocWizz/DocWizz.csproj -c Release --nologo -p:Version="$VERSION"
-          dotnet test src/DocWizz/DocWizz.csproj -c Release --no-build --nologo -p:Version="$VERSION"
+          dotnet test --project tests/DocWizz.Tests -c Release --nologo -p:Version="$VERSION"
       - name: Tag and publish
         if: steps.version.outputs.value != ''
         env:
