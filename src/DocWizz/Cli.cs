@@ -35,6 +35,8 @@ static class Cli
             "docwizz architecture .", "--format json, --profile", ["format", "profile"]),
         ["diff"] = new("diff [dir] [base] [head]", "changed symbols, affected pages and linked tests vs the last generate or git refs", "reviews, CI",
             "docwizz diff HEAD~1 HEAD", "--format json, --profile", ["format", "profile"]),
+        ["product"] = new("product <dir> <template.yaml> [out.md]", "render a deterministic product draft (no AI)", "product documents",
+            "docwizz product . templates/vmodell-xt/sw-architecture.yaml", "no options", []),
         ["sbom"] = new("sbom [dir] [out]", "export direct manifest dependencies as CycloneDX 1.6 JSON", "supply-chain inventory",
             "docwizz sbom . sbom.cdx.json", "no options", []),
         ["remediate"] = new("remediate <dir>", "package update suggestions: command or patch, impact, confidence", "maintenance",

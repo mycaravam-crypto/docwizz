@@ -250,6 +250,7 @@ See [AI drafts](#ai-drafts) for the privacy rules.
 | `docwizz generate <dir> [out] [--html] [--refresh-html-on-version-change] [--progress] [--ai]` | Write the docs (default `<dir>/docs`) |
 | `docwizz diff <dir> [ref]` | Changed symbols, affected pages and linked tests vs the last `generate` (or a git ref) |
 | `docwizz diff [dir] <base> <head>` | The same, between two git refs |
+| `docwizz product <dir> <template.yaml> [out.md]` | Deterministic product draft from YAML (no AI) |
 | `docwizz sbom [dir] [out]` | Export CycloneDX 1.6 JSON from direct manifest dependencies (not resolved/transitive) |
 | `docwizz remediate <dir> [--package <name> --to <version>] [--validate] [--since <ref>]` | Package update suggestions: command or patch, impact, confidence; `--validate` builds and tests them in a temporary copy |
 | `docwizz init [dir]` | Write a starter `docwizz.yaml` with every default, ready to edit |
