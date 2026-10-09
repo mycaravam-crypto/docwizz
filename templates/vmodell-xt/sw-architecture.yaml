@@ -15,7 +15,7 @@ sections:
     required: true
     sources: [code]
   - id: interfaces
-    title: Schnittstellen und Abhaengigkeiten
+    title: Schnittstellen und Abhängigkeiten
     required: true
     sources: [code, project]
   - id: decisions
