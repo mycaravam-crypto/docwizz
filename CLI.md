@@ -197,6 +197,7 @@ or for building your own tooling on top. Everyday workflows don't need it.
 | `analyze` | `docwizz analyze <dir> [--format f] [--profile p]` | documentation and architecture report, no gate | everyday |
 | `architecture` | `docwizz architecture <dir> [--format f] [--profile p]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
 | `diff` | `docwizz diff [dir] [base] [head] [--format f] [--profile p]` | change impact vs the last `generate` or git refs | reviews, CI |
+| `product` | `docwizz product <dir> <template.yaml> [out.md]` | versioned product draft without AI | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
 | `init` | `docwizz init [dir]` | write a `docwizz.yaml` with every default; refuses to overwrite | manual setup |
@@ -309,10 +310,11 @@ and creates a GitHub release with generated notes. Nothing is committed to `main
 |---|---|
 | `docwizz.yaml` | **you**. `setup`/`init` create it once and then leave it alone (`setup --force` replaces it). |
 | `docs/*.md`, `docs/modules/`, `docs/views/`, `*.html` | docwizz. Regenerated, so don't edit them. |
+| `docs/products/*.md` | docwizz product; separate marker, preserved by ordinary generate. |
 | `docs/architecture/*.md` | **you**. Linked from the generated pages and never overwritten. |
 | `docs/.docwizz/model.json`, `documentation.json` | docwizz: the baseline `diff` compares against, and the documentation model as data. |
 | `docs/.docwizz/ai-cache.json`, `ai-assessments.json` | docwizz: AI drafts and ratings, cached by code hash. Commit them to avoid re-sending code. |
 
 ## Product draft (deterministic MVP)
 
-Run `docwizz product . templates/vmodell-xt/sw-architecture.yaml` from a repository containing that template (or supply an absolute template path). The optional third positional argument specifies the Markdown output. Default: `docs/products/<product_id>.md`. Product facts come from the existing CodeModel; fields that cannot be evidenced remain marked `OFFEN`. This command makes no AI calls, and refuses to replace manually maintained output. Re-running an unchanged generation does not rewrite the file. The template is illustrative, not a V-Modell XT compliance assertion.
+Run `docwizz product . templates/vmodell-xt/sw-architecture.yaml` using a path from the current directory, or from `<dir>` if not found. The optional third positional argument specifies the Markdown output relative to the current directory. Default: `docs/products/<product_id>.md`. Product facts come from the existing CodeModel; fields that cannot be evidenced remain marked `OFFEN`. This command makes no AI calls, and refuses to replace manually maintained output. Re-running an unchanged generation does not rewrite the file. The template is illustrative, not a V-Modell XT compliance assertion.
