@@ -156,9 +156,9 @@ record DocumentationItem(Node Node, string Profile, string Pattern, Level Level,
 
 static partial class Analyzer
 {
-    static readonly string[] Analyzed = ["class", "record", "struct", "interface", "type", "enum", "method", "endpoint",
+    static readonly string[] Analyzed = ["class", "record", "struct", "interface", "type", "enum", "trait", "method", "endpoint",
         "component", "function", "store", "delegate", "procedure", "sql-function", "sql-view", "trigger"];
-    static readonly string[] TypeKinds = ["class", "record", "struct", "interface", "type", "enum", "delegate"];
+    static readonly string[] TypeKinds = ["class", "record", "struct", "interface", "type", "enum", "delegate", "trait"];
 
     // Profile section names → the canonical (XML doc tag) name.
     static readonly Dictionary<string, string> Aliases = new()

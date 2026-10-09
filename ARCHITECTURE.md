@@ -103,6 +103,12 @@ The model separates what the code states from what DocWizz concludes:
   unwrapped return type, constructor/`@Autowired`/Lombok injection, calls through injected fields (overloads by name
   and argument count), method-level `implements`, `@Value`/`@ConfigurationProperties` reads, and imported packages. Projects come from
   `pom.xml`/`build.gradle`, configuration from `application*.yml|properties`.
+- **[PhpScanner](src/DocWizz/PhpScanner.cs)** reads plain PHP the same way JavaScanner reads Java (masking, then
+  regexes, no parser): classes, interfaces, traits and enums with PHPDoc, free functions, complexity and signatures,
+  constructor property promotion as both a typed property and `injects` (PHP's equivalent of Lombok/final-field DI),
+  calls through `$this->`/`self::`/`static::`/`parent::` and known-typed properties (including the `$this->field->x()`
+  chain the promotion idiom produces), traits mixed into a class, and namespace `use` imports. No framework
+  awareness yet (Laravel/Symfony routes, DI containers, Eloquent) -- a deliberate follow-up, not this scanner's job.
 - **[Sql](src/DocWizz/Sql.cs)** reads `.sql` files: procedures, functions, views, triggers and tables (doc from the
   comment above, `@parameters`), the tables each routine touches and the procedures it EXECs, and migration files
   (a `migrations/` folder or Flyway names). C# literals that EXEC a procedure, or name it next to
