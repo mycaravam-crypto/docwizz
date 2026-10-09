@@ -35,6 +35,17 @@ public class ProjectContextTests
         Assert.Equal(output, ProductDraft.Render(template, project: context));
     }
 
+    [Fact]
+    public void Statements_must_target_existing_project_sections()
+    {
+        var template = ProductTemplate.Parse(new StringReader(TemplateYaml), "template.yaml");
+        var typo = ProjectContext.Parse(new StringReader(ContextYaml.Replace("section: scope", "section: scpoe")));
+        Assert.Contains("not in template", Assert.Throws<ArgumentException>(() => ProductDraft.Render(template, project: typo)).Message);
+        var codeOnly = ProductTemplate.Parse(new StringReader(TemplateYaml.Replace("sources: [project]", "sources: [code]")), "template.yaml");
+        var valid = ProjectContext.Parse(new StringReader(ContextYaml));
+        Assert.Contains("does not accept project", Assert.Throws<ArgumentException>(() => ProductDraft.Render(codeOnly, project: valid)).Message);
+    }
+
     [Theory]
     [InlineData("schema: 2\nstatements: []")]
     [InlineData("schema: 1\nstatements:\n  - section: scope\n    text: claim")]
