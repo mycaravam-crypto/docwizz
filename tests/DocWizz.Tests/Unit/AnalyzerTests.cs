@@ -57,4 +57,14 @@ public class AnalyzerTests
         Assert.Equal(Level.High, item.Level);
         Assert.True(Analyzer.IsCritical(item));
     }
+
+    // Regression: a PHP trait is a type declaration like a class or interface, not a behavioural member -- it must
+    // be analyzed (and not scored as if it had side effects) like the rest of PhpScanner's "class"-shaped kinds.
+    [Fact]
+    public void A_trait_is_analyzed_as_a_type_not_skipped()
+    {
+        var trait = N("php:App\\Loggable", "src/Loggable.php", kind: "trait");
+        var item = Assert.Single(Analyzer.Analyze(Model([trait]), AllMedium));
+        Assert.Equal(Status.Undocumented, item.Status);
+    }
 }

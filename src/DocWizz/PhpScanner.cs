@@ -157,7 +157,7 @@ static partial class PhpScanner
                 var open = code.IndexOf('{', fm.Index + fm.Length - 1);
                 var end = open >= 0 ? Close(code, open) : fm.Index + fm.Length;
                 var head = Preamble(code, fm.Index);
-                nodes.Add(new Node(id, "function", name, rel, Line(fm.Index), null, Doc(text, head),
+                nodes.Add(new Node(id, "function", name, rel, Line(fm.Index), "public", Doc(text, head),
                     Complexity: 1 + DecisionRe().Matches(code[(open >= 0 ? open : fm.Index)..end]).Count,
                     Params: parameters.Count, Hash: Hash(code[fm.Index..end]), EndLine: Line(end),
                     Parameters: parameters.Count > 0 ? [.. parameters.Select(x => x.Display)] : null,
