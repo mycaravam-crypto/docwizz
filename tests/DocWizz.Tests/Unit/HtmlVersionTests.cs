@@ -1,3 +1,5 @@
+using DocWizz.Tests.Journey;
+
 namespace DocWizz.Tests.Unit;
 
 public class HtmlVersionTests
