@@ -210,6 +210,7 @@ or for building your own tooling on top. Everyday workflows don't need it.
 
 | Option | Default | Applies to | Interaction | Use |
 |---|---|---|---|---|
+| `--context <file.yaml>` | off | product | validates sourced project statements against template before writing | product documents |
 | `--profile <name\|file.yaml>` | `profile:` in `docwizz.yaml`, else `default` | setup, generate, check, analyze, architecture, diff | overrides `profile:` and the file's own `patterns:` | normal |
 | `--format console\|json` | `console` | analyze, check, architecture, diff, remediate | `json` prints one JSON document to stdout | CI, tooling |
 | `--since <ref>` | — | check, remediate | check: compares against the tree at `<ref>`, so only introduced problems fail; remediate: says whether each update touches only what changed since `<ref>` | CI |
