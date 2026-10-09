@@ -39,3 +39,14 @@ conventions with explicit selectors once more than two mappings are justified.
 Evidence is a plain `file:line` reference, not a fragile relative Markdown URL.
 Results are deliberately limited to 40 entries per section; this is a partial
 inventory, not proof of completeness.
+
+## Project context evidence (P1)
+
+Project statements are **human-maintained, not human-approved**. Schema 1 accepts
+`statements: [{section, text, source}]`; `source` must be a repository-relative
+Markdown path beneath `docs/` (for example `docs/charter.md`). The parser checks
+the format only, **not existence, document version, approval or truth**. A later
+CLI integration must decide how to verify source existence and pin evidence
+versions. Multi-line statements and approval-like status text are rejected;
+statement section IDs must match a template section accepting `project` evidence.
+Unsupported or renamed sections fail rather than silently dropping statements.
