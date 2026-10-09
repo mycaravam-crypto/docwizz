@@ -250,6 +250,7 @@ or for building your own tooling on top. Everyday workflows don't need it.
 | `check` | thresholds pass | thresholds fail, or bad arguments/config |
 | `architecture` | within `max_violations`/`max_cycles` | above them |
 | `analyze`, `generate`, `scan`, `sbom` | done | bad arguments or config |
+| `product` | draft written or unchanged | invalid template, unsafe overwrite, or bad arguments |
 | `remediate` | done (suggestions alone never fail) | a `--validate` run failed, or bad arguments |
 | `diff` | done | no baseline (`generate` first or pass a ref), unknown ref |
 | `init` | written | `docwizz.yaml` exists |
