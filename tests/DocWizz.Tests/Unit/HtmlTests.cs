@@ -40,12 +40,27 @@ public class HtmlTests
     {
         var many = Html.Page("api.md", "# API endpoints\n\n## Orders\n\n## Two `words`\n\n## Users\n", Pages);
         Assert.Contains("On this page", many);
+        Assert.Contains("class=\"toc-inner\"", many);
         Assert.Contains("<a href=\"#orders\">Orders</a>", many);
         Assert.Contains("<a href=\"#two-words\">Two words</a>", many);
         Assert.Contains("<a href=\"#users\">Users</a>", many);
 
         var few = Html.Page("api.md", "# API endpoints\n\n## Orders\n\n## Users\n", Pages);
-        Assert.DoesNotContain("On this page", few);
+        Assert.Contains("On this page", few);
+    }
+
+    [Fact]
+    public void Redesigned_pages_have_navigation_theme_controls_and_offline_search()
+    {
+        var html = Html.Page("modules/src-Core.md", "# Core\n\n## Intro\n\n## Details\n", Pages);
+        Assert.Contains("id=\"side-filter\"", html);
+        Assert.Contains("id=\"theme-toggle\"", html);
+        Assert.Contains("id=\"nav-toggle\"", html);
+        Assert.Contains("class=\"breadcrumbs\"", html);
+        Assert.Contains("id=\"reading-progress\"", html);
+        Assert.Contains("prefers-reduced-motion", html);
+        Assert.Contains("aria-label=\"On this page\"", html);
+        Assert.Contains("src=\"../search.js\"", html);
     }
 
     [Fact]

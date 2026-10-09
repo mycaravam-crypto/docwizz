@@ -30,7 +30,7 @@ public class CliProgressTests
     }
 
     [Fact]
-    public void Terminal_progress_updates_one_line_and_finishes_with_newline()
+    public void Terminal_progress_finishes_each_stage_with_newline()
     {
         var output = new StringWriter();
         using (var bar = new CliProgress(output, 2, interactive: true))
@@ -38,7 +38,9 @@ public class CliProgressTests
             bar.Advance("scan");
             bar.Advance("write");
         }
-        Assert.Contains("\r\u001b[2Kdocwizz [========================] 2/2 write", output.ToString());
+        Assert.Contains("docwizz [========================] 2/2 write", output.ToString());
+        Assert.DoesNotContain("\r", output.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("\u001b", output.ToString(), StringComparison.Ordinal);
         Assert.EndsWith(Environment.NewLine, output.ToString());
     }
 }
