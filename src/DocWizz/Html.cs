@@ -39,83 +39,34 @@ static class Html
         var nav = string.Concat(Top.Select(n => Link(n.Page, n.Label)));
         var title = Title(rel, markdown);
         var side = Sidebar(rel, body, pages, Link);
+        var toc = TableOfContents(body);
+        var category = rel.StartsWith("modules/") ? "Module" : rel.StartsWith("views/") ? "Architecture view" : "Documentation";
+        var breadcrumb = rel.Contains('/') ? rel.Split('/')[0] : "Pages";
         return $$"""
             <!doctype html>
             {{Generator.Marker}}
             <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
             <title>{{System.Net.WebUtility.HtmlEncode(title)}}</title>
             <style>
-            :root { --bg: #f8fafc; --panel: #fff; --fg: #0f172a; --muted: #64748b; --line: #e2e8f0; --link: #2563eb; --accent: #4f46e5;
-              --code: #f1f5f9; --stripe: #f8fafc; --hover: #eef2ff; --shadow: 0 1px 2px rgb(15 23 42 / .06), 0 1px 3px rgb(15 23 42 / .08); }
-            @media (prefers-color-scheme: dark) { :root { --bg: #0b1120; --panel: #111827; --fg: #e5e7eb; --muted: #94a3b8; --line: #1f2937;
-              --link: #60a5fa; --accent: #818cf8; --code: #1e293b; --stripe: #0f172a; --hover: #1e1b4b; --shadow: none; } }
-            * { box-sizing: border-box; }
-            body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
-            a { color: var(--link); text-decoration: none; } a:hover { text-decoration: underline; }
-            header { position: sticky; top: 0; z-index: 10; display: flex; gap: .25rem; flex-wrap: wrap; align-items: center; padding: .5rem 1.25rem;
-              background: color-mix(in srgb, var(--panel) 85%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
-            header .brand { font-weight: 700; color: var(--fg); margin-right: 1rem; letter-spacing: -.01em; } header .brand span { color: var(--accent); }
-            header nav { display: flex; max-width: 100%; overflow-x: auto; } header nav a { flex: none; color: var(--muted); font-weight: 500; font-size: .9rem; padding: .35rem .7rem; border-radius: 6px; }
-            header nav a:hover { color: var(--fg); background: var(--code); text-decoration: none; }
-            header nav a[aria-current] { color: var(--accent); background: var(--hover); }
-            .search { position: relative; margin-left: auto; }
-            #q { width: 18rem; max-width: 70vw; padding: .45rem .75rem; font: inherit; font-size: .9rem; color: var(--fg); background: var(--panel);
-              border: 1px solid var(--line); border-radius: 8px; outline: none; }
-            #q:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
-            #hits { position: absolute; right: 0; top: calc(100% + .35rem); width: 22rem; max-width: 90vw; max-height: 60vh; overflow-y: auto; margin: 0; padding: .25rem;
-              list-style: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 10px 25px rgb(15 23 42 / .15); }
-            #hits:empty { display: none; } #hits a { display: flex; justify-content: space-between; gap: 1rem; padding: .35rem .6rem; border-radius: 5px; color: var(--fg); }
-            #hits a:hover { background: var(--hover); text-decoration: none; }
-            #hits small { color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; }
-            main { max-width: 76rem; margin: 1.5rem auto 3rem; padding: 2rem 2.5rem; background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-              box-shadow: var(--shadow); overflow-wrap: anywhere; }
-            @media (max-width: 640px) { main { margin: 0; padding: 1.25rem 1rem; border: 0; border-radius: 0; } header .brand { display: none; } }
-            h1, h2, h3 { line-height: 1.25; letter-spacing: -.015em; scroll-margin-top: 4rem; }
-            h1 { font-size: 1.9rem; margin: 0 0 .5rem; } h2 { font-size: 1.3rem; margin: 2.5rem 0 .75rem; padding-bottom: .4rem; border-bottom: 1px solid var(--line); }
-            h3 { font-size: 1.05rem; margin: 1.75rem 0 .5rem; } h1 + p { color: var(--muted); margin-top: 0; }
-            hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; } em { color: var(--muted); }
-            code { font: .85em/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--code); padding: .1em .35em; border-radius: 4px; }
-            pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 1rem; overflow-x: auto; } pre code { padding: 0; background: none; }
-            pre.mermaid { background: none; border: 0; text-align: center; }
-            table { border-collapse: separate; border-spacing: 0; display: block; max-width: 100%; width: max-content; overflow-x: auto; margin: 1rem 0;
-              border: 1px solid var(--line); border-radius: 8px; font-size: .9rem; }
-            th, td { padding: .5rem .85rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
-            th { background: var(--code); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); white-space: nowrap; }
-            thead:not(:has(th:not(:empty))) { display: none; }
-            tbody tr:nth-child(even) { background: var(--stripe); } tbody tr:hover { background: var(--hover); } tbody tr:last-child td { border-bottom: 0; }
-            ul, ol { padding-left: 1.4rem; } li { margin: .2rem 0; }
-            .generator { margin-top: 3rem; padding-top: .75rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .8rem; }
-            #hits .none { padding: .35rem .6rem; color: var(--muted); } #hits [aria-selected=true] a { background: var(--hover); }
-            .skip { position: absolute; left: -999px; } .skip:focus { left: 1rem; top: .5rem; z-index: 20; padding: .4rem .75rem; background: var(--panel); border-radius: 6px; }
-            .layout { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 1.5rem; align-items: start; max-width: 94rem; margin: 1.5rem auto 3rem; padding: 0 1.25rem; }
-            .layout main { margin: 0; max-width: none; }
-            .side { position: sticky; top: 4rem; max-height: calc(100vh - 5rem); overflow-y: auto; font-size: .875rem; }
-            .side details { margin-bottom: .75rem; } .side summary { cursor: pointer; padding: .25rem .5rem; color: var(--muted); font-size: .75rem; font-weight: 600;
-              text-transform: uppercase; letter-spacing: .04em; }
-            .side ul { list-style: none; margin: .25rem 0 0; padding: 0; } .side li { margin: 0; }
-            .side a { display: block; padding: .25rem .5rem; border-radius: 6px; color: var(--fg); overflow-wrap: anywhere; }
-            .side a:hover { background: var(--code); text-decoration: none; } .side a[aria-current] { color: var(--accent); background: var(--hover); font-weight: 600; }
-            /* Narrow screens: content first, the site map after it. */
-            @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } .side { order: 1; position: static; max-height: none; } }
-            @media (max-width: 640px) { .layout { margin: 0; padding: 0; gap: 0; } .side { padding: .75rem 1rem; border-top: 1px solid var(--line); } }
-            @media print {
-              :root { --bg: #fff; --panel: #fff; --fg: #000; --muted: #444; --line: #ccc; --link: #000; --code: #f4f4f4; --stripe: #fff; --hover: #fff; --shadow: none; }
-              header, .side, .skip { display: none; } .layout { display: block; max-width: none; margin: 0; padding: 0; }
-              main { padding: 0; border: 0; box-shadow: none; } pre { white-space: pre-wrap; } h2, h3 { break-after: avoid; } tr, pre { break-inside: avoid; }
-            }
+            {{HtmlDesign.Css}}
             </style></head><body>
             <a class="skip" href="#content">Skip to content</a>
-            <header><a class="brand" href="{{up}}index.html">Doc<span>Wizz</span></a><nav>{{nav}}</nav>
-            <div class="search"><input id="q" type="search" placeholder="Search code and endpoints (/)" aria-label="Search"
-              role="combobox" aria-expanded="false" aria-controls="hits" aria-autocomplete="list" autocomplete="off"><ul id="hits" role="listbox"></ul></div></header>
+            <div class="reading-progress" id="reading-progress" aria-hidden="true"></div>
+            <header><button class="icon-button" id="nav-toggle" type="button" aria-label="Open navigation" aria-controls="site-nav" aria-expanded="false">☰</button><a class="brand" href="{{up}}index.html"><span class="brand-mark" aria-hidden="true">DW</span><span class="brand-name">Doc<span>Wizz</span></span></a><nav aria-label="Primary">{{nav}}</nav>
+            <div class="header-actions"><div class="search"><input id="q" type="search" placeholder="Search docs..." aria-label="Search"
+              role="combobox" aria-expanded="false" aria-controls="hits" aria-autocomplete="list" autocomplete="off"><kbd aria-hidden="true">/</kbd><ul id="hits" role="listbox"></ul></div><button class="icon-button" id="theme-toggle" type="button" aria-label="Switch theme" title="Switch theme">☾</button></div></header>
             <div class="layout">
-            <nav class="side" aria-label="Site">{{side}}</nav>
+            <nav class="side" id="site-nav" aria-label="Site"><div class="side-top">Explore <button class="icon-button" id="nav-close" type="button" aria-label="Close navigation">×</button></div><div class="filter-wrap"><input id="side-filter" type="search" placeholder="Filter pages" aria-label="Filter navigation pages" autocomplete="off"></div><p class="side-empty" id="side-empty" hidden>No pages match.</p>{{side}}</nav>
             <main id="content">
+            <div class="breadcrumbs"><a href="{{up}}index.html">Docs</a><span aria-hidden="true">/</span><span>{{Enc(breadcrumb)}}</span></div>
+            <span class="report-label">{{Enc(category)}}</span>
             {{body}}
             <footer class="generator">Generated by docwizz {{Enc(AppVersion.Number)}}</footer>
             </main>
+            <aside class="toc" aria-label="On this page">{{toc}}</aside>
             </div>
             <script src="{{up}}search.js"></script>
+            <script>{{HtmlDesign.Script}}</script>
             <script>
             // Exact names first, then prefixes, then substrings; shorter names before longer ones.
             const q = document.getElementById('q'), hits = document.getElementById('hits');
@@ -167,6 +118,17 @@ static class Html
             """;
     }
 
+    // Explicit headings improve reading navigation on long reports.
+    static string TableOfContents(string body)
+    {
+        var headings = Regex.Matches(body, @"<h2 id=""([^""]+)"">(.*?)</h2>", RegexOptions.Singleline)
+            .Select(m => (Id: Enc(m.Groups[1].Value), Label: Regex.Replace(m.Groups[2].Value, "<[^>]+>", "")))
+            .ToList();
+        if (headings.Count == 0) return "";
+        return "<div class=\"toc-inner\"><div class=\"toc-title\">On this page</div><ul>"
+            + string.Concat(headings.Select(h => $"<li><a href=\"#{h.Id}\">{h.Label}</a></li>")) + "</ul></div>";
+    }
+
     static string Enc(string s) => System.Net.WebUtility.HtmlEncode(s);
 
     // Pages, Views and Modules, the group holding this page open; above them this page's `##` sections when there are 3+.
@@ -183,7 +145,7 @@ static class Html
         // Markdig's auto identifiers: <h2 id="...">text</h2>; the text is already HTML, only tags are dropped.
         var sections = Regex.Matches(body, @"<h2 id=""([^""]+)"">(.*?)</h2>")
             .Select(m => $"<li><a href=\"#{m.Groups[1].Value}\">{Regex.Replace(m.Groups[2].Value, "<[^>]+>", "")}</a></li>").ToList();
-        var toc = sections.Count >= 3 ? $"<details open><summary>On this page</summary><ul>{string.Concat(sections)}</ul></details>" : "";
+        var toc = "";
         return toc + Group("Pages", topPages, true) + Group("Views", Under("views"), false) + Group("Modules", Under("modules"), false);
     }
 }
