@@ -19,6 +19,13 @@ static partial class PhpScanner
 
     record PType(string Id, string Name, int Start, int BodyStart, int End, string Kind);
 
+    /// <summary>
+    /// Scans plain PHP files into the shared code model: classes, interfaces, traits, enums, free functions,
+    /// their members, calls and namespace imports.
+    /// </summary>
+    /// <param name="root">Repository root; node file paths are recorded relative to it.</param>
+    /// <param name="files">Absolute paths of the `.php` files to scan.</param>
+    /// <returns>The nodes and edges found, ready to merge into the rest of the model.</returns>
     public static (List<Node>, List<Edge>) Scan(string root, IEnumerable<string> files)
     {
         var nodes = new List<Node>();
