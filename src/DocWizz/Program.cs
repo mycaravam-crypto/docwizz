@@ -258,7 +258,7 @@ static List<string> RepoFiles(string root, Config config, string[]? dotDirs = nu
 
 static (CodeModel Model, List<string> Files) BuildModel(string root, Config config)
 {
-    string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java"];
+    string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java", ".php"];
     var candidates = Timings.Measure("files", () => RepoFiles(root, config));
     var scanned = candidates.Where(f => exts.Contains(Path.GetExtension(f)) && !f.EndsWith(".d.ts") && !f.EndsWith(".min.js")
         && !f.Replace('\\', '/').Contains("/wwwroot/lib/")).ToList(); // ponytail: libman/bower vendor dir only; other vendored JS needs exclude:
@@ -267,6 +267,7 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     var (feNodes, feEdges) = Timings.Measure("scan:frontend", () => Frontend.Scan(root, scanned.Where(f => Path.GetExtension(f) is ".vue" or ".ts" or ".tsx" or ".js" or ".jsx" or ".mjs").ToList()));
     var (sqlNodes, sqlEdges) = Timings.Measure("scan:sql", () => Sql.Scan(root, scanned.Where(f => f.EndsWith(".sql"))));
     var (javaNodes, javaEdges) = Timings.Measure("scan:java", () => JavaScanner.Scan(root, scanned.Where(f => f.EndsWith(".java"))));
+    var (phpNodes, phpEdges) = Timings.Measure("scan:php", () => PhpScanner.Scan(root, scanned.Where(f => f.EndsWith(".php"))));
     var (projNodes, projEdges) = Timings.Measure("scan:projects", () => Projects.Scan(root, candidates.Where(f => f.EndsWith(".csproj") || f.EndsWith(".sln") || f.EndsWith(".slnx")
         || Path.GetFileName(f) is "package.json" or "pom.xml" or "build.gradle" or "build.gradle.kts")));
     // Keys defined in configuration files win over the bare key nodes code reads create.
@@ -280,8 +281,8 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     // Same id from test and production code (a test router's `route:/login`): production wins.
     nodes = CodeModel.MergeHashes(nodes, n => testFiles.Contains(n.File)).OrderBy(n => testFiles.Contains(n.File)).DistinctBy(n => n.Id).ToList();
     var ids = nodes.Select(n => n.Id).ToHashSet();
-    nodes.AddRange(CodeModel.MergeHashes(feNodes.Concat(javaNodes).Concat(sqlNodes), n => testFiles.Contains(n.File)).OrderBy(n => testFiles.Contains(n.File)).Concat(projNodes).Concat(settings).Where(n => ids.Add(n.Id)));
-    edges = Frontend.LinkHttp(nodes, Sql.Link(nodes, [.. edges, .. feEdges, .. javaEdges, .. sqlEdges, .. projEdges]));
+    nodes.AddRange(CodeModel.MergeHashes(feNodes.Concat(javaNodes).Concat(phpNodes).Concat(sqlNodes), n => testFiles.Contains(n.File)).OrderBy(n => testFiles.Contains(n.File)).Concat(projNodes).Concat(settings).Where(n => ids.Add(n.Id)));
+    edges = Frontend.LinkHttp(nodes, Sql.Link(nodes, [.. edges, .. feEdges, .. javaEdges, .. phpEdges, .. sqlEdges, .. projEdges]));
     Externals.Link(nodes, edges);
     Configuration.Link(nodes, edges);
 
@@ -300,7 +301,7 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
 
 static string? Language(string file) => Path.GetExtension(file) switch
 {
-    ".cs" => "csharp", ".vue" => "vue", ".ts" or ".tsx" => "typescript", ".js" or ".jsx" or ".mjs" => "javascript", ".sql" => "sql", ".java" => "java", ".csproj" => "msbuild",
+    ".cs" => "csharp", ".vue" => "vue", ".ts" or ".tsx" => "typescript", ".js" or ".jsx" or ".mjs" => "javascript", ".sql" => "sql", ".java" => "java", ".php" => "php", ".csproj" => "msbuild",
     _ => Path.GetFileName(file) switch { "package.json" => "npm", "pom.xml" => "maven", "build.gradle" or "build.gradle.kts" => "gradle", _ => null },
 };
 

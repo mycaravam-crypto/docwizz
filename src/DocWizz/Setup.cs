@@ -18,7 +18,7 @@ static class Setup
         int TestProjects,
         List<string> Deployment)
     {
-        public bool Backend => Languages.Keys.Any(l => l is "csharp" or "java");
+        public bool Backend => Languages.Keys.Any(l => l is "csharp" or "java" or "php");
         public bool Frontend => Languages.Keys.Any(l => l is "vue" or "typescript" or "javascript");
     }
 
@@ -29,7 +29,7 @@ static class Setup
     }
 
     static readonly string[] CodeKinds = ["project", "package", "external", "config"];
-    static readonly string[] SourceExts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java"];
+    static readonly string[] SourceExts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java", ".php"];
 
     // Package name (a trailing `*` matches a prefix) → the framework it shows.
     static readonly (string Package, string Framework)[] FrameworkPackages =
