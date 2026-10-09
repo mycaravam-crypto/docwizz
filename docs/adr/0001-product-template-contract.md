@@ -28,3 +28,14 @@ German-language** SW-Architektur example, **not an official V-Modell XT template
 - P1 will define template lookup and dependency ID resolution; examples are
   not yet packaged with the CLI tool.
 - Rights to reuse official template wording must be checked before inclusion.
+
+## P1 renderer conventions
+
+Schema v1 reserves section IDs `structure` (top-level code building blocks) and
+`interfaces` (known code dependency edges) for deterministic CodeModel population.
+Other IDs are not automatically filled; their content remains visibly open. Changing
+a reserved ID disables that mapping. A future schema version can replace these
+conventions with explicit selectors once more than two mappings are justified.
+Evidence is a plain `file:line` reference, not a fragile relative Markdown URL.
+Results are deliberately limited to 40 entries per section; this is a partial
+inventory, not proof of completeness.

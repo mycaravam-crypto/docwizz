@@ -1,13 +1,19 @@
 using System.Text;
 
-// Deterministic product draft. Only explicitly supported sections consume verified CodeModel facts.
+// An evidence-only draft. Known section IDs are reserved by schema v1; other sections remain open.
 internal static class ProductDraft
 {
-    // Render sections from a validated template; unsupported claims remain visibly open.
+    const int MaxFacts = 40;
+
+    // Render a template without inventing project intent or statements of compliance.
     public static string Render(ProductTemplate template, CodeModel? model = null)
     {
         var output = new StringBuilder();
         output.AppendLine("# " + template.ProductId);
+        output.AppendLine();
+        output.AppendLine($"V-Modell: {template.XtVariant} {template.XtVersion}; Tailoring: {template.Tailoring}");
+        output.AppendLine($"Produktabhängigkeiten: {(template.Dependencies.Count == 0 ? "keine angegeben" : string.Join(", ", template.Dependencies))}");
+        if (model is not null) output.AppendLine($"Code-Stand: {model.Commit ?? "unbekannt"}");
         output.AppendLine();
         output.AppendLine("> Entwurf – keine V-Modell-XT-Konformitäts- oder Freigabeaussage.");
         output.AppendLine();
@@ -15,10 +21,9 @@ internal static class ProductDraft
         {
             output.AppendLine("## " + section.Title);
             output.AppendLine();
-            var facts = model is not null && section.Sources.Contains("code")
-                ? Facts(section.Id, model) : [];
+            var facts = model is not null && section.Sources.Contains("code") ? Facts(section.Id, model) : [];
             if (facts.Count == 0)
-                output.AppendLine("OFFEN – Quelle und fachliche Prüfung erforderlich.");
+                output.AppendLine(section.Required ? "OFFEN – Quelle und fachliche Prüfung erforderlich." : "Optional – keine belegten Angaben.");
             else
                 foreach (var fact in facts) output.AppendLine(fact);
             output.AppendLine();
@@ -28,20 +33,23 @@ internal static class ProductDraft
 
     static List<string> Facts(string sectionId, CodeModel model)
     {
-        // Explicit mappings only. An arbitrary template heading must not trigger guessed facts.
+        var nodes = model.Nodes.ToDictionary(n => n.Id);
+        var childIds = model.Edges.Where(e => e.Kind == "contains").Select(e => e.To).ToHashSet();
+        // CodeModel provided by the normal scan excludes test declarations; ignore explicit test projects as well.
+        var allowed = nodes.Values.Where(n => n.Tags?.Contains("test") != true).ToDictionary(n => n.Id);
         if (sectionId == "structure")
-            return model.Nodes.Where(n => n.Kind is "class" or "interface" or "component" or "module")
-                .OrderBy(n => n.Id, StringComparer.Ordinal)
-                .Select(n => $"- {n.Kind}: `{n.Name}` ([Quelle]({n.File}#L{n.Line}))")
+        {
+            return allowed.Values.Where(n => Generator.TopKinds.Contains(n.Kind) && n.Kind != "module" && !childIds.Contains(n.Id))
+                .OrderBy(n => n.File, StringComparer.Ordinal).ThenBy(n => n.Id, StringComparer.Ordinal)
+                .Take(MaxFacts).Select(n => $"- {n.Kind}: `{n.Name}` (Quelle: `{CodeModel.Location(n)}`)")
                 .ToList();
-
+        }
         if (sectionId == "interfaces")
         {
-            var nodes = model.Nodes.ToDictionary(n => n.Id);
-            return model.Edges.Where(e => e.Kind is "implements" or "http" or "references")
-                .Where(e => nodes.ContainsKey(e.From) && nodes.ContainsKey(e.To))
-                .OrderBy(e => e.From, StringComparer.Ordinal).ThenBy(e => e.To, StringComparer.Ordinal)
-                .Select(e => $"- `{nodes[e.From].Name}` → `{nodes[e.To].Name}` ({e.Kind}; [Quelle]({nodes[e.From].File}#L{nodes[e.From].Line}))")
+            return model.Edges.Where(e => CodeModel.DependencyKinds.Contains(e.Kind) && allowed.ContainsKey(e.From) && allowed.ContainsKey(e.To))
+                .OrderBy(e => e.From, StringComparer.Ordinal).ThenBy(e => e.To, StringComparer.Ordinal).ThenBy(e => e.Kind, StringComparer.Ordinal)
+                .Take(MaxFacts)
+                .Select(e => $"- `{allowed[e.From].Name}` → `{allowed[e.To].Name}` ({e.Kind}; Quelle: `{CodeModel.Location(allowed[e.From])}`)")
                 .ToList();
         }
         return [];
