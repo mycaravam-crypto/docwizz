@@ -14,7 +14,7 @@ static class Cli
     public static readonly Dictionary<string, string> Valued = new()
     {
         ["format"] = "console or json", ["profile"] = $"a profile ({string.Join(", ", Profiles.Names)}) or a .yaml file",
-        ["since"] = "a git ref, e.g. origin/main", ["package"] = "a package name", ["to"] = "a version",
+        ["context"] = "a project context YAML file", ["since"] = "a git ref, e.g. origin/main", ["package"] = "a package name", ["to"] = "a version",
     };
 
     // Meaningful for every command.
@@ -36,7 +36,7 @@ static class Cli
         ["diff"] = new("diff [dir] [base] [head]", "changed symbols, affected pages and linked tests vs the last generate or git refs", "reviews, CI",
             "docwizz diff HEAD~1 HEAD", "--format json, --profile", ["format", "profile"]),
         ["product"] = new("product <dir> <template.yaml> [out.md]", "render a deterministic product draft (no AI)", "product documents",
-            "docwizz product . templates/vmodell-xt/sw-architecture.yaml", "no options", []),
+            "docwizz product . templates/vmodell-xt/sw-architecture.yaml --context project.yaml", "--context <file.yaml>", ["context"]),
         ["sbom"] = new("sbom [dir] [out]", "export direct manifest dependencies as CycloneDX 1.6 JSON", "supply-chain inventory",
             "docwizz sbom . sbom.cdx.json", "no options", []),
         ["remediate"] = new("remediate <dir>", "package update suggestions: command or patch, impact, confidence", "maintenance",

@@ -197,7 +197,7 @@ or for building your own tooling on top. Everyday workflows don't need it.
 | `analyze` | `docwizz analyze <dir> [--format f] [--profile p]` | documentation and architecture report, no gate | everyday |
 | `architecture` | `docwizz architecture <dir> [--format f] [--profile p]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
 | `diff` | `docwizz diff [dir] [base] [head] [--format f] [--profile p]` | change impact vs the last `generate` or git refs | reviews, CI |
-| `product` | `docwizz product <dir> <template.yaml> [out.md]` | versioned product draft without AI | architects |
+| `product` | `docwizz product <dir> <template.yaml> [out.md] [--context file.yaml]` | versioned product draft without AI | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
 | `init` | `docwizz init [dir]` | write a `docwizz.yaml` with every default; refuses to overwrite | manual setup |
@@ -210,6 +210,7 @@ or for building your own tooling on top. Everyday workflows don't need it.
 
 | Option | Default | Applies to | Interaction | Use |
 |---|---|---|---|---|
+| `--context <file.yaml>` | off | product | validates sourced project statements against template before writing | product documents |
 | `--profile <name\|file.yaml>` | `profile:` in `docwizz.yaml`, else `default` | setup, generate, check, analyze, architecture, diff | overrides `profile:` and the file's own `patterns:` | normal |
 | `--format console\|json` | `console` | analyze, check, architecture, diff, remediate | `json` prints one JSON document to stdout | CI, tooling |
 | `--since <ref>` | — | check, remediate | check: compares against the tree at `<ref>`, so only introduced problems fail; remediate: says whether each update touches only what changed since `<ref>` | CI |
@@ -319,3 +320,5 @@ and creates a GitHub release with generated notes. Nothing is committed to `main
 ## Product draft (deterministic MVP)
 
 Run `docwizz product . templates/vmodell-xt/sw-architecture.yaml` using a path from the current directory, or from `<dir>` if not found. The optional third positional argument specifies the Markdown output relative to the current directory. Default: `docs/products/<product_id>.md`. Product facts come from the existing CodeModel; fields that cannot be evidenced remain marked `OFFEN`. This command makes no AI calls, and refuses to replace manually maintained output. Re-running an unchanged generation does not rewrite the file. The template is illustrative, not a V-Modell XT compliance assertion.
+
+Optional `--context project.yaml` loads sourced project statements. The path is resolved from the current directory, falling back to `<dir>`. Unmapped statements or sources incompatible with the selected section cause exit 1; statements are never silently discarded. No network or AI calls are made.
