@@ -51,7 +51,7 @@ public class ProductDraftTests
             Optional – keine belegten Angaben.
 
             """;
-        Assert.Equal(expected.TrimEnd() + Environment.NewLine, text.Replace("\r\n", "\n").Replace("\n", Environment.NewLine));
+        Assert.Equal(expected.TrimEnd() + Environment.NewLine + Environment.NewLine, text.Replace("\r\n", "\n").Replace("\n", Environment.NewLine));
         Assert.Equal(text, ProductDraft.Render(Template()));
     }
 
