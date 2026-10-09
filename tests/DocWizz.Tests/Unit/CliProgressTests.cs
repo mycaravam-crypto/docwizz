@@ -15,8 +15,9 @@ public class CliProgressTests
         var text = output.ToString();
         Assert.Contains("[========================] 3/3 write", text);
         Assert.Equal(3, text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length);
-        Assert.DoesNotContain("\r", text);
-        Assert.DoesNotContain("\u001b", text);
+        Assert.DoesNotContain("\r", text, StringComparison.Ordinal);
+        // Ordinal: culture-aware comparison ignores control characters and "finds" ESC anywhere.
+        Assert.DoesNotContain("\u001b", text, StringComparison.Ordinal);
     }
 
     [Fact]

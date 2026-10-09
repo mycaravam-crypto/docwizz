@@ -197,11 +197,22 @@ static string Reference() => $"""
 static List<string> RepoFiles(string root, Config config, string[]? dotDirs = null)
 {
     string[] skip = ["bin", "obj", "node_modules", "dist"];
+    // docwizz's own output (a directory below the root holding .docwizz/): its search.js would otherwise be scanned
+    // as a module on the next run, so regenerating unchanged code would change the docs.
+    var output = new Dictionary<string, bool>();
+    bool IsOutput(string dir) => output.TryGetValue(dir, out var o) ? o : (output[dir] = Directory.Exists(Path.Combine(root, dir, ".docwizz")));
+    bool InOutput(string rel)
+    {
+        for (var dir = Path.GetDirectoryName(rel); !string.IsNullOrEmpty(dir); dir = Path.GetDirectoryName(dir))
+            if (IsOutput(dir)) return true;
+        return false;
+    }
     return (Git(root, "ls-files --cached --others --exclude-standard")?
         .Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(f => Path.Combine(root, f)).Where(File.Exists)
         ?? Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
         .Where(f => !Path.GetRelativePath(root, f).Split(Path.DirectorySeparatorChar).SkipLast(1)
             .Any(d => (d.StartsWith('.') && dotDirs?.Contains(d) != true) || skip.Contains(d)))
+        .Where(f => !InOutput(Path.GetRelativePath(root, f)))
         .Where(f => !config.Exclude.Any(g =>
             FileSystemName.MatchesSimpleExpression(g, Path.GetRelativePath(root, f).Replace('\\', '/'))))
         .Distinct()
