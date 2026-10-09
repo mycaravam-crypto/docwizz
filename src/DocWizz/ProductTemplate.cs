@@ -38,6 +38,8 @@ internal sealed record ProductTemplate(
         var schema = Required(root, "schema", "template");
         if (((YamlScalarNode)root.Children[new YamlScalarNode("schema")]).Style != YamlDotNet.Core.ScalarStyle.Plain || schema != "1") throw new ArgumentException($"unsupported product template schema '{schema}' (expected 1)");
         var id = Required(root, "product_id", "template");
+        if (!System.Text.RegularExpressions.Regex.IsMatch(id, "^[a-z0-9][a-z0-9-]*$"))
+            throw new ArgumentException("template.product_id must be a lowercase slug");
         var variant = Required(root, "xt_variant", "template");
         var version = Required(root, "xt_version", "template");
         var tailoring = Required(root, "tailoring", "template");
@@ -70,6 +72,9 @@ internal sealed record ProductTemplate(
         }
 
         var dependencies = Strings(root, "dependencies", "template");
+        foreach (var dependency in dependencies)
+            if (!System.Text.RegularExpressions.Regex.IsMatch(dependency, "^[a-z0-9][a-z0-9-]*$"))
+                throw new ArgumentException($"invalid dependency id: {dependency}");
         if (dependencies.Contains(id)) throw new ArgumentException("product cannot depend on itself");
         Unique(dependencies, "template.dependencies");
         return new ProductTemplate(id, variant, version, tailoring, result, dependencies);
