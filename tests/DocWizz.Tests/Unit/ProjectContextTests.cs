@@ -30,7 +30,7 @@ public class ProjectContextTests
         var context = ProjectContext.Parse(new StringReader(ContextYaml));
         var output = ProductDraft.Render(template, project: context);
         Assert.Contains("signed project charter", output);
-        Assert.Contains("Quelle: docs/charter.md", output);
+        Assert.Contains("Quelle: `docs/charter.md`", output);
         Assert.DoesNotContain("OFFEN", output);
         Assert.Equal(output, ProductDraft.Render(template, project: context));
     }
