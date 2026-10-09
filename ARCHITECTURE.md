@@ -211,6 +211,10 @@ With the same facts and the doc comment, it also rates written docs (score 1–5
 symbol, doc and body hash in `ai-assessments.json`; the rating is shown in `quality.md` only and never feeds doc
 quality % or `check`.
 
+## Product templates (proposed P0)
+
+[ADR-0001](docs/adr/0001-product-template-contract.md) defines the small V-Modell XT product-template contract independently of coverage profiles. No product generation is implemented yet.
+
 ## Tests
 
 Four layers, so a failure points at the part that broke. CI ([test.yml](.github/workflows/test.yml)) runs each as
