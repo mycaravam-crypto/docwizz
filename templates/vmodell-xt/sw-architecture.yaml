@@ -1,0 +1,25 @@
+# Minimal illustrative structure, not an official V-Modell XT template.
+# Tailor the sections and product relations to the licensed/reference process version.
+schema: 1
+product_id: sw-architecture
+xt_variant: V-Modell XT
+xt_version: "2.4"
+tailoring: project-specific
+sections:
+  - id: scope
+    title: Geltungsbereich und Randbedingungen
+    required: true
+    sources: [project]
+  - id: structure
+    title: Softwarestruktur und Bausteine
+    required: true
+    sources: [code]
+  - id: interfaces
+    title: Schnittstellen und Abhaengigkeiten
+    required: true
+    sources: [code, project]
+  - id: decisions
+    title: Architekturentscheidungen
+    required: true
+    sources: [project]
+dependencies: []
