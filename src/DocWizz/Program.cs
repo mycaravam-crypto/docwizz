@@ -54,6 +54,8 @@ static async Task<int> Dispatch(string[] args)
 
     switch (cmd)
     {
+        case "product":
+            return ProductCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), config);
         case "sbom":
             return SbomCommand(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "sbom.cdx.json"), config);
         case "scan":
@@ -76,6 +78,37 @@ static async Task<int> Dispatch(string[] args)
         default:
             return Usage($"unknown command {cmd}");
     }
+}
+
+// Deterministic product draft; manual files are never overwritten.
+static int ProductCommand(string root, string? templateName, string? outName, Config config)
+{
+    if (string.IsNullOrWhiteSpace(templateName))
+        return Usage("product needs a template YAML path", "product");
+    var templatePath = Path.IsPathRooted(templateName) ? templateName : Path.Combine(root, templateName);
+    ProductTemplate template;
+    try { template = ProductTemplate.Load(templatePath); }
+    catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
+    catch (IOException e) { Console.Error.WriteLine($"{templatePath}: {e.Message}"); return 1; }
+    var output = outName is null ? Path.Combine(root, "docs", "products", template.ProductId + ".md")
+        : Path.IsPathRooted(outName) ? outName : Path.Combine(root, outName);
+    var full = Path.GetFullPath(output);
+    var marker = Generator.Marker;
+    if (File.Exists(full) && !File.ReadLines(full).Take(2).Contains(marker))
+    {
+        Console.Error.WriteLine($"{full} exists and is not docwizz-generated; refusing to overwrite");
+        return 1;
+    }
+    var text = marker + Environment.NewLine + ProductDraft.Render(template, BuildModel(root, config).Model);
+    if (File.Exists(full) && File.ReadAllText(full) == text)
+    {
+        Console.WriteLine($"unchanged: {full}");
+        return 0;
+    }
+    Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+    File.WriteAllText(full, text);
+    Console.WriteLine($"→ {full}");
+    return 0;
 }
 
 static int SbomCommand(string root, string output, Config config)

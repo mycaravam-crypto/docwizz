@@ -22,6 +22,7 @@ an example and its options.
 | `analyze` | documentation report | developers | yes |
 | `architecture` | architecture diagnostics | architects | optional |
 | `diff` | change impact | developers, CI | optional |
+| `product` | deterministic product draft from a YAML template | architects | optional |
 | `sbom` | CycloneDX manifest SBOM | supply-chain inventory | optional |
 | `remediate` | package update suggestions | maintainers | optional |
 | `init` | blank config with every default | manual setup | no |
@@ -311,3 +312,7 @@ and creates a GitHub release with generated notes. Nothing is committed to `main
 | `docs/architecture/*.md` | **you**. Linked from the generated pages and never overwritten. |
 | `docs/.docwizz/model.json`, `documentation.json` | docwizz: the baseline `diff` compares against, and the documentation model as data. |
 | `docs/.docwizz/ai-cache.json`, `ai-assessments.json` | docwizz: AI drafts and ratings, cached by code hash. Commit them to avoid re-sending code. |
+
+## Product draft (deterministic MVP)
+
+Run `docwizz product . templates/vmodell-xt/sw-architecture.yaml` from a repository containing that template (or supply an absolute template path). The optional third positional argument specifies the Markdown output. Default: `docs/products/<product_id>.md`. Product facts come from the existing CodeModel; fields that cannot be evidenced remain marked `OFFEN`. This command makes no AI calls, and refuses to replace manually maintained output. Re-running an unchanged generation does not rewrite the file. The template is illustrative, not a V-Modell XT compliance assertion.
