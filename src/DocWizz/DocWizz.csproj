@@ -6,9 +6,30 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>docwizz</ToolCommandName>
-    <!-- Official release builds supply -p:Version from the immutable Git tag. -->
+    <!-- Official release builds supply -p:Version from the immutable Git tag; any other build derives it from the
+         tags (DocWizzGitVersion below), and only a build without git or tags is 0.0.0-dev. -->
+    <DocWizzGitVersion Condition="'$(Version)' == ''">true</DocWizzGitVersion>
     <Version Condition="'$(Version)' == ''">0.0.0-dev</Version>
   </PropertyGroup>
+  <!-- On a release tag: that version (v0.2.2 → 0.2.2). Commits after it: a pre-release of the next patch, counting the
+       commits since the tag (0.2.3-dev.4), so it sorts after the release it builds on and before the next one. -->
+  <Target Name="DocWizzGitVersion" BeforeTargets="GetAssemblyVersion;GenerateNuspec" Condition="'$(DocWizzGitVersion)' == 'true'">
+    <Exec Command="git describe --tags --long --match &quot;v[0-9]*.[0-9]*.[0-9]*&quot;" WorkingDirectory="$(MSBuildProjectDirectory)"
+          ConsoleToMSBuild="true" IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true" EchoOff="true"
+          StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_DocWizzDescribe" />
+      <Output TaskParameter="ExitCode" PropertyName="_DocWizzDescribeExit" />
+    </Exec>
+    <PropertyGroup Condition="'$(_DocWizzDescribeExit)' == '0' and $([System.Text.RegularExpressions.Regex]::IsMatch('$(_DocWizzDescribe)', '^v\d+\.\d+\.\d+-\d+-g[0-9a-f]+$'))">
+      <_DocWizzTag>$([System.Text.RegularExpressions.Regex]::Replace('$(_DocWizzDescribe)', '^v(\d+\.\d+\.\d+)-.*$', '$1'))</_DocWizzTag>
+      <_DocWizzMinor>$([System.Text.RegularExpressions.Regex]::Replace('$(_DocWizzDescribe)', '^v(\d+\.\d+)\..*$', '$1'))</_DocWizzMinor>
+      <_DocWizzPatch>$([System.Text.RegularExpressions.Regex]::Replace('$(_DocWizzDescribe)', '^v\d+\.\d+\.(\d+)-.*$', '$1'))</_DocWizzPatch>
+      <_DocWizzSince>$([System.Text.RegularExpressions.Regex]::Replace('$(_DocWizzDescribe)', '^.*-(\d+)-g[0-9a-f]+$', '$1'))</_DocWizzSince>
+      <Version Condition="'$(_DocWizzSince)' == '0'">$(_DocWizzTag)</Version>
+      <Version Condition="'$(_DocWizzSince)' != '0'">$(_DocWizzMinor).$([MSBuild]::Add($(_DocWizzPatch), 1))-dev.$(_DocWizzSince)</Version>
+      <PackageVersion>$(Version)</PackageVersion>
+    </PropertyGroup>
+  </Target>
   <ItemGroup>
     <PackageReference Include="Markdig" Version="1.4.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
