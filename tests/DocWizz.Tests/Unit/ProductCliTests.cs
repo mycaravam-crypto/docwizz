@@ -10,5 +10,9 @@ public class ProductCliTests
         Assert.Equal("product", request.Command);
         Assert.Equal(3, request.Positional.Count);
         Assert.NotNull(Cli.Parse(["product", ".", "template.yaml", "--ai"]).Error);
+        var withContext = Cli.Parse(["product", ".", "template.yaml", "--context", "project.yaml"]);
+        Assert.Null(withContext.Error);
+        Assert.Equal("project.yaml", withContext.Options["context"]);
+        Assert.Contains("needs a value", Cli.Parse(["product", ".", "template.yaml", "--context"]).Error);
     }
 }
