@@ -15,7 +15,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     public Action<int, int>? OnPageProcessed { get; init; }
     // Repository files (relative, `/`-separated) after exclude:/.gitignore; the deployment view picks its descriptors from them.
     public List<string> Files { get; init; } = [];
-    static readonly string[] TopKinds = ["class", "record", "struct", "interface", "type", "enum", "delegate", "component", "module", "store",
+    internal static readonly string[] TopKinds = ["class", "record", "struct", "interface", "type", "enum", "delegate", "component", "module", "store",
         "procedure", "sql-function", "sql-view", "trigger", "table", "migration"];
     const int MaxDiagramEdges = 60;
 
