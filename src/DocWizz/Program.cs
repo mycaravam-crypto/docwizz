@@ -55,7 +55,7 @@ static async Task<int> Dispatch(string[] args)
     switch (cmd)
     {
         case "product":
-            return ProductCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), config);
+            return ProductCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), opts.GetValueOrDefault("context"), config);
         case "sbom":
             return SbomCommand(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "sbom.cdx.json"), config);
         case "scan":
@@ -81,7 +81,7 @@ static async Task<int> Dispatch(string[] args)
 }
 
 // Deterministic product draft; manual files are never overwritten.
-static int ProductCommand(string root, string? templateName, string? outName, Config config)
+static int ProductCommand(string root, string? templateName, string? outName, string? contextName, Config config)
 {
     if (string.IsNullOrWhiteSpace(templateName))
         return Usage("product needs a template YAML path", "product");
@@ -90,6 +90,14 @@ static int ProductCommand(string root, string? templateName, string? outName, Co
     try { template = ProductTemplate.Load(templatePath); }
     catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
     catch (IOException e) { Console.Error.WriteLine($"{templatePath}: {e.Message}"); return 1; }
+    ProjectContext? project = null;
+    if (contextName is not null)
+    {
+        var contextPath = File.Exists(contextName) ? contextName : Path.Combine(root, contextName);
+        try { project = ProjectContext.Load(contextPath); project.Validate(template); }
+        catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
+        catch (IOException e) { Console.Error.WriteLine($"{contextPath}: {e.Message}"); return 1; }
+    }
     var output = outName is null ? Path.Combine(root, "docs", "products", template.ProductId + ".md")
         : outName;
     var full = Path.GetFullPath(output);
@@ -99,7 +107,7 @@ static int ProductCommand(string root, string? templateName, string? outName, Co
         Console.Error.WriteLine($"{full} exists and is not docwizz-generated; refusing to overwrite");
         return 1;
     }
-    var text = (marker + "\n" + ProductDraft.Render(template, BuildModel(root, config).Model)).Replace("\r\n", "\n");
+    var text = (marker + "\n" + ProductDraft.Render(template, BuildModel(root, config).Model, project)).Replace("\r\n", "\n");
     if (File.Exists(full) && File.ReadAllText(full) == text)
     {
         Console.WriteLine($"unchanged: {Path.GetRelativePath(root, full)}");
@@ -215,6 +223,7 @@ static string Reference() => $"""
       docwizz init [dir]                write a starter docwizz.yaml with every default
       docwizz scan <dir> [model.json]   write the raw code model
       docwizz product <dir> <template.yaml> [out.md]  render product draft without AI
+        [--context <file.yaml>]           load sourced project facts
 
     options:
       --profile <name|file.yaml>        documentation profile: {string.Join(", ", Profiles.Names)}, or your own file
