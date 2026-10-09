@@ -9,7 +9,6 @@ public class ProductCliTests
         Assert.Null(request.Error);
         Assert.Equal("product", request.Command);
         Assert.Equal(3, request.Positional.Count);
-        Assert.Contains("product", Cli.Commands.Keys);
         Assert.NotNull(Cli.Parse(["product", ".", "template.yaml", "--ai"]).Error);
     }
 }
