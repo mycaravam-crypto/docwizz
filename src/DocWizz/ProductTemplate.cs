@@ -12,19 +12,31 @@ internal sealed record ProductTemplate(
     static readonly HashSet<string> SectionKeys = ["id", "title", "required", "sources"];
     static readonly HashSet<string> SourceKinds = ["code", "project"];
 
+    // Load and validate a product template.
     public static ProductTemplate Load(string file)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(file);
         using var input = File.OpenText(file);
+        return Parse(input, file);
+    }
+
+    // Parse templates without file I/O for isolated tests.
+    public static ProductTemplate Parse(TextReader input, string source)
+    {
+        try { return ParseCore(input); }
+        catch (ArgumentException error) { throw new ArgumentException($"{source}: {error.Message}", error); }
+    }
+
+    static ProductTemplate ParseCore(TextReader input)
+    {
         var yaml = new YamlStream();
         try { yaml.Load(input); }
-        catch (YamlDotNet.Core.YamlException e) { throw new ArgumentException($"invalid product template YAML: {e.Message}", nameof(file), e); }
+        catch (YamlDotNet.Core.YamlException e) { throw new ArgumentException($"invalid product template YAML: {e.Message}", e); }
         if (yaml.Documents.Count != 1)
-            throw new ArgumentException("product template must contain exactly one YAML document", nameof(file));
+            throw new ArgumentException("product template must contain exactly one YAML document");
         var root = Map(yaml.Documents[0].RootNode, "template");
         Keys(root, RootKeys, "template");
         var schema = Required(root, "schema", "template");
-        if (schema != "1") throw new ArgumentException($"unsupported product template schema '{schema}' (expected 1)");
+        if (((YamlScalarNode)root.Children[new YamlScalarNode("schema")]).Style != YamlDotNet.Core.ScalarStyle.Plain || schema != "1") throw new ArgumentException($"unsupported product template schema '{schema}' (expected 1)");
         var id = Required(root, "product_id", "template");
         var variant = Required(root, "xt_variant", "template");
         var version = Required(root, "xt_version", "template");
@@ -46,23 +58,28 @@ internal sealed record ProductTemplate(
             if (!ids.Add(sectionId))
                 throw new ArgumentException($"duplicate section id '{sectionId}'");
             var requiredText = Required(section, "required", context);
-            if (requiredText is not ("true" or "false"))
+            if (((YamlScalarNode)section.Children[new YamlScalarNode("required")]).Style != YamlDotNet.Core.ScalarStyle.Plain || requiredText is not ("true" or "false"))
                 throw new ArgumentException($"{context}.required must be true or false");
             var sources = Strings(section, "sources", context);
             if (sources.Count == 0) throw new ArgumentException($"{context}.sources must not be empty");
             foreach (var source in sources)
                 if (!SourceKinds.Contains(source))
                     throw new ArgumentException($"{context}.sources: unsupported source '{source}' (code, project)");
-            if (sources.Distinct(StringComparer.Ordinal).Count() != sources.Count)
-                throw new ArgumentException($"{context}.sources contains duplicates");
+            Unique(sources, $"{context}.sources");
             result.Add(new ProductSection(sectionId, title, requiredText == "true", sources));
         }
 
         var dependencies = Strings(root, "dependencies", "template");
         if (dependencies.Contains(id)) throw new ArgumentException("product cannot depend on itself");
-        if (dependencies.Distinct(StringComparer.Ordinal).Count() != dependencies.Count)
-            throw new ArgumentException("template.dependencies contains duplicates");
+        Unique(dependencies, "template.dependencies");
         return new ProductTemplate(id, variant, version, tailoring, result, dependencies);
+    }
+
+    static void Unique(IEnumerable<string> values, string context)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var value in values)
+            if (!seen.Add(value)) throw new ArgumentException($"{context}: duplicate value '{value}'");
     }
 
     static YamlMappingNode Map(YamlNode node, string context) =>
@@ -79,8 +96,9 @@ internal sealed record ProductTemplate(
 
     static string Required(YamlMappingNode map, string name, string context)
     {
-        if (!map.Children.TryGetValue(new YamlScalarNode(name), out var value)
-            || value is not YamlScalarNode scalar || string.IsNullOrWhiteSpace(scalar.Value))
+        if (!map.Children.TryGetValue(new YamlScalarNode(name), out var value))
+            throw new ArgumentException($"{context}.{name} is missing");
+        if (value is not YamlScalarNode scalar || string.IsNullOrWhiteSpace(scalar.Value))
             throw new ArgumentException($"{context}.{name} must be a non-empty scalar");
         return scalar.Value.Trim();
     }
