@@ -65,13 +65,10 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         foreach (var (rel, content) in pages)
         {
             var file = Path.Combine(outDir, rel);
-            if (!((RebuildHtml && rel.EndsWith(".html", StringComparison.OrdinalIgnoreCase))) && File.Exists(file) && File.ReadAllText(file) == content)
-            {
-                OnPageProcessed?.Invoke(++processed, pages.Count);
-                continue;
-            }
-            File.WriteAllText(file, content);
-            changed.Add(rel);
+            // A version refresh rewrites HTML even when it is identical, but only a page whose content differs is "changed".
+            var same = File.Exists(file) && File.ReadAllText(file) == content;
+            if (!same || (RebuildHtml && rel.EndsWith(".html", StringComparison.OrdinalIgnoreCase))) File.WriteAllText(file, content);
+            if (!same) changed.Add(rel);
             OnPageProcessed?.Invoke(++processed, pages.Count);
         }
         return ([.. pages.Keys], changed);

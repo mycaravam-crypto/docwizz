@@ -125,7 +125,7 @@ a sidebar to every page and keyboard search. For example, `api.md` traces every 
 - `PUT /api/materials/{id}`: MaterialController → MaterialService → SqlMaterialRepository → AppDbContext → SQL Server (inferred)
 ```
 
-To refresh every HTML page after a DocWizz upgrade, use `docwizz generate . --refresh-html-on-version-change` (implies `--html`). The version stamp is `docs/.docwizz/html-version.txt`. Progress bars appear automatically on interactive stderr; add `--progress` to force them in redirected output. Regenerating otherwise rewrites only the pages that changed. Pages you write yourself, such as anything in `docs/architecture/`,
+Every HTML page names the DocWizz version that generated it in its footer, so an upgrade refreshes all of them. To also rewrite them when nothing else changed, use `docwizz generate . --refresh-html-on-version-change` (implies `--html`). The version stamp is `docs/.docwizz/html-version.txt`. Progress bars appear automatically on interactive stderr; add `--progress` to force them in redirected output. Regenerating otherwise rewrites only the pages that changed. Pages you write yourself, such as anything in `docs/architecture/`,
 are linked and never overwritten.
 
 ### What does my change affect?
