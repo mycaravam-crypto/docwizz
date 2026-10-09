@@ -8,6 +8,7 @@ internal static class ProductDraft
     // Render a template without inventing project intent or statements of compliance.
     public static string Render(ProductTemplate template, CodeModel? model = null, ProjectContext? project = null)
     {
+        project?.Validate(template);
         var output = new StringBuilder();
         output.AppendLine("# " + template.ProductId);
         output.AppendLine();
@@ -24,7 +25,7 @@ internal static class ProductDraft
             var facts = model is not null && section.Sources.Contains("code") ? Facts(section.Id, model) : [];
             if (project is not null && section.Sources.Contains("project"))
                 facts.AddRange(project.Statements.Where(x => x.SectionId == section.Id)
-                    .Select(x => $"- {x.Text} (Quelle: {x.Source})"));
+                    .Select(x => $"- {Escape(x.Text)} (Quelle: `{x.Source}`)"));
             if (facts.Count == 0)
                 output.AppendLine(section.Required ? "OFFEN – Quelle und fachliche Prüfung erforderlich." : "Optional – keine belegten Angaben.");
             else
@@ -33,6 +34,17 @@ internal static class ProductDraft
         }
         return output.ToString();
     }
+
+    static string Escape(string value) => value.Replace("&", "&amp;", StringComparison.Ordinal)
+        .Replace("<", "&lt;", StringComparison.Ordinal)
+        .Replace(">", "&gt;", StringComparison.Ordinal)
+        .Replace("&#", "&amp;#", StringComparison.Ordinal)
+        .Replace("\\", "\\\\", StringComparison.Ordinal)
+        .Replace("`", "\\`", StringComparison.Ordinal)
+        .Replace("*", "\\*", StringComparison.Ordinal)
+        .Replace("_", "\\_", StringComparison.Ordinal)
+        .Replace("[", "\\[", StringComparison.Ordinal)
+        .Replace("]", "\\]", StringComparison.Ordinal);
 
     static List<string> Facts(string sectionId, CodeModel model)
     {
