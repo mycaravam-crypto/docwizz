@@ -68,7 +68,7 @@ public class CliDocsTests
     {
         var applies = new Dictionary<string, string>();
         foreach (var row in Rows(Section(CliMd, "## Options")))
-            foreach (var m in Regex.Matches(row[0], @"(?<![\w-])--?([a-z]+)").Cast<System.Text.RegularExpressions.Match>())
+            foreach (var m in Regex.Matches(row[0], @"(?<![\w-])--?([a-z]+(?:-[a-z]+)*)").Cast<System.Text.RegularExpressions.Match>())
                 applies[m.Groups[1].Value switch { "h" => "help", "v" => "version", var o => o }] = row[2];
 
         foreach (var option in Cli.Flags.Concat(Cli.Valued.Keys))

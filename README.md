@@ -125,7 +125,7 @@ a sidebar to every page and keyboard search. For example, `api.md` traces every 
 - `PUT /api/materials/{id}`: MaterialController → MaterialService → SqlMaterialRepository → AppDbContext → SQL Server (inferred)
 ```
 
-Regenerating rewrites only the pages that changed. Pages you write yourself, such as anything in `docs/architecture/`,
+To refresh every HTML page after a DocWizz upgrade, use `docwizz generate . --refresh-html-on-version-change` (implies `--html`). The version stamp is `docs/.docwizz/html-version.txt`. Progress bars appear automatically on interactive stderr; add `--progress` to force them in redirected output. Regenerating otherwise rewrites only the pages that changed. Pages you write yourself, such as anything in `docs/architecture/`,
 are linked and never overwritten.
 
 ### What does my change affect?
@@ -247,7 +247,7 @@ See [AI drafts](#ai-drafts) for the privacy rules.
 | `docwizz analyze <dir>` | Documentation report |
 | `docwizz architecture <dir>` | Layers, layer dependencies, violations, cycles |
 | `docwizz check <dir> [--since <ref>]` | Report; exit 1 if thresholds fail (only on new problems with `--since`) |
-| `docwizz generate <dir> [out] [--html] [--ai]` | Write the docs (default `<dir>/docs`) |
+| `docwizz generate <dir> [out] [--html] [--refresh-html-on-version-change] [--progress] [--ai]` | Write the docs (default `<dir>/docs`) |
 | `docwizz diff <dir> [ref]` | Changed symbols, affected pages and linked tests vs the last `generate` (or a git ref) |
 | `docwizz diff [dir] <base> <head>` | The same, between two git refs |
 | `docwizz sbom [dir] [out]` | Export CycloneDX 1.6 JSON from direct manifest dependencies (not resolved/transitive) |

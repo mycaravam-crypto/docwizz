@@ -93,7 +93,10 @@ Then read `docs/index.md` (or `docs/index.html` with `--html`) and the summary's
 ```bash
 docwizz generate .              # Markdown in ./docs
 docwizz generate . site --html  # Markdown and HTML in ./site
+ docwizz generate . site --refresh-html-on-version-change  # re-render HTML on DocWizz upgrades
 ```
+
+The optional `--refresh-html-on-version-change` implies `--html`, and rebuilds all generated HTML if `<out>/.docwizz/html-version.txt` is absent or differs from the running DocWizz version. Markdown stays incremental. Interactive progress bars go to stderr; `--progress` forces them in CI and redirected logs. Machine-readable stdout remains unchanged.
 
 Regenerating rewrites only the pages whose content changed and prints how many changed. See
 [Generated vs. your files](#generated-vs-your-files) for what you may edit.
@@ -187,8 +190,8 @@ or for building your own tooling on top. Everyday workflows don't need it.
 
 | Command | Syntax | Purpose | Use |
 |---|---|---|---|
-| `setup` | `docwizz setup [dir] [--force] [--html] [--ai] [--profile p]` | detect the stack, write `docwizz.yaml`, analyze, architecture, generate, check | start here |
-| `generate` | `docwizz generate <dir> [out] [--html] [--ai] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
+| `setup` | `docwizz setup [dir] [--force] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | detect the stack, write `docwizz.yaml`, analyze, architecture, generate, check | start here |
+| `generate` | `docwizz generate <dir> [out] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
 | `check` | `docwizz check <dir> [--since ref] [--format f] [--profile p]` | quality gate; exit 1 when thresholds fail | CI |
 | `analyze` | `docwizz analyze <dir> [--format f] [--profile p]` | documentation and architecture report, no gate | everyday |
 | `architecture` | `docwizz architecture <dir> [--format f] [--profile p]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
@@ -211,6 +214,8 @@ or for building your own tooling on top. Everyday workflows don't need it.
 | `--package <name> --to <version>` | `remediation.targets` and version drift | remediate | given together or not at all | maintenance |
 | `--validate` | off | remediate | runs the configured restore/build/test commands in a temporary copy, never the working tree | maintenance |
 | `--html` | off | generate, setup | adds HTML pages; the Markdown is written either way | normal |
+| `--progress` | interactive terminals | generate, setup | Force progress bars on stderr when output is redirected | normal |
+| `--refresh-html-on-version-change` | off | generate, setup | Implies HTML; rebuild on generator version change | normal |
 | `--ai` | off | generate, setup | local Ollama only; cached drafts are used even without it, nothing new is sent | opt-in |
 | `--force` | off | setup | replaces an existing `docwizz.yaml`; any other command rejects it | setup only |
 | `--timings` | off | all | time and peak memory per stage, on stderr | benchmarks |

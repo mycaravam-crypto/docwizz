@@ -146,7 +146,7 @@ static class Setup
 
     // Runs the stages in order. A failing stage is reported and the next one runs, except after a required stage:
     // then the rest are skipped, because they need its result.
-    public static List<StageResult> Run(IReadOnlyList<Stage> stages, TextWriter log)
+    public static List<StageResult> Run(IReadOnlyList<Stage> stages, TextWriter log, Action<string>? onStageCompleted = null)
     {
         var results = new List<StageResult>();
         string? blockedBy = null;
@@ -164,6 +164,7 @@ static class Setup
                 }
             results.Add(r);
             log.WriteLine($"  [{i + 1}/{stages.Count}] {r.Name,-13}{r.Status,-8} {r.Detail}");
+            onStageCompleted?.Invoke(r.Name);
         }
         return results;
     }

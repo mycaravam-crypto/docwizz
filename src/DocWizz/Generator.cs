@@ -11,6 +11,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
 
     // Also write an HTML twin of every page (Html.cs).
     public bool WriteHtml { get; init; }
+    public bool RebuildHtml { get; init; }
+    public Action<int, int>? OnPageProcessed { get; init; }
     // Repository files (relative, `/`-separated) after exclude:/.gitignore; the deployment view picks its descriptors from them.
     public List<string> Files { get; init; } = [];
     static readonly string[] TopKinds = ["class", "record", "struct", "interface", "type", "enum", "delegate", "component", "module", "store",
@@ -59,12 +61,18 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         foreach (var f in Directory.EnumerateFiles(outDir, "*.*", SearchOption.AllDirectories).Where(f => f.EndsWith(".md") || f.EndsWith(".html")))
             if (!pages.ContainsKey(Path.GetRelativePath(outDir, f).Replace('\\', '/')) && File.ReadLines(f).Take(2).Contains(Marker)) File.Delete(f);
         var changed = new List<string>();
+        var processed = 0;
         foreach (var (rel, content) in pages)
         {
             var file = Path.Combine(outDir, rel);
-            if (File.Exists(file) && File.ReadAllText(file) == content) continue;
+            if (!((RebuildHtml && rel.EndsWith(".html", StringComparison.OrdinalIgnoreCase))) && File.Exists(file) && File.ReadAllText(file) == content)
+            {
+                OnPageProcessed?.Invoke(++processed, pages.Count);
+                continue;
+            }
             File.WriteAllText(file, content);
             changed.Add(rel);
+            OnPageProcessed?.Invoke(++processed, pages.Count);
         }
         return ([.. pages.Keys], changed);
     }

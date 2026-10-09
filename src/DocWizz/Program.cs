@@ -43,7 +43,7 @@ static async Task<int> Dispatch(string[] args)
         return 1;
     }
     if (cmd == "init") return Init(path);
-    if (cmd == "setup") return await SetupCommand(path, opts.GetValueOrDefault("profile"), opts.ContainsKey("force"), opts.ContainsKey("ai"), opts.ContainsKey("html"));
+    if (cmd == "setup") return await SetupCommand(path, opts.GetValueOrDefault("profile"), opts.ContainsKey("force"), opts.ContainsKey("ai"), opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"), opts.ContainsKey("refresh-html-on-version-change"), opts.ContainsKey("progress"));
     Config config;
     try { config = Config.Load(path, opts.GetValueOrDefault("profile")); }
     catch (ArgumentException e)
@@ -71,7 +71,7 @@ static async Task<int> Dispatch(string[] args)
         case "remediate":
             return Remediate(path, config, opts.GetValueOrDefault("package"), opts.GetValueOrDefault("to"), opts.ContainsKey("validate"), opts.GetValueOrDefault("since"), json);
         case "generate":
-            Console.WriteLine(await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html")));
+            Console.WriteLine(await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"), refreshHtmlOnVersionChange: opts.ContainsKey("refresh-html-on-version-change"), progress: opts.ContainsKey("progress")));
             return 0;
         default:
             return Usage($"unknown command {cmd}");
@@ -163,6 +163,8 @@ static string Reference() => $"""
     everyday:
       docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
         [--html]                        also write an HTML page next to every Markdown page
+        [--refresh-html-on-version-change]  rewrite HTML when the docwizz version changes
+        [--progress]                    print progress to stderr (including redirected output)
         [--ai]                          draft missing summaries with a local Ollama (cached per code hash)
       docwizz analyze <dir>             documentation report
       docwizz check <dir>               report + exit 1 if thresholds fail (CI)
@@ -195,11 +197,22 @@ static string Reference() => $"""
 static List<string> RepoFiles(string root, Config config, string[]? dotDirs = null)
 {
     string[] skip = ["bin", "obj", "node_modules", "dist"];
+    // docwizz's own output (a directory below the root holding .docwizz/): its search.js would otherwise be scanned
+    // as a module on the next run, so regenerating unchanged code would change the docs.
+    var output = new Dictionary<string, bool>();
+    bool IsOutput(string dir) => output.TryGetValue(dir, out var o) ? o : (output[dir] = Directory.Exists(Path.Combine(root, dir, ".docwizz")));
+    bool InOutput(string rel)
+    {
+        for (var dir = Path.GetDirectoryName(rel); !string.IsNullOrEmpty(dir); dir = Path.GetDirectoryName(dir))
+            if (IsOutput(dir)) return true;
+        return false;
+    }
     return (Git(root, "ls-files --cached --others --exclude-standard")?
         .Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(f => Path.Combine(root, f)).Where(File.Exists)
         ?? Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
         .Where(f => !Path.GetRelativePath(root, f).Split(Path.DirectorySeparatorChar).SkipLast(1)
             .Any(d => (d.StartsWith('.') && dotDirs?.Contains(d) != true) || skip.Contains(d)))
+        .Where(f => !InOutput(Path.GetRelativePath(root, f)))
         .Where(f => !config.Exclude.Any(g =>
             FileSystemName.MatchesSimpleExpression(g, Path.GetRelativePath(root, f).Replace('\\', '/'))))
         .Distinct()
@@ -309,13 +322,18 @@ static object DocumentationJson(CodeModel model, Config config, List<Documentati
 }
 
 // Writes the docs; returns the one-line result.
-static async Task<string> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null)
+static async Task<string> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null, bool refreshHtmlOnVersionChange = false, bool progress = false)
 {
+    using var bar = CliProgress.ForConsole(7, progress);
     model ??= BuildModel(root, config).Model;
+    bar.Advance("scan");
     var findings = Timings.Measure("analyze", () => Analyzer.Analyze(model, config));
+    bar.Advance("analyze");
     var arch = Timings.Measure("architecture", () => Architecture.Check(model, config));
+    bar.Advance("architecture");
     // Cached drafts are always used; new ones are only requested with --ai.
     var drafts = await AiProse.Summaries(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-cache.json"), ai);
+    bar.Advance("AI summaries");
     // A draft fills what is missing, never what is written or derived: the summary, and sections the item doesn't have.
     foreach (var f in findings)
     {
@@ -330,17 +348,23 @@ static async Task<string> Generate(string root, string outDir, Config config, bo
     var overviews = drafts.Where(d => d.Key.StartsWith("module:")).ToDictionary(d => d.Key["module:".Length..], d => d.Value);
     // Advisory ratings of written docs: shown in quality.md, never part of doc quality % or check.
     var assessments = await AiProse.Assessments(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-assessments.json"), ai);
+    bar.Advance("AI assessments");
+    var rebuildHtml = html && refreshHtmlOnVersionChange && HtmlVersion.NeedsRefresh(outDir, AppVersion.Number);
     var (pages, changed) = Timings.Measure("generate", () => new Generator(root, outDir, model, findings, arch, config, summaries, overviews, assessments)
     {
         WriteHtml = html,
+        RebuildHtml = rebuildHtml,
         Files = [.. RepoFiles(root, config, [".github", ".circleci"]).Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))],
     }.Run());
 
+    bar.Advance("write pages");
+    if (html) HtmlVersion.Record(outDir, AppVersion.Number);
     // Fingerprint for `docwizz diff`: the model these docs were generated from.
     Directory.CreateDirectory(Path.Combine(outDir, ".docwizz"));
     WriteModel(model, Path.Combine(outDir, ".docwizz", "model.json"));
     File.WriteAllText(Path.Combine(outDir, ".docwizz", "documentation.json"),
         JsonSerializer.Serialize(DocumentationJson(model, config, findings), JsonOptions()));
+    bar.Advance("metadata");
     return $"{pages.Count} pages → {outDir} (commit {model.Commit ?? "unknown"}): {changed.Count} changed" +
         (changed.Count is > 0 and <= 10 ? $" ({string.Join(", ", changed.Order())})" : "");
 }
@@ -516,7 +540,7 @@ static (List<string> Failures, List<string> MissingSections) CheckFailures(strin
 // First run on a repository, in a fixed order: scan (and detect the stack) → config → analyze → architecture →
 // generate → check. A failed stage is reported and doesn't hide the others; scan and config are required by the rest.
 // Exit 1 only when a stage fails: a failing check is the baseline to improve on, reported with what to do next.
-static async Task<int> SetupCommand(string root, string? profile, bool force, bool ai, bool html)
+static async Task<int> SetupCommand(string root, string? profile, bool force, bool ai, bool html, bool refreshHtmlOnVersionChange = false, bool progress = false)
 {
     var file = Path.Combine(root, "docwizz.yaml");
     var outDir = Path.Combine(root, "docs");
@@ -529,6 +553,7 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
     string configStatus = "";
     bool? passed = null;
 
+    using var bar = CliProgress.ForConsole(6, progress);
     Console.WriteLine($"docwizz setup {Path.GetFullPath(root)}");
     var results = Setup.Run(
     [
@@ -561,7 +586,7 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
             return $"{arch.Violations.Count - security} violations ({Architecture.Failing(arch.Violations, config.Check).Count - security} failing), {arch.Cycles.Count} cycles" +
                 (config.Security.Enabled ? $", {security} security findings" : ", security rules off");
         }),
-        new("generate", () => Generate(root, outDir, config, ai, html, model).GetAwaiter().GetResult()),
+        new("generate", () => Generate(root, outDir, config, ai, html, model, refreshHtmlOnVersionChange: refreshHtmlOnVersionChange).GetAwaiter().GetResult()),
         new("check", () =>
         {
             findings ??= Analyzer.Analyze(model, config);
@@ -570,7 +595,7 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
             passed = failures.Count == 0;
             return passed.Value ? "PASS" : "FAIL — " + string.Join("; ", failures);
         }),
-    ], Console.Out);
+    ], Console.Out, bar.Advance);
 
     var failed = results.Where(r => !r.Ok).ToList();
     var rel = (string p) => "./" + Path.GetRelativePath(".", p).Replace('\\', '/');
