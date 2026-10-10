@@ -14,7 +14,8 @@ It never guesses intent, and it marks whether each item is *detected*, *inferred
 - **SBOM:** a CycloneDX 1.6 inventory of the direct dependencies declared in NuGet, npm, Maven and Gradle manifests, with
   package URLs; nothing is installed or resolved ([SBOM inventory](CLI.md#sbom-inventory)).
 
-How it works: [ARCHITECTURE.md](ARCHITECTURE.md). What's next: [ROADMAP.md](ROADMAP.md).
+How it works: [ARCHITECTURE.md](ARCHITECTURE.md). What's next: [ROADMAP.md](ROADMAP.md). Using the docs as context for
+a coding agent: [CLI.md](CLI.md#8-context-for-coding-agents) and the [AGENTS.md template](templates/AGENTS.md).
 
 ## Quick start
 
