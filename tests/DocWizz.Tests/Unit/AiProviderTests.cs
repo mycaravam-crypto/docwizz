@@ -183,7 +183,7 @@ public class AiProviderTests
     public async Task A_server_that_does_not_answer_times_out_as_an_http_error()
     {
         using var server = new FakeServer(0, "");
-        using var ai = new OpenAiCompatibleProvider("m", server.Uri, null, TimeSpan.FromMilliseconds(300));
+        using var ai = new OpenAiCompatibleProvider("m", server.Uri, null, TimeSpan.FromSeconds(2));
         Assert.Contains("did not answer within", (await Assert.ThrowsAsync<HttpRequestException>(() => ai.Complete("i", "f"))).Message);
     }
 
