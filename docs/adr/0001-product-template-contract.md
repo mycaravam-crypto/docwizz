@@ -63,5 +63,7 @@ escaped. Sections without evidence are not sent and stay **OFFEN**. Project
 statements are untrusted data. Cache key: template id, section id, a hash of the
 instructions and evidence, and provider/model. Without `--ai`, or when nothing
 survives validation, output is byte-identical to the deterministic draft.
-Deliberately deferred: the machine-readable evidence/gap report, `product check`,
-DOCX.
+`<product_id>.evidence.json` next to the draft is the machine-readable evidence and
+gap report: per section `evidenced` / `open` / `empty`, the evidence with ids and
+origin, synthesized sentences with their citations, and the required-section totals.
+Deliberately deferred: `product check`, DOCX.

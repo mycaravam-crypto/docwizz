@@ -67,6 +67,37 @@ internal static class ProductDraft
         return output.ToString();
     }
 
+    // The machine-readable evidence and gap report next to the draft: per section whether it is filled from evidence, or
+    // open (required, no evidence) or empty (optional), with every piece of evidence and any synthesized sentence and
+    // the ids it cites. Nothing in it is a statement of review, approval or conformity, and the report says so.
+    public static string Report(ProductTemplate template, CodeModel? model = null, ProjectContext? project = null,
+        IReadOnlyDictionary<string, List<ProductSynthesis.Sentence>>? synthesis = null)
+    {
+        var sections = Catalog(template, model, project).Select(c => new
+        {
+            id = c.Section.Id, title = c.Section.Title, required = c.Section.Required, sources = c.Section.Sources,
+            status = c.Evidence.Count > 0 ? "evidenced" : c.Section.Required ? "open" : "empty",
+            evidence = c.Evidence.Select(e => new { id = e.Id, kind = e.Kind, origin = e.Kind == "code" ? "detected" : "human", text = e.Text, source = e.Source }),
+            synthesized = synthesis?.GetValueOrDefault(c.Section.Id)?.Select(x => new { text = x.Text, evidence = x.Evidence, origin = "ai-drafted" }),
+        }).ToList();
+        var required = sections.Where(x => x.required).ToList();
+        return System.Text.Json.JsonSerializer.Serialize(new
+        {
+            generator = "docwizz product",
+            product = template.ProductId, variant = template.XtVariant, version = template.XtVersion, tailoring = template.Tailoring,
+            dependencies = template.Dependencies,
+            commit = model?.Commit,
+            note = "evidence inventory and gaps of a draft; not a statement of review, approval or V-Modell XT conformity",
+            required = new { total = required.Count, evidenced = required.Count(x => x.status == "evidenced"), open = required.Where(x => x.status == "open").Select(x => x.id) },
+            sections,
+        }, new System.Text.Json.JsonSerializerOptions
+        {
+            WriteIndented = true,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        }).Replace("\r\n", "\n") + "\n";
+    }
+
     static string Escape(string value) => value.Replace("&", "&amp;", StringComparison.Ordinal)
         .Replace("<", "&lt;", StringComparison.Ordinal)
         .Replace(">", "&gt;", StringComparison.Ordinal)

@@ -72,4 +72,23 @@ public class ProductJourneyTests
         Assert.Equal(plain, File.ReadAllText(output));
         Docwizz.NoStackTrace(ai);
     }
+
+    [Fact]
+    public void The_evidence_report_is_written_next_to_the_draft_kept_when_unchanged_and_never_overwrites_a_foreign_file()
+    {
+        using var repo = new Sources(("template.yaml", Template), ("Example.cs", "public class Example {}"));
+        var first = Docwizz.Run("product", repo.Root, Path.Combine(repo.Root, "template.yaml"));
+        Assert.Equal(0, first.Exit);
+        var report = Path.Combine(repo.Root, "docs", "products", "sw-architecture.evidence.json");
+        Assert.Contains("sw-architecture.evidence.json", first.Out);
+        var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(report)).RootElement;
+        Assert.Equal(["scope"], json.GetProperty("required").GetProperty("open").EnumerateArray().Select(x => x.GetString()));
+        Assert.Contains("unchanged:", Docwizz.Run("product", repo.Root, Path.Combine(repo.Root, "template.yaml")).Out);
+
+        File.WriteAllText(report, "{\"mine\": true}\n");
+        var blocked = Docwizz.Run("product", repo.Root, Path.Combine(repo.Root, "template.yaml"));
+        Assert.Equal(1, blocked.Exit);
+        Assert.Contains("is not docwizz-generated", blocked.Err);
+        Assert.Equal("{\"mine\": true}\n", File.ReadAllText(report));
+    }
 }

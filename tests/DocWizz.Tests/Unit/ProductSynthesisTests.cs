@@ -102,4 +102,29 @@ public class ProductSynthesisTests
         Assert.Empty(await ProductSynthesis.Synthesize(template, catalog, down, "fake/fake-2", Cache()));
         Assert.Single(down.Sent);
     }
+
+    [Fact]
+    public async Task The_evidence_report_lists_every_section_as_evidenced_open_or_empty_with_ids_and_origins()
+    {
+        var template = ProductDraftTests.Template();
+        var catalog = ProductDraft.Catalog(template, Code);
+        var synthesis = await ProductSynthesis.Synthesize(template, catalog, new FakeModel(s => s == "Bausteine" ? Reply(S("Zwei Bausteine.", "E1", "E2")) : Reply()), "fake/fake-1", Cache());
+        var report = System.Text.Json.JsonDocument.Parse(ProductDraft.Report(template, Code, null, synthesis)).RootElement;
+
+        Assert.Equal("docwizz product", report.GetProperty("generator").GetString());
+        Assert.Contains("not a statement of review, approval", report.GetProperty("note").GetString());
+        Assert.Equal(2, report.GetProperty("required").GetProperty("total").GetInt32());   // scope, structure
+        Assert.Equal(1, report.GetProperty("required").GetProperty("evidenced").GetInt32());
+        Assert.Equal(["scope"], report.GetProperty("required").GetProperty("open").EnumerateArray().Select(x => x.GetString()));
+        var sections = report.GetProperty("sections").EnumerateArray().ToDictionary(x => x.GetProperty("id").GetString()!);
+        Assert.Equal("open", sections["scope"].GetProperty("status").GetString());
+        Assert.Equal("evidenced", sections["structure"].GetProperty("status").GetString());
+        var e1 = sections["structure"].GetProperty("evidence")[0];
+        Assert.Equal(("E1", "code", "detected", "src/Api/OrderController.cs:1"),
+            (e1.GetProperty("id").GetString(), e1.GetProperty("kind").GetString(), e1.GetProperty("origin").GetString(), e1.GetProperty("source").GetString()));
+        var sentence = sections["structure"].GetProperty("synthesized")[0];
+        Assert.Equal(("Zwei Bausteine.", "ai-drafted"), (sentence.GetProperty("text").GetString(), sentence.GetProperty("origin").GetString()));
+        Assert.Equal(ProductDraft.Report(template, Code), ProductDraft.Report(template, Code));   // deterministic
+        Assert.DoesNotContain("synthesized", ProductDraft.Report(template, Code));   // without --ai: evidence only
+    }
 }

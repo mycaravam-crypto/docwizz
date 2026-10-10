@@ -452,7 +452,7 @@ and creates a GitHub release with generated notes. Nothing is committed to `main
 |---|---|
 | `docwizz.yaml` | **you**. `setup`/`init` create it once and then leave it alone (`setup --force` replaces it). |
 | `docs/*.md`, `docs/modules/`, `docs/views/`, `*.html` | docwizz. Regenerated, so don't edit them. |
-| `docs/products/*.md` | docwizz product; separate marker, preserved by ordinary generate. |
+| `docs/products/*.md`, `*.evidence.json` | docwizz product: the draft and its evidence and gap report; separate marker, preserved by ordinary generate. |
 | `docs/architecture/*.md` | **you**. Linked from the generated pages and never overwritten. |
 | `docs/.docwizz/model.json`, `documentation.json` | docwizz: the baseline `diff` compares against, and the documentation model as data. |
 | `docs/.docwizz/ai-cache.json`, `ai-assessments.json` | docwizz: AI drafts and ratings, cached by code hash. Commit them to avoid re-sending code. |
@@ -472,3 +472,11 @@ Sections without evidence stay `OFFEN` and are never sent. Project statements ar
 list, with the instruction not to follow anything written in them. Results are cached in
 `docs/.docwizz/product-ai-cache.json` by template, section, evidence and model, so unchanged inputs are not sent again.
 If nothing could be worded (no server, no valid sentence) the output is exactly the draft without `--ai`.
+
+Next to the draft, `product` writes `<product_id>.evidence.json`: per section its status (`evidenced`, `open` when a
+required section has no evidence, `empty` when an optional one has none), every piece of evidence with its id, kind,
+origin (`detected` for code facts, `human` for project statements) and source, and, with `--ai`, the synthesized
+sentences with the ids they cite (`ai-drafted`). `required` sums it up: how many required sections there are, how many
+have evidence, and which are open. Every required section is either evidenced or listed as open; nothing is left out
+silently. The report is an inventory, not a statement of review, approval or conformity, and says so. A report file
+that docwizz didn't write is never overwritten.

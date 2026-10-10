@@ -206,14 +206,24 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
         if (synthesis.Count == 0) synthesis = null;   // nothing worded: the deterministic draft, without ids or an AI note
     }
     var text = (marker + "\n" + ProductDraft.Render(template, model, project, synthesis)).Replace("\r\n", "\n");
-    if (File.Exists(full) && File.ReadAllText(full) == text)
+    // The evidence and gap report sits next to the draft (<id>.evidence.json) and is protected the same way.
+    var report = Path.ChangeExtension(full, ".evidence.json");
+    var json = ProductDraft.Report(template, model, project, synthesis);
+    if (File.Exists(report) && !File.ReadAllText(report).Contains("\"generator\": \"docwizz product\""))
     {
-        Console.WriteLine($"unchanged: {Path.GetRelativePath(root, full)}");
-        return 0;
+        Console.Error.WriteLine($"{report} exists and is not docwizz-generated; refusing to overwrite");
+        return 1;
     }
-    Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-    File.WriteAllText(full, text);
-    Console.WriteLine($"→ {Path.GetRelativePath(root, full)}");
+    var written = false;
+    foreach (var (file, content) in new[] { (full, text), (report, json) })
+    {
+        if (File.Exists(file) && File.ReadAllText(file) == content) continue;
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(file, content);
+        Console.WriteLine($"→ {Path.GetRelativePath(root, file)}");
+        written = true;
+    }
+    if (!written) Console.WriteLine($"unchanged: {Path.GetRelativePath(root, full)}");
     return 0;
 }
 
