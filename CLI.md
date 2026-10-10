@@ -159,11 +159,31 @@ docwizz setup . --ai
 ```
 
 Use `--ai` when you want drafts for missing summaries and module overviews to start writing from. It is off unless you
-pass it, including in `setup`. The model must be a **self-hosted Ollama** on a loopback or private address: cloud
-models and public hosts are refused and proxies are bypassed. Drafts are marked 🤖 and cite the facts they rest on.
+pass it, including in `setup`. The model must be **self-hosted** on a loopback or private address: a local Ollama
+(the default), or any server with an OpenAI-compatible API (vLLM, NVIDIA NIM, Nutanix Enterprise AI, a LiteLLM gateway)
+configured under `ai:` in `docwizz.yaml`. Cloud models and public hosts are refused and proxies are bypassed. Drafts are marked 🤖 and cite the facts they rest on.
 They fill only empty sections and **never** close a documentation gap, raise coverage or pass a check. AI ratings of
 written docs are advisory and not part of any gate. Drafts are cached by code hash, so unchanged code is not sent
 again. Without `--ai`, nothing is sent. See [README: AI drafts](README.md#ai-drafts).
+
+An OpenAI-compatible server, for example vLLM on an internal GPU host:
+
+```yaml
+ai:
+  provider: openai-compatible   # ollama (default) or openai-compatible
+  endpoint: http://10.0.0.5:8000/v1
+  model: qwen3-coder-next
+  api_key_env: DOCWIZZ_AI_KEY   # optional: the variable that holds the key
+```
+
+```bash
+DOCWIZZ_AI_KEY=... docwizz generate . --ai
+```
+
+The key is read only from the variable `api_key_env` names. It never goes in `docwizz.yaml`, which refuses an `api_key`
+setting, and it is never printed. If the variable is named but empty, `--ai` is skipped with a message. `DOCWIZZ_MODEL`
+overrides `model` (and, for Ollama, `OLLAMA_HOST` overrides `endpoint`). Drafts are cached per provider and model:
+switching models drafts afresh with `--ai`, and without `--ai` any cached draft of unchanged code is used.
 
 ### 6. Diff and impact analysis
 
@@ -290,7 +310,7 @@ gives the same lines as data (compact, since whitespace costs tokens).
 | `--html` | off | generate, setup | adds HTML pages; the Markdown is written either way | normal |
 | `--progress` | interactive terminals | generate, setup | Force progress bars on stderr when output is redirected | normal |
 | `--refresh-html-on-version-change` | off | generate, setup | Implies HTML; rebuild on generator version change | normal |
-| `--ai` | off | generate, setup | local Ollama only; cached drafts are used even without it, nothing new is sent | opt-in |
+| `--ai` | off | generate, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it, nothing new is sent | opt-in |
 | `--force` | off | setup | replaces an existing `docwizz.yaml`; any other command rejects it | setup only |
 | `--timings` | off | all | time and peak memory per stage, on stderr | benchmarks |
 | `--help`, `-h` | — | all | prints the command's help and exits | — |

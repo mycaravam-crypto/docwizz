@@ -14,6 +14,7 @@ class Config
     public ArchitectureConfig Architecture { get; set; } = new();
     public SecurityConfig Security { get; set; } = new();
     public RemediationConfig Remediation { get; set; } = new();
+    public AiConfig Ai { get; set; } = new();
     public string Profile { get; set; } = "default";
 
     // Human-authored architecture sections the profile expects under docs/architecture/<name>.md.
@@ -69,6 +70,12 @@ class Config
         exclude: []
         # Count a plain // comment block directly above a C# member as its summary (for code that doesn't use /// XML docs).
         comment_docs: false
+        # Self-hosted model for --ai (README: AI drafts). Default: Ollama at OLLAMA_HOST, model DOCWIZZ_MODEL.
+        # ai:
+        #   provider: openai-compatible   # ollama (default) or openai-compatible (vLLM, NVIDIA NIM, LiteLLM, ...)
+        #   endpoint: http://10.0.0.5:8000/v1   # must resolve to a loopback or private address
+        #   model: qwen3-coder-next
+        #   api_key_env: DOCWIZZ_AI_KEY   # the environment variable that holds the key; never the key itself
         """;
 
     static readonly IDeserializer Yaml = new DeserializerBuilder().WithNamingConvention(UnderscoredNamingConvention.Instance).Build();
@@ -97,7 +104,34 @@ class Config
         if (config.Check.RequireTests is { } rt && rt.ToLowerInvariant() is not ("high" or "medium"))
             throw new ArgumentException($"check.require_tests: '{rt}' (high or medium; lower levels need no docs and aren't tracked)");
         global::Security.Validate(config.Security);
+        config.Ai.Validate();
         return config;
+    }
+}
+
+// `ai:`: the self-hosted model --ai uses. Ollama by default (OLLAMA_HOST, DOCWIZZ_MODEL); `openai-compatible` for
+// servers with /v1/chat/completions (vLLM, NVIDIA NIM, LiteLLM, ...). The API key is only ever read from the environment
+// variable named here, never from this file. DOCWIZZ_MODEL and OLLAMA_HOST override `model` and `endpoint`.
+class AiConfig
+{
+    public static readonly string[] Providers = ["ollama", "openai-compatible"];
+
+    public string Provider { get; set; } = "ollama";
+    public string? Endpoint { get; set; }
+    public string? Model { get; set; }
+    public string? ApiKeyEnv { get; set; }
+
+    // Fails at load, not at the first draft: an unknown provider, or an OpenAI-compatible one without endpoint or model.
+    public void Validate()
+    {
+        if (!Providers.Contains(Provider))
+            throw new ArgumentException($"ai.provider: '{Provider}' ({string.Join(" or ", Providers)})");
+        if (Endpoint is not null && (!Uri.TryCreate(Endpoint, UriKind.Absolute, out var u) || u.Scheme is not ("http" or "https")))
+            throw new ArgumentException($"ai.endpoint: '{Endpoint}' is not an http(s) URL");
+        if (Provider == "openai-compatible" && (Endpoint is null || Model is null))
+            throw new ArgumentException("ai: provider openai-compatible needs endpoint (e.g. http://10.0.0.5:8000/v1) and model");
+        if (ApiKeyEnv is not null && !System.Text.RegularExpressions.Regex.IsMatch(ApiKeyEnv, "^[A-Za-z_][A-Za-z0-9_]*$"))
+            throw new ArgumentException($"ai.api_key_env: '{ApiKeyEnv}' is not an environment variable name (the key itself never goes in docwizz.yaml)");
     }
 }
 

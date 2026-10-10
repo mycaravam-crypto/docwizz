@@ -23,7 +23,19 @@ interface IAiProvider : IDisposable
 static class AiProviders
 {
     // The provider --ai uses, or null when it may not be used; the reason goes to stderr, naming `what` was skipped.
-    public static IAiProvider? Create(string what) => OllamaProvider.FromEnvironment(what);
+    public static IAiProvider? Create(AiConfig config, string what) => config.Provider switch
+    {
+        "openai-compatible" => OpenAiCompatibleProvider.FromConfig(config, what),
+        _ => OllamaProvider.FromConfig(config, what),
+    };
+
+    // "<provider>/<model>" as Create would configure it, without connecting or checking anything: what a cached result
+    // is filed under, so a draft from one model isn't taken for another's.
+    public static string Tag(AiConfig config) => $"{config.Provider}/{ModelName(config)}";
+
+    // DOCWIZZ_MODEL, else ai.model, else (Ollama only) the default model.
+    public static string ModelName(AiConfig config) => Environment.GetEnvironmentVariable("DOCWIZZ_MODEL") is { Length: > 0 } m ? m
+        : config.Model ?? (config.Provider == "ollama" ? OllamaProvider.DefaultModel : "");
 
     // Reasoning models think aloud before answering; only the answer is the reply.
     public static string? Answer(string? text) =>
@@ -34,7 +46,7 @@ static class AiProviders
 // private-network address, and proxies are never used (a proxy would carry the code to wherever it sends it).
 static class LocalEndpoint
 {
-    public static HttpClient Client(Uri baseAddress, string server) => new(new SocketsHttpHandler
+    public static HttpClient Client(Uri baseAddress, string server, TimeSpan? timeout = null) => new(new SocketsHttpHandler
     {
         UseProxy = false,
         ConnectCallback = async (ctx, ct) =>
@@ -46,7 +58,7 @@ static class LocalEndpoint
             try { await socket.ConnectAsync(addresses, ctx.DnsEndPoint.Port, ct); return new NetworkStream(socket, ownsSocket: true); }
             catch { socket.Dispose(); throw; }
         },
-    }) { BaseAddress = baseAddress, Timeout = TimeSpan.FromMinutes(10) }; // local models on CPU are slow
+    }) { BaseAddress = baseAddress, Timeout = timeout ?? TimeSpan.FromMinutes(10) }; // local models on CPU are slow
 
     // Loopback, RFC 1918, IPv6 unique-local.
     public static bool IsPrivate(IPAddress a)
@@ -59,8 +71,8 @@ static class LocalEndpoint
     }
 }
 
-// A self-hosted Ollama (`/api/chat`). OLLAMA_HOST picks the server, DOCWIZZ_MODEL the model; Ollama's cloud models are
-// refused because they run on ollama.com.
+// A self-hosted Ollama (`/api/chat`). OLLAMA_HOST (else ai.endpoint) picks the server, DOCWIZZ_MODEL (else ai.model) the
+// model; Ollama's cloud models are refused because they run on ollama.com.
 sealed class OllamaProvider(string model, Uri endpoint) : IAiProvider
 {
     public const string DefaultModel = "qwen2.5-coder:7b";
@@ -71,17 +83,17 @@ sealed class OllamaProvider(string model, Uri endpoint) : IAiProvider
     public string Model => model;
     public Uri Endpoint => endpoint;
 
-    // DOCWIZZ_MODEL (default qwen2.5-coder:7b) at OLLAMA_HOST, or null when the model is one of Ollama's `…-cloud` /
-    // `…:cloud` models.
-    public static OllamaProvider? FromEnvironment(string what)
+    // The configured model (default qwen2.5-coder:7b) at the configured host, or null when the model is one of Ollama's
+    // `…-cloud` / `…:cloud` models.
+    public static OllamaProvider? FromConfig(AiConfig config, string what)
     {
-        var name = Environment.GetEnvironmentVariable("DOCWIZZ_MODEL") is { Length: > 0 } m ? m : DefaultModel;
+        var name = AiProviders.ModelName(config);
         if (IsCloud(name))
         {
             Console.Error.WriteLine($"docwizz: AI {what} skipped — {name} is an Ollama cloud model; use a local one");
             return null;
         }
-        return new(name, Uri(Environment.GetEnvironmentVariable("OLLAMA_HOST")));
+        return new(name, Uri(Environment.GetEnvironmentVariable("OLLAMA_HOST") is { Length: > 0 } host ? host : config.Endpoint));
     }
 
     public static bool IsCloud(string model) => model.Split(':').Last().EndsWith("cloud", StringComparison.OrdinalIgnoreCase);
@@ -112,6 +124,90 @@ sealed class OllamaProvider(string model, Uri endpoint) : IAiProvider
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         return AiProviders.Answer(body.GetProperty("message").GetProperty("content").GetString());
+    }
+
+    public void Dispose() => client.Dispose();
+}
+
+// A self-hosted server with an OpenAI-compatible API (`<endpoint>/chat/completions`): vLLM, NVIDIA NIM, Nutanix
+// Enterprise AI, a LiteLLM gateway. Same guard as Ollama: only loopback or private addresses, no proxy. Which hosts are
+// allowed follows from the address alone (an allowlist of private ranges), so no public provider can be configured by
+// accident. The API key comes from the environment variable ai.api_key_env names and is only ever sent as a header.
+sealed class OpenAiCompatibleProvider : IAiProvider
+{
+    readonly HttpClient client;
+    readonly TimeSpan timeout;
+    // Some servers reject `response_format`; after the first 400 the JSON object is asked for by the prompt alone.
+    bool jsonMode = true;
+
+    public string Name => "openai-compatible";
+    public string Model { get; }
+    public Uri Endpoint { get; }
+
+    public OpenAiCompatibleProvider(string model, Uri endpoint, string? apiKey, TimeSpan? timeout = null)
+    {
+        Model = model;
+        Endpoint = new UriBuilder(endpoint) { Path = endpoint.AbsolutePath.TrimEnd('/') + "/" }.Uri;
+        this.timeout = timeout ?? TimeSpan.FromMinutes(10);
+        client = LocalEndpoint.Client(Endpoint, "model server", this.timeout);
+        if (apiKey is not null) client.DefaultRequestHeaders.Authorization = new("Bearer", apiKey);
+    }
+
+    // ai.endpoint and ai.model (DOCWIZZ_MODEL overrides the model), with the key from ai.api_key_env; null, with the reason,
+    // when that variable is named but not set.
+    public static OpenAiCompatibleProvider? FromConfig(AiConfig config, string what)
+    {
+        string? key = null;
+        if (config.ApiKeyEnv is { } env && (key = Environment.GetEnvironmentVariable(env)) is not { Length: > 0 })
+        {
+            Console.Error.WriteLine($"docwizz: AI {what} skipped — ai.api_key_env names {env}, which is not set");
+            return null;
+        }
+        return new(AiProviders.ModelName(config), new Uri(config.Endpoint!), key);
+    }
+
+    public async Task<string?> Complete(string instructions, string facts)
+    {
+        while (true)
+        {
+            var request = new Dictionary<string, object>
+            {
+                ["model"] = Model,
+                ["temperature"] = 0,
+                ["stream"] = false,
+                ["messages"] = new[] { new { role = "system", content = instructions }, new { role = "user", content = facts } },
+            };
+            if (jsonMode) request["response_format"] = new { type = "json_object" };
+            HttpResponseMessage response;
+            try
+            {
+                response = await client.PostAsync("chat/completions",
+                    new StringContent(JsonSerializer.Serialize(request), System.Text.Encoding.UTF8, "application/json"));
+            }
+            catch (TaskCanceledException) { throw new HttpRequestException($"{Endpoint} did not answer within {timeout.TotalSeconds:0} s"); }
+            using (response)
+            {
+                if (response.StatusCode == HttpStatusCode.BadRequest && jsonMode)
+                {
+                    jsonMode = false;
+                    continue;
+                }
+                if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                    throw new HttpRequestException($"{Endpoint} refused the request ({(int)response.StatusCode}): check the key in ai.api_key_env");
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                    throw new HttpRequestException($"{Endpoint}chat/completions or model {Model} not found (check ai.endpoint, which usually ends in /v1, and ai.model)");
+                response.EnsureSuccessStatusCode();
+                try
+                {
+                    var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+                    return AiProviders.Answer(body.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString());
+                }
+                catch (Exception e) when (e is JsonException or KeyNotFoundException or InvalidOperationException or IndexOutOfRangeException)
+                {
+                    throw new HttpRequestException($"{Endpoint} did not answer like an OpenAI-compatible server ({e.Message})");
+                }
+            }
+        }
     }
 
     public void Dispose() => client.Dispose();
