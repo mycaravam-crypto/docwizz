@@ -13,7 +13,7 @@ section_log=$(mktemp); section_name="build"; section_start=$EPOCHREALTIME
 section() {
   local now=$EPOCHREALTIME
   local ms=$(( (${now//[.,]/} - ${section_start//[.,]/}) / 1000 ))
-  printf '%6d ms  %s\n' "$ms" "$section_name" | tee -a "$section_log" >&2
+  [ -z "$section_name" ] || printf '%6d ms  %s\n' "$ms" "$section_name" | tee -a "$section_log" >&2
   section_name=$1; section_start=$now
 }
 # Build once and run the built DLL: `dotnet run` re-evaluates and up-to-date-checks the project on every call, which
@@ -21,6 +21,12 @@ section() {
 dotnet build "$root/src/DocWizz" --nologo -v q
 dll=$(dotnet msbuild "$root/src/DocWizz" -getProperty:TargetPath)
 dw() { dotnet "$dll" "$@"; }
+section ""
+
+# The sections run in four groups at once (each in its own subshell), each group's sections in order. A section may use
+# what an earlier section of its group set up; across groups nothing is shared: sections write only to their own temp
+# directories and only read fixture/. Put a new section in the group whose time it balances (see the job summary).
+group_a() {
 section "scan and code graph"
 model=$(mktemp)
 out=$(dw scan fixture "$model")
@@ -452,6 +458,9 @@ assert "<summary>Stacked notifications in the corner of the page.</summary>" in 
 PY
 rm -rf "$plain"
 
+}
+
+group_b() {
 # Change impact: only what a change introduces fails `check --since`
 section "change impact"
 repo=$(mktemp -d)
@@ -614,6 +623,9 @@ set +e; bad=$(dw architecture "$repo" 2>&1); code=$?; set -e
 [ "$code" -eq 1 ] && grep -q "architecture.rules\[0\] (ARCH-DOMAIN-001): unknown layer 'core'" <<<"$bad" || { echo "$bad"; exit 1; }
 rm -rf "$repo"
 
+}
+
+group_c() {
 # Security rules (opt-in): facts apart from risks, per rule, on the fixture's endpoints
 section "security rules"
 sec=$(mktemp -d); cp -r fixture/. "$sec"
@@ -720,6 +732,9 @@ assert "cs:Fixture.Application.IMaterialService.GetAsync(int)" in i["sections"][
 PY
 rm -rf "$docs"
 
+}
+
+group_d() {
 # --ai talks only to a self-hosted Ollama: a fake one on loopback drafts; public hosts and cloud models are refused
 section "AI drafts (fake Ollama)"
 docs=$(mktemp -d); port_file=$(mktemp)
@@ -747,7 +762,7 @@ class H(http.server.BaseHTTPRequestHandler):
 s = http.server.HTTPServer(("127.0.0.1", 0), H)
 open(sys.argv[1], "w").write(str(s.server_port)); s.serve_forever()
 PY
-fake=$!; trap 'kill $fake 2>/dev/null || true; rm -rf "$sandbox"' EXIT
+fake=$!; trap 'kill $fake 2>/dev/null || true' EXIT
 until [ -s "$port_file" ]; do sleep 0.1; done
 OLLAMA_HOST="127.0.0.1:$(cat "$port_file")" DOCWIZZ_MODEL=local:7b dw generate fixture "$docs" --ai >/dev/null 2>&1
 grep -q "🤖 _Drafted locally._" "$docs/api.md"
@@ -958,8 +973,26 @@ assert (c["current"], r["kind"], r["status"], r["confidence"]) == ("9.0.0", "maj
 assert "cs:Fixture.Infrastructure.AppDbContext" in [s["id"] for s in r["impact"]["symbols"]], r["impact"]
 assert "POST /api/materials" in r["impact"]["flows"] and "validation" not in r and r["provenance"]["impact"] == "inferred"
 PY2
-section ""
+}
+
+# Each group's output goes to its own log, printed whole once the group ends: folded when it passed, open when it failed.
+logs=$(mktemp -d); groups=(a b c d); declare -A pid
+for g in "${groups[@]}"; do
+  # A failing check names its line and section; with `set +e` around a command (an expected failure) it stays quiet.
+  ( set -E; trap '[[ $- == *e* ]] && echo "test.sh:$LINENO ($section_name): failed: $BASH_COMMAND"' ERR
+    "group_$g"; section "" ) > "$logs/$g.log" 2>&1 &
+  pid[$g]=$!
+done
+failed=""
+for g in "${groups[@]}"; do
+  if wait "${pid[$g]}"; then
+    echo "::group::group $g passed"; cat "$logs/$g.log"; echo "::endgroup::"
+  else
+    failed+=" $g"; echo "=== group $g FAILED ==="; cat "$logs/$g.log"
+  fi
+done
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   { echo "### test.sh: time per section"; echo; echo '```text'; sort -rn "$section_log"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 fi
+[ -z "$failed" ] || { echo "FAILED groups:$failed"; exit 1; }
 echo PASS
