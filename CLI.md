@@ -25,7 +25,7 @@ an example and its options.
 | `diff` | change impact | developers, CI | optional |
 | `context` | token-budgeted facts about one target, for coding agents | coding agents | optional |
 | `mcp` | read-only MCP server over the code model | coding agents | optional |
-| `product` | deterministic product draft from a YAML template | architects | optional |
+| `product` | product draft from a YAML template, from code and project evidence | architects | optional |
 | `sbom` | CycloneDX manifest SBOM | supply-chain inventory | optional |
 | `remediate` | package update suggestions | maintainers | optional |
 | `init` | blank config with every default | manual setup | no |
@@ -330,7 +330,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 | `diff` | `docwizz diff [dir] [base] [head] [--format f] [--profile p]` | change impact vs the last `generate` or git refs | reviews, CI |
 | `context` | `docwizz context <dir> --for target [--hops n] [--budget tokens] [--format md\|json] [--include-ai]` | token-budgeted context package for one symbol, file, folder or endpoint | coding agents |
 | `mcp` | `docwizz mcp <dir> [--auto-rescan]` | read-only MCP server on stdio: find_symbol, context, callers, impact, check, … | coding agents |
-| `product` | `docwizz product <dir> <template.yaml> [out.md] [--context file.yaml]` | versioned product draft without AI | architects |
+| `product` | `docwizz product <dir> <template.yaml> [out.md] [--context file.yaml] [--ai]` | versioned product draft from evidence; `--ai`: a local model words sections, citing evidence ids | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
 | `init` | `docwizz init [dir]` | write a `docwizz.yaml` with every default; refuses to overwrite | manual setup |
@@ -357,7 +357,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 | `--html` | off | generate, setup | adds HTML pages; the Markdown is written either way | normal |
 | `--progress` | interactive terminals | generate, setup | Force progress bars on stderr when output is redirected | normal |
 | `--refresh-html-on-version-change` | off | generate, setup | Implies HTML; rebuild on generator version change | normal |
-| `--ai` | off | generate, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it, nothing new is sent | opt-in |
+| `--ai` | off | generate, product, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it, nothing new is sent | opt-in |
 | `--force` | off | setup | replaces an existing `docwizz.yaml`; any other command rejects it | setup only |
 | `--timings` | off | all | time and peak memory per stage, on stderr | benchmarks |
 | `--help`, `-h` | — | all | prints the command's help and exits | — |
@@ -452,13 +452,31 @@ and creates a GitHub release with generated notes. Nothing is committed to `main
 |---|---|
 | `docwizz.yaml` | **you**. `setup`/`init` create it once and then leave it alone (`setup --force` replaces it). |
 | `docs/*.md`, `docs/modules/`, `docs/views/`, `*.html` | docwizz. Regenerated, so don't edit them. |
-| `docs/products/*.md` | docwizz product; separate marker, preserved by ordinary generate. |
+| `docs/products/*.md`, `*.evidence.json` | docwizz product: the draft and its evidence and gap report; separate marker, preserved by ordinary generate. |
 | `docs/architecture/*.md` | **you**. Linked from the generated pages and never overwritten. |
 | `docs/.docwizz/model.json`, `documentation.json` | docwizz: the baseline `diff` compares against, and the documentation model as data. |
 | `docs/.docwizz/ai-cache.json`, `ai-assessments.json` | docwizz: AI drafts and ratings, cached by code hash. Commit them to avoid re-sending code. |
 
 ## Product draft (deterministic MVP)
 
-Run `docwizz product . templates/vmodell-xt/sw-architecture.yaml` using a path from the current directory, or from `<dir>` if not found. The optional third positional argument specifies the Markdown output relative to the current directory. Default: `docs/products/<product_id>.md`. Product facts come from the existing CodeModel; fields that cannot be evidenced remain marked `OFFEN`. This command makes no AI calls, and refuses to replace manually maintained output. Re-running an unchanged generation does not rewrite the file. The template is illustrative, not a V-Modell XT compliance assertion.
+Run `docwizz product . templates/vmodell-xt/sw-architecture.yaml` using a path from the current directory, or from `<dir>` if not found. The optional third positional argument specifies the Markdown output relative to the current directory. Default: `docs/products/<product_id>.md`. Product facts come from the existing CodeModel; fields that cannot be evidenced remain marked `OFFEN`. Without `--ai` this command makes no AI calls. It refuses to replace manually maintained output. Re-running an unchanged generation does not rewrite the file. The template is illustrative, not a V-Modell XT compliance assertion.
 
 Optional `--context project.yaml` loads sourced project statements. The path is resolved from the current directory, falling back to `<dir>`. Unmapped statements or sources incompatible with the selected section cause exit 1; statements are never silently discarded. No network or AI calls are made.
+
+With `--ai`, a self-hosted model (the `ai:` provider, as for `generate --ai`) words each section that has evidence.
+Every piece of evidence gets a document-wide id (`E1`, `E2`, …) and each sentence must cite the ids it rests on. The
+reply is validated, not trusted: a sentence that cites nothing, cites another section's evidence or an id that doesn't
+exist, or claims approval, release, review, completeness or conformity is dropped, and model text can't become Markdown
+links or HTML. Sentences are marked 🤖 and shown above the evidence they cite; the evidence list stays the authority.
+Sections without evidence stay `OFFEN` and are never sent. Project statements are sent as data inside the evidence
+list, with the instruction not to follow anything written in them. Results are cached in
+`docs/.docwizz/product-ai-cache.json` by template, section, evidence and model, so unchanged inputs are not sent again.
+If nothing could be worded (no server, no valid sentence) the output is exactly the draft without `--ai`.
+
+Next to the draft, `product` writes `<product_id>.evidence.json`: per section its status (`evidenced`, `open` when a
+required section has no evidence, `empty` when an optional one has none), every piece of evidence with its id, kind,
+origin (`detected` for code facts, `human` for project statements) and source, and, with `--ai`, the synthesized
+sentences with the ids they cite (`ai-drafted`). `required` sums it up: how many required sections there are, how many
+have evidence, and which are open. Every required section is either evidenced or listed as open; nothing is left out
+silently. The report is an inventory, not a statement of review, approval or conformity, and says so. A report file
+that docwizz didn't write is never overwritten.

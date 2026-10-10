@@ -245,9 +245,14 @@ dependency and no listener. Tools only read: `context` is the package above, `im
 freshness and fitted to its budget. The CLI hands the server its loaders and reports as delegates, so the server holds
 no I/O of its own besides stdio.
 
-## Product templates (proposed P0)
+## Product templates
 
-[ADR-0001](docs/adr/0001-product-template-contract.md) defines the small V-Modell XT product-template contract independently of coverage profiles. No product generation is implemented yet.
+[ADR-0001](docs/adr/0001-product-template-contract.md) defines the small V-Modell XT product-template contract
+independently of coverage profiles. [ProductDraft](src/DocWizz/ProductDraft.cs) builds an evidence catalog per section
+(code facts from the model, sourced project statements) with document-wide ids, and renders it; sections without
+evidence say `OFFEN`. With `--ai`, [ProductSynthesis](src/DocWizz/ProductSynthesis.cs) sends each section's evidence
+through `IAiProvider` (the same guard as AI drafts) and keeps only sentences that cite that section's ids and claim no
+status or conformity; results are cached by template, section, evidence and model.
 
 ## Tests
 

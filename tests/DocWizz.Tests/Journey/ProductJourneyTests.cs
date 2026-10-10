@@ -51,4 +51,44 @@ public class ProductJourneyTests
         Assert.Contains("product_id", result.Err);
         Assert.False(Directory.Exists(Path.Combine(repo.Root, "docs", "products")));
     }
+
+    // --ai is opt-in and never required: with no model server the draft is the deterministic one, and the reason is said.
+    [Fact]
+    public void Product_ai_without_a_server_writes_the_plain_draft_and_says_why()
+    {
+        var template = Template.Replace("id: scope", "id: structure").Replace("[project]", "[code]");   // a section with code evidence
+        using var repo = new Sources(("template.yaml", template), ("Example.cs", "public class Example {}"));
+        Assert.Equal(0, Docwizz.Run("product", repo.Root, Path.Combine(repo.Root, "template.yaml")).Exit);
+        var output = Path.Combine(repo.Root, "docs", "products", "sw-architecture.md");
+        var plain = File.ReadAllText(output);
+        Assert.Contains("class: `Example`", plain);
+        File.Delete(output);
+
+        var env = new Dictionary<string, string?> { ["OLLAMA_HOST"] = "127.0.0.1:9", ["DOCWIZZ_MODEL"] = null };   // nothing listens on port 9
+        var ai = Docwizz.Run(null, env, "product", repo.Root, Path.Combine(repo.Root, "template.yaml"), "--ai");
+        Assert.Equal(0, ai.Exit);
+        Assert.Contains("drafting 1 sections", ai.Err);
+        Assert.Contains("AI product synthesis skipped", ai.Err);
+        Assert.Equal(plain, File.ReadAllText(output));
+        Docwizz.NoStackTrace(ai);
+    }
+
+    [Fact]
+    public void The_evidence_report_is_written_next_to_the_draft_kept_when_unchanged_and_never_overwrites_a_foreign_file()
+    {
+        using var repo = new Sources(("template.yaml", Template), ("Example.cs", "public class Example {}"));
+        var first = Docwizz.Run("product", repo.Root, Path.Combine(repo.Root, "template.yaml"));
+        Assert.Equal(0, first.Exit);
+        var report = Path.Combine(repo.Root, "docs", "products", "sw-architecture.evidence.json");
+        Assert.Contains("sw-architecture.evidence.json", first.Out);
+        var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(report)).RootElement;
+        Assert.Equal(["scope"], json.GetProperty("required").GetProperty("open").EnumerateArray().Select(x => x.GetString()));
+        Assert.Contains("unchanged:", Docwizz.Run("product", repo.Root, Path.Combine(repo.Root, "template.yaml")).Out);
+
+        File.WriteAllText(report, "{\"mine\": true}\n");
+        var blocked = Docwizz.Run("product", repo.Root, Path.Combine(repo.Root, "template.yaml"));
+        Assert.Equal(1, blocked.Exit);
+        Assert.Contains("is not docwizz-generated", blocked.Err);
+        Assert.Equal("{\"mine\": true}\n", File.ReadAllText(report));
+    }
 }
