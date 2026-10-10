@@ -1,0 +1,194 @@
+{
+  "model": {
+    "commit": "<commit>",
+    "head": "<commit>",
+    "stale": false,
+    "source": "a fresh scan (no docs/.docwizz/model.json)"
+  },
+  "target": {
+    "kind": "endpoint",
+    "label": "POST /api/materials",
+    "id": "cs:Fixture.Api.MaterialController.Create(string, int, string, string, string, bool)"
+  },
+  "repository": "fixture",
+  "budget": {
+    "tokens": 1500,
+    "estimate": "characters / 4"
+  },
+  "provenance": "detected = read from the code; inferred = heuristic, confirm in the code; human = written docs, may be outdated; ai-drafted = \uD83E\uDD16 draft, not a fact",
+  "aiDrafts": "none",
+  "truncated": [],
+  "sections": [
+    {
+      "name": "target",
+      "title": "Target",
+      "lines": [
+        {
+          "text": "method `Fixture.Api.MaterialController.Create(string, int, string, string, string, bool)`, public, layer api",
+          "origin": "detected",
+          "location": "backend/Api/MaterialController.cs:18-23"
+        },
+        {
+          "text": "route `POST /api/materials`",
+          "origin": "detected"
+        },
+        {
+          "text": "member of class `Fixture.Api.MaterialController`",
+          "origin": "detected",
+          "location": "backend/Api/MaterialController.cs:9-32"
+        },
+        {
+          "text": "parameters: `name: string`, `quantity: int`, `unit: string`, `location: string`, `requestedBy: string`, `urgent: bool`",
+          "origin": "detected"
+        },
+        {
+          "text": "returns `IActionResult`",
+          "origin": "detected"
+        },
+        {
+          "text": "responses: 201 int",
+          "origin": "detected"
+        },
+        {
+          "text": "cyclomatic complexity 1",
+          "origin": "detected"
+        },
+        {
+          "text": "authorization: none declared",
+          "origin": "detected"
+        },
+        {
+          "text": "input: name: string, quantity: int, unit: string, location: string, requestedBy: string, urgent: bool",
+          "origin": "detected"
+        },
+        {
+          "text": "output: IActionResult",
+          "origin": "detected"
+        },
+        {
+          "text": "documentation undocumented, missing summary, param (high need: public; 6 params; side effects: db, event; pattern endpoint)",
+          "origin": "detected"
+        }
+      ]
+    },
+    {
+      "name": "neighbours",
+      "title": "Neighbours",
+      "lines": [
+        {
+          "text": "calls `Fixture.Application.IMaterialService.CreateAsync(string, int, string, string, string, bool)`",
+          "origin": "detected",
+          "location": "backend/Application/IMaterialService.cs:12"
+        },
+        {
+          "text": "injects, accesses `Fixture.Application.IMaterialService`",
+          "origin": "detected",
+          "location": "backend/Application/IMaterialService.cs:6-13"
+        },
+        {
+          "text": "called over HTTP by `frontend/src/api/materialApi.ts#createMaterial`",
+          "origin": "detected",
+          "location": "frontend/src/api/materialApi.ts:7-9"
+        }
+      ]
+    },
+    {
+      "name": "further",
+      "title": "Further neighbours (signature only)",
+      "lines": [
+        {
+          "text": "`Fixture.Api.MaterialController.Get(int)` (hop 2, via `Fixture.Application.IMaterialService`)",
+          "origin": "detected",
+          "location": "backend/Api/MaterialController.cs:13-15"
+        },
+        {
+          "text": "`Fixture.Api.MaterialController.Rename(int, Fixture.Api.RenameMaterialRequest)` (hop 2, via `Fixture.Application.IMaterialService`)",
+          "origin": "detected",
+          "location": "backend/Api/MaterialController.cs:28-31"
+        },
+        {
+          "text": "`Fixture.Application.MaterialService` (hop 2, via `Fixture.Application.IMaterialService`)",
+          "origin": "detected",
+          "location": "backend/Application/MaterialService.cs:5-38"
+        },
+        {
+          "text": "`Fixture.Application.MaterialService.CreateAsync(string, int, string, string, string, bool)` (hop 2, via `Fixture.Application.IMaterialService.CreateAsync(string, int, string, string, string, bool)`)",
+          "origin": "detected",
+          "location": "backend/Application/MaterialService.cs:13-32"
+        },
+        {
+          "text": "`frontend/src/stores/materialStore.ts#useMaterialStore` (hop 2, via `frontend/src/api/materialApi.ts#createMaterial`)",
+          "origin": "detected",
+          "location": "frontend/src/stores/materialStore.ts:4-10"
+        }
+      ]
+    },
+    {
+      "name": "flows",
+      "title": "Endpoints, flows, external systems, configuration",
+      "lines": [
+        {
+          "text": "flow `POST /api/materials → MaterialService → IEventPublisher, SqlMaterialRepository → AppDbContext → SQL Server (inferred)`",
+          "origin": "inferred",
+          "location": "backend/Api/MaterialController.cs:18-23"
+        },
+        {
+          "text": "flow `/materials → MaterialTable → GET /api/materials (no endpoint found), MaterialForm → useMaterialStore → createMaterial, getMaterial → GET /api/materials/{id}, POST /api/materials`",
+          "origin": "detected",
+          "location": "frontend/src/router/index.ts:6"
+        },
+        {
+          "text": "external system SQL Server (database)",
+          "origin": "inferred"
+        }
+      ]
+    },
+    {
+      "name": "quality",
+      "title": "Tests, documentation gaps, architecture findings (a link means test code uses the symbol; it is not code coverage)",
+      "lines": [
+        {
+          "text": "documentation gap (high, critical): `Fixture.Api.MaterialController.Create(string, int, string, string, string, bool)` missing summary, param",
+          "origin": "detected",
+          "location": "backend/Api/MaterialController.cs:18-23"
+        },
+        {
+          "text": "documentation gap (medium): `Fixture.Application.IMaterialService.CreateAsync(string, int, string, string, string, bool)` missing param",
+          "origin": "detected",
+          "location": "backend/Application/IMaterialService.cs:12"
+        }
+      ]
+    },
+    {
+      "name": "read",
+      "title": "Read before you change it",
+      "lines": [
+        {
+          "text": "`Create`",
+          "origin": "detected",
+          "location": "backend/Api/MaterialController.cs:18-23"
+        },
+        {
+          "text": "`MaterialController`",
+          "origin": "detected",
+          "location": "backend/Api/MaterialController.cs:9-32"
+        },
+        {
+          "text": "`CreateAsync`",
+          "origin": "detected",
+          "location": "backend/Application/IMaterialService.cs:12"
+        },
+        {
+          "text": "`IMaterialService`",
+          "origin": "detected",
+          "location": "backend/Application/IMaterialService.cs:6-13"
+        },
+        {
+          "text": "`createMaterial`",
+          "origin": "detected",
+          "location": "frontend/src/api/materialApi.ts:7-9"
+        }
+      ]
+    }
+  ]
+}

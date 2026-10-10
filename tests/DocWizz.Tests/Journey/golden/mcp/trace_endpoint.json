@@ -1,0 +1,35 @@
+{
+  "model": {
+    "commit": "<commit>",
+    "head": "<commit>",
+    "stale": false,
+    "source": "a fresh scan (no docs/.docwizz/model.json)"
+  },
+  "endpoint": {
+    "id": "cs:Fixture.Api.StockController.Get(string)",
+    "kind": "method (endpoint)",
+    "name": "GET /api/stock/{sku}",
+    "location": "backend/Api/StockController.cs:12-13"
+  },
+  "flow": "GET /api/stock/{sku} → ErpClient → erp.example.com",
+  "externalSystems": [
+    {
+      "name": "erp.example.com",
+      "category": "http-api",
+      "certainty": "detected"
+    }
+  ],
+  "calledBy": [
+    {
+      "id": "ts:angular/src/app/stock/stock.service.ts#StockService.level",
+      "name": "angular/src/app/stock/stock.service.ts#StockService.level",
+      "location": "angular/src/app/stock/stock.service.ts:9-11"
+    },
+    {
+      "id": "ts:frontend/src/api/stockApi.ts#StockClient.level",
+      "name": "frontend/src/api/stockApi.ts#StockClient.level",
+      "location": "frontend/src/api/stockApi.ts:10-12"
+    }
+  ],
+  "note": "reached means the code can get there, not that every request does"
+}

@@ -1,0 +1,49 @@
+{
+  "model": {
+    "commit": "<commit>",
+    "head": "<commit>",
+    "stale": false,
+    "source": "a fresh scan (no docs/.docwizz/model.json)"
+  },
+  "module": "backend/Application",
+  "layers": [
+    "application"
+  ],
+  "files": 4,
+  "endpoints": [],
+  "dependsOn": [
+    "backend/Domain"
+  ],
+  "usedBy": [
+    "backend/Api"
+  ],
+  "externalSystems": [],
+  "gaps": 2,
+  "criticalGaps": 1,
+  "violations": 0,
+  "symbols": [
+    {
+      "id": "cs:Fixture.Application.IEventPublisher",
+      "kind": "interface",
+      "location": "backend/Application/IEventPublisher.cs:3-6"
+    },
+    {
+      "id": "cs:Fixture.Application.IMaterialService",
+      "kind": "interface",
+      "location": "backend/Application/IMaterialService.cs:6-13",
+      "summary": "Application service for managing materials."
+    },
+    {
+      "id": "cs:Fixture.Application.MaterialNotifier",
+      "kind": "class",
+      "location": "backend/Application/MaterialNotifier.cs:4-8",
+      "summary": "Writes a line for every created material."
+    },
+    {
+      "id": "cs:Fixture.Application.MaterialService",
+      "kind": "class",
+      "location": "backend/Application/MaterialService.cs:5-38"
+    }
+  ],
+  "symbolsLeftOut": 0
+}

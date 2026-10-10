@@ -252,6 +252,7 @@ See [AI drafts](#ai-drafts) for the privacy rules.
 | `docwizz diff <dir> [ref]` | Changed symbols, affected pages and linked tests vs the last `generate` (or a git ref) |
 | `docwizz diff [dir] <base> <head>` | The same, between two git refs |
 | `docwizz context <dir> --for <target> [--budget <tokens>] [--format json]` | Token-budgeted facts about one symbol, file, folder or endpoint, with provenance per line, for coding agents |
+| `docwizz mcp <dir> [--auto-rescan]` | Read-only MCP server on stdio: coding agents query symbols, flows, impact and the gate instead of searching files |
 | `docwizz product <dir> <template.yaml> [out.md] [--context file.yaml]` | Deterministic product draft from YAML (no AI) |
 | `docwizz sbom [dir] [out]` | Export CycloneDX 1.6 JSON from direct manifest dependencies (not resolved/transitive) |
 | `docwizz remediate <dir> [--package <name> --to <version>] [--validate] [--since <ref>]` | Package update suggestions: command or patch, impact, confidence; `--validate` builds and tests them in a temporary copy |

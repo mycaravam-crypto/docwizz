@@ -230,6 +230,13 @@ same graph access `AiProse` builds its facts JSON with, and the flows from the g
 and the pages never disagree. It reads `docs/.docwizz/model.json` (and reports it stale when `HEAD` or file times say
 so) or scans; it never calls the network or a model.
 
+[McpServer](src/DocWizz/Mcp.cs) (`docwizz mcp`) puts the same model behind the Model Context Protocol: JSON-RPC 2.0,
+one message per line on stdin/stdout, hand-written (initialize, ping, tools/list, tools/call) so there is no SDK
+dependency and no listener. Tools only read: `context` is the package above, `impact` and `check` are the `diff` and
+`check --since` reports as data, the rest query the graph. Each answer is wrapped with the model's commit and
+freshness and fitted to its budget. The CLI hands the server its loaders and reports as delegates, so the server holds
+no I/O of its own besides stdio.
+
 ## Product templates (proposed P0)
 
 [ADR-0001](docs/adr/0001-product-template-contract.md) defines the small V-Modell XT product-template contract independently of coverage profiles. No product generation is implemented yet.

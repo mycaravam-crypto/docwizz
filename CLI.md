@@ -24,6 +24,7 @@ an example and its options.
 | `architecture` | architecture diagnostics | architects | optional |
 | `diff` | change impact | developers, CI | optional |
 | `context` | token-budgeted facts about one target, for coding agents | coding agents | optional |
+| `mcp` | read-only MCP server over the code model | coding agents | optional |
 | `product` | deterministic product draft from a YAML template | architects | optional |
 | `sbom` | CycloneDX manifest SBOM | supply-chain inventory | optional |
 | `remediate` | package update suggestions | maintainers | optional |
@@ -269,6 +270,50 @@ model is from another commit than `HEAD`, or source files changed after it was w
 and so does stderr: run `docwizz generate .`. It makes no network calls, runs no build and calls no AI. `--format json`
 gives the same lines as data (compact, since whitespace costs tokens).
 
+#### A read-only MCP server
+
+```bash
+docwizz mcp .                  # stdio; the agent's harness starts it
+docwizz mcp . --auto-rescan    # rescan when the model is stale instead of only saying so
+```
+
+`mcp` serves the code model to agents over the [Model Context Protocol](https://modelcontextprotocol.io) on stdio,
+so an agent can ask instead of searching files:
+
+| Tool | Answers |
+|---|---|
+| `find_symbol(query, kind?)` | symbols, endpoints and modules by name: exact, then prefix, then substring |
+| `context(target, hops?, budget?, include_ai?)` | the same package as `docwizz context`, as JSON |
+| `callers(id)` / `callees(id)` | incoming / outgoing `calls`, `injects` and `http` edges of a symbol and its members |
+| `trace_endpoint(verb, route)` | the request flow down to databases and external systems, and the frontend callers |
+| `module_summary(path)` | a folder's symbols, layer, endpoints, dependencies both ways, gap and finding counts |
+| `impact(ref?)` | `docwizz diff` against a ref (default `HEAD`: the uncommitted change) |
+| `gaps(path?)` / `violations(path?)` | documentation gaps (critical first) / architecture violations and cycles |
+| `check(since?)` | the quality gate as JSON; with `since`, only what the change introduces |
+| `rescan()` | scan the code again, in memory |
+
+It is **read-only**: stdio only, no network listener, nothing is written (`generate` and `setup` are not tools).
+Every answer has a `model` object with the commit the model was scanned at, `HEAD`, and `stale: true` with the reasons
+when they differ or source files changed since; then call `rescan` (or start with `--auto-rescan`). Answers take a
+`budget` in tokens (default 4000) and long lists are paged (`offset`, `limit`, `nextOffset`); what didn't fit is listed
+under `truncated`. AI drafts stay out unless `context` is asked for them. Configuration values never appear, only
+keys. The model is `docs/.docwizz/model.json` when `generate` wrote one, else a scan at startup.
+
+Register it with your agent (replace the path with your build of docwizz):
+
+```bash
+# Claude Code
+claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
+```
+
+```jsonc
+// OpenCode: opencode.json
+{ "mcp": { "docwizz": { "type": "local", "command": ["dotnet", "/opt/docwizz/DocWizz.dll", "mcp", "."], "enabled": true } } }
+
+// Cline: cline_mcp_settings.json
+{ "mcpServers": { "docwizz": { "command": "dotnet", "args": ["/opt/docwizz/DocWizz.dll", "mcp", "/path/to/repo"] } } }
+```
+
 ## SBOM inventory
 
 `docwizz sbom .` writes `sbom.cdx.json` (or use `docwizz sbom . output.json`). The exporter reads NuGet, npm, Maven and Gradle **manifests only**. It records direct declared dependencies with a package URL (`purl`) and their version literals or expressions, not resolved or installed packages; ranges, wildcards and property references are kept as declared and left out of `version` and the purl. Project-to-project references appear in the dependency graph. Transitive dependencies, lockfiles, licenses and vulnerability analysis are intentionally outside the MVP. No restore, build or network access occurs. Output is deterministic for identical inputs. `docwizz generate` writes the same inventory as `views/packages.md` for readers, listing packages declared at more than one version first.
@@ -284,6 +329,7 @@ gives the same lines as data (compact, since whitespace costs tokens).
 | `architecture` | `docwizz architecture <dir> [--format f] [--profile p]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
 | `diff` | `docwizz diff [dir] [base] [head] [--format f] [--profile p]` | change impact vs the last `generate` or git refs | reviews, CI |
 | `context` | `docwizz context <dir> --for target [--hops n] [--budget tokens] [--format md\|json] [--include-ai]` | token-budgeted context package for one symbol, file, folder or endpoint | coding agents |
+| `mcp` | `docwizz mcp <dir> [--auto-rescan]` | read-only MCP server on stdio: find_symbol, context, callers, impact, check, … | coding agents |
 | `product` | `docwizz product <dir> <template.yaml> [out.md] [--context file.yaml]` | versioned product draft without AI | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
@@ -303,6 +349,7 @@ gives the same lines as data (compact, since whitespace costs tokens).
 | `--for <target>` | — | context | required; a symbol id or qualified name, a file, a folder, or `VERB /route`; ambiguous or unknown exits 1 with candidates | coding agents |
 | `--hops <n>` | 2 | context | how far neighbours are listed, 1 to 4; hops beyond 1 are signature only | coding agents |
 | `--budget <tokens>` | 6000 | context | at least 100; estimated as characters / 4; lower-priority sections are cut first, and the cut is reported | coding agents |
+| `--auto-rescan` | off | mcp | rescans the code when the model is stale (other commit or changed files) instead of only reporting `stale: true` | coding agents |
 | `--include-ai` | off | context | includes cached 🤖 drafts, marked `ai-drafted`; never calls a model | coding agents |
 | `--since <ref>` | — | check, remediate | check: compares against the tree at `<ref>`, so only introduced problems fail; remediate: says whether each update touches only what changed since `<ref>` | CI |
 | `--package <name> --to <version>` | `remediation.targets` and version drift | remediate | given together or not at all | maintenance |
@@ -345,6 +392,7 @@ gives the same lines as data (compact, since whitespace costs tokens).
 | `product` | draft written or unchanged | invalid template, unsafe overwrite, or bad arguments |
 | `remediate` | done (suggestions alone never fail) | a `--validate` run failed, or bad arguments |
 | `context` | package written | no `--for`, an ambiguous or unknown target (candidates on stderr), or bad arguments |
+| `mcp` | stdin closed | bad arguments or config |
 | `diff` | done | no baseline (`generate` first or pass a ref), unknown ref |
 | `init` | written | `docwizz.yaml` exists |
 | no command | — | prints how to start |

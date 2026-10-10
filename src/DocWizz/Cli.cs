@@ -8,7 +8,7 @@ static class Cli
 
     public record Request(string? Command, Dictionary<string, string> Options, List<string> Positional, string? Error);
 
-    public static readonly string[] Flags = ["ai", "html", "progress", "refresh-html-on-version-change", "timings", "validate", "force", "include-ai", "help", "version"];
+    public static readonly string[] Flags = ["ai", "html", "progress", "refresh-html-on-version-change", "timings", "validate", "force", "include-ai", "auto-rescan", "help", "version"];
 
     // Valued option → what its value is, for the error when it is missing.
     public static readonly Dictionary<string, string> Valued = new()
@@ -40,6 +40,8 @@ static class Cli
         ["context"] = new("context <dir> --for <target>", "token-budgeted context package for a coding agent: one symbol, file, folder or endpoint", "coding agents",
             "docwizz context . --for \"POST /api/materials\"", "--for <symbol|file|folder|VERB /route>, --hops <1-4>, --budget <tokens>, --format md|json, --include-ai",
             ["for", "hops", "budget", "format", "include-ai"]),
+        ["mcp"] = new("mcp <dir>", "read-only MCP server on stdio: coding agents query the code model (find_symbol, context, impact, check, ...)", "coding agents",
+            "docwizz mcp .", "--auto-rescan (rescan when the model is stale)", ["auto-rescan"]),
         ["product"] = new("product <dir> <template.yaml> [out.md]", "render a deterministic product draft (no AI)", "product documents",
             "docwizz product . templates/vmodell-xt/sw-architecture.yaml --context project.yaml", "--context <file.yaml>", ["context"]),
         ["sbom"] = new("sbom [dir] [out]", "export direct manifest dependencies as CycloneDX 1.6 JSON", "supply-chain inventory",

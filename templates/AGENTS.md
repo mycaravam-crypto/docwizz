@@ -29,7 +29,9 @@ docwizz context . --for "POST /api/orders" --budget 4000   # or a qualified name
 ```
 
 It lists the target, its callers and callees, the request flows through it, tests, gaps and the files to read first,
-each line marked with its provenance. If it says the model is stale, run `docwizz generate .` first.
+each line marked with its provenance. If it says the model is stale, run `docwizz generate .` first. If your agent
+supports MCP, `docwizz mcp .` serves the same facts as tools (`find_symbol`, `context`, `callers`, `trace_endpoint`,
+`impact`, `check`, ...).
 
 **Weigh what you read by where it comes from:**
 
