@@ -1,0 +1,114 @@
+{
+  "note": "Agent benchmark tasks (bench/agents.py). Each task runs in a fresh git copy of `repo`; `checks` decide success and are executable; `reference` is a known-good solution, applied only by the `reference` agent to prove the checks pass when the task is solved. Answers are written to ANSWER.md in the repository root.",
+  "tasks": [
+    {
+      "id": "doc-create-endpoint",
+      "repo": "fixture",
+      "kind": "change",
+      "prompt": "The public endpoint method `Create` in backend/Api/MaterialController.cs has no documentation. Add an XML doc comment with a <summary> and a <param> for every parameter. Change nothing else.",
+      "checks": [
+        { "type": "documented", "ids": ["cs:Fixture.Api.MaterialController.Create(string, int, string, string, string, bool)"] },
+        { "type": "check_since" }
+      ],
+      "reference": { "edits": [ { "file": "backend/Api/MaterialController.cs", "find": "    // Undocumented public endpoint (should be flagged)\n", "replace": "    /// <summary>Requests a new material.</summary>\n    /// <param name=\"name\">Material name.</param>\n    /// <param name=\"quantity\">How many units.</param>\n    /// <param name=\"unit\">Unit of measure.</param>\n    /// <param name=\"location\">Where it is needed.</param>\n    /// <param name=\"requestedBy\">Who asks for it.</param>\n    /// <param name=\"urgent\">Whether it is urgent.</param>\n" } ] }
+    },
+    {
+      "id": "doc-stock-param",
+      "repo": "fixture",
+      "kind": "change",
+      "prompt": "StockController.Get is missing the documentation of its parameter. Complete its XML doc comment so that every parameter is documented. Change nothing else.",
+      "checks": [
+        { "type": "documented", "ids": ["cs:Fixture.Api.StockController.Get(string)"] },
+        { "type": "check_since" }
+      ],
+      "reference": { "edits": [ { "file": "backend/Api/StockController.cs", "find": "/// <summary>Stock for one article.</summary>", "replace": "/// <summary>Stock for one article.</summary>\n    /// <param name=\"sku\">Article number.</param>" } ] }
+    },
+    {
+      "id": "fix-arch-001",
+      "repo": "fixture",
+      "kind": "change",
+      "prompt": "The domain layer must not depend on infrastructure, but backend/Domain/Material.cs does (architecture rule ARCH-001). Remove that dependency without introducing a new architecture violation.",
+      "checks": [
+        { "type": "no_violation", "rule": "ARCH-001", "from": "backend/Domain/Material.cs" },
+        { "type": "check_since" }
+      ],
+      "reference": { "edits": [
+        { "file": "backend/Domain/Material.cs", "find": "using Fixture.Infrastructure;\n\n", "replace": "" },
+        { "file": "backend/Domain/Material.cs", "find": "\n    // ARCH-001 violation: Domain depends on Infrastructure\n    public void Save(SqlMaterialRepository repo) => repo.AddAsync(this);\n", "replace": "" }
+      ] }
+    },
+    {
+      "id": "fix-arch-002-react",
+      "repo": "fixture",
+      "kind": "change",
+      "prompt": "react/src/pages/InventoryPage.tsx calls HTTP directly with fetch, which the architecture forbids for UI code (ARCH-002: ui may only use state and client code). Move the call into an API client module under react/src/api/ and use it from the page. Keep the behaviour.",
+      "checks": [
+        { "type": "no_violation", "rule": "ARCH-002", "from": "react/src/pages/InventoryPage.tsx" },
+        { "type": "http_caller", "endpoint": "GET /api/inventory/low", "under": "react/src/api/" },
+        { "type": "check_since" }
+      ],
+      "reference": {
+        "create": [ { "file": "react/src/api/inventoryApi.ts", "content": "/** Names of the items running low. */\nexport function lowItems(): Promise<string[]> {\n  return fetch('/api/inventory/low').then(r => r.json())\n}\n" } ],
+        "edits": [
+          { "file": "react/src/pages/InventoryPage.tsx", "find": "import { ItemList } from '../components/ItemList'\n", "replace": "import { ItemList } from '../components/ItemList'\nimport { lowItems } from '../api/inventoryApi'\n" },
+          { "file": "react/src/pages/InventoryPage.tsx", "find": "fetch('/api/inventory/low').then(r => r.json()).then(setItems)", "replace": "lowItems().then(setItems)" }
+        ]
+      }
+    },
+    {
+      "id": "add-delete-endpoint",
+      "repo": "fixture",
+      "kind": "change",
+      "prompt": "Add an endpoint DELETE /api/materials/{id} to MaterialController, following the existing pattern: the controller calls a new IMaterialService.DeleteAsync(int id), which MaterialService implements by loading the material through IMaterialRepository.FindAsync and publishing a \"material.deleted\" event through IEventPublisher. Document every public member you add with an XML doc comment (summary and params).",
+      "checks": [
+        { "type": "endpoint", "label": "DELETE /api/materials/{id}", "reaches": "MaterialService" },
+        { "type": "check_since" }
+      ],
+      "reference": { "edits": [
+        { "file": "backend/Api/MaterialController.cs", "find": "    /// <summary>Renames a material.</summary>", "replace": "    /// <summary>Deletes a material.</summary>\n    /// <param name=\"id\">Material id.</param>\n    [HttpDelete(\"{id}\")]\n    public async Task<IActionResult> Delete(int id)\n    {\n        await service.DeleteAsync(id);\n        return NoContent();\n    }\n\n    /// <summary>Renames a material.</summary>" },
+        { "file": "backend/Application/IMaterialService.cs", "find": "    Task<Material?> GetAsync(int id);", "replace": "    Task<Material?> GetAsync(int id);\n\n    /// <summary>Deletes a material and announces it.</summary>\n    /// <param name=\"id\">Material id.</param>\n    Task DeleteAsync(int id);" },
+        { "file": "backend/Application/MaterialService.cs", "find": "    public Task<Material?> GetAsync(int id)", "replace": "    /// <summary>Deletes a material and announces it.</summary>\n    /// <param name=\"id\">Material id.</param>\n    public async Task DeleteAsync(int id)\n    {\n        if (await repository.FindAsync(id) is not null) await events.PublishAsync(\"material.deleted\", id);\n    }\n\n    public Task<Material?> GetAsync(int id)" }
+      ] }
+    },
+    {
+      "id": "ask-externals",
+      "repo": "fixture",
+      "kind": "question",
+      "prompt": "Which external systems (databases, external HTTP services) can a request to POST /api/materials reach, directly or indirectly? Name each one.",
+      "checks": [ { "type": "answer", "expect": ["SQL Server"], "reject": ["erp.example.com", "Redis", "rates.example.org"] } ],
+      "reference": { "answer": "POST /api/materials goes MaterialController → MaterialService → SqlMaterialRepository → AppDbContext → SQL Server. It reaches SQL Server only." }
+    },
+    {
+      "id": "ask-stock-callers",
+      "repo": "fixture",
+      "kind": "question",
+      "prompt": "Which frontend functions call the endpoint GET /api/stock/{sku}? Give each function's name and file.",
+      "checks": [ { "type": "answer", "expect": ["level", "stockApi.ts", "stock.service.ts"], "reject": [] } ],
+      "reference": { "answer": "StockClient.level in frontend/src/api/stockApi.ts and StockService.level in angular/src/app/stock/stock.service.ts." }
+    },
+    {
+      "id": "ask-tests",
+      "repo": "fixture",
+      "kind": "question",
+      "prompt": "Which test method exercises MaterialService.CreateAsync? Give its name.",
+      "checks": [ { "type": "answer", "expect": ["CreateAsync_Creates"], "reject": [] } ],
+      "reference": { "answer": "MaterialServiceTests.CreateAsync_Creates" }
+    },
+    {
+      "id": "ask-config",
+      "repo": "fixture",
+      "kind": "question",
+      "prompt": "Which configuration key does WarehouseClient read? Give the key, not its value.",
+      "checks": [ { "type": "answer", "expect": ["Warehouse:BaseUrl"], "reject": [] } ],
+      "reference": { "answer": "Warehouse:BaseUrl" }
+    },
+    {
+      "id": "ask-legacy-database",
+      "repo": "fixture-legacy",
+      "kind": "question",
+      "prompt": "Which database does OrdersController ultimately read and write, and through which class does it access it?",
+      "checks": [ { "type": "answer", "expect": ["PostgreSQL", "ShopContext"], "reject": ["SQL Server"] } ],
+      "reference": { "answer": "PostgreSQL, through the EF Core context ShopContext, which OrdersController uses directly." }
+    }
+  ]
+}

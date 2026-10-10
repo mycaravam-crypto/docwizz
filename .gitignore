@@ -4,3 +4,5 @@ node_modules/
 model.json
 staging/
 bench/results.json
+bench/agents-results.json
+__pycache__/
