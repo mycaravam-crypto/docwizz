@@ -799,6 +799,7 @@ rm -rf "$docs" "$port_file"
 
 # --ai with provider openai-compatible (vLLM, NIM, LiteLLM): /v1/chat/completions on a private address, the key from the
 # variable ai.api_key_env names, never from docwizz.yaml; drafts are filed under provider and model
+section "AI drafts (fake OpenAI-compatible server)"
 own=$(mktemp -d); cp -r fixture/. "$own"; docs=$(mktemp -d); port_file=$(mktemp)
 python3 - "$port_file" <<'PY' &
 import http.server, json, sys
