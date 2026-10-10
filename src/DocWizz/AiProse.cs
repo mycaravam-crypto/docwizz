@@ -1,17 +1,12 @@
-using System.Net;
-using System.Net.Http.Json;
-using System.Net.Sockets;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 // Drafts documentation for items that need docs and have no summary, and an overview per module. Deterministic facts go
 // in, sections of cited sentences come out: every sentence names the facts it rests on, and one that cites nothing in the
 // facts is dropped. Results are cached per (symbol or module, body hash): unchanged code is never sent twice.
-// Only a self-hosted Ollama is used: every connection must go to a loopback or private-network address,
-// and Ollama's cloud-hosted models are refused, so source code never leaves the network.
+// The model is a self-hosted one behind IAiProvider (AiProvider.cs): every connection must go to a loopback or
+// private-network address, and cloud-hosted models are refused, so source code never leaves the network.
 static class AiProse
 {
-    const string DefaultModel = "qwen2.5-coder:7b";
     const int Parallelism = 2; // Ollama queues requests beyond OLLAMA_NUM_PARALLEL anyway
 
     const string Instructions = """
@@ -87,9 +82,9 @@ static class AiProse
 
         if (call && misses.Count + moduleMisses.Count > 0)
         {
-            if (LocalModel("summaries") is not { } name) return result;
-            using var client = LocalOnly(OllamaUri());
-            Console.Error.WriteLine($"docwizz: drafting {misses.Count} symbols and {moduleMisses.Count} module overviews with {name} at {client.BaseAddress} " +
+            if (AiProviders.Create("summaries") is not { } ai) return result;
+            using var _ = ai;
+            Console.Error.WriteLine($"docwizz: drafting {misses.Count} symbols and {moduleMisses.Count} module overviews with {ai.Model} at {ai.Endpoint} " +
                 $"({targets.Count - misses.Count} cached)");
             var facts = new ContextBuilder(root, model);
             using var gate = new SemaphoreSlim(Parallelism);
@@ -101,7 +96,7 @@ static class AiProse
                 {
                     if (Volatile.Read(ref stopped) == 1) return (t.Node, Draft: null);
                     var (json, sources, names) = facts.For(t.Node, t.Item);
-                    return (t.Node, Draft: Parse(await Create(client, name, Instructions, json), sources, names));
+                    return (t.Node, Draft: Parse(await ai.Complete(Instructions, json), sources, names));
                 }
                 catch (HttpRequestException e)
                 {
@@ -126,7 +121,7 @@ static class AiProse
                 try
                 {
                     var (json, sources, names) = facts.ForModule(folder, members, result);
-                    if (Parse(await Create(client, name, ModuleInstructions, json), sources, names) is { } d) result[key.Split('@')[0]] = cache[key] = d;
+                    if (Parse(await ai.Complete(ModuleInstructions, json), sources, names) is { } d) result[key.Split('@')[0]] = cache[key] = d;
                 }
                 catch (HttpRequestException e) { Console.Error.WriteLine($"docwizz: AI module overviews skipped — {e.InnerException?.Message ?? e.Message}"); break; }
                 catch (Exception e) { Console.Error.WriteLine($"docwizz: AI overview failed for {folder}: {e.Message}"); }
@@ -152,16 +147,16 @@ static class AiProse
         var targets = findings.Where(f => f.Node.Doc is not null && f.Sections.GetValueOrDefault("summary")?.Origin == Origin.Written).ToList();
         var result = targets.Where(f => cache.ContainsKey(Key(f.Node))).ToDictionary(f => f.Node.Id, f => cache[Key(f.Node)]);
         var misses = targets.Where(f => !cache.ContainsKey(Key(f.Node))).ToList();
-        if (!call || misses.Count == 0 || LocalModel("assessments") is not { } name) return result;
+        if (!call || misses.Count == 0 || AiProviders.Create("assessments") is not { } ai) return result;
 
-        using var client = LocalOnly(OllamaUri());
-        Console.Error.WriteLine($"docwizz: assessing {misses.Count} written docs with {name} at {client.BaseAddress} ({result.Count} cached)");
+        using var _ = ai;
+        Console.Error.WriteLine($"docwizz: assessing {misses.Count} written docs with {ai.Model} at {ai.Endpoint} ({result.Count} cached)");
         var facts = new ContextBuilder(root, model);
         foreach (var f in misses)
         {
             try
             {
-                if (ParseAssessment(await Create(client, name, AssessInstructions, facts.For(f.Node, f).Json)) is { } a)
+                if (ParseAssessment(await ai.Complete(AssessInstructions, facts.For(f.Node, f).Json)) is { } a)
                     result[f.Node.Id] = cache[Key(f.Node)] = a;
             }
             catch (HttpRequestException e) { Console.Error.WriteLine($"docwizz: AI assessments skipped — {e.InnerException?.Message ?? e.Message}"); break; }
@@ -189,35 +184,6 @@ static class AiProse
             return new(score, missing, note);
         }
         catch (JsonException) { return null; }
-    }
-
-    // DOCWIZZ_MODEL (default qwen2.5-coder:7b), or null when it's one of Ollama's `…-cloud` / `…:cloud` models: they
-    // run on ollama.com, which would send the code out.
-    static string? LocalModel(string what)
-    {
-        var name = Environment.GetEnvironmentVariable("DOCWIZZ_MODEL") is { Length: > 0 } m ? m : DefaultModel;
-        if (!name.Split(':').Last().EndsWith("cloud", StringComparison.OrdinalIgnoreCase)) return name;
-        Console.Error.WriteLine($"docwizz: AI {what} skipped — {name} is an Ollama cloud model; use a local one");
-        return null;
-    }
-
-    static async Task<string?> Create(HttpClient client, string model, string instructions, string facts)
-    {
-        using var response = await client.PostAsync("api/chat", new StringContent(JsonSerializer.Serialize(new
-        {
-            model,
-            stream = false,
-            format = "json",
-            options = new { temperature = 0 },
-            messages = new[] { new { role = "system", content = instructions }, new { role = "user", content = facts } },
-        }), System.Text.Encoding.UTF8, "application/json"));
-        if (response.StatusCode == HttpStatusCode.NotFound)
-            throw new HttpRequestException($"model {model} not found (ollama pull {model}, or set DOCWIZZ_MODEL)");
-        response.EnsureSuccessStatusCode();
-        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        var text = body.GetProperty("message").GetProperty("content").GetString() ?? "";
-        text = Regex.Replace(text, @"<think>.*?</think>", "", RegexOptions.Singleline).Trim(); // reasoning models
-        return text.Length > 0 ? text : null;
     }
 
     // Sections of cited sentences. `names` maps what the facts call a symbol (and "source") to its id; a sentence keeps
@@ -256,43 +222,6 @@ static class AiProse
             .Select(g => (Key: $"module:{g.Key}@{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
                 System.Text.Encoding.UTF8.GetBytes(string.Join("|", g.OrderBy(n => n.Id).Select(n => $"{n.Id}={n.Hash}")))))[..12].ToLowerInvariant()}",
                 Folder: g.Key, Members: g.ToList()))];
-
-    // OLLAMA_HOST as Ollama itself reads it: `host`, `host:port` or a URL; default localhost:11434.
-    public static Uri OllamaUri()
-    {
-        var v = Environment.GetEnvironmentVariable("OLLAMA_HOST") is { Length: > 0 } h ? h.Trim() : "localhost";
-        var b = new UriBuilder(v.Contains("://") ? v : "http://" + v);
-        if (!Regex.IsMatch(v, @":\d+(/|$)")) b.Port = 11434;
-        if (b.Host is "0.0.0.0" or "[::]") b.Host = "localhost"; // bind-all address, as the server is often configured
-        b.Path = b.Path.TrimEnd('/') + "/";
-        return b.Uri;
-    }
-
-    // Connects only to loopback/private addresses, checked on the resolved address of every connection
-    // (redirects and DNS answers included), and never through a proxy.
-    static HttpClient LocalOnly(Uri baseAddress) => new(new SocketsHttpHandler
-    {
-        UseProxy = false,
-        ConnectCallback = async (ctx, ct) =>
-        {
-            var addresses = await Dns.GetHostAddressesAsync(ctx.DnsEndPoint.Host, ct);
-            if (addresses.Length == 0 || !addresses.All(IsPrivate))
-                throw new IOException($"{ctx.DnsEndPoint.Host} is not a local or private address; docwizz only uses a self-hosted Ollama");
-            var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
-            try { await socket.ConnectAsync(addresses, ctx.DnsEndPoint.Port, ct); return new NetworkStream(socket, ownsSocket: true); }
-            catch { socket.Dispose(); throw; }
-        },
-    }) { BaseAddress = baseAddress, Timeout = TimeSpan.FromMinutes(10) }; // local models on CPU are slow
-
-    // Loopback, RFC 1918, IPv6 unique-local.
-    public static bool IsPrivate(IPAddress a)
-    {
-        if (a.IsIPv4MappedToIPv6) a = a.MapToIPv4();
-        if (IPAddress.IsLoopback(a) || a.IsIPv6UniqueLocal) return true;
-        if (a.AddressFamily != AddressFamily.InterNetwork) return false;
-        var b = a.GetAddressBytes();
-        return b[0] == 10 || (b[0] == 172 && b[1] is >= 16 and < 32) || (b[0] == 192 && b[1] == 168);
-    }
 
     static string Key(Node n) => $"{n.Id}@{n.Hash}";
 
