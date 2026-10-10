@@ -1,0 +1,25 @@
+{
+  "model": {
+    "commit": "<commit>",
+    "head": "<commit>",
+    "stale": false,
+    "source": "a fresh scan (no docs/.docwizz/model.json)"
+  },
+  "total": 2,
+  "offset": 0,
+  "callees": [
+    {
+      "edge": "calls",
+      "id": "cs:Fixture.Application.IEventPublisher.PublishAsync(string, int)",
+      "name": "Fixture.Application.IEventPublisher.PublishAsync(string, int)",
+      "location": "backend/Application/IEventPublisher.cs:5"
+    },
+    {
+      "edge": "calls",
+      "id": "cs:Fixture.Domain.IMaterialRepository.AddAsync(Fixture.Domain.Material)",
+      "name": "Fixture.Domain.IMaterialRepository.AddAsync(Fixture.Domain.Material)",
+      "location": "backend/Domain/IMaterialRepository.cs:6"
+    }
+  ],
+  "nextOffset": null
+}

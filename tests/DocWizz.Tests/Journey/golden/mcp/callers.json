@@ -1,0 +1,40 @@
+{
+  "model": {
+    "commit": "<commit>",
+    "head": "<commit>",
+    "stale": false,
+    "source": "a fresh scan (no docs/.docwizz/model.json)"
+  },
+  "total": 4,
+  "offset": 0,
+  "callers": [
+    {
+      "edge": "injects",
+      "id": "cs:Fixture.Api.MaterialController",
+      "name": "Fixture.Api.MaterialController",
+      "location": "backend/Api/MaterialController.cs:9-32"
+    },
+    {
+      "edge": "calls",
+      "id": "cs:Fixture.Api.MaterialController.Create(string, int, string, string, string, bool)",
+      "name": "Fixture.Api.MaterialController.Create(string, int, string, string, string, bool)",
+      "location": "backend/Api/MaterialController.cs:18-23",
+      "via": "Fixture.Application.IMaterialService.CreateAsync(string, int, string, string, string, bool)"
+    },
+    {
+      "edge": "calls",
+      "id": "cs:Fixture.Api.MaterialController.Get(int)",
+      "name": "Fixture.Api.MaterialController.Get(int)",
+      "location": "backend/Api/MaterialController.cs:13-15",
+      "via": "Fixture.Application.IMaterialService.GetAsync(int)"
+    },
+    {
+      "edge": "calls",
+      "id": "cs:Fixture.Api.MaterialController.Rename(int, Fixture.Api.RenameMaterialRequest)",
+      "name": "Fixture.Api.MaterialController.Rename(int, Fixture.Api.RenameMaterialRequest)",
+      "location": "backend/Api/MaterialController.cs:28-31",
+      "via": "Fixture.Application.IMaterialService.GetAsync(int)"
+    }
+  ],
+  "nextOffset": null
+}

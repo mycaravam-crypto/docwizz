@@ -1,0 +1,70 @@
+{
+  "model": {
+    "commit": "<commit>",
+    "head": "<commit>",
+    "stale": false,
+    "source": "a fresh scan (no docs/.docwizz/model.json)"
+  },
+  "baseline": "HEAD",
+  "added": [
+    {
+      "id": "cs:Fixture.Application.MaterialService.Count(int)",
+      "kind": "method",
+      "location": "backend/Application/MaterialService.cs:37"
+    }
+  ],
+  "changed": [
+    {
+      "id": "cs:Fixture.Application.MaterialService",
+      "kind": "class",
+      "location": "backend/Application/MaterialService.cs:5-38"
+    }
+  ],
+  "removed": [],
+  "pages": [
+    "api.md",
+    "index.md",
+    "modules/backend-Api.md",
+    "modules/backend-Application.md",
+    "modules/backend-Infrastructure.md",
+    "quality.md"
+  ],
+  "dependencies": {
+    "added": [],
+    "removed": []
+  },
+  "decisions": [],
+  "stale": [],
+  "introduced": {
+    "gaps": [],
+    "violations": [],
+    "flags": []
+  },
+  "packages": [],
+  "tests": {
+    "note": "a link means test code uses the symbol; it is not code coverage",
+    "linked": [
+      {
+        "id": "cs:Fixture.Application.MaterialService",
+        "location": "backend/Application/MaterialService.cs:5-38",
+        "change": "changed",
+        "level": "none",
+        "tests": [
+          {
+            "test": "cs:Fixture.Tests.MaterialServiceTests.CreateAsync_Creates(Fixture.Application.MaterialService)",
+            "link": "indirect",
+            "via": "cs:Fixture.Application.MaterialService.CreateAsync(string, int, string, string, string, bool)"
+          }
+        ]
+      }
+    ],
+    "unlinked": [
+      {
+        "id": "cs:Fixture.Application.MaterialService.Count(int)",
+        "location": "backend/Application/MaterialService.cs:37",
+        "change": "added",
+        "level": "none"
+      }
+    ]
+  }
+}

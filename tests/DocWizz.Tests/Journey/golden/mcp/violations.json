@@ -1,0 +1,32 @@
+{
+  "model": {
+    "commit": "<commit>",
+    "head": "<commit>",
+    "stale": false,
+    "source": "a fresh scan (no docs/.docwizz/model.json)"
+  },
+  "total": 1,
+  "offset": 0,
+  "violations": [
+    {
+      "rule": "ARCH-001",
+      "fromLayer": "domain",
+      "toLayer": "infrastructure",
+      "fromFile": "backend/Domain/Material.cs",
+      "to": "backend/Infrastructure/SqlMaterialRepository.cs",
+      "example": "Fixture.Domain.Material.Save calls Fixture.Infrastructure.SqlMaterialRepository.AddAsync",
+      "severity": "high",
+      "custom": false
+    }
+  ],
+  "nextOffset": null,
+  "cycles": [
+    {
+      "rule": "ARCH-003",
+      "cycle": [
+        "backend/Domain",
+        "backend/Infrastructure"
+      ]
+    }
+  ]
+}

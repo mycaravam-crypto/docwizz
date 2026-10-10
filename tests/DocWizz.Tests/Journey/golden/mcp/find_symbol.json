@@ -1,0 +1,43 @@
+{
+  "model": {
+    "commit": "<commit>",
+    "head": "<commit>",
+    "stale": false,
+    "source": "a fresh scan (no docs/.docwizz/model.json)"
+  },
+  "total": 10,
+  "offset": 0,
+  "matches": [
+    {
+      "id": "cs:Fixture.Application.MaterialService",
+      "kind": "class",
+      "name": "Fixture.Application.MaterialService",
+      "location": "backend/Application/MaterialService.cs:5-38"
+    },
+    {
+      "id": "cs:Fixture.Application.IMaterialService",
+      "kind": "interface",
+      "name": "Fixture.Application.IMaterialService",
+      "location": "backend/Application/IMaterialService.cs:6-13"
+    },
+    {
+      "id": "cs:Fixture.Application.MaterialService.Created",
+      "kind": "event",
+      "name": "Fixture.Application.MaterialService.Created",
+      "location": "backend/Application/MaterialService.cs:8"
+    },
+    {
+      "id": "cs:Fixture.Application.MaterialService.Count(int)",
+      "kind": "method",
+      "name": "Fixture.Application.MaterialService.Count(int)",
+      "location": "backend/Application/MaterialService.cs:37"
+    },
+    {
+      "id": "cs:Fixture.Application.MaterialService.Add(int, int)",
+      "kind": "method",
+      "name": "Fixture.Application.MaterialService.Add(int, int)",
+      "location": "backend/Application/MaterialService.cs:35"
+    }
+  ],
+  "nextOffset": 5
+}

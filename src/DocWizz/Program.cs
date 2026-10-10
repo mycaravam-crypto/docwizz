@@ -56,6 +56,8 @@ static async Task<int> Dispatch(string[] args)
     {
         case "context":
             return ContextCommand(path, config, opts);
+        case "mcp":
+            return await McpCommand(path, config, opts.ContainsKey("auto-rescan"));
         case "product":
             return ProductCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), opts.GetValueOrDefault("context"), config);
         case "sbom":
@@ -93,22 +95,8 @@ static int ContextCommand(string root, Config config, Dictionary<string, string>
     if (!int.TryParse(opts.GetValueOrDefault("budget") ?? $"{AgentContext.DefaultBudget}", out var budget) || budget < 100)
         return Usage("--budget must be a number of tokens, at least 100", "context");
 
-    var fingerprint = Path.Combine(root, "docs", ".docwizz", "model.json");
-    CodeModel model;
-    string source;
-    var changed = 0;
-    if (File.Exists(fingerprint))
-    {
-        model = JsonSerializer.Deserialize<CodeModel>(File.ReadAllText(fingerprint), JsonOptions())!;
-        var written = File.GetLastWriteTimeUtc(fingerprint);
-        source = $"docs/.docwizz/model.json (written {written:yyyy-MM-dd HH:mm} UTC)";
-        changed = BuildFiles(root, config).Count(f => File.GetLastWriteTimeUtc(f) > written);
-    }
-    else
-    {
-        model = BuildModel(root, config).Model;
-        source = "a fresh scan (no docs/.docwizz/model.json)";
-    }
+    var (model, source, since) = LoadModel(root, config);
+    var changed = source.StartsWith("docs/") ? BuildFiles(root, config).Count(f => File.GetLastWriteTimeUtc(f) > since) : 0;
 
     var resolved = AgentContext.Resolve(model, target);
     if (resolved.Target is not { } t)
@@ -130,6 +118,44 @@ static int ContextCommand(string root, Config config, Dictionary<string, string>
     if (package.Stale) Console.Error.WriteLine("docwizz: the model is stale; run docwizz generate . to refresh it (the package says why)");
     Console.Write(AgentContext.Render(package, opts.GetValueOrDefault("format") == "json"));
     return 0;
+}
+
+// The model the docs were generated from (docs/.docwizz/model.json), else a fresh scan: the model, where it came from,
+// and the time it reflects (when it was written, or now), for staleness checks.
+static (CodeModel Model, string Source, DateTime Since) LoadModel(string root, Config config)
+{
+    var fingerprint = Path.Combine(root, "docs", ".docwizz", "model.json");
+    if (!File.Exists(fingerprint)) return (BuildModel(root, config).Model, "a fresh scan (no docs/.docwizz/model.json)", DateTime.UtcNow);
+    var written = File.GetLastWriteTimeUtc(fingerprint);
+    return (JsonSerializer.Deserialize<CodeModel>(File.ReadAllText(fingerprint), JsonOptions())!, $"docs/.docwizz/model.json (written {written:yyyy-MM-dd HH:mm} UTC)", written);
+}
+
+// `docwizz mcp`: the read-only MCP server on stdio. stdout carries only protocol messages.
+static async Task<int> McpCommand(string root, Config config, bool autoRescan)
+{
+    Console.Error.WriteLine($"docwizz mcp: serving {Path.GetFullPath(root)} on stdio (read-only; Ctrl+D or closing stdin stops it)");
+    var host = new McpServer.Host(root, config, autoRescan,
+        Load: () => LoadModel(root, config),
+        Scan: () => BuildModel(root, config).Model,
+        Head: () => Git(root, "rev-parse --short HEAD")?.Trim(),
+        ChangedSince: t => BuildFiles(root, config).Count(f => File.GetLastWriteTimeUtc(f) > t),
+        Impact: gitRef => ModelAt(root, gitRef, config) is { } before
+            ? DiffJson(Diff.Compare(before, BuildModel(root, config).Model, config), gitRef, null) : null,
+        Check: since =>
+        {
+            var model = BuildModel(root, config).Model;
+            if (since is null)
+            {
+                var findings = Analyzer.Analyze(model, config);
+                var (failures, _) = CheckFailures(root, model, config, findings, Architecture.Check(model, config));
+                return new { pass = failures.Count == 0, failures };
+            }
+            if (ModelAt(root, since, config) is not { } before) return null;
+            var result = Diff.Compare(before, model, config);
+            var (ok, summary) = Gate(result, config);
+            return DiffJson(result, since, new { pass = ok, summary });
+        });
+    return await new McpServer(host).Run(Console.In, Console.Out);
 }
 
 // The source files the scanners would read, for staleness checks.
@@ -274,6 +300,8 @@ static string Reference() => $"""
       docwizz diff [dir] <base> <head>  what changed between two git refs
       docwizz context <dir> --for <target>  token-budgeted facts about one symbol, file, folder or endpoint, for agents
         [--hops <1-4>] [--budget <tokens>] [--format md|json] [--include-ai]
+      docwizz mcp <dir>                 read-only MCP server on stdio for coding agents (find_symbol, context, impact, ...)
+        [--auto-rescan]                 rescan when the model is stale instead of only saying so
       docwizz sbom [dir] [out]          export direct manifest dependencies as CycloneDX JSON
       docwizz remediate <dir>           package update suggestions: command or patch, impact, confidence
         [--package <name> --to <ver>]   propose this update (default: remediation.targets and version drift)
@@ -507,6 +535,19 @@ static int DiffCommand(string root, string? gitRef, Config config, bool enforce,
         return 0;
     }
 
+    var (ok, summary) = Gate(result, config);
+    if (json) Console.WriteLine(JsonSerializer.Serialize(DiffJson(result, against, new { pass = ok, summary }), JsonOptions()));
+    else
+    {
+        Console.WriteLine();
+        Console.WriteLine(summary);
+    }
+    return ok ? 0 : 1;
+}
+
+// `check --since`: whether the change introduces what the thresholds forbid, and the one-line verdict.
+static (bool Ok, string Summary) Gate(DiffResult result, Config config)
+{
     var critical = result.NewGaps.Count(Analyzer.IsCritical);
     var violations = Architecture.Failing(result.NewViolations, config.Check).Count;
     var complex = TooComplex(result.Added.Concat(result.Changed), config.Check);
@@ -520,13 +561,7 @@ static int DiffCommand(string root, string? gitRef, Config config, bool enforce,
         (contradictions > 0 ? $", {contradictions} docs contradicting the code" : "") +
         (complex.Count > 0 ? $", {complex.Count} symbols over complexity {config.Check.MaxComplexity}" : "") +
         (untested.Count > 0 ? $", {untested.Count} new {config.Check.RequireTests!.ToLowerInvariant()}-level symbols without linked tests ({string.Join(", ", untested.Select(t => Generator.Display(t.Symbol)))})" : "");
-    if (json) Console.WriteLine(JsonSerializer.Serialize(DiffJson(result, against, new { pass = ok, summary }), JsonOptions()));
-    else
-    {
-        Console.WriteLine();
-        Console.WriteLine(summary);
-    }
-    return ok ? 0 : 1;
+    return (ok, summary);
 }
 
 // `diff`/`check --since` as data: symbols by id and location, and test traceability with its caveat spelled out.
