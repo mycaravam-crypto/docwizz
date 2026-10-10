@@ -93,3 +93,42 @@ Recommended configuration:
   is analyzed and documented as production code.
 - **Generate docs where they're read.** `generate` is the expensive command. Run it on the default branch, and keep
   `check --since` for pull requests: it doesn't render pages.
+
+## Coding agents with and without docwizz
+
+Does docwizz context make a local coding agent better? [agents.py](agents.py) measures it instead of claiming it
+(issue #104). It runs a fixed task list against fresh git copies of `fixture/` and `fixture-legacy/`, in three variants:
+
+| Variant | The agent gets |
+|---|---|
+| `none` | the repository |
+| `docs` | the repository, `docs/` from `docwizz generate`, and the [AGENTS.md template](../templates/AGENTS.md) |
+| `context` | as `docs`, plus the instruction to use `docwizz context` (and `docwizz mcp`, where the harness supports MCP) |
+
+The [tasks](agents/tasks.json) (10) are documentation fixes, architecture fixes (ARCH-001, ARCH-002), a new endpoint
+in the existing pattern, and questions about the code (which external systems an endpoint reaches, who calls an
+endpoint, which test exercises a method, which configuration key a class reads). Each has **executable success
+checks**: docwizz's own analysis of the result (the symbol is documented, the violation is gone, the endpoint exists and
+reaches the service, `check --since HEAD` passes) or the answer in `ANSWER.md` (expected terms present, wrong ones
+absent). The agent's own claim never counts.
+
+Per run it records success, wall time, and what the harness reports: steps (LLM calls), prompt and completion tokens,
+files read. Several runs per variant (`--runs 3`) show the spread; model, harness version and temperature are recorded.
+
+```console
+$ python3 bench/agents.py --agent reference --expect all     # self-test: every check passes on the known solution
+$ python3 bench/agents.py --agent noop --expect none         # self-test: nothing passes when nothing is done
+$ python3 bench/agents.py --agent aider --model openai/qwen3-coder --endpoint http://127.0.0.1:8000/v1 --runs 3 --report report.md
+$ python3 bench/agents.py --agent command --runs 3 \
+    --cmd 'opencode run -m local/qwen3-coder "$(cat {prompt_file})"'
+```
+
+`--agent aider` runs [Aider](https://aider.chat) headless against an OpenAI-compatible endpoint and reads its token
+counts. `--agent command` runs any harness: `{prompt_file}` is the prompt, and the command may write steps and token
+counts to `{metrics_file}` as JSON. In the `docs` and `context` variants a `docwizz` command is on the agent's `PATH`,
+and `DOCWIZZ_MCP_COMMAND` holds the command line of the MCP server for harness configs. Results go to
+`bench/agents-results.json` and a Markdown report to stdout.
+
+A real run takes an hour or more on a local model, so it is never part of CI. The two self-tests take about two
+minutes and run weekly with the other benchmarks ([bench.yml](../.github/workflows/bench.yml)): they prove that every
+task is solvable and that no check passes by accident.

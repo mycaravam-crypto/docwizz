@@ -23,6 +23,12 @@ jobs:
         env:
           SIZES: ${{ inputs.sizes || 'small,medium,large' }}
         run: python3 bench/run.py --sizes "$SIZES" --out "$RUNNER_TEMP/bench.json" --compare bench/baseline.json | tee "$RUNNER_TEMP/bench.md"
+      - name: Agent benchmark self-tests (tasks solvable, checks not passing by accident; no model needed)
+        shell: bash
+        run: |
+          npm ci --prefix scanner-vue --silent
+          python3 bench/agents.py --agent reference --variants none --expect all --out "$RUNNER_TEMP/agents-reference.json"
+          python3 bench/agents.py --agent noop --variants none --expect none --out "$RUNNER_TEMP/agents-noop.json"
       - name: Summary
         if: always()
         shell: bash
