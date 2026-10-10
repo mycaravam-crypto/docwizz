@@ -222,7 +222,8 @@ section "documentation model"
 dw analyze fixture --format json 2>/dev/null > "$model"
 # --timings: one line per stage on stderr, stdout untouched (bench/run.py reads these)
 timings=$(dw analyze fixture --timings 2>&1 >/dev/null)
-for stage in files scan:csharp scan:frontend scan:sql scan:java link analyze architecture peak-memory-mb; do
+echo "$timings"   # in the group log: where one run on the fixture spends its time
+for stage in startup total files scan:csharp scan:frontend scan:sql scan:java link analyze architecture peak-memory-mb; do
     grep -q "^timing $stage [0-9]*$" <<<"$timings" || { echo "missing timing $stage: $timings"; exit 1; }
 done
 dw analyze fixture --format json --profile software 2>/dev/null > "$model.software"
