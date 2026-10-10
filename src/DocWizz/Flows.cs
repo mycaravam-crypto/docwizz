@@ -107,3 +107,19 @@ partial class Generator
         }
     }
 }
+
+partial class Generator
+{
+    // Entry points (endpoints, frontend routes) whose flow starts at or passes through the touched symbols, each with its
+    // chain as api.md shows it and the external systems it reaches: the request-flow facts of an agent context package.
+    public static List<(Node Entry, string Chain, List<Node> Externals)> FlowChains(CodeModel model, Config config, IEnumerable<string> touched)
+    {
+        var g = new Generator("", "", model, [], null!, config, []);
+        return [.. FlowsThrough(model, config, touched).Select(n =>
+        {
+            var trace = g.TraceOf(n.Id);
+            var start = n.Kind == "route" ? n.Route ?? n.Name : EndpointLabel(n);
+            return (n, trace.Layers.Count == 0 ? start : $"{start} → {g.Chain(trace)}", g.Reached(trace, x => x.Kind == "external").OrderBy(x => x.Id, StringComparer.Ordinal).ToList());
+        })];
+    }
+}

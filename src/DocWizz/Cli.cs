@@ -8,13 +8,15 @@ static class Cli
 
     public record Request(string? Command, Dictionary<string, string> Options, List<string> Positional, string? Error);
 
-    public static readonly string[] Flags = ["ai", "html", "progress", "refresh-html-on-version-change", "timings", "validate", "force", "help", "version"];
+    public static readonly string[] Flags = ["ai", "html", "progress", "refresh-html-on-version-change", "timings", "validate", "force", "include-ai", "help", "version"];
 
     // Valued option → what its value is, for the error when it is missing.
     public static readonly Dictionary<string, string> Valued = new()
     {
         ["format"] = "console or json", ["profile"] = $"a profile ({string.Join(", ", Profiles.Names)}) or a .yaml file",
         ["context"] = "a project context YAML file", ["since"] = "a git ref, e.g. origin/main", ["package"] = "a package name", ["to"] = "a version",
+        ["for"] = "a symbol, file, folder or endpoint (\"POST /api/orders\")", ["hops"] = $"a number of hops, 1 to {AgentContext.MaxHops}",
+        ["budget"] = "a number of tokens",
     };
 
     // Meaningful for every command.
@@ -35,6 +37,9 @@ static class Cli
             "docwizz architecture .", "--format json, --profile", ["format", "profile"]),
         ["diff"] = new("diff [dir] [base] [head]", "changed symbols, affected pages and linked tests vs the last generate or git refs", "reviews, CI",
             "docwizz diff HEAD~1 HEAD", "--format json, --profile", ["format", "profile"]),
+        ["context"] = new("context <dir> --for <target>", "token-budgeted context package for a coding agent: one symbol, file, folder or endpoint", "coding agents",
+            "docwizz context . --for \"POST /api/materials\"", "--for <symbol|file|folder|VERB /route>, --hops <1-4>, --budget <tokens>, --format md|json, --include-ai",
+            ["for", "hops", "budget", "format", "include-ai"]),
         ["product"] = new("product <dir> <template.yaml> [out.md]", "render a deterministic product draft (no AI)", "product documents",
             "docwizz product . templates/vmodell-xt/sw-architecture.yaml --context project.yaml", "--context <file.yaml>", ["context"]),
         ["sbom"] = new("sbom [dir] [out]", "export direct manifest dependencies as CycloneDX 1.6 JSON", "supply-chain inventory",
@@ -71,8 +76,8 @@ static class Cli
         var cmd = pos.ElementAtOrDefault(0);
         if (cmd is not null && cmd is not ("help" or "version") && !Commands.ContainsKey(cmd))
             error ??= $"unknown command {cmd}" + Suggest(cmd, Commands.Keys, "");
-        if (opts.GetValueOrDefault("format") is { } format && format is not ("console" or "json"))
-            error ??= $"unknown format {format}: use console or json";
+        if (opts.GetValueOrDefault("format") is { } format && format is not ("console" or "json") && !(format == "md" && cmd == "context"))
+            error ??= $"unknown format {format}: use console or json" + (cmd == "context" ? " (md is the same as console)" : "");
         if (cmd is not null && Commands.TryGetValue(cmd, out var c))
         {
             foreach (var o in opts.Keys.Where(o => !Global.Contains(o) && !c.Accepts.Contains(o)))

@@ -12,7 +12,6 @@ using System.Text.RegularExpressions;
 static class AiProse
 {
     const string DefaultModel = "qwen2.5-coder:7b";
-    const int MaxSourceLines = 150;
     const int Parallelism = 2; // Ollama queues requests beyond OLLAMA_NUM_PARALLEL anyway
 
     const string Instructions = """
@@ -92,7 +91,7 @@ static class AiProse
             using var client = LocalOnly(OllamaUri());
             Console.Error.WriteLine($"docwizz: drafting {misses.Count} symbols and {moduleMisses.Count} module overviews with {name} at {client.BaseAddress} " +
                 $"({targets.Count - misses.Count} cached)");
-            var facts = new Facts(root, model);
+            var facts = new ContextBuilder(root, model);
             using var gate = new SemaphoreSlim(Parallelism);
             var stopped = 0;
             var drafted = await Task.WhenAll(misses.Select(async t =>
@@ -157,7 +156,7 @@ static class AiProse
 
         using var client = LocalOnly(OllamaUri());
         Console.Error.WriteLine($"docwizz: assessing {misses.Count} written docs with {name} at {client.BaseAddress} ({result.Count} cached)");
-        var facts = new Facts(root, model);
+        var facts = new ContextBuilder(root, model);
         foreach (var f in misses)
         {
             try
@@ -297,6 +296,13 @@ static class AiProse
 
     static string Key(Node n) => $"{n.Id}@{n.Hash}";
 
+    // Cached drafts for the code as it is now, never a call: agent context packages show them only when asked to.
+    public static Dictionary<string, Draft> Cached(CodeModel model, string cacheFile)
+    {
+        var cache = Load(cacheFile);
+        return model.Nodes.Where(n => n.Hash is not null && cache.ContainsKey(Key(n))).ToDictionary(n => n.Id, n => cache[Key(n)]);
+    }
+
     // Cache: "<id>@<hash>" → { text, sources }. Entries from before provenance was recorded are plain strings.
     static Dictionary<string, Draft> Load(string file)
     {
@@ -316,102 +322,5 @@ static class AiProse
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
         File.WriteAllText(file, JsonSerializer.Serialize(new SortedDictionary<string, Draft>(cache),
             new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
-    }
-
-    // Facts JSON for one symbol: what the graph knows, plus its own source lines.
-    class Facts(string root, CodeModel model)
-    {
-        readonly Dictionary<string, Node> nodes = model.Nodes.ToDictionary(n => n.Id);
-        readonly ILookup<string, Edge> outgoing = model.Edges.ToLookup(e => e.From);
-        readonly ILookup<string, Edge> incoming = model.Edges.ToLookup(e => e.To);
-
-        string Name(string id) => nodes.TryGetValue(id, out var n) ? Generator.Display(n) : id.Replace("http:", "");
-
-        static readonly JsonSerializerOptions Options = new()
-        {
-            WriteIndented = true,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping, // keep source readable: no \u003C
-        };
-
-        // name as the facts show it → id, for resolving a draft's citations.
-        Dictionary<string, string> Names(IEnumerable<string> ids, string self) =>
-            ids.Where(nodes.ContainsKey).DistinctBy(Name).ToDictionary(Name, id => id).Append(new("source", self))
-                .DistinctBy(kv => kv.Key).ToDictionary(kv => kv.Key, kv => kv.Value);
-
-        static string? WrittenSummary(Node n)
-        {
-            try { return n.Doc is null ? null : System.Xml.Linq.XElement.Parse($"<r>{n.Doc}</r>").Descendants("summary").FirstOrDefault() is { } e ? Analyzer.Text(e) : null; }
-            catch (System.Xml.XmlException) { return null; }
-        }
-
-        // A module's facts: its members with their docs (written, else drafted), and the modules on either side.
-        public (string Json, List<string> Sources, Dictionary<string, string> Names) ForModule(string folder, List<Node> members, Dictionary<string, Draft> drafts)
-        {
-            var ids = members.Select(m => m.Id).ToHashSet();
-            string Module(string id) => Generator.Folder(nodes[id].File);
-            var deps = model.Edges.Where(e => CodeModel.DependencyKinds.Contains(e.Kind) && nodes.ContainsKey(e.From) && nodes.ContainsKey(e.To)).ToList();
-            var shown = members.Where(m => m.Kind is not ("property" or "event" or "constructor")).Take(40).ToList();
-            var json = JsonSerializer.Serialize(new
-            {
-                module = folder,
-                members = shown.Select(m => new
-                {
-                    name = Name(m.Id), kind = m.Kind, route = m.Route,
-                    docs = WrittenSummary(m) ?? drafts.GetValueOrDefault(m.Id)?.Text,
-                }),
-                dependsOn = deps.Where(e => ids.Contains(e.From) && !ids.Contains(e.To)).Select(e => Module(e.To)).Where(f => f != folder).Distinct().Order(),
-                usedBy = deps.Where(e => ids.Contains(e.To) && !ids.Contains(e.From)).Select(e => Module(e.From)).Where(f => f != folder).Distinct().Order(),
-                externalSystems = model.Edges.Where(e => e.Kind == "connects" && ids.Contains(e.From)).Select(e => nodes.GetValueOrDefault(e.To)?.Name).OfType<string>().Distinct(),
-            }, Options);
-            var names = Names(shown.Select(m => m.Id), shown.FirstOrDefault()?.Id ?? folder);
-            foreach (var m in deps.SelectMany(e => new[] { Module(e.From), Module(e.To) }).Distinct()) names.TryAdd(m, $"module:{m}");
-            return (json, [.. shown.Select(m => m.Id)], names);
-        }
-
-        // The facts JSON, the symbols it mentions (the draft's provenance) and their names for citations.
-        public (string Json, List<string> Sources, Dictionary<string, string> Names) For(Node n, DocumentationItem f)
-        {
-            var sources = new List<string> { n.Id };
-            IEnumerable<string> Pick(IEnumerable<string> ids) { var l = ids.Distinct().ToList(); sources.AddRange(l.Where(nodes.ContainsKey)); return l.Select(Name); }
-            IEnumerable<string> Out(params string[] kinds) => Pick(outgoing[n.Id].Where(e => kinds.Contains(e.Kind)).Select(e => e.To));
-            IEnumerable<string> In(params string[] kinds) => Pick(incoming[n.Id].Where(e => kinds.Contains(e.Kind)).Select(e => e.From));
-
-            var json = JsonSerializer.Serialize(new
-            {
-                symbol = Generator.Display(n),
-                kind = n.Kind,
-                file = n.File,
-                route = n.Route is null ? null : $"{n.Tags?.ElementAtOrDefault(1)} {n.Route}".Trim(),
-                visibility = n.Visibility,
-                complexity = n.Complexity,
-                parameters = n.Parameters,
-                returns = n.Returns,
-                throws = n.Throws,
-                emits = n.Events,
-                existingDocs = n.Doc,
-                calls = Out("calls"),
-                httpCalls = Out("http"),
-                injects = Out("injects"),
-                renders = Out("renders"),
-                publishes = Out("publishes"),
-                calledBy = In("calls", "http"),
-                renderedBy = In("renders"),
-                derived = f.Sections.Where(kv => kv.Value.Origin is Origin.Fact or Origin.Inferred)
-                    .ToDictionary(kv => kv.Key, kv => $"{kv.Value.Text} ({kv.Value.Origin.ToString().ToLowerInvariant()})"),
-                whyItNeedsDocs = f.Reasons,
-                source = Source(n),
-            }, Options);
-            var all = sources.Concat(f.Sources).Distinct().ToList();
-            return (json, all, Names(all, n.Id));
-        }
-
-        string? Source(Node n)
-        {
-            var path = Path.Combine(root, n.File);
-            if (!File.Exists(path)) return null;
-            var end = Math.Min(n.EndLine ?? n.Line + MaxSourceLines, n.Line + MaxSourceLines);
-            return string.Join('\n', File.ReadLines(path).Skip(n.Line - 1).Take(end - n.Line + 1));
-        }
     }
 }

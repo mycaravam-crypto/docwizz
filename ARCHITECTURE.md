@@ -207,8 +207,8 @@ Escape). A print stylesheet drops the navigation and prints light.
 [AiProse](src/DocWizz/AiProse.cs) drafts documentation for items that still lack a summary (summary, responsibilities,
 behaviour, side effects, errors, usage) and an overview per module. The model answers in JSON, one list of sentences
 per section, each citing the facts it uses; citations are resolved to symbol ids and a sentence without a valid one is
-dropped (per-sentence provenance). Per item it sends the facts JSON
-(graph neighbours, signature, derived sections with their origin) and that symbol's own source lines. It never
+dropped (per-sentence provenance). Per item it sends the facts JSON from
+[ContextBuilder](src/DocWizz/ContextBuilder.cs) (graph neighbours, signature, derived sections with their origin) and that symbol's own source lines. It never
 sends the repository, and it only talks to a self-hosted Ollama: every connection's resolved address must be
 loopback or private, proxies are bypassed and Ollama cloud models are refused, so code never reaches a public
 service. Drafts are cached per symbol and body hash in `docs/.docwizz/ai-cache.json`, together with
@@ -216,6 +216,17 @@ the symbols they were drafted from (provenance). Drafts are marked 🤖 and neve
 With the same facts and the doc comment, it also rates written docs (score 1–5, missing gaps, a note), cached per
 symbol, doc and body hash in `ai-assessments.json`; the rating is shown in `quality.md` only and never feeds doc
 quality % or `check`.
+
+## Agent context
+
+[AgentContext](src/DocWizz/AgentContext.cs) answers `docwizz context`: it resolves `--for` to a scope (one symbol and
+its members, a file, a folder or an endpoint; never a guess), collects lines in priority order (the target, hop-1
+neighbours, further hops, flows/external systems/configuration keys, tests/gaps/findings, files to read) and drops lines
+from the lowest-priority end until the rendering fits the budget (characters / 4). Each line carries its provenance;
+🤖 drafts stay out unless asked for. The neighbours come from [ContextBuilder](src/DocWizz/ContextBuilder.cs), the
+same graph access `AiProse` builds its facts JSON with, and the flows from the generator's flow tracer, so a package
+and the pages never disagree. It reads `docs/.docwizz/model.json` (and reports it stale when `HEAD` or file times say
+so) or scans; it never calls the network or a model.
 
 ## Product templates (proposed P0)
 
