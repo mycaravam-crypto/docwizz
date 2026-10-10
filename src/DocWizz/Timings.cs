@@ -1,8 +1,7 @@
 using System.Diagnostics;
 
 // Wall-clock time per pipeline stage, printed to stderr at exit with --timings (bench/run.py reads it). Stages that
-// run more than once (both sides of a diff) add up, and stages that run at the same time (the scanners) overlap, so
-// they can add up to more than `total`. Off by default: Measure is then a plain call.
+// run more than once (both sides of a diff) add up. Off by default: Measure is then a plain call.
 static class Timings
 {
     static readonly List<(string Stage, TimeSpan Time)> stages = [];
