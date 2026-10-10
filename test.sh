@@ -764,7 +764,8 @@ open(sys.argv[1], "w").write(str(s.server_port)); s.serve_forever()
 PY
 fake=$!; trap 'kill $fake 2>/dev/null || true' EXIT
 until [ -s "$port_file" ]; do sleep 0.1; done
-OLLAMA_HOST="127.0.0.1:$(cat "$port_file")" DOCWIZZ_MODEL=local:7b dw generate fixture "$docs" --ai >/dev/null 2>&1
+ai_log=$(OLLAMA_HOST="127.0.0.1:$(cat "$port_file")" DOCWIZZ_MODEL=local:7b dw generate fixture "$docs" --ai 2>&1 >/dev/null)
+echo "$ai_log"   # in the group log: what was drafted, and why a call failed
 grep -q "🤖 _Drafted locally._" "$docs/api.md"
 # section-level drafts: cited sentences kept with their provenance, uncited ones dropped; module overviews
 grep -q "| POST | \`/api/materials\` | 🤖 _Creates a material._ |" "$docs/api.md"
