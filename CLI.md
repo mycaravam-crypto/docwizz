@@ -8,6 +8,7 @@ New here? Run `docwizz setup .` and read what it prints. You only need this page
 - [Exit codes](#exit-codes)
 - [Versioning](#versioning): what `docwizz --version` prints and how releases are numbered
 - [Generated vs. your files](#generated-vs-your-files)
+- [Context for coding agents](#8-context-for-coding-agents): the docs as an agent's map of the code
 
 `docwizz help` lists the commands. `docwizz help <command>` or `docwizz <command> --help` shows one command's purpose,
 an example and its options.
@@ -182,6 +183,34 @@ docwizz scan . model.json
 
 This writes every node and edge the scanners found. It is useful when debugging why a symbol is or isn't reported,
 or for building your own tooling on top. Everyday workflows don't need it.
+
+### 8. Context for coding agents
+
+```bash
+docwizz generate .                                    # once, and after every change
+cp templates/AGENTS.md ./AGENTS.md                    # or append it to the agent file you already have
+```
+
+Coding agents (Claude Code, OpenCode, Qwen Code, Cline, Aider) can read the generated docs instead of exploring the
+code file by file, which is where local models with small context windows drift on long runs. docwizz does the
+exploration; the agent reads the result. [templates/AGENTS.md](templates/AGENTS.md) is a section to copy into
+`AGENTS.md`, `CLAUDE.md`, `.clinerules` or `CONVENTIONS.md`. It tells the agent:
+
+- **what to read first:** `docs/index.md`, `docs/architecture.md`, `docs/api.md`, then `docs/modules/<module>.md`
+  for the folders it will touch (the folder path with `/` replaced by `-`);
+- **how much to trust it:** detected facts over `(inferred)` ones; 🤖 marks a draft, never a fact;
+- **that the docs are navigation:** read the real code before changing it, starting at the `file:line` links;
+- **when it is done:** `docwizz check . --since <base> --format json` reports no new problems, `docwizz diff`
+  has been reviewed, and `docwizz generate .` has refreshed the docs so the next task doesn't read a stale model.
+
+What helps an agent most, from trying the template on `fixture/`: a module page's *Flows through this module*
+answers "what does this endpoint touch" in one read (`POST /api/materials`: controller → service → repository →
+`AppDbContext` → SQL Server); `api.md` maps a route to its handler's `file:line` and its frontend callers; and the
+*Documentation gaps* list on the same page is the to-do list for a documentation task.
+
+**Limits.** Generated pages are written for people, not for a token budget: a large module page can crowd out the
+agent's context, and an agent has to know which page to open. The docs are as fresh as the last `generate`;
+`docs/index.md` names the commit they were generated from.
 
 ## SBOM inventory
 
