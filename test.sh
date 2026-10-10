@@ -757,15 +757,19 @@ class H(http.server.BaseHTTPRequestHandler):
         else:
             reply = "<think>hmm</think>Drafted locally."   # not JSON: taken as a plain summary
         body = json.dumps({"message": {"content": reply if isinstance(reply, str) else json.dumps(reply)}}).encode()
-        self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+        self.send_response(200); self.send_header("Content-Length", str(len(body))); self.send_header("Connection", "close")
+        self.end_headers(); self.wfile.write(body)
     def log_message(self, *a): pass
-s = http.server.HTTPServer(("127.0.0.1", 0), H)
+# Like Ollama: concurrent requests served at once (docwizz sends two), and a closed connection is said to be closed,
+# so the client never reuses one the server is about to drop ("response ended prematurely" under load).
+s = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
 open(sys.argv[1], "w").write(str(s.server_port)); s.serve_forever()
 PY
 fake=$!; trap 'kill $fake 2>/dev/null || true' EXIT
 until [ -s "$port_file" ]; do sleep 0.1; done
 ai_log=$(OLLAMA_HOST="127.0.0.1:$(cat "$port_file")" DOCWIZZ_MODEL=local:7b dw generate fixture "$docs" --ai 2>&1 >/dev/null)
 echo "$ai_log"   # in the group log: what was drafted, and why a call failed
+if grep -q "skipped\|failed" <<<"$ai_log"; then echo "AI drafting did not complete against the fake Ollama"; exit 1; fi
 grep -q "🤖 _Drafted locally._" "$docs/api.md"
 # section-level drafts: cited sentences kept with their provenance, uncited ones dropped; module overviews
 grep -q "| POST | \`/api/materials\` | 🤖 _Creates a material._ |" "$docs/api.md"
