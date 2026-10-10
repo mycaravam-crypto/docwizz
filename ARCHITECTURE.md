@@ -209,10 +209,11 @@ behaviour, side effects, errors, usage) and an overview per module. The model an
 per section, each citing the facts it uses; citations are resolved to symbol ids and a sentence without a valid one is
 dropped (per-sentence provenance). Per item it sends the facts JSON from
 [ContextBuilder](src/DocWizz/ContextBuilder.cs) (graph neighbours, signature, derived sections with their origin) and that symbol's own source lines. It never
-sends the repository. The model sits behind [IAiProvider](src/DocWizz/AiProvider.cs) (today: `OllamaProvider`), and
+sends the repository. The model sits behind [IAiProvider](src/DocWizz/AiProvider.cs) (`OllamaProvider` for `/api/chat`, `OpenAiCompatibleProvider` for `/v1/chat/completions` with
+`response_format: json_object`, falling back to the prompt alone when a server rejects it), and
 every provider connects through `LocalEndpoint`: each connection's resolved address must be loopback or private and
 proxies are bypassed. Ollama cloud models are refused, so code never reaches a public service. Anything else that
-needs a model (product synthesis, other self-hosted servers) adds a provider instead of its own HTTP client. Drafts are cached per symbol and body hash in `docs/.docwizz/ai-cache.json`, together with
+needs a model (product synthesis, other self-hosted servers) adds a provider instead of its own HTTP client. Drafts are cached per symbol, body hash, provider and model in `docs/.docwizz/ai-cache.json`, together with
 the symbols they were drafted from (provenance). Drafts are marked 🤖 and never override written documentation.
 With the same facts and the doc comment, it also rates written docs (score 1–5, missing gaps, a note), cached per
 symbol, doc and body hash in `ai-assessments.json`; the rating is shown in `quality.md` only and never feeds doc

@@ -437,7 +437,7 @@ static async Task<string> Generate(string root, string outDir, Config config, bo
     var arch = Timings.Measure("architecture", () => Architecture.Check(model, config));
     bar.Advance("architecture");
     // Cached drafts are always used; new ones are only requested with --ai.
-    var drafts = await AiProse.Summaries(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-cache.json"), ai);
+    var drafts = await AiProse.Summaries(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-cache.json"), ai, config.Ai);
     bar.Advance("AI summaries");
     // A draft fills what is missing, never what is written or derived: the summary, and sections the item doesn't have.
     foreach (var f in findings)
@@ -452,7 +452,7 @@ static async Task<string> Generate(string root, string outDir, Config config, bo
     var summaries = drafts.Where(d => !d.Key.StartsWith("module:") && d.Value.Text.Length > 0).ToDictionary(d => d.Key, d => d.Value.Text);
     var overviews = drafts.Where(d => d.Key.StartsWith("module:")).ToDictionary(d => d.Key["module:".Length..], d => d.Value);
     // Advisory ratings of written docs: shown in quality.md, never part of doc quality % or check.
-    var assessments = await AiProse.Assessments(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-assessments.json"), ai);
+    var assessments = await AiProse.Assessments(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-assessments.json"), ai, config.Ai);
     bar.Advance("AI assessments");
     var rebuildHtml = html && refreshHtmlOnVersionChange && HtmlVersion.NeedsRefresh(outDir, AppVersion.Number);
     var (pages, changed) = Timings.Measure("generate", () => new Generator(root, outDir, model, findings, arch, config, summaries, overviews, assessments)

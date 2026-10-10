@@ -467,11 +467,12 @@ present section comes from (`written`, `fact`, `inferred` or `ai`), and the evid
 
 ## AI drafts
 
-`--ai` asks a **self-hosted [Ollama](https://ollama.com)** to draft what's missing: summary, responsibilities,
+`--ai` asks a **self-hosted model** ([Ollama](https://ollama.com) by default, or any OpenAI-compatible server such as
+vLLM, NVIDIA NIM or a LiteLLM gateway) to draft what's missing: summary, responsibilities,
 behaviour, side effects, errors and usage for each item, plus an overview per module.
 
 - **Only local or private addresses.** The resolved address must be loopback, 10/8, 172.16/12, 192.168/16 or an IPv6
-  unique-local address. Proxies are bypassed, and Ollama `…-cloud` models are refused.
+  unique-local address, for every provider. Proxies are bypassed, and Ollama `…-cloud` models are refused.
 - **Grounded.** Each sentence cites the facts it rests on, and sentences that cite nothing are dropped.
 - **Never authoritative.** Drafts are marked 🤖, fill only empty sections and never close a gap.
 - **Sent once.** Drafts are cached in `docs/.docwizz/ai-cache.json` by symbol and code hash, so unchanged code isn't
@@ -482,4 +483,6 @@ behaviour, side effects, errors and usage for each item, plus an overview per mo
   `docs/.docwizz/ai-assessments.json` by symbol, doc and code hash.
 
 `OLLAMA_HOST` picks the server (default `localhost:11434`). `DOCWIZZ_MODEL` picks the model (default
-`qwen2.5-coder:7b`).
+`qwen2.5-coder:7b`). For an OpenAI-compatible server, set `ai: { provider: openai-compatible, endpoint: http://10.0.0.5:8000/v1,
+model: <name>, api_key_env: DOCWIZZ_AI_KEY }` in `docwizz.yaml`: the same address rules apply, the key comes only from
+that environment variable, and drafts are cached per provider and model ([CLI.md](CLI.md#5-ai-assisted-documentation)).

@@ -63,26 +63,29 @@ static class AiProse
 
     // Returns node id → summary, from cache and (when allowed) fresh API calls.
     public static async Task<Dictionary<string, Draft>> Summaries(
-        string root, CodeModel model, List<DocumentationItem> findings, string cacheFile, bool call)
+        string root, CodeModel model, List<DocumentationItem> findings, string cacheFile, bool call, AiConfig? config = null)
     {
+        config ??= new();
         var cache = Load(cacheFile);
+        var tag = call ? AiProviders.Tag(config) : null;
         var targets = findings.Where(f => f.Missing.Contains("summary") && f.Node.Hash is not null)
             .Select(f => new Target(f.Node, f)).ToList();
         var result = new Dictionary<string, Draft>();
         var misses = new List<Target>();
         foreach (var t in targets)
         {
-            if (cache.TryGetValue(Key(t.Node), out var text)) result[t.Node.Id] = text;
+            var text = Cached(cache, Key(t.Node), tag);
+            if (text is not null) result[t.Node.Id] = text;
             if (text is null || (call && text.Sections is null)) misses.Add(t); // with --ai, summary-only drafts get their sections
         }
         var modules = ModuleTargets(model);
         foreach (var (key, _, _) in modules)
-            if (cache.TryGetValue(key, out var d)) result[key.Split('@')[0]] = d;
-        var moduleMisses = modules.Where(m => !cache.ContainsKey(m.Key)).ToList();
+            if (Cached(cache, key, tag) is { } d) result[key.Split('@')[0]] = d;
+        var moduleMisses = modules.Where(m => Cached(cache, m.Key, tag) is null).ToList();
 
         if (call && misses.Count + moduleMisses.Count > 0)
         {
-            if (AiProviders.Create("summaries") is not { } ai) return result;
+            if (AiProviders.Create(config, "summaries") is not { } ai) return result;
             using var _ = ai;
             Console.Error.WriteLine($"docwizz: drafting {misses.Count} symbols and {moduleMisses.Count} module overviews with {ai.Model} at {ai.Endpoint} " +
                 $"({targets.Count - misses.Count} cached)");
@@ -113,7 +116,7 @@ static class AiProse
                 finally { gate.Release(); }
             }));
             foreach (var (node, draft) in drafted.Where(d => d.Draft is not null))
-                result[node.Id] = cache[Key(node)] = draft!;
+                result[node.Id] = cache[$"{Key(node)}@{tag}"] = draft!;
             // Module overviews after the symbols, so they build on the fresh drafts; one at a time is plenty.
             foreach (var (key, folder, members) in moduleMisses)
             {
@@ -121,7 +124,7 @@ static class AiProse
                 try
                 {
                     var (json, sources, names) = facts.ForModule(folder, members, result);
-                    if (Parse(await ai.Complete(ModuleInstructions, json), sources, names) is { } d) result[key.Split('@')[0]] = cache[key] = d;
+                    if (Parse(await ai.Complete(ModuleInstructions, json), sources, names) is { } d) result[key.Split('@')[0]] = cache[$"{key}@{tag}"] = d;
                 }
                 catch (HttpRequestException e) { Console.Error.WriteLine($"docwizz: AI module overviews skipped — {e.InnerException?.Message ?? e.Message}"); break; }
                 catch (Exception e) { Console.Error.WriteLine($"docwizz: AI overview failed for {folder}: {e.Message}"); }
@@ -137,17 +140,19 @@ static class AiProse
     // Rates the written docs of items that have them, from cache and (when allowed) fresh calls, keyed by symbol, doc
     // and body: a doc or code change asks again.
     public static async Task<Dictionary<string, Assessment>> Assessments(
-        string root, CodeModel model, List<DocumentationItem> findings, string cacheFile, bool call)
+        string root, CodeModel model, List<DocumentationItem> findings, string cacheFile, bool call, AiConfig? config = null)
     {
+        config ??= new();
+        var tag = call ? AiProviders.Tag(config) : null;
         Dictionary<string, Assessment> cache;
         try { cache = File.Exists(cacheFile) ? JsonSerializer.Deserialize<Dictionary<string, Assessment>>(File.ReadAllText(cacheFile), Web) ?? [] : []; }
         catch (JsonException) { cache = []; }
         static string Key(Node n) => $"{n.Id}@{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes($"{n.Doc}|{n.Hash}")))[..12].ToLowerInvariant()}";
         var targets = findings.Where(f => f.Node.Doc is not null && f.Sections.GetValueOrDefault("summary")?.Origin == Origin.Written).ToList();
-        var result = targets.Where(f => cache.ContainsKey(Key(f.Node))).ToDictionary(f => f.Node.Id, f => cache[Key(f.Node)]);
-        var misses = targets.Where(f => !cache.ContainsKey(Key(f.Node))).ToList();
-        if (!call || misses.Count == 0 || AiProviders.Create("assessments") is not { } ai) return result;
+        var result = targets.Where(f => Cached(cache, Key(f.Node), tag) is not null).ToDictionary(f => f.Node.Id, f => Cached(cache, Key(f.Node), tag)!);
+        var misses = targets.Where(f => Cached(cache, Key(f.Node), tag) is null).ToList();
+        if (!call || misses.Count == 0 || AiProviders.Create(config, "assessments") is not { } ai) return result;
 
         using var _ = ai;
         Console.Error.WriteLine($"docwizz: assessing {misses.Count} written docs with {ai.Model} at {ai.Endpoint} ({result.Count} cached)");
@@ -157,7 +162,7 @@ static class AiProse
             try
             {
                 if (ParseAssessment(await ai.Complete(AssessInstructions, facts.For(f.Node, f).Json)) is { } a)
-                    result[f.Node.Id] = cache[Key(f.Node)] = a;
+                    result[f.Node.Id] = cache[$"{Key(f.Node)}@{tag}"] = a;
             }
             catch (HttpRequestException e) { Console.Error.WriteLine($"docwizz: AI assessments skipped — {e.InnerException?.Message ?? e.Message}"); break; }
             catch (Exception e) { Console.Error.WriteLine($"docwizz: AI assessment failed for {f.Node.Id}: {e.Message}"); }
@@ -225,11 +230,20 @@ static class AiProse
 
     static string Key(Node n) => $"{n.Id}@{n.Hash}";
 
+    // A cache entry is "<subject>@<hash>@<provider>/<model>"; entries from before providers were configurable have no
+    // provider and were drafted by Ollama. With a provider (`tag`, from --ai) only its own entries count, so another model
+    // drafts afresh; without one, any draft of the same code is used (the first by key, so the choice is stable).
+    public static T? Cached<T>(Dictionary<string, T> cache, string key, string? tag) where T : class =>
+        tag is not null
+            ? cache.GetValueOrDefault($"{key}@{tag}") ?? (tag.StartsWith("ollama/") ? cache.GetValueOrDefault(key) : null)
+            : cache.GetValueOrDefault(key) ?? cache.Where(kv => kv.Key.StartsWith(key + "@", StringComparison.Ordinal))
+                .OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => kv.Value).FirstOrDefault();
+
     // Cached drafts for the code as it is now, never a call: agent context packages show them only when asked to.
     public static Dictionary<string, Draft> Cached(CodeModel model, string cacheFile)
     {
         var cache = Load(cacheFile);
-        return model.Nodes.Where(n => n.Hash is not null && cache.ContainsKey(Key(n))).ToDictionary(n => n.Id, n => cache[Key(n)]);
+        return model.Nodes.Where(n => n.Hash is not null && Cached(cache, Key(n), null) is not null).ToDictionary(n => n.Id, n => Cached(cache, Key(n), null)!);
     }
 
     // Cache: "<id>@<hash>" → { text, sources }. Entries from before provenance was recorded are plain strings.

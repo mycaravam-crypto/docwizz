@@ -797,6 +797,39 @@ dw generate fixture "$docs" >/dev/null 2>&1   # no --ai, no server: from the cac
 grep -q '| 2 | purpose, side effects | Says what, not why. |' "$docs/quality.md"
 rm -rf "$docs" "$port_file"
 
+# --ai with provider openai-compatible (vLLM, NIM, LiteLLM): /v1/chat/completions on a private address, the key from the
+# variable ai.api_key_env names, never from docwizz.yaml; drafts are filed under provider and model
+own=$(mktemp -d); cp -r fixture/. "$own"; docs=$(mktemp -d); port_file=$(mktemp)
+python3 - "$port_file" <<'PY' &
+import http.server, json, sys
+class H(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        assert self.path == "/v1/chat/completions" and req["model"] == "coder-next" and req["temperature"] == 0, req
+        assert self.headers["Authorization"] == "Bearer k-123", self.headers
+        reply = {"summary": [{"text": "Drafted by vLLM.", "from": ["source"]}]}
+        body = json.dumps({"choices": [{"message": {"role": "assistant", "content": json.dumps(reply)}}]}).encode()
+        self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+    def log_message(self, *a): pass
+s = http.server.HTTPServer(("127.0.0.1", 0), H)
+open(sys.argv[1], "w").write(str(s.server_port)); s.serve_forever()
+PY
+fake=$!; trap 'kill $fake 2>/dev/null || true; rm -rf "$sandbox"' EXIT
+until [ -s "$port_file" ]; do sleep 0.1; done
+dw init "$own" >/dev/null
+printf '\nai:\n  provider: openai-compatible\n  endpoint: http://127.0.0.1:%s/v1\n  model: coder-next\n  api_key_env: DOCWIZZ_AI_KEY\n' "$(cat "$port_file")" >> "$own/docwizz.yaml"
+nokey=$(DOCWIZZ_AI_KEY= dw generate "$own" "$docs" --ai 2>&1 >/dev/null)
+grep -q "ai.api_key_env names DOCWIZZ_AI_KEY, which is not set" <<<"$nokey" || { echo "$nokey"; exit 1; }
+DOCWIZZ_AI_KEY=k-123 dw generate "$own" "$docs" --ai >/dev/null 2>&1
+grep -q "🤖 _Drafted by vLLM._" "$docs/api.md"
+grep -q '@openai-compatible/coder-next"' "$docs/.docwizz/ai-cache.json"
+if grep -rq "k-123" "$docs" "$own/docwizz.yaml"; then echo "API key written to disk"; exit 1; fi
+sed -i "s|http://127.0.0.1:[0-9]*/v1|http://8.8.8.8/v1|" "$own/docwizz.yaml"
+public=$(DOCWIZZ_AI_KEY=k-123 dw generate "$own" "$(mktemp -d)" --ai 2>&1 >/dev/null)
+grep -q "8.8.8.8 is not a local or private address" <<<"$public" || { echo "$public"; exit 1; }
+kill $fake
+rm -rf "$own" "$docs" "$port_file"
+
 # Legacy project: no doc comments, no docwizz.yaml, controller talks to the DbContext and holds the logic
 section "legacy project"
 legacy=$(mktemp -d)
