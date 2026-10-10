@@ -272,11 +272,14 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     var scanned = candidates.Where(f => exts.Contains(Path.GetExtension(f)) && !f.EndsWith(".d.ts") && !f.EndsWith(".min.js")
         && !f.Replace('\\', '/').Contains("/wwwroot/lib/")).ToList(); // ponytail: libman/bower vendor dir only; other vendored JS needs exclude:
 
+    // The frontend scanner is a Node process (about a second to start and load TypeScript): it runs while the others do.
+    var feFiles = scanned.Where(f => Path.GetExtension(f) is ".vue" or ".ts" or ".tsx" or ".js" or ".jsx" or ".mjs").ToList();
+    var frontend = Task.Run(() => Timings.Measure("scan:frontend", () => Frontend.Scan(root, feFiles)));
     var (nodes, edges) = Timings.Measure("scan:csharp", () => CSharpScanner.Scan(root, scanned.Where(f => f.EndsWith(".cs")), config.CommentDocs));
-    var (feNodes, feEdges) = Timings.Measure("scan:frontend", () => Frontend.Scan(root, scanned.Where(f => Path.GetExtension(f) is ".vue" or ".ts" or ".tsx" or ".js" or ".jsx" or ".mjs").ToList()));
     var (sqlNodes, sqlEdges) = Timings.Measure("scan:sql", () => Sql.Scan(root, scanned.Where(f => f.EndsWith(".sql"))));
     var (javaNodes, javaEdges) = Timings.Measure("scan:java", () => JavaScanner.Scan(root, scanned.Where(f => f.EndsWith(".java"))));
     var (phpNodes, phpEdges) = Timings.Measure("scan:php", () => PhpScanner.Scan(root, scanned.Where(f => f.EndsWith(".php"))));
+    var (feNodes, feEdges) = frontend.GetAwaiter().GetResult();
     var (projNodes, projEdges) = Timings.Measure("scan:projects", () => Projects.Scan(root, candidates.Where(f => f.EndsWith(".csproj") || f.EndsWith(".sln") || f.EndsWith(".slnx")
         || Path.GetFileName(f) is "package.json" or "pom.xml" or "build.gradle" or "build.gradle.kts")));
     // Keys defined in configuration files win over the bare key nodes code reads create.
