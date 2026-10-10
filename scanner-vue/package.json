@@ -2,9 +2,11 @@
   "name": "docwizz-scanner-vue",
   "private": true,
   "type": "module",
-  "description": "Emits docwizz model nodes/edges for .vue and .ts files (stdin: file list, stdout: JSON)",
+  "description": "Emits docwizz model nodes/edges for .vue and .ts files (index.mjs) and Java syntax (java.mjs); stdin: file list, stdout: JSON",
   "dependencies": {
     "@vue/compiler-sfc": "^3.5.43",
-    "typescript": "^6.0.3"
+    "tree-sitter-java": "0.23.5",
+    "typescript": "^6.0.3",
+    "web-tree-sitter": "0.25.10"
   }
 }

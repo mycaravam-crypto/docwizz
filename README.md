@@ -19,13 +19,13 @@ a coding agent: [CLI.md](CLI.md#8-context-for-coding-agents) and the [AGENTS.md 
 
 ## Quick start
 
-Needs the [.NET 10 SDK](https://dotnet.microsoft.com/download). For Vue, React, Angular or TypeScript code you also
-need Node.
+Needs the [.NET 10 SDK](https://dotnet.microsoft.com/download). For Java, Vue, React, Angular or TypeScript code you
+also need Node.
 
 ```bash
 git clone https://github.com/mycaravam-crypto/docwizz && cd docwizz
 dotnet build src/DocWizz -c Release
-npm ci --prefix scanner-vue        # only needed for Vue/React/Angular/TypeScript
+npm ci --prefix scanner-vue        # only needed for Java/Vue/React/Angular/TypeScript
 alias docwizz="dotnet $PWD/src/DocWizz/bin/Release/net10.0/DocWizz.dll"
 ```
 
@@ -264,7 +264,7 @@ built from, for bug reports and CI logs. Every merge to `main` is released autom
 `release:major` PR label for bigger bumps ([versioning and releases](CLI.md#versioning)). [CLI.md](CLI.md) is the full reference: every option, defaults,
 precedence and exit codes. Options: `--profile <name|file.yaml>` picks what counts as documented. `--format json` gives machine-readable
 `analyze`/`check`/`architecture`/`diff`/`remediate` output. Run `dotnet test --project tests/DocWizz.Tests` for the unit, component and journey tests (journeys run the CLI as a
-process; Vue/TS ones need `npm ci --prefix scanner-vue`) and `./test.sh` for the end-to-end
+process; Java, Vue and TS ones need `npm ci --prefix scanner-vue`) and `./test.sh` for the end-to-end
 tests against `fixture/` (see [ARCHITECTURE.md](ARCHITECTURE.md#tests)). `--timings` prints the time per stage and
 peak memory; [bench/](bench/README.md) has reproducible benchmarks, the baseline, and advice for large repositories and
 monorepos.
