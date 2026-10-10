@@ -330,7 +330,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 | `diff` | `docwizz diff [dir] [base] [head] [--format f] [--profile p]` | change impact vs the last `generate` or git refs | reviews, CI |
 | `context` | `docwizz context <dir> --for target [--hops n] [--budget tokens] [--format md\|json] [--include-ai]` | token-budgeted context package for one symbol, file, folder or endpoint | coding agents |
 | `mcp` | `docwizz mcp <dir> [--auto-rescan]` | read-only MCP server on stdio: find_symbol, context, callers, impact, check, … | coding agents |
-| `product` | `docwizz product <dir> <template.yaml> [out.md] [--context file.yaml] [--ai]` | versioned product draft from evidence; `--ai`: a local model words sections, citing evidence ids | architects |
+| `product` | `docwizz product [check] <dir> <template.yaml> [out.md] [--context file.yaml] [--ai] [--format f]` | versioned product draft from evidence; `--ai`: a local model words sections, citing evidence ids; `check`: references and freshness of the draft | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
 | `init` | `docwizz init [dir]` | write a `docwizz.yaml` with every default; refuses to overwrite | manual setup |
@@ -345,7 +345,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 |---|---|---|---|---|
 | `--context <file.yaml>` | off | product | validates sourced project statements against template before writing | product documents |
 | `--profile <name\|file.yaml>` | `profile:` in `docwizz.yaml`, else `default` | setup, generate, check, analyze, architecture, diff | overrides `profile:` and the file's own `patterns:` | normal |
-| `--format console\|json` | `console` | analyze, check, architecture, context, diff, remediate | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
+| `--format console\|json` | `console` | analyze, check, architecture, context, diff, product, remediate | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
 | `--for <target>` | — | context | required; a symbol id or qualified name, a file, a folder, or `VERB /route`; ambiguous or unknown exits 1 with candidates | coding agents |
 | `--hops <n>` | 2 | context | how far neighbours are listed, 1 to 4; hops beyond 1 are signature only | coding agents |
 | `--budget <tokens>` | 6000 | context | at least 100; estimated as characters / 4; lower-priority sections are cut first, and the cut is reported | coding agents |
@@ -389,7 +389,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 | `check` | thresholds pass | thresholds fail, or bad arguments/config |
 | `architecture` | within `max_violations`/`max_cycles` | above them |
 | `analyze`, `generate`, `scan`, `sbom` | done | bad arguments or config |
-| `product` | draft written or unchanged | invalid template, unsafe overwrite, or bad arguments |
+| `product` | draft written or unchanged; `check`: no errors (warnings allowed) | invalid template, unsafe overwrite, bad arguments; `check`: an error finding |
 | `remediate` | done (suggestions alone never fail) | a `--validate` run failed, or bad arguments |
 | `context` | package written | no `--for`, an ambiguous or unknown target (candidates on stderr), or bad arguments |
 | `mcp` | stdin closed | bad arguments or config |
@@ -480,3 +480,18 @@ sentences with the ids they cite (`ai-drafted`). `required` sums it up: how many
 have evidence, and which are open. Every required section is either evidenced or listed as open; nothing is left out
 silently. The report is an inventory, not a statement of review, approval or conformity, and says so. A report file
 that docwizz didn't write is never overwritten.
+
+`docwizz product check . templates/vmodell-xt/sw-architecture.yaml --context project.yaml` checks a generated draft
+before someone reviews it (`--format json` for CI; exit 1 on an error, warnings never fail):
+
+| Rule | Severity | Finds |
+|---|---|---|
+| PROD-001 | warning | a required section without evidence (`OFFEN`; allowed in a draft, listed so nobody misses it) |
+| PROD-002 | error | a project statement whose source file doesn't exist |
+| PROD-003 | error | a product in `dependencies` without a draft next to this one |
+| PROD-004 | error | the draft or its evidence report missing, not docwizz's, or stale: the evidence changed since it was generated |
+| PROD-005 | warning | a project statement that reads like an instruction to a model (it is only ever sent as data) |
+| PROD-006 | error | a 🤖 sentence in the draft citing an id that isn't evidence of its section |
+
+It checks references and freshness, never content: whether a statement is true or a product can be approved stays a
+human decision, and the check says so.

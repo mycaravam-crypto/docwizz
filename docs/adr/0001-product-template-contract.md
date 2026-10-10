@@ -66,4 +66,9 @@ survives validation, output is byte-identical to the deterministic draft.
 `<product_id>.evidence.json` next to the draft is the machine-readable evidence and
 gap report: per section `evidenced` / `open` / `empty`, the evidence with ids and
 origin, synthesized sentences with their citations, and the required-section totals.
-Deliberately deferred: `product check`, DOCX.
+`docwizz product check` (P3, first part) verifies references and freshness: statement
+sources exist, dependencies have drafts, the draft and report are docwizz's and match
+current evidence, 🤖 sentences cite their own section's evidence; open required
+sections and instruction-like statements are warnings. Deliberately deferred: V-Modell
+states (`in Bearbeitung` / `vorgelegt` / `fertiggestellt`, which need a documented human
+review to model), a file allowlist for sources beyond `docs/*.md`, P2 imports, DOCX.

@@ -184,7 +184,11 @@ sealed class OpenAiCompatibleProvider : IAiProvider
                 response = await client.PostAsync("chat/completions",
                     new StringContent(JsonSerializer.Serialize(request), System.Text.Encoding.UTF8, "application/json"));
             }
-            catch (TaskCanceledException) { throw new HttpRequestException($"{Endpoint} did not answer within {timeout.TotalSeconds:0} s"); }
+            // The timeout can fire while connecting too, where it arrives wrapped in an HttpRequestException.
+            catch (Exception e) when (e is TaskCanceledException || e.InnerException is OperationCanceledException)
+            {
+                throw new HttpRequestException($"{Endpoint} did not answer within {timeout.TotalSeconds:0.#} s");
+            }
             using (response)
             {
                 if (response.StatusCode == HttpStatusCode.BadRequest && jsonMode)
