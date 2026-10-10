@@ -23,6 +23,7 @@ an example and its options.
 | `analyze` | documentation report | developers | yes |
 | `architecture` | architecture diagnostics | architects | optional |
 | `diff` | change impact | developers, CI | optional |
+| `context` | token-budgeted facts about one target, for coding agents | coding agents | optional |
 | `product` | deterministic product draft from a YAML template | architects | optional |
 | `sbom` | CycloneDX manifest SBOM | supply-chain inventory | optional |
 | `remediate` | package update suggestions | maintainers | optional |
@@ -33,6 +34,7 @@ an example and its options.
 | `--profile` | what counts as documented | teams with their own rules | optional |
 | `--format json` | machine-readable output | CI, tooling | advanced |
 | `--since <ref>` | gate only what a change introduces | CI | optional |
+| `--for <target>` | what a context package is about | coding agents | optional |
 | `--validate` | build and test remediations in a temporary copy | maintainers | optional |
 | `--force` | regenerate `docwizz.yaml` during setup | setup only | no |
 | `--timings` | time and memory per stage | benchmarks | advanced |
@@ -208,9 +210,44 @@ answers "what does this endpoint touch" in one read (`POST /api/materials`: cont
 `AppDbContext` → SQL Server); `api.md` maps a route to its handler's `file:line` and its frontend callers; and the
 *Documentation gaps* list on the same page is the to-do list for a documentation task.
 
-**Limits.** Generated pages are written for people, not for a token budget: a large module page can crowd out the
-agent's context, and an agent has to know which page to open. The docs are as fresh as the last `generate`;
-`docs/index.md` names the commit they were generated from.
+**Limits of the pages.** Generated pages are written for people, not for a token budget: a large module page can
+crowd out the agent's context, and an agent has to know which page to open. For that, use `docwizz context`.
+
+#### A context package per target
+
+```bash
+docwizz context . --for Fixture.Application.MaterialService.CreateAsync   # a symbol (id or qualified name)
+docwizz context . --for backend/Api/MaterialController.cs                 # a file
+docwizz context . --for backend/Infrastructure                            # a folder (module)
+docwizz context . --for "POST /api/materials" --budget 2000 --format json # an endpoint, as data
+```
+
+`context` writes the slice of the model that matters for one target, within a token budget (default 6000, estimated
+as characters / 4, no tokenizer). Highest priority first, and cut from the end when the budget runs out:
+
+1. a header: repository, the commit the model was scanned at, the budget, and a warning when the model is stale;
+2. the target: kind, signature, visibility, layer, `file:line`, its documentation and where each part comes from,
+   complexity, parameters, responses, exceptions, and its members;
+3. its neighbours one hop away: callers, callees, injections, implementations, HTTP callers;
+4. further neighbours up to `--hops` (default 2, at most 4), signature and location only;
+5. request flows through it (as `api.md` shows them), external systems with their certainty, configuration keys it
+   reads (names only, never values);
+6. linked tests, documentation gaps and architecture findings around it;
+7. *Read before you change it*: the `file:line` of the target and of the code on the other side of its edges.
+
+The header says what was cut (`truncated to fit the budget: 7 lines of Further neighbours`). Every line ends with its
+provenance: `[detected]`, `[inferred]`, `[human]` or `[ai-drafted]`. AI drafts are **left out** unless you pass
+`--include-ai`, so an agent never reads a draft back as a fact. The same model, target and budget give byte-identical
+output.
+
+`--for` is resolved in this order: an exact id (`cs:Fixture.Domain.Material`), a qualified name with or without its
+parameter list, a file, a folder, then `VERB /route`. When several symbols match (overloads) or none does, `context`
+exits 1, prints the candidates on stderr and nothing on stdout: it never guesses.
+
+`context` reads `docs/.docwizz/model.json` when `generate` wrote one, and scans the code when there is none. When the
+model is from another commit than `HEAD`, or source files changed after it was written, the package says it is stale
+and so does stderr: run `docwizz generate .`. It makes no network calls, runs no build and calls no AI. `--format json`
+gives the same lines as data (compact, since whitespace costs tokens).
 
 ## SBOM inventory
 
@@ -226,6 +263,7 @@ agent's context, and an agent has to know which page to open. The docs are as fr
 | `analyze` | `docwizz analyze <dir> [--format f] [--profile p]` | documentation and architecture report, no gate | everyday |
 | `architecture` | `docwizz architecture <dir> [--format f] [--profile p]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
 | `diff` | `docwizz diff [dir] [base] [head] [--format f] [--profile p]` | change impact vs the last `generate` or git refs | reviews, CI |
+| `context` | `docwizz context <dir> --for target [--hops n] [--budget tokens] [--format md\|json] [--include-ai]` | token-budgeted context package for one symbol, file, folder or endpoint | coding agents |
 | `product` | `docwizz product <dir> <template.yaml> [out.md] [--context file.yaml]` | versioned product draft without AI | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
@@ -241,7 +279,11 @@ agent's context, and an agent has to know which page to open. The docs are as fr
 |---|---|---|---|---|
 | `--context <file.yaml>` | off | product | validates sourced project statements against template before writing | product documents |
 | `--profile <name\|file.yaml>` | `profile:` in `docwizz.yaml`, else `default` | setup, generate, check, analyze, architecture, diff | overrides `profile:` and the file's own `patterns:` | normal |
-| `--format console\|json` | `console` | analyze, check, architecture, diff, remediate | `json` prints one JSON document to stdout | CI, tooling |
+| `--format console\|json` | `console` | analyze, check, architecture, context, diff, remediate | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
+| `--for <target>` | — | context | required; a symbol id or qualified name, a file, a folder, or `VERB /route`; ambiguous or unknown exits 1 with candidates | coding agents |
+| `--hops <n>` | 2 | context | how far neighbours are listed, 1 to 4; hops beyond 1 are signature only | coding agents |
+| `--budget <tokens>` | 6000 | context | at least 100; estimated as characters / 4; lower-priority sections are cut first, and the cut is reported | coding agents |
+| `--include-ai` | off | context | includes cached 🤖 drafts, marked `ai-drafted`; never calls a model | coding agents |
 | `--since <ref>` | — | check, remediate | check: compares against the tree at `<ref>`, so only introduced problems fail; remediate: says whether each update touches only what changed since `<ref>` | CI |
 | `--package <name> --to <version>` | `remediation.targets` and version drift | remediate | given together or not at all | maintenance |
 | `--validate` | off | remediate | runs the configured restore/build/test commands in a temporary copy, never the working tree | maintenance |
@@ -282,6 +324,7 @@ agent's context, and an agent has to know which page to open. The docs are as fr
 | `analyze`, `generate`, `scan`, `sbom` | done | bad arguments or config |
 | `product` | draft written or unchanged | invalid template, unsafe overwrite, or bad arguments |
 | `remediate` | done (suggestions alone never fail) | a `--validate` run failed, or bad arguments |
+| `context` | package written | no `--for`, an ambiguous or unknown target (candidates on stderr), or bad arguments |
 | `diff` | done | no baseline (`generate` first or pass a ref), unknown ref |
 | `init` | written | `docwizz.yaml` exists |
 | no command | — | prints how to start |

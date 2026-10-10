@@ -54,6 +54,8 @@ static async Task<int> Dispatch(string[] args)
 
     switch (cmd)
     {
+        case "context":
+            return ContextCommand(path, config, opts);
         case "product":
             return ProductCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), opts.GetValueOrDefault("context"), config);
         case "sbom":
@@ -78,6 +80,63 @@ static async Task<int> Dispatch(string[] args)
         default:
             return Usage($"unknown command {cmd}");
     }
+}
+
+// A context package for a coding agent, from the model the docs were generated from (docs/.docwizz/model.json), or from a
+// fresh scan when there is none. No network, no build, no AI: only what is in the model and the AI cache.
+static int ContextCommand(string root, Config config, Dictionary<string, string> opts)
+{
+    if (opts.GetValueOrDefault("for") is not { Length: > 0 } target)
+        return Usage("context needs --for <symbol|file|folder|VERB /route>", "context");
+    if (!int.TryParse(opts.GetValueOrDefault("hops") ?? $"{AgentContext.DefaultHops}", out var hops) || hops is < 1 or > AgentContext.MaxHops)
+        return Usage($"--hops must be a number from 1 to {AgentContext.MaxHops}", "context");
+    if (!int.TryParse(opts.GetValueOrDefault("budget") ?? $"{AgentContext.DefaultBudget}", out var budget) || budget < 100)
+        return Usage("--budget must be a number of tokens, at least 100", "context");
+
+    var fingerprint = Path.Combine(root, "docs", ".docwizz", "model.json");
+    CodeModel model;
+    string source;
+    var changed = 0;
+    if (File.Exists(fingerprint))
+    {
+        model = JsonSerializer.Deserialize<CodeModel>(File.ReadAllText(fingerprint), JsonOptions())!;
+        var written = File.GetLastWriteTimeUtc(fingerprint);
+        source = $"docs/.docwizz/model.json (written {written:yyyy-MM-dd HH:mm} UTC)";
+        changed = BuildFiles(root, config).Count(f => File.GetLastWriteTimeUtc(f) > written);
+    }
+    else
+    {
+        model = BuildModel(root, config).Model;
+        source = "a fresh scan (no docs/.docwizz/model.json)";
+    }
+
+    var resolved = AgentContext.Resolve(model, target);
+    if (resolved.Target is not { } t)
+    {
+        Console.Error.WriteLine(resolved.Error);
+        if (resolved.Candidates.Count > 0)
+            Console.Error.WriteLine((resolved.Error!.Contains("ambiguous") ? "candidates:" : "closest:") + string.Concat(resolved.Candidates.Select(c => $"\n  {c}")));
+        return 1;
+    }
+    var includeAi = opts.ContainsKey("include-ai");
+    var findings = Analyzer.Analyze(model, config);
+    var arch = Architecture.Check(model, config);
+    var drafts = AiProse.Cached(model, Path.Combine(root, "docs", ".docwizz", "ai-cache.json"));
+    var graph = new ContextBuilder(root, model);
+    var blocks = AgentContext.Blocks(graph, config, t, hops, includeAi, findings, arch, drafts);
+    var aiLeftOut = includeAi ? 0 : t.Scope.Count(n => drafts.ContainsKey(n.Id));
+    var package = new AgentContext.Package(Path.GetFileName(Path.GetFullPath(root).TrimEnd('/', '\\')), model.Commit,
+        new(source, Git(root, "rev-parse --short HEAD")?.Trim(), changed), t, budget, includeAi, aiLeftOut, blocks, []);
+    if (package.Stale) Console.Error.WriteLine("docwizz: the model is stale; run docwizz generate . to refresh it (the package says why)");
+    Console.Write(AgentContext.Render(package, opts.GetValueOrDefault("format") == "json"));
+    return 0;
+}
+
+// The source files the scanners would read, for staleness checks.
+static List<string> BuildFiles(string root, Config config)
+{
+    string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java", ".php"];
+    return [.. RepoFiles(root, config).Where(f => exts.Contains(Path.GetExtension(f)))];
 }
 
 // Deterministic product draft; manual files are never overwritten.
@@ -213,6 +272,8 @@ static string Reference() => $"""
       docwizz architecture <dir>        layers, dependencies, violations; exit 1 above check thresholds
       docwizz diff <dir> [ref]          what changed vs <ref> (default: docs/.docwizz/model.json)
       docwizz diff [dir] <base> <head>  what changed between two git refs
+      docwizz context <dir> --for <target>  token-budgeted facts about one symbol, file, folder or endpoint, for agents
+        [--hops <1-4>] [--budget <tokens>] [--format md|json] [--include-ai]
       docwizz sbom [dir] [out]          export direct manifest dependencies as CycloneDX JSON
       docwizz remediate <dir>           package update suggestions: command or patch, impact, confidence
         [--package <name> --to <ver>]   propose this update (default: remediation.targets and version drift)

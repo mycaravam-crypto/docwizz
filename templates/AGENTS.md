@@ -22,6 +22,15 @@ explore the code file by file.
 `docs/views/` has the system context, containers, data model, deployment and packages. `docs/quality.md` lists the
 documentation gaps by priority.
 
+**For one symbol, file, folder or endpoint**, ask docwizz for just the facts that matter, within a token budget:
+
+```bash
+docwizz context . --for "POST /api/orders" --budget 4000   # or a qualified name, a file, a folder
+```
+
+It lists the target, its callers and callees, the request flows through it, tests, gaps and the files to read first,
+each line marked with its provenance. If it says the model is stale, run `docwizz generate .` first.
+
 **Weigh what you read by where it comes from:**
 
 - *Detected* facts (no marker) are read from the code: signatures, calls, routes, injections.
