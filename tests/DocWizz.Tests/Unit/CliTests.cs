@@ -48,11 +48,11 @@ public class CliTests
     // options a command doesn't use
     [InlineData("analyze . --html", "--html doesn't apply to analyze; it applies to setup, generate")]
     [InlineData("scan . --ai", "--ai doesn't apply to scan; it applies to setup, generate, product")]
-    [InlineData("generate . --format json", "--format doesn't apply to generate; it applies to check, analyze, architecture, diff, context, remediate")]
+    [InlineData("generate . --format json", "--format doesn't apply to generate; it applies to check, analyze, architecture, diff, context, product, remediate")]
     [InlineData("generate . --force", "--force doesn't apply to generate; it applies to setup")]
     [InlineData("check . --validate", "--validate doesn't apply to check; it applies to remediate")]
     [InlineData("analyze . --since main", "--since doesn't apply to analyze; it applies to check, remediate")]
-    [InlineData("setup . --format json", "--format doesn't apply to setup; it applies to check, analyze, architecture, diff, context, remediate")]
+    [InlineData("setup . --format json", "--format doesn't apply to setup; it applies to check, analyze, architecture, diff, context, product, remediate")]
     [InlineData("init . --profile api", "--profile doesn't apply to init; it applies to setup, generate, check, analyze, architecture, diff")]
     // conflicts and bad values
     [InlineData("remediate . --package Newtonsoft.Json", "--package and --to go together: --package <name> --to <version>")]
