@@ -19,8 +19,12 @@ static class Frontend
 
         try
         {
-            var p = Process.Start(new ProcessStartInfo("node", [script, Path.GetFullPath(root)])
-                { RedirectStandardInput = true, RedirectStandardOutput = true })!;
+            var psi = new ProcessStartInfo("node", [script, Path.GetFullPath(root)]) { RedirectStandardInput = true, RedirectStandardOutput = true };
+            // Node 22.1+ keeps compiled TypeScript and Vue compiler code here, so later runs skip most of loading them
+            // (older Node ignores it). Anyone who set their own cache directory keeps it.
+            if (Environment.GetEnvironmentVariable("NODE_COMPILE_CACHE") is null)
+                psi.Environment["NODE_COMPILE_CACHE"] = Path.Combine(Path.GetTempPath(), "docwizz-node-compile-cache");
+            var p = Process.Start(psi)!;
             p.StandardInput.Write(string.Join('\n', files.Select(Path.GetFullPath)));
             p.StandardInput.Close();
             var json = p.StandardOutput.ReadToEnd();
