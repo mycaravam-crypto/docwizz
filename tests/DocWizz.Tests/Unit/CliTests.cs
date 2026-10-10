@@ -47,7 +47,7 @@ public class CliTests
     [InlineData("check . --version", null)]
     // options a command doesn't use
     [InlineData("analyze . --html", "--html doesn't apply to analyze; it applies to setup, generate")]
-    [InlineData("scan . --ai", "--ai doesn't apply to scan; it applies to setup, generate")]
+    [InlineData("scan . --ai", "--ai doesn't apply to scan; it applies to setup, generate, product")]
     [InlineData("generate . --format json", "--format doesn't apply to generate; it applies to check, analyze, architecture, diff, context, remediate")]
     [InlineData("generate . --force", "--force doesn't apply to generate; it applies to setup")]
     [InlineData("check . --validate", "--validate doesn't apply to check; it applies to remediate")]

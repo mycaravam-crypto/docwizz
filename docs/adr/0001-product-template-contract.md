@@ -50,3 +50,18 @@ CLI integration must decide how to verify source existence and pin evidence
 versions. Multi-line statements and approval-like status text are rejected;
 statement section IDs must match a template section accepting `project` evidence.
 Unsupported or renamed sections fail rather than silently dropping statements.
+
+## Local synthesis with evidence ids (P1)
+
+`docwizz product --ai` lets a self-hosted model word sections, through the existing
+provider interface and endpoint guard (no second AI client). Evidence items get
+document-wide ids (`E1`…) in template order; the model answers
+`{"sentences": [{"text", "evidence": [ids]}]}`. Validation keeps a sentence only when
+it cites at least one id of *its own* section and makes no status, approval,
+completeness or conformity claim; unknown or foreign ids are dropped, model text is
+escaped. Sections without evidence are not sent and stay **OFFEN**. Project
+statements are untrusted data. Cache key: template id, section id, a hash of the
+instructions and evidence, and provider/model. Without `--ai`, or when nothing
+survives validation, output is byte-identical to the deterministic draft.
+Deliberately deferred: the machine-readable evidence/gap report, `product check`,
+DOCX.

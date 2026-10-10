@@ -59,7 +59,7 @@ static async Task<int> Dispatch(string[] args)
         case "mcp":
             return await McpCommand(path, config, opts.ContainsKey("auto-rescan"));
         case "product":
-            return ProductCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), opts.GetValueOrDefault("context"), config);
+            return await ProductCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), opts.GetValueOrDefault("context"), config, opts.ContainsKey("ai"));
         case "sbom":
             return SbomCommand(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "sbom.cdx.json"), config);
         case "scan":
@@ -165,8 +165,9 @@ static List<string> BuildFiles(string root, Config config)
     return [.. RepoFiles(root, config).Where(f => exts.Contains(Path.GetExtension(f)))];
 }
 
-// Deterministic product draft; manual files are never overwritten.
-static int ProductCommand(string root, string? templateName, string? outName, string? contextName, Config config)
+// Product draft from evidence; with --ai, a local model words each section from it (validated, cached). Manual files are
+// never overwritten.
+static async Task<int> ProductCommand(string root, string? templateName, string? outName, string? contextName, Config config, bool ai = false)
 {
     if (string.IsNullOrWhiteSpace(templateName))
         return Usage("product needs a template YAML path", "product");
@@ -192,7 +193,19 @@ static int ProductCommand(string root, string? templateName, string? outName, st
         Console.Error.WriteLine($"{full} exists and is not docwizz-generated; refusing to overwrite");
         return 1;
     }
-    var text = (marker + "\n" + ProductDraft.Render(template, BuildModel(root, config).Model, project)).Replace("\r\n", "\n");
+    var model = BuildModel(root, config).Model;
+    Dictionary<string, List<ProductSynthesis.Sentence>>? synthesis = null;
+    if (ai)
+    {
+        var catalog = ProductDraft.Catalog(template, model, project);
+        using var provider = AiProviders.Create(config.Ai, "product synthesis");
+        if (provider is not null)
+            Console.Error.WriteLine($"docwizz: drafting {catalog.Count(c => c.Evidence.Count > 0)} sections with {provider.Model} at {provider.Endpoint} (evidence only; sections without evidence stay OFFEN)");
+        synthesis = await ProductSynthesis.Synthesize(template, catalog, provider, AiProviders.Tag(config.Ai),
+            Path.Combine(root, "docs", ".docwizz", "product-ai-cache.json"));
+        if (synthesis.Count == 0) synthesis = null;   // nothing worded: the deterministic draft, without ids or an AI note
+    }
+    var text = (marker + "\n" + ProductDraft.Render(template, model, project, synthesis)).Replace("\r\n", "\n");
     if (File.Exists(full) && File.ReadAllText(full) == text)
     {
         Console.WriteLine($"unchanged: {Path.GetRelativePath(root, full)}");
