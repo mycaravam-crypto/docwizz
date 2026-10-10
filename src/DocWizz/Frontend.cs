@@ -40,8 +40,9 @@ static class Frontend
         }
     }
 
+    // scanner-vue/index.mjs (DOCWIZZ_SCANNER_VUE overrides); java.mjs sits next to it.
     // ponytail: found by walking up from the binary; ship it inside the tool package when publishing.
-    static string? FindScanner()
+    public static string? FindScanner()
     {
         if (Environment.GetEnvironmentVariable("DOCWIZZ_SCANNER_VUE") is { } env) return env;
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)

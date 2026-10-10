@@ -1,130 +1,117 @@
-using RxMatch = System.Text.RegularExpressions.Match;
+using System.Diagnostics;
 using System.Security;
-using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 // Java / Spring: types, methods and constructors with Javadoc, complexity and signatures; Spring roles from annotations
 // (controller, service, repository, entity, configuration); endpoints from @*Mapping with parameter sources, auth and
-// the returned type; injection (constructor, @Autowired fields, Lombok's final fields); calls through injected fields;
-// `implements` down to methods, so flows dispatch to implementations; @Value / @ConfigurationProperties reads.
-// ponytail: a masking tokenizer plus regexes, not a Java parser; overloads resolve by name and argument count, calls on
-// locals, chains and statics stay invisible. Swap for a real parser (JavaParser via a sidecar) if that matters.
-static partial class JavaScanner
+// the returned type; injection (constructor, @Autowired fields, Lombok's final fields); calls through fields,
+// parameters, locals, `this` and type names (statics); `implements` down to methods, so flows dispatch to
+// implementations; @Value / @ConfigurationProperties reads.
+// The syntax comes from a real parser: scanner-vue/java.mjs runs tree-sitter-java (WebAssembly; nothing is compiled or
+// executed) and returns each file's declarations. This class turns them into nodes and edges. What syntax alone can't
+// tell stays out: a call on a chain (`a.b().c()`) or an expression has no known receiver type, and overloads resolve by
+// name and argument count (else the only overload), not by argument types.
+static class JavaScanner
 {
     static readonly string[] Mappings = ["GetMapping", "PostMapping", "PutMapping", "DeleteMapping", "PatchMapping", "RequestMapping"];
     static readonly string[] Wrappers = ["ResponseEntity", "Mono", "Flux", "CompletableFuture", "Optional", "HttpEntity"];
 
-    record JType(string Id, string Name, int Start, int BodyStart, int End, string Kind, string? Parent);
+    // java.mjs output, one record per kind of declaration.
+    record JFile(string Path, string? Package, List<string> Imports, bool Errors, List<JType> Types);
+    record JType(string Name, string Kind, int? Parent, List<string> Modifiers, List<JAnnotation> Annotations, string? Javadoc,
+        List<string> Extends, List<string> Implements, int Line, int EndLine, string Hash, List<JParam> Components, List<JField> Fields, List<JMethod> Methods);
+    record JAnnotation(string Name, string Args);
+    record JField(List<string> Names, string Type, List<string> Modifiers, List<JAnnotation> Annotations);
+    record JParam(string Name, string Type, List<JAnnotation> Annotations);
+    record JMethod(string Name, bool Constructor, bool Compact, List<string> Modifiers, List<JAnnotation> Annotations, string? Javadoc, string? Returns,
+        List<JParam> Parameters, List<string> Throws, bool Abstract, int Line, int EndLine, string Hash, int Complexity, List<JCall> Calls, List<JLocal> Locals);
+    record JCall(string? Receiver, string Name, int Args, int Line);
+    record JLocal(string Name, string Type);
+    record Syntax(List<JFile> Files);
 
     public static (List<Node>, List<Edge>) Scan(string root, IEnumerable<string> files)
     {
+        var list = files.ToList();
+        if (list.Count == 0 || Parse(list) is not { } parsed) return ([], []);
         var nodes = new List<Node>();
         var edges = new List<Edge>();
-        var parsed = files.Select(f => (Rel: Path.GetRelativePath(root, f).Replace('\\', '/'), Text: File.ReadAllText(f))).ToList();
+        if (parsed.Count(f => f.Errors) is var broken and > 0)
+            Console.Error.WriteLine($"docwizz: {broken} Java file{(broken == 1 ? " has" : "s have")} syntax errors; what parsed is used, the rest may be missing");
 
         // Pass 1: every type, so injections and calls can resolve by simple name across files.
         var typesByName = new Dictionary<string, string>();
-        var perFile = new List<(string Rel, string Text, string Code, List<JType> Types)>();
-        foreach (var (rel, text) in parsed)
+        var perFile = new List<(string Rel, JFile File, List<string> Ids)>();
+        foreach (var f in parsed)
         {
-            var code = Mask(text);
-            var pkg = PackageRe().Match(code) is { Success: true } pm ? pm.Groups[1].Value + "." : "";
-            var types = new List<JType>();
-            foreach (RxMatch m in TypeRe().Matches(code))
+            var ids = new List<string>();
+            foreach (var t in f.Types)
             {
-                var open = m.Index + m.Length - 1;
-                var end = Close(code, open);
-                var parent = types.LastOrDefault(t => t.BodyStart < m.Index && m.Index < t.End);
-                var id = parent is null ? $"java:{pkg}{m.Groups[2].Value}" : $"{parent.Id}.{m.Groups[2].Value}";
-                types.Add(new(id, m.Groups[2].Value, m.Index, open, end, m.Groups[1].Value, parent?.Id));
-                typesByName.TryAdd(m.Groups[2].Value, id);
+                var id = t.Parent is { } p ? $"{ids[p]}.{t.Name}" : $"java:{(f.Package is null ? "" : f.Package + ".")}{t.Name}";
+                ids.Add(id);
+                typesByName.TryAdd(t.Name, id);
             }
-            perFile.Add((rel, text, code, types));
+            perFile.Add((Path.GetRelativePath(root, f.Path).Replace('\\', '/'), f, ids));
         }
 
         var methodsOf = new Dictionary<string, List<(string Id, string Name, int Arity)>>();
-        var deferredCalls = new List<(string From, string Type, string Method, int Arity)>();
+        var deferredCalls = new List<(string From, string Type, string Method, int Arity, bool Self)>();
         var interfaces = new List<(string Type, string Interface)>();
-        foreach (var (rel, text, code, types) in perFile)
+        foreach (var (rel, file, ids) in perFile)
         {
-            int Line(int i) => text.AsSpan(0, i).Count('\n') + 1;
-            foreach (var t in types)
+            for (var i = 0; i < file.Types.Count; i++)
             {
-                var head = Preamble(text, code, t.Start);
-                var annotations = Annotations(head);
-                var header = code[t.Start..t.BodyStart];
+                var t = file.Types[i];
+                var tid = ids[i];
+                var annotations = Annotations(t.Annotations);
                 var tags = new List<string>();
                 if (annotations.ContainsKey("RestController") || annotations.ContainsKey("Controller")) tags.Add("controller");
                 if (annotations.ContainsKey("Service")) tags.Add("service");
-                if (annotations.ContainsKey("Repository") || Regex.IsMatch(header, @"\bextends\s+(Jpa|Crud|PagingAndSorting|Mongo|Reactive\w*)Repository\b")) tags.Add("repository");
+                if (annotations.ContainsKey("Repository") || t.Extends.Any(e => Regex.IsMatch(e, @"^(Jpa|Crud|PagingAndSorting|Mongo|Reactive\w*)Repository$"))) tags.Add("repository");
                 if (annotations.ContainsKey("Entity") || annotations.ContainsKey("Document")) tags.Add("entity");
                 if (annotations.ContainsKey("Configuration")) tags.Add("configuration");
                 if (annotations.ContainsKey("ConfigurationProperties")) tags.Add("options");
                 if (annotations.ContainsKey("SpringBootApplication")) tags.Add("application");
-                nodes.Add(new Node(t.Id, t.Kind is "@interface" ? "interface" : t.Kind, t.Name, rel, Line(t.Start), Visibility(head + header), Doc(head),
-                    Hash: Hash(code[t.Start..t.End]), Tags: tags.Count > 0 ? tags : null, EndLine: Line(t.End)));
-                if (t.Parent is not null) edges.Add(new(t.Parent, t.Id, "contains"));
+                nodes.Add(new Node(tid, t.Kind is "@interface" ? "interface" : t.Kind, t.Name, rel, t.Line, Visibility(t.Modifiers), Doc(t.Javadoc),
+                    Hash: t.Hash, Tags: tags.Count > 0 ? tags : null, EndLine: t.EndLine));
+                if (t.Parent is { } parent) edges.Add(new(ids[parent], tid, "contains"));
 
-                // extends / implements between repository types (generic arguments dropped).
-                foreach (RxMatch r in Regex.Matches(Regex.Replace(header, @"<[^<>]*(<[^<>]*>[^<>]*)*>", ""), @"\b(extends|implements)\s+([\w.,\s]+?)(?=\bimplements\b|\bpermits\b|$)"))
-                    foreach (var name in r.Groups[2].Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Select(n => n.Split('.').Last()))
-                        if (typesByName.TryGetValue(name, out var target))
-                        {
-                            var isInterface = r.Groups[1].Value == "implements" || t.Kind == "interface";
-                            edges.Add(new(t.Id, target, isInterface ? "implements" : "inherits"));
-                            if (isInterface) interfaces.Add((t.Id, target));
-                        }
+                // extends / implements between types in the source (generic arguments already dropped).
+                foreach (var (name, keyword) in t.Extends.Select(e => (e, "extends")).Concat(t.Implements.Select(e => (e, "implements"))))
+                    if (typesByName.TryGetValue(name, out var target))
+                    {
+                        var isInterface = keyword == "implements" || t.Kind == "interface";
+                        edges.Add(new(tid, target, isInterface ? "implements" : "inherits"));
+                        if (isInterface) interfaces.Add((tid, target));
+                    }
                 if (annotations.TryGetValue("ConfigurationProperties", out var prefix) && Arg(prefix, "prefix") is { } p)
-                    edges.Add(new(t.Id, Configuration.Id(p), "binds"));
+                    edges.Add(new(tid, Configuration.Id(p), "binds"));
 
-                // Members at depth 1 of this type's body.
                 var classRoute = annotations.TryGetValue("RequestMapping", out var rm) ? Arg(rm, "value", "path") ?? "" : null;
                 var classAuth = Auth(annotations);
-                var fields = new Dictionary<string, string>(); // name → type (simple name)
+                var fields = new Dictionary<string, string>();   // name → type (simple name)
                 var injected = new List<string>();
-                var body = t.BodyStart + 1;
-                var depth = 0;
-                var members = new List<(int Start, int End)>();
-                var memberStart = body;
-                for (var i = body; i < t.End; i++)
+                foreach (var c in t.Components) fields[c.Name] = SimpleType(c.Type);   // a record's components are its fields
+                foreach (var f in t.Fields)
                 {
-                    var c = code[i];
-                    if (c == '{') { if (depth == 0) members.Add((memberStart, Close(code, i))); depth++; }
-                    else if (c == '}') { depth--; if (depth == 0) memberStart = i + 1; }
-                    else if (c == ';' && depth == 0) { members.Add((memberStart, i)); memberStart = i + 1; }
+                    var type = SimpleType(f.Type);
+                    var fieldAnnotations = Annotations(f.Annotations);
+                    foreach (var name in f.Names) fields[name] = type;
+                    if ((fieldAnnotations.ContainsKey("Autowired") || fieldAnnotations.ContainsKey("Inject")
+                            || f.Modifiers.Contains("final") && !f.Modifiers.Contains("static") && (annotations.ContainsKey("RequiredArgsConstructor") || annotations.ContainsKey("AllArgsConstructor")))
+                        && typesByName.TryGetValue(type, out var dep))
+                        injected.Add(dep);
+                    if (fieldAnnotations.TryGetValue("Value", out var v) && Regex.Match(v, @"\$\{([^}:]+)") is { Success: true } key)
+                        edges.Add(new(tid, Configuration.Id(key.Groups[1].Value), "reads"));
                 }
-                foreach (var (start, end) in members)
+
+                foreach (var m in t.Methods)
                 {
-                    var segment = code[start..Math.Min(end + 1, code.Length)];
-                    if (types.Any(n => n.Parent == t.Id && n.Start >= start && n.Start < end)) continue; // nested type: handled on its own
-                    // Field: `[@Autowired] [private] [final] Type name [= ..];`
-                    var bare = AnnotationRe().Replace(segment, "");
-                    if (FieldRe().Match(bare) is { Success: true } f && !bare.Contains('('))
-                    {
-                        var type = SimpleType(f.Groups[2].Value);
-                        fields[f.Groups[3].Value] = type;
-                        var fieldAnnotations = Annotations(text[start..end]);
-                        if ((fieldAnnotations.ContainsKey("Autowired") || fieldAnnotations.ContainsKey("Inject")
-                                || f.Groups[1].Value.Contains("final") && (annotations.ContainsKey("RequiredArgsConstructor") || annotations.ContainsKey("AllArgsConstructor")))
-                            && typesByName.TryGetValue(type, out var dep))
-                            injected.Add(dep);
-                        if (fieldAnnotations.TryGetValue("Value", out var v) && Regex.Match(v, @"\$\{([^}:]+)") is { Success: true } key)
-                            edges.Add(new(t.Id, Configuration.Id(key.Groups[1].Value), "reads"));
-                        continue;
-                    }
-                    var mm = MethodRe().Match(segment);
-                    if (!mm.Success) continue;
-                    var name = mm.Groups[3].Value;
-                    var isCtor = name == t.Name && string.IsNullOrWhiteSpace(mm.Groups[2].Value);
-                    if (!isCtor && mm.Groups[2].Value.Trim() is "" or "new" or "return" or "else" || name is "if" or "for" or "while" or "switch" or "catch" or "synchronized") continue;
-                    var parameters = SplitTop(mm.Groups[4].Value).Select(Param).Where(x => x.Name.Length > 0).ToList();
-                    var id = $"{t.Id}.{name}({string.Join(", ", parameters.Select(x => x.Type))})";
-                    var memberHead = text[start..(start + mm.Index)];
-                    var ann = Annotations(memberHead);
-                    var bodyIndex = segment.IndexOf('{', mm.Index + mm.Length - 1);
-                    var bodyCode = bodyIndex >= 0 ? segment[bodyIndex..] : "";
-                    var vis = Visibility(segment[..(mm.Index + mm.Length)]) is var vv && vv == "internal" && t.Kind == "interface" ? "public" : vv;
+                    var parameters = (m.Compact ? t.Components : m.Parameters).Where(x => x.Name.Length > 0).Select(Param).ToList();
+                    var id = $"{tid}.{m.Name}({string.Join(", ", parameters.Select(x => x.Type))})";
+                    var ann = Annotations(m.Annotations);
+                    var vis = Visibility(m.Modifiers) is var vv && vv == "internal" && t.Kind == "interface" ? "public" : vv;
 
                     List<string>? mtags = null;
                     string? route = null;
@@ -137,38 +124,43 @@ static partial class JavaScanner
                         if ((Auth(ann) ?? classAuth) is { } auth) mtags.Add(auth);
                         route = string.Join('/', new[] { classRoute ?? "", Arg(ann[mapping], "value", "path") ?? "" }.Select(x => x.Trim('/')).Where(x => x.Length > 0));
                     }
-                    var returns = isCtor ? null : Returns(mm.Groups[2].Value);
-                    nodes.Add(new Node(id, isCtor ? "constructor" : "method", name, rel, Line(start + mm.Index), vis, Doc(memberHead),
-                        Complexity: 1 + DecisionRe().Matches(bodyCode).Count, Params: parameters.Count, Hash: Hash(segment), Tags: mtags, Route: route,
-                        EndLine: Line(end), Parameters: parameters.Count > 0 ? [.. parameters.Select(x => x.Display)] : null,
-                        Returns: returns is "void" ? null : returns,
-                        Throws: mm.Groups[5].Success ? [.. mm.Groups[5].Value.Split(',', StringSplitOptions.TrimEntries).Select(x => x.Split('.').Last())] : null));
-                    edges.Add(new(t.Id, id, "contains"));
-                    (methodsOf.TryGetValue(t.Id, out var list) ? list : methodsOf[t.Id] = []).Add((id, name, parameters.Count));
-                    if (isCtor)
+                    var returns = m.Constructor || m.Returns is null ? null : Returns(m.Returns);
+                    nodes.Add(new Node(id, m.Constructor ? "constructor" : "method", m.Name, rel, m.Line, vis, Doc(m.Javadoc),
+                        Complexity: m.Complexity, Params: parameters.Count, Hash: m.Hash, Tags: mtags, Route: route,
+                        EndLine: m.EndLine, Parameters: parameters.Count > 0 ? [.. parameters.Select(x => x.Display)] : null,
+                        Returns: returns is "void" ? null : returns, Throws: m.Throws.Count > 0 ? m.Throws : null));
+                    edges.Add(new(tid, id, "contains"));
+                    (methodsOf.TryGetValue(tid, out var own) ? own : methodsOf[tid] = []).Add((id, m.Name, parameters.Count));
+                    if (m.Constructor)
                         injected.AddRange(parameters.Select(x => SimpleType(x.Type)).Where(typesByName.ContainsKey).Select(x => typesByName[x]));
 
-                    // Calls through fields and parameters whose type is in the source: `repo.save(x)`, `this.repo.findAll()`.
-                    var locals = parameters.ToDictionary(x => x.Name, x => SimpleType(x.Type));
-                    foreach (RxMatch call in CallRe().Matches(bodyCode))
+                    // Calls whose receiver's type is in the source: a parameter, local or field (`repo.save(x)`,
+                    // `this.repo.findAll()`), `this` or no receiver (this type), or a type name (a static call).
+                    var locals = m.Locals.GroupBy(l => l.Name).ToDictionary(g => g.Key, g => SimpleType(g.First().Type));
+                    foreach (var x in parameters) locals[x.Name] = SimpleType(x.Type);
+                    foreach (var call in m.Calls)
                     {
-                        var target = call.Groups[1].Value;
-                        var type = locals.GetValueOrDefault(target) ?? fields.GetValueOrDefault(target);
-                        if (type is not null && typesByName.TryGetValue(type, out var tid))
-                            deferredCalls.Add((id, tid, call.Groups[2].Value, CountArgs(bodyCode, call.Index + call.Length - 1)));
+                        var receiver = call.Receiver is { } r && r.StartsWith("this.") ? r[5..] : call.Receiver;
+                        if (receiver is null or "this") { deferredCalls.Add((id, tid, call.Name, call.Args, true)); continue; }
+                        var type = call.Receiver!.StartsWith("this.") ? fields.GetValueOrDefault(receiver)
+                            : locals.GetValueOrDefault(receiver) ?? fields.GetValueOrDefault(receiver) ?? (typesByName.ContainsKey(receiver) ? receiver : null);
+                        if (type is not null && typesByName.TryGetValue(type, out var target))
+                            deferredCalls.Add((id, target, call.Name, call.Args, false));
                     }
                 }
-                foreach (var dep in injected.Distinct().Where(d => d != t.Id)) edges.Add(new(t.Id, dep, "injects"));
-                // Field uses in members count as `accesses`, like C# (how a request reaches a repository).
+                foreach (var dep in injected.Distinct().Where(d => d != tid)) edges.Add(new(tid, dep, "injects"));
             }
         }
 
-        // Calls resolve once every type's methods are known: same name, same argument count (else the only overload).
-        foreach (var (from, type, method, arity) in deferredCalls)
+        // Calls resolve once every type's methods are known: same name, same argument count (else the only overload). A
+        // call on another type that matches no method still says the code uses that type; one on this type (inherited
+        // or a constructor's `this(..)`) is left out.
+        foreach (var (from, type, method, arity, self) in deferredCalls)
         {
             var candidates = methodsOf.GetValueOrDefault(type)?.Where(m => m.Name == method).ToList() ?? [];
             var hit = candidates.Where(m => m.Arity == arity).ToList() is [var one] ? one.Id : candidates.Count == 1 ? candidates[0].Id : null;
-            edges.Add(hit is not null ? new(from, hit, "calls") : new(from, type, "accesses"));
+            if (hit is not null) { if (hit != from) edges.Add(new(from, hit, "calls")); }
+            else if (!self) edges.Add(new(from, type, "accesses"));
         }
         // Interface methods → their implementations, by name and arity.
         foreach (var (impl, iface) in interfaces)
@@ -176,62 +168,49 @@ static partial class JavaScanner
                 if (methodsOf.GetValueOrDefault(impl)?.FirstOrDefault(m => m.Name == im.Name && m.Arity == im.Arity) is { Id: not null } found)
                     edges.Add(new(found.Id, im.Id, "implements"));
         // External packages each file's top-level types import, as C# `using`s are: own packages and java.* dropped.
-        var own = perFile.Select(f => PackageRe().Match(f.Code) is { Success: true } m ? m.Groups[1].Value : "").ToHashSet();
-        foreach (var (_, _, code, types) in perFile)
+        var ownPackages = perFile.Select(f => f.File.Package ?? "").ToHashSet();
+        foreach (var (_, file, ids) in perFile)
         {
-            var packages = ImportRe().Matches(code).Select(m => string.Join(".", m.Groups[1].Value.Split('.').TakeWhile(s => !char.IsUpper(s[0]))))
-                .Where(p => p.Length > 0 && !own.Contains(p) && p != "java" && !p.StartsWith("java.")).Distinct().ToList();
-            foreach (var t in types.Where(t => t.Parent is null))
-                edges.AddRange(packages.Select(p => new Edge(t.Id, $"ns:{p}", "uses-namespace")));
+            var packages = file.Imports.Select(i => string.Join(".", i.Split('.').TakeWhile(s => s.Length > 0 && !char.IsUpper(s[0]))))
+                .Where(p => p.Length > 0 && !ownPackages.Contains(p) && p != "java" && !p.StartsWith("java.")).Distinct().ToList();
+            foreach (var tid in ids.Where((_, i) => file.Types[i].Parent is null))
+                edges.AddRange(packages.Select(p => new Edge(tid, $"ns:{p}", "uses-namespace")));
         }
         return (CodeModel.MergeHashes(nodes).DistinctBy(n => n.Id).ToList(), edges.Distinct().ToList());
     }
 
-    // Comments and string/char contents blanked (same length, newlines kept), so braces and keywords can be matched.
-    static string Mask(string s)
+    // Runs scanner-vue/java.mjs over the files. Missing Node or scanner → warn and skip, the rest of the model still works.
+    static List<JFile>? Parse(List<string> files)
     {
-        var sb = new StringBuilder(s);
-        for (var i = 0; i < s.Length; i++)
+        var script = Frontend.FindScanner() is { } index ? Path.Combine(Path.GetDirectoryName(index)!, "java.mjs") : null;
+        if (script is null || !File.Exists(script) || !Directory.Exists(Path.Combine(Path.GetDirectoryName(script)!, "node_modules", "tree-sitter-java")))
         {
-            if (s[i] == '/' && i + 1 < s.Length && s[i + 1] == '/') { while (i < s.Length && s[i] != '\n') sb[i++] = ' '; }
-            else if (s[i] == '/' && i + 1 < s.Length && s[i + 1] == '*')
-            {
-                var end = s.IndexOf("*/", i + 2, StringComparison.Ordinal); end = end < 0 ? s.Length : end + 2;
-                for (; i < end; i++) if (s[i] != '\n') sb[i] = ' ';
-                i--;
-            }
-            else if (s[i] is '"' or '\'')
-            {
-                var q = s[i];
-                if (q == '"' && s.AsSpan(i).StartsWith("\"\"\"")) { var e = s.IndexOf("\"\"\"", i + 3, StringComparison.Ordinal); e = e < 0 ? s.Length : e + 3; for (var j = i + 3; j < e - 3; j++) if (s[j] != '\n') sb[j] = ' '; i = e - 1; continue; }
-                for (i++; i < s.Length && s[i] != q && s[i] != '\n'; i++) { if (s[i] == '\\') sb[i++] = ' '; if (i < s.Length) sb[i] = ' '; }
-            }
+            Console.Error.WriteLine("docwizz: Java skipped — scanner-vue not found or not installed (npm ci in scanner-vue/)");
+            return null;
         }
-        return sb.ToString();
+        try
+        {
+            var psi = new ProcessStartInfo("node", [script]) { RedirectStandardInput = true, RedirectStandardOutput = true };
+            var p = Process.Start(psi)!;
+            p.StandardInput.Write(string.Join('\n', files.Select(Path.GetFullPath)));
+            p.StandardInput.Close();
+            var json = p.StandardOutput.ReadToEnd();
+            p.WaitForExit();
+            if (p.ExitCode != 0) throw new InvalidOperationException($"exit code {p.ExitCode}");
+            return JsonSerializer.Deserialize<Syntax>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))!.Files;
+        }
+        catch (Exception e)
+        {
+            Console.Error.WriteLine($"docwizz: Java skipped — the Java parser failed: {e.Message}");
+            return null;
+        }
     }
 
-    static int Close(string code, int open)
-    {
-        var depth = 0;
-        for (var i = open; i < code.Length; i++)
-            if (code[i] == '{') depth++;
-            else if (code[i] == '}' && --depth == 0) return i;
-        return code.Length - 1;
-    }
-
-    // The annotations and Javadoc before a declaration: back to the previous statement or block boundary.
-    static string Preamble(string text, string code, int start)
-    {
-        var from = start;
-        while (from > 0 && code[from - 1] is not (';' or '{' or '}')) from--;
-        return text[from..start];
-    }
-
-    static Dictionary<string, string> Annotations(string head)
+    // Annotation name → its argument text; the first of a name wins.
+    static Dictionary<string, string> Annotations(List<JAnnotation> list)
     {
         var result = new Dictionary<string, string>();
-        foreach (RxMatch m in AnnotationRe().Matches(Regex.Replace(head, @"/\*.*?\*/|//[^\n]*", "", RegexOptions.Singleline)))
-            result.TryAdd(m.Groups[1].Value.Split('.').Last(), m.Groups[2].Value);
+        foreach (var a in list) result.TryAdd(a.Name, a.Args);
         return result;
     }
 
@@ -247,64 +226,38 @@ static partial class JavaScanner
     static string? Auth(Dictionary<string, string> a) =>
         a.ContainsKey("PermitAll") ? "anonymous" : a.ContainsKey("PreAuthorize") || a.ContainsKey("Secured") || a.ContainsKey("RolesAllowed") ? "authorize" : null;
 
-    static string Visibility(string s) =>
-        Regex.IsMatch(s, @"\bpublic\b") ? "public" : Regex.IsMatch(s, @"\bprotected\b") ? "protected" : Regex.IsMatch(s, @"\bprivate\b") ? "private" : "internal";
+    static string Visibility(List<string> modifiers) =>
+        modifiers.Contains("public") ? "public" : modifiers.Contains("protected") ? "protected" : modifiers.Contains("private") ? "private" : "internal";
 
     // `@PathVariable Long id` → ("Long", "id", "[route] id: Long").
-    static (string Type, string Name, string Display) Param(string p)
+    static (string Type, string Name, string Display) Param(JParam p)
     {
-        var source = Regex.Match(p, @"@(PathVariable|RequestParam|RequestBody|RequestHeader|ModelAttribute)\b") is { Success: true } a
-            ? a.Groups[1].Value switch { "PathVariable" => "route", "RequestParam" => "query", "RequestBody" => "body", "RequestHeader" => "header", _ => "form" } : null;
-        var bare = Regex.Replace(p, @"@[\w.]+(\s*\((?:[^()]|\([^()]*\))*\))?", "").Replace("final ", "").Trim();
-        var m = Regex.Match(bare, @"^(.+?)\s+(\w+)$");
-        if (!m.Success) return ("", "", "");
-        var type = Regex.Replace(m.Groups[1].Value, @"\s+", "");
-        return (type, m.Groups[2].Value, $"{(source is null ? "" : $"[{source}] ")}{m.Groups[2].Value}: {type}");
+        var source = p.Annotations.Select(a => a.Name switch
+        {
+            "PathVariable" => "route", "RequestParam" => "query", "RequestBody" => "body", "RequestHeader" => "header", "ModelAttribute" => "form", _ => null,
+        }).FirstOrDefault(x => x is not null);
+        return (p.Type, p.Name, $"{(source is null ? "" : $"[{source}] ")}{p.Name}: {p.Type}");
     }
 
+    // The declared return type with framework wrappers unwrapped: ResponseEntity<List<Item>> → List<Item>.
     static string? Returns(string type)
     {
-        var t = Regex.Replace(type, @"\b(public|protected|private|static|final|abstract|synchronized|default|native)\b|<[^<>]*>\s+(?=\w)", " ").Trim();
-        t = Regex.Replace(t, @"\s+", "");
+        var t = type;
         while (Regex.Match(t, @"^(\w+)<(.+)>$") is { Success: true } m && Wrappers.Contains(m.Groups[1].Value)) t = m.Groups[2].Value;
         return t.Length == 0 ? null : t;
     }
 
-    static string SimpleType(string type) => Regex.Replace(type, @"<.*$|\[\]", "").Split('.').Last().Trim();
+    static string SimpleType(string type) => Regex.Replace(type, @"<.*$|\[\]|\.\.\.$", "").Split('.').Last().Trim();
 
-    static List<string> SplitTop(string s)
+    // Javadoc → the same XML shape C# docs use.
+    static string? Doc(string? javadoc)
     {
-        var parts = new List<string>();
-        var depth = 0; var start = 0;
-        for (var i = 0; i < s.Length; i++)
-        {
-            if (s[i] is '<' or '(' or '{' or '[') depth++;
-            else if (s[i] is '>' or ')' or '}' or ']') depth--;
-            else if (s[i] == ',' && depth == 0) { parts.Add(s[start..i]); start = i + 1; }
-        }
-        if (s[start..].Trim().Length > 0) parts.Add(s[start..]);
-        return parts;
-    }
-
-    static int CountArgs(string code, int open)
-    {
-        var depth = 0;
-        for (var i = open; i < code.Length; i++)
-            if (code[i] == '(') depth++;
-            else if (code[i] == ')' && --depth == 0) return SplitTop(code[(open + 1)..i]).Count;
-        return 0;
-    }
-
-    // The last Javadoc before the declaration → the same XML shape C# docs use.
-    static string? Doc(string head)
-    {
-        var m = Regex.Matches(head, @"/\*\*(.*?)\*/", RegexOptions.Singleline).LastOrDefault();
-        if (m is null) return null;
+        if (javadoc is null || Regex.Match(javadoc, @"/\*\*(.*?)\*/", RegexOptions.Singleline) is not { Success: true } m) return null;
         var lines = m.Groups[1].Value.Split('\n').Select(l => Regex.Replace(l, @"^\s*\*\s?", "").Trim()).ToList();
         var summary = string.Join(" ", lines.TakeWhile(l => !l.StartsWith('@'))).Trim();
         var sb = new StringBuilder("<member>");
         if (summary.Length > 0) sb.Append($"<summary>{SecurityElement.Escape(summary)}</summary>");
-        foreach (var tag in Regex.Matches(string.Join("\n", lines.SkipWhile(l => !l.StartsWith('@'))), @"@(param|return|throws)\s+(.*?)(?=\n@|\z)", RegexOptions.Singleline).Cast<RxMatch>())
+        foreach (var tag in Regex.Matches(string.Join("\n", lines.SkipWhile(l => !l.StartsWith('@'))), @"@(param|return|throws)\s+(.*?)(?=\n@|\z)", RegexOptions.Singleline).Cast<System.Text.RegularExpressions.Match>())
             sb.Append(tag.Groups[1].Value switch
             {
                 "param" when tag.Groups[2].Value.Split(' ', 2) is [var n, var d] => $"<param name=\"{SecurityElement.Escape(n)}\">{SecurityElement.Escape(d.Trim())}</param>",
@@ -314,15 +267,4 @@ static partial class JavaScanner
             });
         return sb.Append("</member>").ToString();
     }
-
-    static string Hash(string s) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Regex.Replace(s, @"\s+", " ").Trim())))[..12].ToLowerInvariant();
-
-    [GeneratedRegex(@"^\s*package\s+([\w.]+)\s*;", RegexOptions.Multiline)] private static partial Regex PackageRe();
-    [GeneratedRegex(@"^\s*import\s+(?:static\s+)?([\w.]+?)(?:\.\*)?\s*;", RegexOptions.Multiline)] private static partial Regex ImportRe();
-    [GeneratedRegex(@"\b(class|interface|enum|record|@interface)\s+(\w+)[^;{()]*?(?:\([^)]*\)[^;{]*?)?\{")] private static partial Regex TypeRe();
-    [GeneratedRegex(@"^\s*((?:(?:private|protected|public|static|final|transient|volatile)\s+)*)([\w.]+(?:<[^;=()]*>)?(?:\[\])*)\s+(\w+)\s*(?:=[^;]*)?;\s*$", RegexOptions.Singleline)] private static partial Regex FieldRe();
-    [GeneratedRegex(@"(?:^|\s)((?:(?:public|protected|private|static|final|abstract|synchronized|default|native)\s+)*(?:<[^>]+>\s+)?)([\w.]+(?:<[^(){};]*>)?(?:\[\])*\s+)?(\w+)\s*\(((?:[^()]|\([^()]*\))*)\)\s*(?:throws\s+([\w.,\s]+?))?\s*[{;]")] private static partial Regex MethodRe();
-    [GeneratedRegex(@"@([\w.]+)\s*(?:\(((?:[^()]|\([^()]*\))*)\))?")] private static partial Regex AnnotationRe();
-    [GeneratedRegex(@"\b(?:if|for|while|case|catch)\b|&&|\|\||\?(?!\?)")] private static partial Regex DecisionRe();
-    [GeneratedRegex(@"(?:\bthis\.)?\b(\w+)\.(\w+)\s*\(")] private static partial Regex CallRe();
 }

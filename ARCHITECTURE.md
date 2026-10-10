@@ -98,13 +98,21 @@ The model separates what the code states from what DocWizz concludes:
   functions returning JSX are components (props, hooks, rendered children), routes from `createBrowserRouter` and
   `<Route>`. Angular: `@Component` classes (`@Input`/`@Output`, signal inputs, lifecycle methods, children by template
   selector), `@Injectable` services, `HttpClient` calls, calls through injected services, `Routes` incl. `loadComponent`.
-- **[JavaScanner](src/DocWizz/JavaScanner.cs)** reads Java without a parser (comments and strings masked, then
-  regexes): types and members with Javadoc, Spring roles, `@*Mapping` endpoints with parameter sources, auth and the
-  unwrapped return type, constructor/`@Autowired`/Lombok injection, calls through injected fields (overloads by name
-  and argument count), method-level `implements`, `@Value`/`@ConfigurationProperties` reads, and imported packages. Projects come from
-  `pom.xml`/`build.gradle`, configuration from `application*.yml|properties`.
-- **[PhpScanner](src/DocWizz/PhpScanner.cs)** reads plain PHP the same way JavaScanner reads Java (masking, then
-  regexes, no parser): classes, interfaces, traits and enums with PHPDoc, free functions, complexity and signatures,
+- **[JavaScanner](src/DocWizz/JavaScanner.cs)** reads Java from a syntax tree: [java.mjs](scanner-vue/java.mjs)
+  parses each file with tree-sitter-java (WebAssembly, so nothing is compiled or executed, and the same files give the
+  same output) and returns its declarations; the C# side turns them into the model. Types (classes, interfaces, enums,
+  records, nested types) and members with Javadoc, complexity from the tree's branches, signatures with generics
+  as written; Spring roles, `@*Mapping` endpoints (annotations over several lines are fine) with parameter sources,
+  auth and the unwrapped return type; constructor/`@Autowired`/Lombok injection; calls through fields, parameters,
+  locals, `this`, unqualified and static calls, including inside lambdas (an anonymous class's code is its own);
+  method-level `implements`; `@Value`/`@ConfigurationProperties` reads; imported packages. Projects come from
+  `pom.xml`/`build.gradle`, configuration from `application*.yml|properties`. **Limits** (syntax, no type checker):
+  a call on a chain or another expression (`a.b().c()`, `get().x()`) has no known receiver type and is not linked;
+  overloads resolve by name and argument count, so two overloads with the same count leave the call unlinked (the
+  type is still recorded as used); inherited methods aren't looked up in supertypes. A file with syntax errors keeps
+  what parsed, with a warning. Needs Node and `npm ci --prefix scanner-vue`, like the Vue/TS scanner.
+- **[PhpScanner](src/DocWizz/PhpScanner.cs)** reads plain PHP without a parser (comments and strings masked, then
+  regexes): classes, interfaces, traits and enums with PHPDoc, free functions, complexity and signatures,
   constructor property promotion as both a typed property and `injects` (PHP's equivalent of Lombok/final-field DI),
   calls through `$this->`/`self::`/`static::`/`parent::` and known-typed properties (including the `$this->field->x()`
   chain the promotion idiom produces), traits mixed into a class, and namespace `use` imports. No framework
@@ -249,7 +257,7 @@ its own step.
 | Layer | Where | What it covers | Run |
 |---|---|---|---|
 | Unit | [tests/DocWizz.Tests/Unit](tests/DocWizz.Tests/Unit/) | `Analyzer`, `Architecture`, `Diff`, `CodeModel`, `Versions` on small in-memory models; `Cli` parsing and the command/option compatibility matrix; CLI.md and README checked against the command table (commands, options and where they apply, advanced commands, setup and CI workflows), so the docs can't drift | `dotnet test --project tests/DocWizz.Tests --filter-namespace DocWizz.Tests.Unit` |
-| Component | [tests/DocWizz.Tests/Component](tests/DocWizz.Tests/Component/) | one scanner on a few source snippets → nodes and edges, incl. past regressions per backend language; project files → remediation suggestions and validation | `… --filter-namespace DocWizz.Tests.Component` |
+| Component | [tests/DocWizz.Tests/Component](tests/DocWizz.Tests/Component/) | one scanner on a few source snippets → nodes and edges, incl. past regressions per backend language; project files → remediation suggestions and validation | `… --filter-namespace DocWizz.Tests.Component` (Java needs `npm ci --prefix scanner-vue`) |
 | Journey | [tests/DocWizz.Tests/Journey](tests/DocWizz.Tests/Journey/) | the CLI as a process: `setup` on small C#, Java, Vue, mixed, console, partial and empty repositories; re-runs change nothing and output doesn't depend on file order; findings vs failures and the next actions for each; exit codes, stdout vs stderr, no stack traces; no AI without `--ai`, no secrets in `docwizz.yaml`, no repository code run | `… --filter-namespace DocWizz.Tests.Journey` (needs `npm ci --prefix scanner-vue`) |
 | End-to-end | [test.sh](test.sh) | repository → model → reports → generated pages, on the fixtures | `./test.sh` |
 
