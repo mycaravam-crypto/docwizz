@@ -402,6 +402,7 @@ static string Reference() => $"""
       docwizz discover [dir]             read-only project and solution inventory [--format json]
       docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
         [--html]                        also write an HTML page next to every Markdown page
+        [--screenshots --base-url <url>]  capture anonymous static routes from a running frontend (Playwright)
         [--refresh-html-on-version-change]  rewrite HTML when the docwizz version changes
         [--progress]                    print progress to stderr (including redirected output)
         [--ai]                          draft missing summaries with a local Ollama (cached per code hash)
