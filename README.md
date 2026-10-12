@@ -330,7 +330,7 @@ A profile decides which items need docs and which sections (`summary`, `param`, 
 | `technical-publication` | task-oriented docs for readers outside the code; examples required |
 | `iso-42010`, `iso-15289` | also require hand-written pages in `docs/architecture/` (stakeholders, concerns, decisions, …) |
 
-Use your own with `--profile team.yaml` or `profile: team.yaml`, in the shape of [Profiles.cs](src/DocWizz/Profiles.cs).
+Use your own with `--profile team.yaml` or `profile: team.yaml`, in the shape of [Profiles.cs](src/DocWizz/Model/Profiles.cs).
 Coverage is measured against the profile; docwizz never claims compliance with a standard.
 
 Besides XML doc and JSDoc, plain comments count above a minimal-API `Map*` call, before a Vue component's first block
