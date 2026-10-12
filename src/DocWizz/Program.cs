@@ -65,6 +65,8 @@ static async Task<int> Dispatch(string[] args)
             return ContextCommand(path, config, opts);
         case "mcp":
             return await McpCommand(path, config, opts.ContainsKey("auto-rescan"));
+        case "trace":
+            return TraceCommand(path, pos.ElementAtOrDefault(2), json);
         case "product":
             return await ProductCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), opts.GetValueOrDefault("context"), config, opts.ContainsKey("ai"), productCheck, json);
         case "sbom":
@@ -89,6 +91,21 @@ static async Task<int> Dispatch(string[] args)
         default:
             return Usage($"unknown command {cmd}");
     }
+}
+
+// P2 traceability uses only explicit YAML links. No scan, inference or network calls.
+static int TraceCommand(string root, string? name, bool json)
+{
+    if (string.IsNullOrWhiteSpace(name)) return Usage("trace needs an evidence YAML file", "trace");
+    var file = File.Exists(name) ? name : Path.Combine(root, name);
+    try
+    {
+        var report = TraceabilityReport.Build(ProjectEvidenceCatalog.Load(file));
+        Console.Write(json ? TraceabilityReport.Json(report) : TraceabilityReport.Markdown(report));
+        return 0;
+    }
+    catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
+    catch (IOException e) { Console.Error.WriteLine($"{file}: {e.Message}"); return 1; }
 }
 
 // A context package for a coding agent, from the model the docs were generated from (docs/.docwizz/model.json), or from a
@@ -353,6 +370,8 @@ static string Reference() => $"""
     manual setup and debugging:
       docwizz init [dir]                write a starter docwizz.yaml with every default
       docwizz scan <dir> [model.json]   write the raw code model
+      docwizz trace <dir> <evidence.yaml>  explicit requirement-architecture-test gaps
+        [--format json]                  machine-readable instead of Markdown
       docwizz product <dir> <template.yaml> [out.md]  product draft from code and project evidence
         [--context <file.yaml>]           load sourced project facts
         [--ai]                            a local model words sections, citing evidence ids
@@ -360,7 +379,7 @@ static string Reference() => $"""
 
     options:
       --profile <name|file.yaml>        documentation profile: {string.Join(", ", Profiles.Names)}, or your own file
-      --format console|json             discover/analyze/check/architecture/diff/remediate output
+      --format console|json             discover/analyze/check/architecture/diff/context/product/trace/remediate output
       --timings                         time per stage and peak memory, on stderr (benchmarks)
       --help, -h                        help for a command: docwizz <command> --help
       --version, -v                     version, commit and runtime (also: docwizz version)
