@@ -526,7 +526,9 @@ let routesScanned = new Set()
 function scanRoutes(file, sf, imports, line) {
   if (routesScanned.has(file)) return
   routesScanned.add(file)
-  const walk = n => {
+  // Nested `children` paths are relative to their parent's (Vue Router, Angular): '/app' + 'settings' → /app/settings.
+  const join = (parent, raw) => raw.startsWith('/') ? raw : `${parent.replace(/\/$/, '')}/${raw}`.replace(/(.)\/$/, '$1')
+  const walk = (n, parent = '/') => {
     if (ts.isObjectLiteralExpression(n)) {
       const prop = k => n.properties.find(p => ts.isPropertyAssignment(p) && p.name.getText(sf) === k)?.initializer
       const p = prop('path')
@@ -541,10 +543,14 @@ function scanRoutes(file, sf, imports, line) {
           const file2 = imp && resolveImport(file, imp[1])
           if (file2) target = componentId(file2, text.match(/\.then\(\s*\(?\s*\w+\s*\)?\s*=>\s*\w+\.(\w+)/)?.[1] ?? 'default')
         }
-        addRoute(file, p.text, line(n), target ?? jsxTarget(prop('element'), imports, file, sf))
+        const route = join(parent, p.text)
+        addRoute(file, route, line(n), target ?? jsxTarget(prop('element'), imports, file, sf))
+        for (const child of n.properties)
+          walk(child, ts.isPropertyAssignment(child) && child.name.getText(sf) === 'children' ? route : parent)
+        return
       }
     }
-    ts.forEachChild(n, walk)
+    ts.forEachChild(n, c => walk(c, parent))
   }
   walk(sf)
 }
