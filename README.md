@@ -147,7 +147,7 @@ containers, components, data and deployment. `api.md` traces every endpoint to w
 - `PUT /api/materials/{id}`: MaterialController → MaterialService → SqlMaterialRepository → AppDbContext → SQL Server (inferred)
 ```
 
-- **HTML** (`--html`): an offline site with a collapsible navigation tree (solution → project → module, with a filter that remembers what you opened), search (`/`), outline, previous/next links and dark mode. Open `docs/index.html`.
+- **HTML** (`--html`): an offline site with a collapsible navigation tree (solution → project → module, remembers what you opened, with a filter), search (`/`), outline, previous/next links and dark mode. Open `docs/index.html`.
   Mermaid diagrams load from a pinned CDN.
 - **Incremental**: only changed pages are rewritten. Pages you write yourself (e.g. `docs/architecture/`) are linked,
   never overwritten. After upgrading docwizz, `--refresh-html-on-version-change` rewrites all HTML pages.
