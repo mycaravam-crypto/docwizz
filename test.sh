@@ -465,10 +465,11 @@ group_b() {
 # Git fixtures are isolated per group. Check ref health at each boundary so an intermittent
 # "unknown HEAD" failure records whether the git repository or DocWizz's ref lookup failed.
 require_fixture_head() {
-  local phase=$1
-  if ! git -C "$repo" rev-parse --verify HEAD >/dev/null 2>&1; then
-    echo "group B: Git HEAD unavailable at '$phase' (cwd=$PWD, repo=$repo)" >&2
+  local phase=$1 ref=${2:-HEAD}
+  if ! git -C "$repo" rev-parse --verify "$ref" >/dev/null 2>&1; then
+    echo "group B: Git ref '$ref' unavailable at '$phase' (cwd=$PWD, repo=$repo)" >&2
     git -C "$repo" status --short --branch >&2 || true
+    git -C "$repo" log -3 --oneline >&2 || true
     exit 1
   fi
 }
@@ -556,7 +557,7 @@ rm "$repo/docwizz.yaml" "$repo.json"
 # Two refs: commit the change, then compare HEAD~1..HEAD from inside the repo, without a dir argument
 git -C "$repo" add -A && git -C "$repo" -c user.name=t -c user.email=t@t commit -qm change
 require_fixture_head "change commit before diff"
-git -C "$repo" rev-parse --verify HEAD~1 >/dev/null
+require_fixture_head "change commit before diff" "HEAD~1"
 refs=$(cd "$repo" && dw diff HEAD~1 HEAD)
 grep -q "vs HEAD~1, at HEAD" <<<"$refs"
 grep -q "+ Fixture.Domain.Audit" <<<"$refs"
