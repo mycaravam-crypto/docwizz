@@ -411,7 +411,7 @@ static string Reference() => $"""
       docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
         [--html]                        also write an HTML page next to every Markdown page
         [--screenshots --base-url <url>]  capture static routes from a running frontend (Playwright)
-        [--storage-state <file>]       reuse a saved Playwright login session (generate screenshots only)
+        [--storage-state <file>]        reuse a saved Playwright login session (generate screenshots only)
         [--refresh-html-on-version-change]  rewrite HTML when the docwizz version changes
         [--progress]                    print progress to stderr (including redirected output)
         [--ai]                          draft missing summaries with a local Ollama (cached per code hash)
