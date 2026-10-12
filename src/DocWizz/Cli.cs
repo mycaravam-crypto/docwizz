@@ -17,7 +17,7 @@ static class Cli
         ["context"] = "a project context YAML file", ["since"] = "a git ref, e.g. origin/main", ["package"] = "a package name", ["to"] = "a version",
         ["for"] = "a symbol, file, folder or endpoint (\"POST /api/orders\")", ["hops"] = $"a number of hops, 1 to {AgentContext.MaxHops}",
         ["budget"] = "a number of tokens", ["base-url"] = "a running application URL (http or https)",
-        ["storage-state"] = "a Playwright storageState JSON file",
+        ["storage-state"] = "a Playwright storageState JSON file", ["screenshot-delay"] = "a number of milliseconds, 0 to 60000",
     };
 
     // Meaningful for every command.
@@ -31,7 +31,7 @@ static class Cli
         ["setup"] = new("setup [dir]", "first run: detect the stack, write docwizz.yaml, analyze, generate docs, check", "start here",
             "docwizz setup . --select-projects", "--select-projects (TTY wizard), --all-projects (clear scope), --yes (no prompts), --force (overwrite docwizz.yaml), --html, --progress, --refresh-html-on-version-change, --ai, --profile <name|file>", ["select-projects", "all-projects", "yes", "force", "html", "progress", "refresh-html-on-version-change", "ai", "profile"]),
         ["generate"] = new("generate <dir> [out]", "write Markdown docs (default <dir>/docs)", "everyday",
-            "docwizz generate . --html", "--html (HTML next to every page), --screenshots --base-url <url> [--storage-state <file>] (Playwright captures detected routes), --progress, --refresh-html-on-version-change, --ai (local Ollama drafts), --profile", ["html", "screenshots", "base-url", "storage-state", "progress", "refresh-html-on-version-change", "ai", "profile"]),
+            "docwizz generate . --html", "--html (HTML next to every page), --screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>] (Playwright captures detected routes), --progress, --refresh-html-on-version-change, --ai (local Ollama drafts), --profile", ["html", "screenshots", "base-url", "storage-state", "screenshot-delay", "progress", "refresh-html-on-version-change", "ai", "profile"]),
         ["check"] = new("check <dir> [--since <ref>]", "quality gate: exit 1 when thresholds fail (only new problems with --since)", "CI",
             "docwizz check . --since origin/main", "--since <ref>, --format json, --profile", ["since", "format", "profile"]),
         ["analyze"] = new("analyze <dir>", "documentation report: gaps, coverage, quality, architecture", "everyday",
@@ -103,6 +103,10 @@ static class Cli
                     error ??= "--base-url requires --screenshots";
                 if (!opts.ContainsKey("screenshots") && opts.ContainsKey("storage-state"))
                     error ??= "--storage-state requires --screenshots";
+                if (!opts.ContainsKey("screenshots") && opts.ContainsKey("screenshot-delay"))
+                    error ??= "--screenshot-delay requires --screenshots";
+                if (opts.GetValueOrDefault("screenshot-delay") is { } delay && (!int.TryParse(delay, out var ms) || ms is < 0 or > 60000))
+                    error ??= "--screenshot-delay must be a number of milliseconds, 0 to 60000";
                 if (opts.GetValueOrDefault("base-url") is { } url &&
                     (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
                      uri.Scheme is not ("http" or "https") || uri.UserInfo.Length > 0 ||

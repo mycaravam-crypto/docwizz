@@ -111,9 +111,14 @@ docwizz generate . --html --screenshots --base-url http://localhost:5173 --stora
 
 - Each route gets a fresh, isolated browser context: anonymous by default, or initialized from the saved storage state
   (cookies and localStorage; sessionStorage is not preserved). docwizz never automates login or handles passwords.
+- With a session, each route after the first starts from the previous route's cookies and storage (kept in memory; the
+  file is never written), so apps that rotate refresh tokens stay signed in. Routes such as `/logout` are skipped.
+- Before each capture docwizz waits for the network to go idle (up to 5 s) plus 400 ms; `--screenshot-delay <ms>`
+  adds more for slow pages.
 - `--storage-state` paths are relative to the scanned directory.
-- Dynamic routes, HTTP errors (400+), URL redirects and expired sessions are skipped with a warning. A login overlay
-  without a URL change, or a client-side guard redirecting more than ~400 ms after load, can't be recognized.
+- Dynamic routes, HTTP errors (400+), URL redirects, expired sessions and signed-in routes that show a password field
+  (a login form without a redirect) are skipped with a warning. A login overlay without a password field can't be
+  recognized.
 - Captures go to `docs/screenshots/`, linked from `frontend.md`. **The storage-state file holds session tokens:** keep
   it out of Git, restrict access, and use a low-privilege test account with sanitized data.
 
@@ -470,7 +475,7 @@ It never judges content: whether a statement is true or a product can be approve
 |---|---|---|---|
 | `discover` | `docwizz discover [dir] [--format console\|json]` | read-only inventory of solutions, projects and references | everyday |
 | `setup` | `docwizz setup [dir] [--select-projects] [--all-projects] [--yes] [--force] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | detect the stack, write `docwizz.yaml`, analyze, architecture, generate, check | start here |
-| `generate` | `docwizz generate <dir> [out] [--html] [--screenshots --base-url <url> [--storage-state <file>]] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
+| `generate` | `docwizz generate <dir> [out] [--html] [--screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>]] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
 | `check` | `docwizz check <dir> [--since ref] [--format f] [--profile p]` | quality gate; exit 1 when thresholds fail | CI |
 | `analyze` | `docwizz analyze <dir> [--format f] [--profile p]` | documentation and architecture report, no gate | everyday |
 | `architecture` | `docwizz architecture <dir> [--format f] [--profile p]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
@@ -499,6 +504,7 @@ It never judges content: whether a statement is true or a product can be approve
 | `--refresh-html-on-version-change` | off | generate, setup | implies `--html`; rewrites all HTML when the docwizz version changed | normal |
 | `--screenshots --base-url <url>` | off | generate | captures detected static routes from a running frontend; anonymous isolated contexts by default; HTTP errors and redirects are skipped | opt-in |
 | `--storage-state <file>` | off | generate | with `--screenshots`, starts each route's context from a saved Playwright login state; path relative to the scanned directory; keep it out of Git | opt-in |
+| `--screenshot-delay <ms>` | 0 | generate | with `--screenshots`, extra wait (0 to 60000 ms) after the page settles, for slow pages | opt-in |
 | `--ai` | off | generate, product, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it, nothing new is sent | opt-in |
 | `--since <ref>` | — | check, remediate | check: only problems introduced since `<ref>` fail; remediate: says whether each update touches only what changed since `<ref>` | CI |
 | `--for <target>` | — | context | required; a symbol id or qualified name, a file, a folder, or `VERB /route`; ambiguous or unknown exits 1 with candidates | coding agents |
