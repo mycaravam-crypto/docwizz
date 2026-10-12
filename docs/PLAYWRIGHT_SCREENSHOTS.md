@@ -73,6 +73,8 @@ This means DocWizz could not launch the browser revision expected by **its .NET 
 | `screenshots: skipped N dynamic/unsupported route(s)` | DocWizz intentionally excludes parameterized or unsupported routes (for example `/customers/:id`). This is separate from browser installation. |
 | `screenshot skipped: ... redirected to ... (needs authentication?)` | Check the stored login, target origin, authorization and expiry; recreate the state if necessary. |
 | `screenshot skipped: ... shows a login form (session not accepted?)` | The page rendered a password field without redirecting: the session was rejected. Recreate the state file. |
+| `screenshot skipped: ... API answered 401/403 for /api/... (session not accepted?)` | The page loaded, but its data calls were rejected: the session expired or the test account lacks the role. Recreate the state or use an account with access. |
+| Every route shows the home page | The app uses hash routing (`/#/orders`) but the router was not detected as such; docwizz recognizes `createWebHashHistory`, `createHashRouter`, `<HashRouter>`, `useHash: true` and `withHashLocation()` in the file that declares the routes. |
 | `screenshot skipped: ... would end the session` | Logout routes are never opened, so later routes stay signed in. |
 | Only `/` is signed in, later routes are not | Fixed by carrying the session from route to route; if it persists, check whether the app keeps its token in sessionStorage (not saved by Playwright). |
 | Pages captured half-loaded (spinners, empty tables) | Add `--screenshot-delay 1500` (milliseconds, up to 60000). |

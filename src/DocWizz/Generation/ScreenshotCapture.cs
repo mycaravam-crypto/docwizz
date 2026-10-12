@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -19,6 +20,14 @@ static class ScreenshotCapture
             .Where(IsStaticRoute).OfType<string>()
             .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
 
+    // Routes from a hash-history router (createWebHashHistory, createHashRouter, ...) are opened as <base>/#/route.
+    public static HashSet<string> HashRoutes(CodeModel model) =>
+        model.Nodes.Where(n => n.Kind == "route" && n.Route is not null && n.Tags?.Contains("hash") == true)
+            .Select(n => n.Route!).ToHashSet(StringComparer.Ordinal);
+
+    public static Uri RouteUrl(Uri target, string route, bool hash) =>
+        hash ? new Uri(target, "#" + route) : new Uri(target, route.TrimStart('/'));
+
     // Hash avoids collisions between routes such as /a-b and /a/b.
     public static string FileName(string route)
     {
@@ -30,7 +39,7 @@ static class ScreenshotCapture
     }
 
     // Returns a capture failure reason; a client-side SPA guard can redirect after an HTTP 200.
-    public static string? NavigationFailure(Uri requested, Uri landed, int? status)
+    public static string? NavigationFailure(Uri requested, Uri landed, int? status, bool hash = false)
     {
         if (status is null) return "no HTTP response";
         if (status >= 400) return $"HTTP {status}";
@@ -38,11 +47,29 @@ static class ScreenshotCapture
             return $"redirected to another origin ({PathOf(landed)}) (needs authentication?)";
         if (PathOf(requested).TrimEnd('/') != PathOf(landed).TrimEnd('/'))
             return $"redirected to {PathOf(landed)} (needs authentication?)";
+        if (hash && HashPathOf(requested).TrimEnd('/') != HashPathOf(landed).TrimEnd('/'))
+            return $"redirected to #{HashPathOf(landed)} (needs authentication?)";
         return null;
     }
 
     // The path as written: the browser reports /größen-prüfung percent-encoded, possibly with other hex casing.
     static string PathOf(Uri uri) => Uri.UnescapeDataString(uri.AbsolutePath).Normalize(NormalizationForm.FormC);
+
+    // The route inside the fragment, without its query: #/orders?tab=1 → /orders.
+    static string HashPathOf(Uri uri)
+    {
+        var fragment = uri.Fragment.TrimStart('#');
+        var query = fragment.IndexOf('?');
+        if (query >= 0) fragment = fragment[..query];
+        return fragment.Length == 0 ? "/" : Uri.UnescapeDataString(fragment).Normalize(NormalizationForm.FormC);
+    }
+
+    // With a session, an API call answered 401/403 means the page rendered without (enough) access, even though the
+    // document itself came back 200 (SPA servers answer every path with index.html). Only the path is reported.
+    public static string? ApiFailure(IEnumerable<(int Status, string Url)> apiResponses) =>
+        apiResponses.Where(r => r.Status is 401 or 403)
+            .Select(r => $"API answered {r.Status} for {(Uri.TryCreate(r.Url, UriKind.Absolute, out var u) ? u.AbsolutePath : "?")} (session not accepted?)")
+            .FirstOrDefault();
 
     // Visiting these would end the saved session for every route after them.
     static readonly Regex SessionEnding = new(@"(^|/)(log-?out|sign-?out|log-?off|abmelden)(/|$)",
@@ -75,12 +102,14 @@ static class ScreenshotCapture
         await page.WaitForTimeoutAsync(400 + delayMs);
     }
 
-    // Captures static routes anonymously or with a provided session, returning only successful images.
+    // Captures static routes (hash-router routes as /#/route) anonymously or with a provided session, waiting delayMs
+    // extra per page; returns only successful images.
     public static async Task<Dictionary<string, string>> Run(CodeModel model, string outDir, string baseUrl,
         string? storageStateFile = null, int delayMs = 0)
     {
         var images = new Dictionary<string, string>(StringComparer.Ordinal);
         var routes = Routes(model);
+        var hashRoutes = HashRoutes(model);
         var skipped = model.Nodes.Count(n => n.Kind == "route" && !IsStaticRoute(n.Route));
         if (skipped > 0) Console.Error.WriteLine($"docwizz: screenshots: skipped {skipped} dynamic/unsupported route(s)");
         foreach (var route in routes.Where(EndsSession))
@@ -100,7 +129,8 @@ static class ScreenshotCapture
 
             foreach (var route in routes)
             {
-                var url = new Uri(target, route.TrimStart('/'));
+                var hash = hashRoutes.Contains(route);
+                var url = RouteUrl(target, route, hash);
                 var fileName = FileName(route);
                 var fullPath = Path.Combine(folder, fileName);
                 try
@@ -110,11 +140,17 @@ static class ScreenshotCapture
                     try
                     {
                         var page = await context.NewPageAsync();
+                        var apiResponses = new ConcurrentQueue<(int, string)>();
+                        page.Response += (_, r) =>
+                        {
+                            if (r.Request.ResourceType is "fetch" or "xhr") apiResponses.Enqueue((r.Status, r.Url));
+                        };
                         var response = await page.GotoAsync(url.ToString(),
                             new() { WaitUntil = WaitUntilState.Load, Timeout = 15000 });
                         // A SPA guard may redirect after the initial (successful) document load.
                         await Settle(page, delayMs);
-                        var failure = NavigationFailure(url, new Uri(page.Url), response?.Status) ??
+                        var failure = NavigationFailure(url, new Uri(page.Url), response?.Status, hash) ??
+                            (storageStateFile is null ? null : ApiFailure(apiResponses)) ??
                             LoginFormFailure(route, storageStateFile is not null, await page.Locator("input[type=password]:visible").CountAsync() > 0);
                         if (failure is not null)
                         {
@@ -124,7 +160,7 @@ static class ScreenshotCapture
                         }
                         await page.ScreenshotAsync(new() { Path = fullPath, FullPage = true, Timeout = 10000 });
                         // Also reject redirects triggered while rendering the screenshot.
-                        failure = NavigationFailure(url, new Uri(page.Url), response?.Status);
+                        failure = NavigationFailure(url, new Uri(page.Url), response?.Status, hash);
                         if (failure is not null)
                         {
                             File.Delete(fullPath);

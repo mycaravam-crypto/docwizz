@@ -167,8 +167,8 @@ docwizz generate . --html --screenshots --base-url http://localhost:5173 --stora
 
 Screenshots land in `docs/screenshots/` and are linked from the frontend page. Without `--storage-state` routes are
 captured anonymously; with it, each route continues the previous route's session, so rotating refresh tokens keep
-working. Slow pages: add `--screenshot-delay <ms>`. Dynamic routes, `/logout`, HTTP errors, redirects and expired
-sessions are skipped with a warning.
+working. Slow pages: add `--screenshot-delay <ms>`. Hash routers are opened as `/#/route`. Dynamic routes, `/logout`, HTTP
+errors, redirects, expired sessions and pages whose API calls answer 401/403 are skipped with a warning.
 **The state file holds session tokens:** keep it out of Git, and use a low-privilege test account with sanitized data.
 Limits are listed in [CLI.md](CLI.md#options); for Windows installation errors, authenticated capture and diagnostics,
 see [Playwright screenshot troubleshooting](docs/PLAYWRIGHT_SCREENSHOTS.md).

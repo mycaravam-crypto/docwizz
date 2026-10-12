@@ -116,8 +116,12 @@ docwizz generate . --html --screenshots --base-url http://localhost:5173 --stora
 - Before each capture docwizz waits for the network to go idle (up to 5 s) plus 400 ms; `--screenshot-delay <ms>`
   adds more for slow pages.
 - `--storage-state` paths are relative to the scanned directory.
+- Routes of a hash-history router (`createWebHashHistory`, `createHashRouter`, `<HashRouter>`, Angular `useHash: true` /
+  `withHashLocation()` in the routes file) are opened as `<base-url>/#/route`.
 - Dynamic routes, HTTP errors (400+), URL redirects, expired sessions and signed-in routes that show a password field
-  (a login form without a redirect) are skipped with a warning. A login overlay without a password field can't be
+  (a login form without a redirect) are skipped with a warning. With a session, a route whose API calls (fetch/XHR)
+  are answered 401 or 403 is skipped too: SPA servers answer every page with 200, so the API is where a rejected
+  session shows. API 404s are not treated as failures. A login overlay without a password field can't be
   recognized.
 - Captures go to `docs/screenshots/`, linked from `frontend.md`. **The storage-state file holds session tokens:** keep
   it out of Git, restrict access, and use a low-privilege test account with sanitized data.
