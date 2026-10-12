@@ -109,6 +109,37 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             sb.AppendLine($"\nProject references: `{active.Projects.References}`; " +
                 $"test links: `{active.Projects.TestLinks.ToString().ToLowerInvariant()}`; " +
                 $"unassigned sources: `{active.UnassignedSources}`.\n");
+            sb.AppendLine($"Repository deployment/CI/config descriptors: `{active.RepositoryFiles}`.\n");
+            if (model.ScopeInventory is { } effective)
+            {
+                sb.AppendLine("### Effective scan\n");
+                foreach (var manifest in effective.ScannedProjects)
+                    sb.AppendLine("- `" + manifest + "`" +
+                        (effective.TestProjects.Contains(manifest) ? " (test evidence only)" : " (source-scanned)"));
+                sb.AppendLine();
+                if (effective.MetadataOnlyProjects.Count > 0)
+                {
+                    sb.AppendLine("### Dependency-only projects (not source-scanned)\n");
+                    foreach (var manifest in effective.MetadataOnlyProjects)
+                        sb.AppendLine("- `" + manifest + "` (metadata-only)");
+                    sb.AppendLine();
+                }
+                if (effective.ExcludedReferences.Count > 0)
+                {
+                    sb.AppendLine($"### Excluded project references ({effective.ExcludedReferences.Count})\n");
+                    sb.AppendLine("These references are omitted from the model by `references: exclude`; the dependency graph is intentionally incomplete.\n");
+                    foreach (var edge in effective.ExcludedReferences)
+                        sb.AppendLine("- `" + edge.Replace("`", "'") + "`");
+                    sb.AppendLine();
+                }
+                if (effective.UnresolvedReferences.Count > 0)
+                {
+                    sb.AppendLine($"### Unresolved project references ({effective.UnresolvedReferences.Count})\n");
+                    foreach (var edge in effective.UnresolvedReferences)
+                        sb.AppendLine("- `" + edge.Replace("`", "'") + "`");
+                    sb.AppendLine();
+                }
+            }
             sb.AppendLine("Referenced projects marked `metadata-only` are dependency stubs, not analyzed source code.\n");
         }
         sb.AppendLine("| | |\n|---|---|");
