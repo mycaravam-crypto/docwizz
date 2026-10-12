@@ -7,6 +7,11 @@ using System.Text.Json.Serialization;
 // An exception that escapes a command is a bug or an environment problem (disk, permissions), never a finding: one
 // line and exit 2, so CI can tell "docwizz broke" from "the gate failed" (1). DOCWIZZ_DEBUG=1 lets it through with the trace.
 try { return await Dispatch(args); }
+catch (ScopeException e)
+{
+    Console.Error.WriteLine(e.Message);
+    return 1;
+}
 catch (Exception e) when (Environment.GetEnvironmentVariable("DOCWIZZ_DEBUG") is not { Length: > 0 })
 {
     Console.Error.WriteLine($"docwizz: error: {e.Message}");
@@ -58,7 +63,7 @@ static async Task<int> Dispatch(string[] args)
     switch (cmd)
     {
         case "discover":
-            var inventory = ProjectDiscovery.Scan(path, RepoFiles(path, config));
+            var inventory = ProjectDiscovery.Scan(path, RepoFilesUnscoped(path, config));
             Console.WriteLine(json ? JsonSerializer.Serialize(inventory, JsonOptions()) : ProjectDiscovery.ConsoleReport(inventory));
             return 0;
         case "context":
@@ -151,7 +156,10 @@ static (CodeModel Model, string Source, DateTime Since) LoadModel(string root, C
     var fingerprint = Path.Combine(root, "docs", ".docwizz", "model.json");
     if (!File.Exists(fingerprint)) return (BuildModel(root, config).Model, "a fresh scan (no docs/.docwizz/model.json)", DateTime.UtcNow);
     var written = File.GetLastWriteTimeUtc(fingerprint);
-    return (JsonSerializer.Deserialize<CodeModel>(File.ReadAllText(fingerprint), JsonOptions())!, $"docs/.docwizz/model.json (written {written:yyyy-MM-dd HH:mm} UTC)", written);
+    var saved = JsonSerializer.Deserialize<CodeModel>(File.ReadAllText(fingerprint), JsonOptions())!;
+    if (saved.ScopeFingerprint != ProjectScope.Fingerprint(config.Scope))
+        return (BuildModel(root, config).Model, "a fresh scan (the project scope changed since generate)", DateTime.UtcNow);
+    return (saved, $"docs/.docwizz/model.json (written {written:yyyy-MM-dd HH:mm} UTC)", written);
 }
 
 // `docwizz mcp`: the read-only MCP server on stdio. stdout carries only protocol messages.
@@ -389,7 +397,7 @@ static string Reference() => $"""
 
 // Every file docwizz may read. Prefer git's view (honours .gitignore, skips nested worktrees); fall back to a directory walk.
 // Dot-directories are skipped except those named in `dotDirs` (CI descriptors live in .github/.circleci).
-static List<string> RepoFiles(string root, Config config, string[]? dotDirs = null)
+static List<string> RepoFilesUnscoped(string root, Config config, string[]? dotDirs = null)
 {
     string[] skip = ["bin", "obj", "node_modules", "dist"];
     // docwizz's own output (a directory below the root holding .docwizz/): its search.js would otherwise be scanned
@@ -417,10 +425,19 @@ static List<string> RepoFiles(string root, Config config, string[]? dotDirs = nu
         .ToList();
 }
 
+// All consumers of source/deployment/manifest files share the same scope. Discovery alone uses RepoFilesUnscoped.
+static List<string> RepoFiles(string root, Config config, string[]? dotDirs = null)
+{
+    var all = RepoFilesUnscoped(root, config, dotDirs);
+    return ProjectScope.Resolve(root, config.Scope, all).Files;
+}
+
 static (CodeModel Model, List<string> Files) BuildModel(string root, Config config)
 {
     string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java", ".php"];
-    var candidates = Timings.Measure("files", () => RepoFiles(root, config));
+    var raw = Timings.Measure("files", () => RepoFilesUnscoped(root, config));
+    var plan = ProjectScope.Resolve(root, config.Scope, raw);
+    var candidates = plan.Files;
     var scanned = candidates.Where(f => exts.Contains(Path.GetExtension(f)) && !f.EndsWith(".d.ts") && !f.EndsWith(".min.js")
         && !f.Replace('\\', '/').Contains("/wwwroot/lib/")).ToList(); // ponytail: libman/bower vendor dir only; other vendored JS needs exclude:
 
@@ -431,6 +448,7 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     var (phpNodes, phpEdges) = Timings.Measure("scan:php", () => PhpScanner.Scan(root, scanned.Where(f => f.EndsWith(".php"))));
     var (projNodes, projEdges) = Timings.Measure("scan:projects", () => Projects.Scan(root, candidates.Where(f => f.EndsWith(".csproj") || f.EndsWith(".sln") || f.EndsWith(".slnx")
         || Path.GetFileName(f) is "package.json" or "pom.xml" or "build.gradle" or "build.gradle.kts")));
+    if (config.Scope is not null) ProjectScope.CompleteReferences(plan, projNodes, projEdges);
     // Keys defined in configuration files win over the bare key nodes code reads create.
     var settings = Timings.Measure("scan:configuration", () => Configuration.Scan(root, candidates.Where(Configuration.IsConfigFile)));
     var defined = settings.Select(n => n.Id).ToHashSet();
@@ -457,7 +475,8 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     link.Dispose();
 
     var files = scanned.Where(f => !testFiles.Contains(Path.GetRelativePath(root, f).Replace('\\', '/'))).ToList();
-    return (new CodeModel(Git(root, "rev-parse --short HEAD")?.Trim(), nodes, edges), files);
+    return (new CodeModel(Git(root, "rev-parse --short HEAD")?.Trim(), nodes, edges,
+        ProjectScope.Fingerprint(config.Scope), plan.Inventory), files);
 }
 
 static string? Language(string file) => Path.GetExtension(file) switch
@@ -583,6 +602,11 @@ static int DiffCommand(string root, string? gitRef, Config config, bool enforce,
             return 1;
         }
         before = JsonSerializer.Deserialize<CodeModel>(File.ReadAllText(fingerprint), JsonOptions());
+        if (before?.ScopeFingerprint != ProjectScope.Fingerprint(config.Scope))
+        {
+            Console.Error.WriteLine("scope changed since the last generate; regenerate docs before comparing against the saved model");
+            return 1;
+        }
         baseline = $"docs generated at {before?.Commit ?? "unknown"}";
     }
     if (before is null) return 1;
@@ -740,8 +764,8 @@ static (List<string> Failures, List<string> MissingSections) CheckFailures(strin
     return (failures, missingSections);
 }
 
-// First run: lightweight project discovery → full scan → inferred config → analyze → architecture →
-// generate → check. P0 intentionally does not filter the model; that belongs to P1.
+// First run: discovery → scope resolution before language scanning → inferred config → analysis → generation → check.
+// Keep the config stage after scan until inferred layer/test defaults can be computed without the full model.
 // Exit 1 only when a stage fails: a failing check is the baseline to improve on, reported with what to do next.
 static async Task<int> SetupCommand(string root, string? profile, bool force, bool ai, bool html, bool refreshHtmlOnVersionChange = false, bool progress = false)
 {
@@ -763,10 +787,10 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
     [
         new("discover", () =>
         {
-            // Always before BuildModel. With no interactive selection implemented yet, the inventory cannot
-            // change the scan scope. Existing config and .gitignore/exclude rules still apply.
+            // Always before BuildModel. An existing explicit scope is loaded and validated before language scanning.
+            // New configurations remain unfiltered by default; project selection is not inferred.
             config = existing ? Config.Load(root, profile) : Config.Parse(Config.Default, root, profile);
-            inventory = ProjectDiscovery.Scan(root, RepoFiles(root, config));
+            inventory = ProjectDiscovery.Scan(root, RepoFilesUnscoped(root, config));
             return Setup.DiscoverySummary(inventory);
         }, Required: true),
         new("scan", () =>
@@ -822,6 +846,7 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
     Console.WriteLine();
     Console.WriteLine($"Status:         {Setup.Label(outcome)}");
     if (inventory is not null) Console.WriteLine($"Discovery:      {Setup.DiscoverySummary(inventory)}");
+    if (config?.Scope is not null) Console.WriteLine($"Scope:          {string.Join(", ", config.Scope.Projects.Include)} (references: {config.Scope.Projects.References})");
     if (detection is not null)
     {
         Console.WriteLine($"Stack:          {Setup.Stack(detection)}");
@@ -845,7 +870,7 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
         foreach (var t in Setup.FollowUp(detection, configStatus, config, passed != false)) Console.WriteLine($"  - {t}");
         if (inventory is not null && Setup.NeedsProjectSelection(inventory))
             Console.WriteLine("  - multiple solutions or standalone projects detected: review with docwizz discover " +
-                root + " --format json; project selection is planned for Epic #124 P1/P2 (currently use exclude:)");
+                root + " --format json; configure scope.projects.include in docwizz.yaml (interactive setup wizard: Epic #124 P2)");
     }
     Console.WriteLine();
     Console.WriteLine("Next useful actions:");

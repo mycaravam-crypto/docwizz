@@ -273,7 +273,10 @@ monorepos.
 
 ## Configuration
 
-For multi-solution repositories, run `docwizz discover . --format json` to inspect the project inventory without a full code scan. Project selection and hierarchical generation are planned in [Epic #124](https://github.com/mycaravam-crypto/docwizz/issues/124), but not yet implemented.
+**Multi-project documentation:** To document only selected manifests, add `scope.projects.include` using their root-relative paths. `references: metadata` retains dependency-only stubs; `include` scans reachable dependencies; `exclude` omits them. `test_links: true` includes referencing test projects only for traceability. By default, `repository_files: include` preserves system-wide deployment, CI and configuration descriptors; `unassigned_sources` controls loose code, not those descriptors. Excluded reference edges are explicitly listed in the generated scope report. With no `scope:` all previous scans remain unchanged. Changing a scope invalidates the saved context model; regenerate docs before using the saved-model `diff` baseline. The full schema, precedence and CI behavior are in [CLI.md](CLI.md#explicit-project-scope-epic-124-p1).
+
+
+For multi-solution repositories, run `docwizz discover . --format json` to inspect the complete project inventory without a full code scan. Project selection can be configured with `scope:` in `docwizz.yaml` (see [CLI.md](CLI.md#explicit-project-scope-epic-124-p1)). The interactive setup wizard and hierarchical navigation remain subsequent stages of [Epic #124](https://github.com/mycaravam-crypto/docwizz/issues/124).
 
 
 `docwizz setup` writes a `docwizz.yaml` from what the repository shows (`docwizz init` writes the plain defaults).

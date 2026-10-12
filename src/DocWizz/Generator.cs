@@ -100,6 +100,48 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         var kinds = model.Nodes.GroupBy(n => n.Kind).ToDictionary(g => g.Key, g => g.Count());
         sb.AppendLine($"# {Path.GetFileName(Path.GetFullPath(root))}\n");
         sb.AppendLine($"Generated from commit `{model.Commit ?? "unknown"}`.\n");
+        if (config.Scope is { } active)
+        {
+            sb.AppendLine("## Documentation scope\n");
+            sb.AppendLine("Explicit project selection (other projects are not source-scanned):");
+            foreach (var project in active.Projects.Include)
+                sb.AppendLine("- `" + project + "`");
+            sb.AppendLine($"\nProject references: `{active.Projects.References}`; " +
+                $"test links: `{active.Projects.TestLinks.ToString().ToLowerInvariant()}`; " +
+                $"unassigned sources: `{active.UnassignedSources}`.\n");
+            sb.AppendLine($"Repository deployment/CI/config descriptors: `{active.RepositoryFiles}`.\n");
+            if (model.ScopeInventory is { } effective)
+            {
+                sb.AppendLine("### Effective scan\n");
+                foreach (var manifest in effective.ScannedProjects)
+                    sb.AppendLine("- `" + manifest + "`" +
+                        (effective.TestProjects.Contains(manifest) ? " (test evidence only)" : " (source-scanned)"));
+                sb.AppendLine();
+                if (effective.MetadataOnlyProjects.Count > 0)
+                {
+                    sb.AppendLine("### Dependency-only projects (not source-scanned)\n");
+                    foreach (var manifest in effective.MetadataOnlyProjects)
+                        sb.AppendLine("- `" + manifest + "` (metadata-only)");
+                    sb.AppendLine();
+                }
+                if (effective.ExcludedReferences.Count > 0)
+                {
+                    sb.AppendLine($"### Excluded project references ({effective.ExcludedReferences.Count})\n");
+                    sb.AppendLine("These references are omitted from the model by `references: exclude`; the dependency graph is intentionally incomplete.\n");
+                    foreach (var edge in effective.ExcludedReferences)
+                        sb.AppendLine("- `" + edge.Replace("`", "'") + "`");
+                    sb.AppendLine();
+                }
+                if (effective.UnresolvedReferences.Count > 0)
+                {
+                    sb.AppendLine($"### Unresolved project references ({effective.UnresolvedReferences.Count})\n");
+                    foreach (var edge in effective.UnresolvedReferences)
+                        sb.AppendLine("- `" + edge.Replace("`", "'") + "`");
+                    sb.AppendLine();
+                }
+            }
+            sb.AppendLine("Referenced projects marked `metadata-only` are dependency stubs, not analyzed source code.\n");
+        }
         sb.AppendLine("| | |\n|---|---|");
         foreach (var (label, kind) in new[] { ("Classes & records", "class"), ("Methods", "method"), ("Frontend functions", "function") })
         {
@@ -162,9 +204,10 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             };
             var tfms = p.Tags!.Where(t => t.StartsWith("net")).ToList();
             var role = p.Tags!.FirstOrDefault(t => t is "executable" or "library" or "test");
+            var metadata = p.Tags!.Contains("metadata-only") ? " (metadata-only)" : "";
             var folder = p.Tags!.FirstOrDefault(t => t.StartsWith("sln:"))?[4..];
             yield return $"`{p.Name}`: {kind}{(tfms.Count > 0 ? $" on {string.Join(", ", tfms)}" : "")}" +
-                (role is null ? "" : $" — {role}") + (folder is null ? "" : $", solution folder `{folder}`");
+                (role is null ? "" : $" — {role}") + metadata + (folder is null ? "" : $", solution folder `{folder}`");
         }
         foreach (var p in model.Nodes.Where(n => n.Kind == "project" && n.Tags?.Any(t => t is "maven" or "gradle") == true))
         {
