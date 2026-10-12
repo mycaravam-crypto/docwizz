@@ -34,7 +34,7 @@ public class ProjectEvidenceCatalogTests
     }
 
     [Theory]
-    [InlineData("schema: 1\nevidence:", "schema: 1\nmissing:", "catalog.evidence")]
+    [InlineData("evidence:", "evidence: {}", "catalog.evidence")]
     [InlineData("schema: 1", "schema: '1'", "unquoted 1")]
     [InlineData("id: REQ-017", "id: ../../escape", "evidence[0].id")]
     [InlineData("kind: requirement", "kind: decision", "evidence[0].kind")]
