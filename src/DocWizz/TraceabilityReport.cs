@@ -5,9 +5,9 @@ using System.Text.Json;
 internal static class TraceabilityReport
 {
     internal sealed record Row(string Requirement, string Source, string Version, string[] Architectures, string[] Tests, string Status);
-    internal sealed record Report(IReadOnlyList<Row> Requirements, string[] UnlinkedArchitectures, string[] UntestedArchitectures, string[] OrphanedTests);
+    internal sealed record Report(IReadOnlyList<Row> Requirements, string[] UnlinkedArchitectures, string[] UntestedArchitectures, string[] OrphanedTests, IReadOnlyList<EvidenceSourceCheck.Finding>? Sources = null);
 
-    public static Report Build(ProjectEvidenceCatalog catalog)
+    public static Report Build(ProjectEvidenceCatalog catalog, string? root = null)
     {
         var items = catalog.Items.ToDictionary(x => x.Id, StringComparer.Ordinal);
         var byFrom = catalog.Links.GroupBy(x => x.From).ToDictionary(x => x.Key, x => x.Select(y => y.To).Order(StringComparer.Ordinal).ToArray(), StringComparer.Ordinal);
@@ -25,7 +25,8 @@ internal static class TraceabilityReport
         return new(rows,
             architecturesAll.Where(x => !linkedArchitectures.Contains(x.Id)).Select(x => x.Id).ToArray(),
             architecturesAll.Where(x => Targets(x.Id).Length == 0).Select(x => x.Id).ToArray(),
-            catalog.Items.Where(x => x.Kind == "test" && !catalog.Links.Any(l => l.To == x.Id)).Select(x => x.Id).Order(StringComparer.Ordinal).ToArray());
+            catalog.Items.Where(x => x.Kind == "test" && !catalog.Links.Any(l => l.To == x.Id)).Select(x => x.Id).Order(StringComparer.Ordinal).ToArray(),
+            root is null ? null : EvidenceSourceCheck.Check(catalog, root));
     }
 
     public static string Json(Report report) => JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase }) + "\n";
@@ -35,7 +36,7 @@ internal static class TraceabilityReport
         static string Safe(string value) => value.Replace("|", "\\|", StringComparison.Ordinal);
         static string Code(string value) => value.Contains('`') ? Safe(value).Replace("`", "&#96;", StringComparison.Ordinal) : Safe(value);
         var b = new StringBuilder("# Traceability (explicit links only)\n\n");
-        b.AppendLine("This report does not verify requirements, tests, source freshness or V-Modell conformity.").AppendLine();
+        b.AppendLine("This report does not verify requirements, test execution or V-Modell conformity.").AppendLine();
         b.AppendLine("| Requirement | Source | Architecture | Test | Status |").AppendLine("|---|---|---|---|---|");
         foreach (var x in report.Requirements)
             b.Append("| `").Append(x.Requirement).Append("` | `").Append(Code(x.Source)).Append("@").Append(Code(x.Version))
@@ -45,6 +46,12 @@ internal static class TraceabilityReport
         b.AppendLine().AppendLine("Unlinked architectures: " + (report.UnlinkedArchitectures.Length == 0 ? "none" : string.Join(", ", report.UnlinkedArchitectures)));
         b.AppendLine("Architectures without tests: " + (report.UntestedArchitectures.Length == 0 ? "none" : string.Join(", ", report.UntestedArchitectures)));
         b.AppendLine("Tests without architecture: " + (report.OrphanedTests.Length == 0 ? "none" : string.Join(", ", report.OrphanedTests)));
+        if (report.Sources is { } sources)
+        {
+            b.AppendLine().AppendLine("Source files (SHA-256):");
+            foreach (var source in sources)
+                b.AppendLine($"- {source.Id}: {source.Status} ({source.Source})");
+        }
         return b.ToString();
     }
 }
