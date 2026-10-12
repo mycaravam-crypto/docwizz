@@ -18,6 +18,7 @@ sealed class ProjectHierarchy
     readonly Dictionary<string, Project> projectPages = new(StringComparer.Ordinal);
     readonly Dictionary<string, Solution> solutionPages = new(StringComparer.Ordinal);
     readonly Dictionary<string, List<Project>> modulePages = new(StringComparer.Ordinal);
+    readonly Dictionary<string, List<Node>> nodesByProject = new(StringComparer.Ordinal);
     readonly Func<string, string?> ownerOf;
 
     public static string ProjectPage(string manifest) => FilePage("projects", manifest);
@@ -84,12 +85,25 @@ sealed class ProjectHierarchy
             Solutions.Add(solution);
             solutionPages.Add(solution.Page, solution);
         }
+        // Index every model node once. The former per-module scan revisited every node for each folder;
+        // per-project rendering then scanned the whole model again for each project (O(modules*nodes +
+        // projects*nodes)). This index makes both paths linear in node count plus rendered output.
+        var ownersByFolder = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        foreach (var node in model.Nodes.Where(n => n.Kind is not ("project" or "package" or "external" or "config")))
+        {
+            if (Owner(node.File) is not { } project) continue;
+            if (!nodesByProject.TryGetValue(project.Id, out var owned))
+                nodesByProject[project.Id] = owned = [];
+            owned.Add(node);
+            var folder = Generator.Folder(node.File);
+            if (!ownersByFolder.TryGetValue(folder, out var ids))
+                ownersByFolder[folder] = ids = new HashSet<string>(StringComparer.Ordinal);
+            ids.Add(project.Id);
+        }
         foreach (var folder in moduleFolders.Order(StringComparer.Ordinal))
         {
-            var owners = model.Nodes.Where(n => n.Kind is not ("project" or "package" or "external" or "config")
-                    && Generator.Folder(n.File) == folder)
-                .Select(n => Owner(n.File)).OfType<Project>().DistinctBy(p => p.Id)
-                .OrderBy(p => p.Path, StringComparer.Ordinal).ToList();
+            var owners = ownersByFolder.GetValueOrDefault(folder)?.Select(id => projectsById[id])
+                .OrderBy(p => p.Path, StringComparer.Ordinal).ToList() ?? [];
             if (owners.Count == 0) UnassignedModules.Add(folder);
             else
             {
@@ -101,6 +115,9 @@ sealed class ProjectHierarchy
 
     // The same ownership rule as the scope filter (ProjectOwnership), cached per file. Metadata-only stubs own nothing.
     public Project? Owner(string file) => ownerOf(file) is { } id ? projectsById.GetValueOrDefault(id) : null;
+
+    /// <summary>Production nodes assigned to a project, indexed once when the hierarchy is constructed.</summary>
+    public IReadOnlyList<Node> NodesFor(string projectId) => nodesByProject.GetValueOrDefault(projectId) ?? [];
 
     public IReadOnlyList<Project> ForModule(string folder) =>
         modulePages.GetValueOrDefault($"modules/{Generator.Slug(folder)}.md") ?? [];
