@@ -3,6 +3,31 @@ namespace DocWizz.Tests.Journey;
 // Exercises the real CLI and file ownership, not only argument parsing.
 public class ProductJourneyTests
 {
+    [Fact]
+    public void Trace_command_renders_explicit_gaps_as_markdown_or_json_without_writing()
+    {
+        const string evidence = """
+            schema: 1
+            evidence:
+              - id: REQ-001
+                kind: requirement
+                text: Must authenticate
+                source: docs/requirements.md
+                version: v1
+            """;
+        using var repo = new Sources(("evidence.yaml", evidence));
+        var markdown = Docwizz.Run("trace", repo.Root, "evidence.yaml");
+        Assert.Equal(0, markdown.Exit);
+        Assert.Contains("REQ-001", markdown.Out);
+        Assert.Contains("no-architecture", markdown.Out);
+        var json = Docwizz.Run("trace", repo.Root, "evidence.yaml", "--format", "json");
+        Assert.Equal(0, json.Exit);
+        Assert.Equal("no-architecture", System.Text.Json.JsonDocument.Parse(json.Out).RootElement
+            .GetProperty("Requirements")[0].GetProperty("Status").GetString());
+        Assert.Equal(1, Docwizz.Run("trace", repo.Root, "missing.yaml").Exit);
+        Assert.False(File.Exists(Path.Combine(repo.Root, "trace.md")));
+    }
+
     const string Template = """
         schema: 1
         product_id: sw-architecture
