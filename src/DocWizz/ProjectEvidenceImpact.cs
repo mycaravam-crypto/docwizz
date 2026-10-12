@@ -43,7 +43,7 @@ internal static class ProjectEvidenceImpact
                 newItems.TryGetValue(id, out var z);
                 var change = a is null ? "added" : z is null ? "removed" : "changed";
                 string[] fields = a is null || z is null ? [] :
-                    new[] { ("kind", a.Kind, z.Kind), ("text", a.Text, z.Text), ("source", a.Source, z.Source), ("version", a.Version, z.Version) }
+                    new[] { ("kind", a.Kind, z.Kind), ("text", a.Text, z.Text), ("source", a.Source, z.Source), ("version", a.Version, z.Version), ("source_hash", a.SourceHash, z.SourceHash) }
                         .Where(f => !string.Equals(f.Item2, f.Item3, StringComparison.Ordinal)).Select(f => f.Item1).ToArray();
                 var related = outgoing[id].Concat(incoming[id]).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
                 return new ChangedEvidence(id, change, fields, related, Tests(id));
