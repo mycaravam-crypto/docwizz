@@ -49,7 +49,7 @@ public class SetupProjectWizardJourneyTests
         var config = File.ReadAllText(Path.Combine(repo.Root, "docwizz.yaml"));
         Assert.DoesNotContain("\nscope:\n", config);
         Assert.Contains("# Project inventory inferred by docwizz discover", config);
-        Assert.Contains("A/A.csproj", File.ReadAllText(Path.Combine(repo.Root, "docs", "index.md")));
+        Assert.Contains("`A`", File.ReadAllText(Path.Combine(repo.Root, "docs", "index.md")));
     }
 
     [Fact]
