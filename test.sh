@@ -462,6 +462,16 @@ rm -rf "$plain"
 }
 
 group_b() {
+# Git fixtures are isolated per group. Check ref health at each boundary so an intermittent
+# "unknown HEAD" failure records whether the git repository or DocWizz's ref lookup failed.
+require_fixture_head() {
+  local phase=$1
+  if ! git -C "$repo" rev-parse --verify HEAD >/dev/null 2>&1; then
+    echo "group B: Git HEAD unavailable at '$phase' (cwd=$PWD, repo=$repo)" >&2
+    git -C "$repo" status --short --branch >&2 || true
+    exit 1
+  fi
+}
 # Change impact: only what a change introduces fails `check --since`
 section "change impact"
 repo=$(mktemp -d)
@@ -477,6 +487,7 @@ namespace Fixture.Application;
 public partial class Report { int Extra() => 2; }
 CS
 git -C "$repo" init -q && git -C "$repo" add -A && git -C "$repo" -c user.name=t -c user.email=t@t commit -qm base
+require_fixture_head "base commit"
 dw check "$repo" --since HEAD | grep -q "check: PASS"
 for args in "HEAD" "HEAD HEAD"; do
     if dw diff "$repo" $args | grep -q "^Changed"; then echo "unchanged symbols reported as changed (diff $args)"; exit 1; fi
@@ -544,6 +555,8 @@ PY
 rm "$repo/docwizz.yaml" "$repo.json"
 # Two refs: commit the change, then compare HEAD~1..HEAD from inside the repo, without a dir argument
 git -C "$repo" add -A && git -C "$repo" -c user.name=t -c user.email=t@t commit -qm change
+require_fixture_head "change commit before diff"
+git -C "$repo" rev-parse --verify HEAD~1 >/dev/null
 refs=$(cd "$repo" && dw diff HEAD~1 HEAD)
 grep -q "vs HEAD~1, at HEAD" <<<"$refs"
 grep -q "+ Fixture.Domain.Audit" <<<"$refs"
@@ -610,6 +623,7 @@ grep -q "^- ARCH-API-001 (custom, medium): Fixture.Api.StockController" "$cdocs/
 rm -rf "$cdocs"
 # a custom violation the change introduces fails check --since; an invalid rule fails fast, naming it
 git -C "$repo" add -A && git -C "$repo" -c user.name=t -c user.email=t@t commit -qm rules
+require_fixture_head "rules commit before check --since"
 cat > "$repo/backend/Api/ReportController.cs" <<'CS'
 namespace Fixture.Api;
 /// <summary>Stock reports.</summary>
@@ -617,7 +631,11 @@ namespace Fixture.Api;
 public class ReportController(Fixture.Infrastructure.ErpClient erp) : Microsoft.AspNetCore.Mvc.ControllerBase { }
 CS
 set +e; since=$(dw check "$repo" --since HEAD 2>&1); code=$?; set -e
-[ "$code" -eq 1 ] && grep -q "Introduced: .* 1 architecture violations" <<<"$since" || { echo "$since"; exit 1; }
+[ "$code" -eq 1 ] && grep -q "Introduced: .* 1 architecture violations" <<<"$since" || {
+  echo "group B: unexpected check --since HEAD result (exit=$code, cwd=$PWD, repo=$repo)" >&2
+  git -C "$repo" rev-parse --show-toplevel HEAD >&2 || true
+  echo "$since"; exit 1;
+}
 grep -q "ARCH-API-001  api → infrastructure  backend/Api/ReportController.cs → backend/Infrastructure/ErpClient.cs  \[medium\]" <<<"$since"
 sed -i 's/from: { layer: domain }/from: { layer: core }/' "$repo/docwizz.yaml"
 set +e; bad=$(dw architecture "$repo" 2>&1); code=$?; set -e
