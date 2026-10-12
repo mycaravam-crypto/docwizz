@@ -242,7 +242,7 @@ static class AiProse
 
     // Sections of cited sentences. `names` maps what the facts call a symbol (and "source") to its id; a sentence keeps
     // only citations found there and is dropped without one. A reply that isn't the JSON asked for is taken as a summary.
-    static Draft? Parse(string? reply, List<string> sources, Dictionary<string, string> names)
+    static Draft? Parse(string? reply, List<string> sources, Dictionary<string, List<string>> names)
     {
         if (reply is null) return null;
         JsonElement json;
@@ -258,7 +258,7 @@ static class AiProse
             {
                 var text = s.TryGetProperty("text", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString()!.Trim() : "";
                 var from = s.TryGetProperty("from", out var f) && f.ValueKind == JsonValueKind.Array
-                    ? f.EnumerateArray().Select(x => x.ValueKind == JsonValueKind.String ? names.GetValueOrDefault(x.GetString()!) : null).OfType<string>().Distinct().ToList()
+                    ? f.EnumerateArray().SelectMany(x => x.ValueKind == JsonValueKind.String ? names.GetValueOrDefault(x.GetString()!) ?? [] : []).Distinct().ToList()
                     : [];
                 if (text.Length > 0 && from.Count > 0) kept.Add(new(text, from));
             }

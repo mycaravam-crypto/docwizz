@@ -29,9 +29,9 @@ class ContextBuilder(string root, CodeModel model)
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping, // keep source readable: no <
     };
 
-    // name as the facts show it → id, for resolving a draft's citations.
-    Dictionary<string, string> Names(IEnumerable<string> ids, string self) =>
-        ids.Where(nodes.ContainsKey).DistinctBy(Name).ToDictionary(Name, id => id).Append(new("source", self))
+    // name as the facts show it → the ids a citation of it rests on, for resolving a draft's citations.
+    Dictionary<string, List<string>> Names(IEnumerable<string> ids, string self) =>
+        ids.Where(nodes.ContainsKey).DistinctBy(Name).ToDictionary(Name, id => new List<string> { id }).Append(new("source", [self]))
             .DistinctBy(kv => kv.Key).ToDictionary(kv => kv.Key, kv => kv.Value);
 
     // The <summary> of a written doc comment, or null when there is none (or it isn't XML).
@@ -45,7 +45,7 @@ class ContextBuilder(string root, CodeModel model)
     public static bool Shown(Node m) => m.Kind is not ("property" or "event" or "constructor");
 
     // A module's facts: its members with their docs (written, else drafted), and the modules on either side.
-    public (string Json, List<string> Sources, Dictionary<string, string> Names) ForModule(string folder, List<Node> members, Dictionary<string, AiProse.Draft> drafts)
+    public (string Json, List<string> Sources, Dictionary<string, List<string>> Names) ForModule(string folder, List<Node> members, Dictionary<string, AiProse.Draft> drafts)
     {
         var ids = members.Select(m => m.Id).ToHashSet();
         string Module(string id) => Naming.Folder(nodes[id].File);
@@ -64,17 +64,25 @@ class ContextBuilder(string root, CodeModel model)
             externalSystems = model.Edges.Where(e => e.Kind == "connects" && ids.Contains(e.From)).Select(e => nodes.GetValueOrDefault(e.To)?.Name).OfType<string>().Distinct(),
         }, Options);
         var names = Names(shown.Select(m => m.Id), shown.FirstOrDefault()?.Id ?? folder);
-        foreach (var m in deps.SelectMany(e => new[] { Module(e.From), Module(e.To) }).Distinct()) names.TryAdd(m, $"module:{m}");
+        foreach (var m in deps.SelectMany(e => new[] { Module(e.From), Module(e.To) }).Distinct()) names.TryAdd(m, [$"module:{m}"]);
         return (json, [.. shown.Select(m => m.Id)], names);
     }
 
     // The facts JSON for one symbol, the symbols it mentions (a draft's provenance) and their names for citations.
-    public (string Json, List<string> Sources, Dictionary<string, string> Names) For(Node n, DocumentationItem f)
+    // Models cite the facts' own fields too ("parameters", "calls"): a field of the symbol's own facts rests on the
+    // symbol, a list of neighbours on the neighbours in it.
+    public (string Json, List<string> Sources, Dictionary<string, List<string>> Names) For(Node n, DocumentationItem f)
     {
         var sources = new List<string> { n.Id };
-        IEnumerable<string> Pick(IEnumerable<string> ids) { var l = ids.Distinct().ToList(); sources.AddRange(l.Where(nodes.ContainsKey)); return l.Select(Name); }
-        IEnumerable<string> To(params string[] kinds) => Pick(Out(n.Id, kinds).Select(e => e.To));
-        IEnumerable<string> From(params string[] kinds) => Pick(In(n.Id, kinds).Select(e => e.From));
+        var lists = new Dictionary<string, List<string>>();
+        IEnumerable<string> Pick(string field, IEnumerable<string> ids)
+        {
+            var l = ids.Distinct().ToList();
+            if (l.Where(nodes.ContainsKey).ToList() is { Count: > 0 } known) { sources.AddRange(known); lists[field] = known; }
+            return l.Select(Name);
+        }
+        IEnumerable<string> To(string field, params string[] kinds) => Pick(field, Out(n.Id, kinds).Select(e => e.To));
+        IEnumerable<string> From(string field, params string[] kinds) => Pick(field, In(n.Id, kinds).Select(e => e.From));
 
         var json = JsonSerializer.Serialize(new
         {
@@ -89,20 +97,29 @@ class ContextBuilder(string root, CodeModel model)
             throws = n.Throws,
             emits = n.Events,
             existingDocs = n.Doc,
-            calls = To("calls"),
-            httpCalls = To("http"),
-            injects = To("injects"),
-            renders = To("renders"),
-            publishes = To("publishes"),
-            calledBy = From("calls", "http"),
-            renderedBy = From("renders"),
+            calls = To("calls", "calls"),
+            httpCalls = To("httpCalls", "http"),
+            injects = To("injects", "injects"),
+            renders = To("renders", "renders"),
+            publishes = To("publishes", "publishes"),
+            calledBy = From("calledBy", "calls", "http"),
+            renderedBy = From("renderedBy", "renders"),
             derived = f.Sections.Where(kv => kv.Value.Origin is Origin.Fact or Origin.Inferred)
                 .ToDictionary(kv => kv.Key, kv => $"{kv.Value.Text} ({kv.Value.Origin.ToString().ToLowerInvariant()})"),
             whyItNeedsDocs = f.Reasons,
             source = Source(n),
         }, Options);
         var all = sources.Concat(f.Sources).Distinct().ToList();
-        return (json, all, Names(all, n.Id));
+        var names = Names(all, n.Id);
+        foreach (var field in JsonDocument.Parse(json).RootElement.EnumerateObject().Where(p => p.Value.ValueKind switch
+            {
+                JsonValueKind.Array => p.Value.GetArrayLength() > 0,
+                JsonValueKind.Object => p.Value.EnumerateObject().Any(),
+                JsonValueKind.String => p.Value.GetString()!.Length > 0,
+                _ => true,
+            }))
+            names.TryAdd(field.Name, lists.GetValueOrDefault(field.Name) ?? [n.Id]);
+        return (json, all, names);
     }
 
     // The symbol's own source lines (at most MaxSourceLines), or null when the file isn't there.
