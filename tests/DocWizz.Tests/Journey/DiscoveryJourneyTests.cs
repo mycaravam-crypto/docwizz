@@ -69,4 +69,37 @@ public class DiscoveryJourneyTests
         using var d = JsonDocument.Parse(r.Out);
         Assert.Equal("not-found", d.RootElement.GetProperty("solutions")[0].GetProperty("unresolvedProjects")[0].GetProperty("reason").GetString());
     }
+
+    [Fact]
+    public void Setup_begins_with_read_only_discovery_and_only_adds_non_binding_comments()
+    {
+        using var repo = Fixture();
+        var result = Docwizz.Run("setup", repo.Root);
+        Assert.Equal(0, result.Exit);
+        Assert.Contains("[1/7] discover     ok", result.Out);
+        Assert.Contains("[2/7] scan         ok", result.Out);
+        Assert.Contains("Discovery:      2 solutions, 3 projects", result.Out);
+        Assert.Contains("review with docwizz discover", result.Out);
+        var yaml = File.ReadAllText(Path.Combine(repo.Root, "docwizz.yaml"));
+        Assert.Contains("# Project inventory inferred by docwizz discover", yaml);
+        Assert.Contains("#   - Cargo/Cargo.csproj", yaml);
+        Assert.DoesNotContain("\nscope:", yaml);
+        Assert.True(File.Exists(Path.Combine(repo.Root, "docs", "index.md")));
+        // A repeated setup does not replace the user's config or change its byte content.
+        Assert.Equal(0, Docwizz.Run("setup", repo.Root).Exit);
+        Assert.Equal(yaml, File.ReadAllText(Path.Combine(repo.Root, "docwizz.yaml")));
+    }
+
+    [Fact]
+    public void Setup_keeps_existing_configuration_even_with_multiple_solutions()
+    {
+        using var repo = Fixture();
+        const string config = "# user config\nprofile: default\nexclude: []\n";
+        File.WriteAllText(Path.Combine(repo.Root, "docwizz.yaml"), config);
+        var result = Docwizz.Run("setup", repo.Root);
+        Assert.Equal(0, result.Exit);
+        Assert.Contains("[1/7] discover     ok", result.Out);
+        Assert.Contains("[3/7] config       ok       kept", result.Out);
+        Assert.Equal(config, File.ReadAllText(Path.Combine(repo.Root, "docwizz.yaml")));
+    }
 }
