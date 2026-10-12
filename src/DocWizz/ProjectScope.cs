@@ -43,15 +43,6 @@ static class ProjectScope
             selected.Add(id);
         }
 
-        // MSBuild can place multiple manifests in one directory. Files cannot be safely assigned to only
-        // one of them; require an all-or-none selection instead of leaking symbols from an unselected project.
-        foreach (var group in inventory.Projects.GroupBy(p => Path.GetDirectoryName(p.Path)?.Replace('\\', '/') ?? ""))
-        {
-            if (group.Count() > 1 && group.Any(p => selected.Contains(p.Id)) && group.Any(p => !selected.Contains(p.Id)))
-                throw new ArgumentException("scope.projects.include: manifests share directory '" + group.Key
-                    + "'; select all projects in that directory or move them to separate directories");
-        }
-
         if (scope.Projects.References == "include")
         {
             var remaining = new Queue<string>(selected.Order(StringComparer.Ordinal));
@@ -65,6 +56,15 @@ static class ProjectScope
         if (scope.Projects.TestLinks)
             foreach (var test in inventory.Projects.Where(p => p.Role == "test"))
                 if (test.References.Any(selected.Contains)) selected.Add(test.Id);
+
+        // MSBuild can place multiple manifests in one directory. Files cannot be safely assigned to only
+        // one of them; require an all-or-none selection instead of leaking symbols from an unselected project.
+        foreach (var group in inventory.Projects.GroupBy(p => Path.GetDirectoryName(p.Path)?.Replace('\\', '/') ?? ""))
+        {
+            if (group.Count() > 1 && group.Any(p => selected.Contains(p.Id)) && group.Any(p => !selected.Contains(p.Id)))
+                throw new ArgumentException("scope.projects.include: manifests share directory '" + group.Key
+                    + "'; select all projects in that directory or move them to separate directories");
+        }
 
         // Keep project identities separate even when a nested project shares its parent's directory tree.
         var owners = inventory.Projects
