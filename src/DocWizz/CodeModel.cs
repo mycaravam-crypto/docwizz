@@ -16,7 +16,12 @@ record Node(string Id, string Kind, string Name, string File, int Line,
 // Label carries the detail a kind alone doesn't (e.g. the event name of a `subscribes` edge).
 record Edge(string From, string To, string Kind, string? Label = null);
 
-record CodeModel(string? Commit, List<Node> Nodes, List<Edge> Edges, string? ScopeFingerprint = null)
+// Effective scope recorded with the model, not reconstructed from the user-facing requested project list.
+record ScopeInventory(List<string> ScannedProjects, List<string> TestProjects, List<string> MetadataOnlyProjects,
+    List<string> ExcludedReferences, List<string> UnresolvedReferences);
+
+record CodeModel(string? Commit, List<Node> Nodes, List<Edge> Edges, string? ScopeFingerprint = null,
+    ScopeInventory? ScopeInventory = null)
 {
     // Where a symbol lives: "file:line" or "file:line-endLine" — the evidence behind a documentation statement.
     public static string Location(Node n) => n.EndLine is { } end && end > n.Line ? $"{n.File}:{n.Line}-{end}" : $"{n.File}:{n.Line}";
