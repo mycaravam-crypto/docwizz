@@ -55,8 +55,7 @@ internal static class ProjectEvidenceImport
     {
         if (rows.Count == 0 || !rows[0].SequenceEqual(Header, StringComparer.Ordinal))
             throw new ArgumentException($"{source}: expected header: {string.Join(",", Header)}");
-        var yaml = new StringBuilder("schema: 1\nevidence:\n");
-        if (rows.Count == 1) yaml.Append("  []\n");
+        var yaml = new StringBuilder(rows.Count == 1 ? "schema: 1\nevidence: []\n" : "schema: 1\nevidence:\n");
         foreach (var (row, i) in rows.Skip(1).Select((x, i) => (x, i)))
         {
             if (row.Length != Header.Length) throw new ArgumentException($"{source}: row {i + 2} must have five fields");
