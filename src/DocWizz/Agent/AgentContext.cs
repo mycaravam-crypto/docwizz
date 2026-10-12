@@ -69,33 +69,33 @@ static class AgentContext
         };
 
         if (nodes.TryGetValue(query, out var exact)) return new(Symbol(exact, Kind(exact), Label(exact)), null, []);
-        if (One([.. symbols.Where(n => Generator.Display(n) == query)], Kind, Label) is { } byName) return byName;
-        if (One([.. symbols.Where(n => Generator.Display(n).Split('(')[0] == query)], Kind, Label) is { } byPrefix) return byPrefix;
+        if (One([.. symbols.Where(n => Naming.Display(n) == query)], Kind, Label) is { } byName) return byName;
+        if (One([.. symbols.Where(n => Naming.Display(n).Split('(')[0] == query)], Kind, Label) is { } byPrefix) return byPrefix;
 
         var path = query.Replace('\\', '/').Trim('/');
         if (path.StartsWith("./")) path = path[2..];
         bool InScope(Node n) => n.Kind is not ("external" or "config");
         if (model.Nodes.Where(n => InScope(n) && n.File == path).ToList() is { Count: > 0 } inFile)
             return new(new("file", path, Ordered(inFile), null), null, []);
-        if (model.Nodes.Where(n => InScope(n) && (Generator.Folder(n.File) == path || Generator.Folder(n.File).StartsWith(path + "/"))).ToList() is { Count: > 0 } inFolder)
+        if (model.Nodes.Where(n => InScope(n) && (Naming.Folder(n.File) == path || Naming.Folder(n.File).StartsWith(path + "/"))).ToList() is { Count: > 0 } inFolder)
             return new(new("module", path, Ordered(inFolder), null), null, []);
 
         if (Regex.Match(query, @"^([A-Za-z]+)\s+(\S+)$") is { Success: true } m)
         {
             var label = $"{m.Groups[1].Value.ToUpperInvariant()} /{m.Groups[2].Value.TrimStart('/')}";
-            if (One([.. symbols.Where(n => n.Tags?.Contains("endpoint") == true && n.Tags.Count > 1 && Generator.EndpointLabel(n) == label)], _ => "endpoint", _ => label) is { } endpoint)
+            if (One([.. symbols.Where(n => n.Tags?.Contains("endpoint") == true && n.Tags.Count > 1 && Naming.EndpointLabel(n) == label)], _ => "endpoint", _ => label) is { } endpoint)
                 return endpoint;
         }
 
         var q = query.ToLowerInvariant();
-        var candidates = symbols.Where(n => Generator.Display(n).Contains(q, StringComparison.OrdinalIgnoreCase) || n.File.Contains(q, StringComparison.OrdinalIgnoreCase)
-                || (n.Tags?.Contains("endpoint") == true && n.Tags.Count > 1 && Generator.EndpointLabel(n).Contains(q, StringComparison.OrdinalIgnoreCase)))
-            .Select(n => n.Tags?.Contains("endpoint") == true && n.Tags.Count > 1 && !n.Id.Contains(q, StringComparison.OrdinalIgnoreCase) ? Generator.EndpointLabel(n) : n.Id)
+        var candidates = symbols.Where(n => Naming.Display(n).Contains(q, StringComparison.OrdinalIgnoreCase) || n.File.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || (n.Tags?.Contains("endpoint") == true && n.Tags.Count > 1 && Naming.EndpointLabel(n).Contains(q, StringComparison.OrdinalIgnoreCase)))
+            .Select(n => n.Tags?.Contains("endpoint") == true && n.Tags.Count > 1 && !n.Id.Contains(q, StringComparison.OrdinalIgnoreCase) ? Naming.EndpointLabel(n) : n.Id)
             .Distinct().OrderBy(c => c.Length).ThenBy(c => c, StringComparer.Ordinal).Take(10).ToList();
         return new(null, $"no symbol, file, folder or endpoint matches {query}", candidates);
 
         static string Kind(Node n) => n.Tags?.Contains("endpoint") == true ? "endpoint" : "symbol";
-        static string Label(Node n) => n.Tags?.Contains("endpoint") == true && n.Tags.Count > 1 ? Generator.EndpointLabel(n) : Generator.Display(n);
+        static string Label(Node n) => n.Tags?.Contains("endpoint") == true && n.Tags.Count > 1 ? Naming.EndpointLabel(n) : Naming.Display(n);
         static List<Node> Ordered(IEnumerable<Node> ns) => [.. ns.OrderBy(n => n.File, StringComparer.Ordinal).ThenBy(n => n.Line).ThenBy(n => n.Id, StringComparer.Ordinal)];
     }
 
@@ -124,9 +124,9 @@ static class AgentContext
         if (target.Primary is { } n)
         {
             var layer = Layer(config, n.File);
-            self.Add(new($"{n.Kind} `{Generator.Display(n)}`" + (n.Visibility is { } v ? $", {v}" : "") + (layer is null ? "" : $", layer {layer}"), "detected", Loc(n)));
-            if (n.Tags?.Contains("endpoint") == true && n.Tags.Count > 1) self.Add(new($"route `{Generator.EndpointLabel(n)}`" + (n.Tags.Contains("authorize") ? ", requires authorization" : ""), "detected"));
-            if (owner is not null) self.Add(new($"member of {owner.Kind} `{Generator.Display(owner)}`", "detected", Loc(owner)));
+            self.Add(new($"{n.Kind} `{Naming.Display(n)}`" + (n.Visibility is { } v ? $", {v}" : "") + (layer is null ? "" : $", layer {layer}"), "detected", Loc(n)));
+            if (n.Tags?.Contains("endpoint") == true && n.Tags.Count > 1) self.Add(new($"route `{Naming.EndpointLabel(n)}`" + (n.Tags.Contains("authorize") ? ", requires authorization" : ""), "detected"));
+            if (owner is not null) self.Add(new($"member of {owner.Kind} `{Naming.Display(owner)}`", "detected", Loc(owner)));
             if (n.Parameters is { Count: > 0 }) self.Add(new($"parameters: {string.Join(", ", n.Parameters.Select(x => $"`{x}`"))}", "detected"));
             if (n.Returns is not null) self.Add(new($"returns `{n.Returns}`", "detected"));
             if (n.Responses is { Count: > 0 }) self.Add(new($"responses: {string.Join(", ", n.Responses)}", "detected"));
@@ -143,7 +143,7 @@ static class AgentContext
             if (includeAi && drafts.TryGetValue(n.Id, out var d) && d.Text.Length > 0 && findingOf.GetValueOrDefault(n.Id)?.Sections.ContainsKey("summary") != true)
                 self.Add(new($"summary 🤖: {Flat(d.Text)}", "ai-drafted"));
             foreach (var m in target.Scope.Skip(1).Where(m => m.Kind is not ("property" or "event")).OrderBy(m => m.Line).ThenBy(m => m.Id, StringComparer.Ordinal))
-                self.Add(new($"member {m.Kind} `{Generator.Display(m)}`", "detected", Loc(m)));
+                self.Add(new($"member {m.Kind} `{Naming.Display(m)}`", "detected", Loc(m)));
         }
         else
         {
@@ -151,7 +151,7 @@ static class AgentContext
             var layers = target.Scope.Select(x => Layer(config, x.File)).OfType<string>().Distinct().Order(StringComparer.Ordinal).ToList();
             self.Add(new($"{target.Kind} `{target.Label}`: {fileCount} file{(fileCount == 1 ? "" : "s")}, {target.Scope.Count} symbols" + (layers.Count > 0 ? $", layer {string.Join(", ", layers)}" : ""), "detected"));
             foreach (var t in tops)
-                self.Add(new($"{t.Kind} `{Generator.Display(t)}`" + (ContextBuilder.WrittenSummary(t) is { } s ? $": {Flat(s)}" : ""), ContextBuilder.WrittenSummary(t) is null ? "detected" : "human", Loc(t)));
+                self.Add(new($"{t.Kind} `{Naming.Display(t)}`" + (ContextBuilder.WrittenSummary(t) is { } s ? $": {Flat(s)}" : ""), ContextBuilder.WrittenSummary(t) is null ? "detected" : "human", Loc(t)));
         }
 
         // 2. Neighbours one hop away, and 3. further hops (signature only).
@@ -185,7 +185,7 @@ static class AgentContext
         // 4. Request flows through the target, external systems, configuration keys (names only, never values).
         var flows = new List<Line>();
         var externals = new Dictionary<string, Node>();
-        foreach (var (entry, chain, reachedExternals) in Generator.FlowChains(graph.Model, config, scope))
+        foreach (var (entry, chain, reachedExternals) in FlowGraph.FlowChains(graph.Model, scope))
         {
             flows.Add(new($"flow `{chain}`", chain.Contains("(inferred)") ? "inferred" : "detected", Loc(entry)));
             foreach (var x in reachedExternals) externals.TryAdd(x.Id, x);
@@ -205,12 +205,12 @@ static class AgentContext
         var around = scope.Concat(edges.Select(x => x.Other)).ToHashSet();
         foreach (var f in findings.Where(f => around.Contains(f.Node.Id) && f.Status != Status.Documented)
             .OrderBy(f => !scope.Contains(f.Node.Id)).ThenByDescending(f => f.Level).ThenBy(f => f.Node.Id, StringComparer.Ordinal))
-            quality.Add(new($"documentation gap ({f.Level.ToString().ToLowerInvariant()}{(Analyzer.IsCritical(f) ? ", critical" : "")}): `{Generator.Display(f.Node)}` missing {string.Join(", ", f.Missing)}", "detected", Loc(f.Node)));
+            quality.Add(new($"documentation gap ({f.Level.ToString().ToLowerInvariant()}{(Analyzer.IsCritical(f) ? ", critical" : "")}): `{Naming.Display(f.Node)}` missing {string.Join(", ", f.Missing)}", "detected", Loc(f.Node)));
         var files = target.Scope.Select(x => x.File).Append(owner?.File).OfType<string>().ToHashSet();
         foreach (var v in arch.Violations.Where(v => files.Contains(v.FromFile) || files.Contains(v.To))
             .OrderBy(v => v.Rule, StringComparer.Ordinal).ThenBy(v => v.FromFile, StringComparer.Ordinal).ThenBy(v => v.Example, StringComparer.Ordinal))
             quality.Add(new($"{v.Rule} ({v.Severity.ToString().ToLowerInvariant()}): {v.Example}", v.Basis == global::Origin.Inferred ? "inferred" : "detected", v.FromFile));
-        var folders = files.Select(Generator.Folder).ToHashSet();
+        var folders = files.Select(Naming.Folder).ToHashSet();
         foreach (var c in arch.Cycles.Where(c => c.Any(folders.Contains)))
             quality.Add(new($"ARCH-003 module cycle: {string.Join(" ↔ ", c)}", "detected"));
 

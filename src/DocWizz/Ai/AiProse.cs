@@ -223,7 +223,7 @@ static class AiProse
     // Every folder with code, keyed by folder and the hashes of what is in it: a changed member re-drafts its module.
     static List<(string Key, string Folder, List<Node> Members)> ModuleTargets(CodeModel model) =>
         [.. model.Nodes.Where(n => n.Hash is not null && n.Kind is not ("config" or "project" or "package" or "external" or "route"))
-            .GroupBy(n => Generator.Folder(n.File)).OrderBy(g => g.Key)
+            .GroupBy(n => Naming.Folder(n.File)).OrderBy(g => g.Key)
             .Select(g => (Key: $"module:{g.Key}@{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
                 System.Text.Encoding.UTF8.GetBytes(string.Join("|", g.OrderBy(n => n.Id).Select(n => $"{n.Id}={n.Hash}")))))[..12].ToLowerInvariant()}",
                 Folder: g.Key, Members: g.ToList()))];

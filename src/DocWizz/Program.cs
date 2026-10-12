@@ -710,7 +710,7 @@ static (bool Ok, string Summary) Gate(DiffResult result, Config config)
     var summary = ok ? "check: PASS" : $"check: FAIL — introduced {critical} critical gaps, {violations} violations" +
         (contradictions > 0 ? $", {contradictions} docs contradicting the code" : "") +
         (complex.Count > 0 ? $", {complex.Count} symbols over complexity {config.Check.MaxComplexity}" : "") +
-        (untested.Count > 0 ? $", {untested.Count} new {config.Check.RequireTests!.ToLowerInvariant()}-level symbols without linked tests ({string.Join(", ", untested.Select(t => Generator.Display(t.Symbol)))})" : "");
+        (untested.Count > 0 ? $", {untested.Count} new {config.Check.RequireTests!.ToLowerInvariant()}-level symbols without linked tests ({string.Join(", ", untested.Select(t => Naming.Display(t.Symbol)))})" : "");
     return (ok, summary);
 }
 
@@ -819,7 +819,7 @@ static (List<string> Failures, List<string> MissingSections) CheckFailures(strin
     if (violations.Count > config.Check.MaxViolations) failures.Add($"{violations.Count} violations > {config.Check.MaxViolations}");
     if (arch.Cycles.Count > config.Check.MaxCycles) failures.Add($"{arch.Cycles.Count} cycles > {config.Check.MaxCycles}");
     if (complex.Count > 0) failures.Add($"complexity > {config.Check.MaxComplexity}: " +
-        string.Join(", ", complex.Take(5).Select(n => $"{Generator.Display(n)} ({n.Complexity})")) + (complex.Count > 5 ? ", …" : ""));
+        string.Join(", ", complex.Take(5).Select(n => $"{Naming.Display(n)} ({n.Complexity})")) + (complex.Count > 5 ? ", …" : ""));
     // Human-authored architecture sections the profile requires (docs/architecture/<name>.md).
     var missingSections = config.ArchitectureSections
         .Where(s => !File.Exists(Path.Combine(root, "docs", "architecture", $"{s}.md"))).ToList();

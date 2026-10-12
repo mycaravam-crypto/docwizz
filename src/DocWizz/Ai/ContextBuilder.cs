@@ -20,7 +20,7 @@ class ContextBuilder(string root, CodeModel model)
     public IEnumerable<Edge> In(string id, params string[] kinds) => kinds.Length == 0 ? incoming[id] : incoming[id].Where(e => kinds.Contains(e.Kind));
 
     // A symbol as the facts and pages name it: its id without the scanner prefix; an unresolved HTTP call as its URL.
-    public string Name(string id) => nodes.TryGetValue(id, out var n) ? Generator.Display(n) : id.Replace("http:", "");
+    public string Name(string id) => nodes.TryGetValue(id, out var n) ? Naming.Display(n) : id.Replace("http:", "");
 
     static readonly JsonSerializerOptions Options = new()
     {
@@ -45,7 +45,7 @@ class ContextBuilder(string root, CodeModel model)
     public (string Json, List<string> Sources, Dictionary<string, string> Names) ForModule(string folder, List<Node> members, Dictionary<string, AiProse.Draft> drafts)
     {
         var ids = members.Select(m => m.Id).ToHashSet();
-        string Module(string id) => Generator.Folder(nodes[id].File);
+        string Module(string id) => Naming.Folder(nodes[id].File);
         var deps = model.Edges.Where(e => CodeModel.DependencyKinds.Contains(e.Kind) && nodes.ContainsKey(e.From) && nodes.ContainsKey(e.To)).ToList();
         var shown = members.Where(m => m.Kind is not ("property" or "event" or "constructor")).Take(40).ToList();
         var json = JsonSerializer.Serialize(new
@@ -75,7 +75,7 @@ class ContextBuilder(string root, CodeModel model)
 
         var json = JsonSerializer.Serialize(new
         {
-            symbol = Generator.Display(n),
+            symbol = Naming.Display(n),
             kind = n.Kind,
             file = n.File,
             route = n.Route is null ? null : $"{n.Tags?.ElementAtOrDefault(1)} {n.Route}".Trim(),

@@ -11,17 +11,13 @@ partial class Generator
     record DeployedUnit(string File, int Line, string Name, string? Image, string? Build, List<string> Ports, List<string> Env,
         List<string> DependsOn, List<string> Volumes, List<string>? Networks = null);
 
-    static readonly string[] DeploymentGlobs = ["Dockerfile*", "*.Dockerfile", "docker-compose*.yml", "docker-compose*.yaml",
-        "compose*.yml", "compose*.yaml", "*.bicep", "*.tf", "Chart.yaml", "azure-pipelines.yml", ".gitlab-ci.yml", "Jenkinsfile",
-        "bitbucket-pipelines.yml", ".circleci/config.yml",
-        ".github/workflows/*.yml", ".github/workflows/*.yaml", "Procfile", "fly.toml", "vercel.json", "netlify.toml"];
     static readonly string[] Workloads = ["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob", "Pod"];
 
     List<string>? deploymentFiles;
     List<string> DeploymentFiles => deploymentFiles ??= [.. FindDeploymentFiles().Order()];
     List<DeployedUnit>? composeUnits, kubernetesUnits;
-    List<DeployedUnit> ComposeUnits => composeUnits ??= [.. DeploymentFiles.Where(IsCompose).SelectMany(Compose)];
-    List<DeployedUnit> KubernetesUnits => kubernetesUnits ??= [.. DeploymentFiles.Where(f => !IsCompose(f) && (f.EndsWith(".yaml") || f.EndsWith(".yml"))).SelectMany(Kubernetes)];
+    List<DeployedUnit> ComposeUnits => composeUnits ??= [.. DeploymentFiles.Where(DeploymentDescriptors.IsCompose).SelectMany(Compose)];
+    List<DeployedUnit> KubernetesUnits => kubernetesUnits ??= [.. DeploymentFiles.Where(f => !DeploymentDescriptors.IsCompose(f) && (f.EndsWith(".yaml") || f.EndsWith(".yml"))).SelectMany(Kubernetes)];
 
     static string HostKind(List<string> tags) =>
         tags.Contains("npm") ? "frontend (npm)"
@@ -30,7 +26,6 @@ partial class Generator
         : tags.Contains("maven") || tags.Contains("gradle") ? "Java application"
         : "executable";
 
-    static bool IsCompose(string f) => Path.GetFileName(f).Contains("compose");
 
     // Configuration keys the deployment sets (compose `environment`, Kubernetes `env`), A__B read as A:B → where.
     ILookup<string, string>? deploymentEnv;
@@ -214,18 +209,5 @@ partial class Generator
         .Select(m => m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value)];
 
     // From the scan's file list, so exclude: and .gitignore apply here too.
-    IEnumerable<string> FindDeploymentFiles() => Files.Where(rel => IsDeploymentFile(root, rel));
-
-    // A deployment descriptor by name, or a Kubernetes manifest by content. `rel` is relative to `root`, `/`-separated.
-    public static bool IsDeploymentFile(string root, string rel) =>
-        DeploymentGlobs.Any(g => FileSystemName.MatchesSimpleExpression(g, g.Contains('/') ? rel : Path.GetFileName(rel)))
-        || IsKubernetes(Path.Combine(root, rel));
-
-    // Any other YAML file with a top-level apiVersion and kind.
-    static bool IsKubernetes(string f)
-    {
-        if (!(f.EndsWith(".yaml") || f.EndsWith(".yml")) || IsCompose(f)) return false;
-        var head = File.ReadLines(f).Take(50).ToList();
-        return head.Any(l => l.StartsWith("apiVersion:")) && head.Any(l => l.StartsWith("kind:"));
-    }
+    IEnumerable<string> FindDeploymentFiles() => Files.Where(rel => DeploymentDescriptors.Is(root, rel));
 }

@@ -36,8 +36,9 @@ order. [Cli.cs](src/DocWizz/Cli.cs) holds the command and option table that the 
 [Setup.cs](src/DocWizz/Setup/Setup.cs) backs `docwizz setup`: it runs the stages in order, isolates failures, detects
 the stack from the model and narrows the default `docwizz.yaml` to the layers and test globs files actually match.
 
-Source is organized by stage: `Discovery/`, `Scanning/`, `Model/`, `Analysis/`, `Packages/`, `Generation/`, `Ai/`,
-`Agent/`, `Product/`, `Setup/`.
+Source is organized by stage: `Discovery/`, `Scanning/`, `Model/`, `Analysis/`, `Generation/`, `Ai/`,
+`Agent/`, `Product/`, `Setup/`. Folders depend one way: Model ← Scanning ← Discovery ←
+Analysis ← Generation, Ai, Agent, Setup, Product.
 
 ## The code model
 
@@ -160,7 +161,7 @@ Without `scope:`, everything is scanned as before. Limits and the acceptance cri
 - **[Projects](src/DocWizz/Scanning/Projects.cs)** reads `.csproj` (SDK, frameworks, package and project references,
   role from `OutputType`, the SDK and test packages; `Directory.Packages.props` and `VersionOverride`),
   `package.json`, and `.sln`/`.slnx` solution folders. Files in a test project count as test code, whatever their path.
-- **[Configuration](src/DocWizz/Model/Configuration.cs)** reads `appsettings*.json`, `.env`, Kubernetes ConfigMaps and
+- **[Configuration](src/DocWizz/Scanning/Configuration.cs)** reads `appsettings*.json`, `.env`, Kubernetes ConfigMaps and
   Helm `values*.yaml` env blocks: keys per environment, no values (only a URL's host).
 - **[Externals](src/DocWizz/Scanning/Externals.cs)** holds the curated list of known systems (packages, calls, container
   images, IaC resource types) and the link step: absolute URLs, package-only evidence, DbContexts without a known
@@ -187,22 +188,24 @@ Without `scope:`, everything is scanned as before. Limits and the acceptance cri
 - **[Diff](src/DocWizz/Analysis/Diff.cs)** compares two models by symbol id and body hash: changed, added and removed
   symbols, affected pages (including every page along a flow through a touched symbol), introduced gaps and violations,
   and changed package versions. New external systems and layer dependencies are listed as ADR candidates. Each added or
-  changed symbol gets its linked tests from [TestLinks](src/DocWizz/Analysis/TestLinks.cs): `tests` edges to it, its
+  changed symbol gets its linked tests from [TestLinks](src/DocWizz/Model/TestLinks.cs): `tests` edges to it, its
   interface, an implementation or a member, the same rule the analyzer uses for "tested".
 
 ## Packages
 
-- **[Sbom](src/DocWizz/Packages/Sbom.cs)** writes CycloneDX 1.6 from the Projects scan: an `application` component per
+Sbom and Remediation live in `Analysis/`; the packages view is part of `Generator`.
+
+- **[Sbom](src/DocWizz/Analysis/Sbom.cs)** writes CycloneDX 1.6 from the Projects scan: an `application` component per
   project, a `library` per declared package and version with a package URL, and project → package / project → project
   dependencies. Only a plain literal (`1.2.3`) fills `version`; ranges, wildcards, properties and git/file specs stay
   as `docwizz:declaredVersion`, marked unresolved. Direct dependencies only, byte-identical for identical inputs.
-  `Sbom.Collect` also feeds `views/packages.md` ([PackagesView](src/DocWizz/Packages/PackagesView.cs)).
-- **[Remediation](src/DocWizz/Packages/Remediation.cs)** turns targets (`--package/--to`, `remediation.targets`, or
+  `Sbom.Collect` also feeds `views/packages.md` ([PackagesView](src/DocWizz/Generation/PackagesView.cs)).
+- **[Remediation](src/DocWizz/Analysis/Remediation.cs)** turns targets (`--package/--to`, `remediation.targets`, or
   NuGet version drift) into suggestions that keep three kinds of evidence apart:
   - *detected*: the declared version and its line, and from them a `dotnet add package` command or a one-line central
     patch (none when the version isn't a literal);
   - *inferred*: types importing the package's namespaces in referencing projects, the flows through them
-    (`Generator.FlowsThrough`) and their linked tests;
+    (`FlowGraph.FlowsThrough`) and their linked tests;
   - *validated*: only with `--validate`, which applies the edits in a temporary copy and runs the configured steps.
 
   A major update without validation is always low confidence; a failed step makes it potentially breaking; passing
@@ -217,12 +220,13 @@ Without `scope:`, everything is scanned as before. Limits and the acceptance cri
 | [Generator.cs](src/DocWizz/Generation/Generator.cs) | `index.md`, `architecture.md`, `api.md`, `frontend.md`, `quality.md`, shared helpers |
 | [Modules.cs](src/DocWizz/Generation/Modules.cs) | `modules/<folder>.md`: role, key components, API, data, external systems, configuration, flows, gaps, observations, component reference |
 | [ProjectPages.cs](src/DocWizz/Generation/ProjectPages.cs) | `solutions/*.md`, `projects/*.md`, from [ProjectHierarchy](src/DocWizz/Discovery/ProjectHierarchy.cs) |
-| [Flows.cs](src/DocWizz/Generation/Flows.cs) | flow tracing used by api.md, frontend.md and module pages |
 | [Views.cs](src/DocWizz/Generation/Views.cs) | `views/context.md`, `containers.md`, `components.md`, `data.md`; the configuration table |
 | [Deployment.cs](src/DocWizz/Generation/Deployment.cs) | `views/deployment.md`: compose, Kubernetes, Dockerfiles, IaC |
 | [Description.cs](src/DocWizz/Generation/Description.cs) | `architecture-description.md`, structured after ISO/IEC/IEEE 42010 |
+| [PackagesView.cs](src/DocWizz/Generation/PackagesView.cs) | `views/packages.md`: the package inventory behind `docwizz sbom` |
 
-- **Flows.** A 0-1 breadth-first search from an endpoint or route. It follows `calls`, `accesses`, `http`, `renders`,
+- **Flows.** [FlowGraph](src/DocWizz/Analysis/FlowGraph.cs) traces them for the pages, change impact, package
+  remediation, security rule SEC-005 and agent context: a 0-1 breadth-first search from an endpoint or route. It follows `calls`, `accesses`, `http`, `renders`,
   `routes-to`, `connects` and minimal-API `injects`, and dispatches interface members to implementations. Steps inside
   a C# type and interface dispatch cost 0, so the hops shown are between units. Frontend flows stop at endpoints.
 - **Project hierarchy.** `ProjectHierarchy` builds path-hash page ids, multi-solution membership and one

@@ -85,7 +85,7 @@ static class Security
                 Add("SEC-004", from, "package", edge.To[3..], $"{Short(from)} uses {edge.To[3..]}");
 
         // SEC-005: an endpoint without required authorization whose flow can reach a sensitive external system.
-        var g = new Generator("", "", model, [], null!, config, []);
+        var g = new FlowGraph(model);
         // One finding per endpoint and system (`to` names both), so a second endpoint in the same file is a new finding.
         foreach (var e in endpoints.Where(e => Auth(e) != "authorize"))
             foreach (var ext in g.ReachedFrom(e.Id, n => n.Kind == "external" && sec.Sensitive.Contains(Externals.Category(n))))

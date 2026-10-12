@@ -126,7 +126,7 @@ static class ProjectScope
             // A repository-level descriptor is not unassigned application source. Preserve it separately
             // so scoped generation still reports CI, Kubernetes, compose, IaC and shared configuration.
             if (scope.RepositoryFiles == "include" &&
-                (Generator.IsDeploymentFile(root, rel) || Configuration.IsConfigFile(path)))
+                (DeploymentDescriptors.Is(root, rel) || Configuration.IsConfigFile(path)))
                 return true;
             // A solution or project manifest is never pulled in as an incidental repository file.
             if (rel.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)

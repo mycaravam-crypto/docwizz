@@ -254,7 +254,7 @@ static class Remediations
             .GroupBy(e => e.From).Select(g => new PackageUse(g.Key, CodeModel.Location(nodes[g.Key]), g.First().To[3..],
                 [.. links.Of(g.Key).Select(l => l.Test)]))
             .OrderBy(u => u.Location, StringComparer.Ordinal).ToList();
-        var flows = Generator.FlowsThrough(model, config, uses.Select(u => u.Id))
+        var flows = FlowGraph.FlowsThrough(model, uses.Select(u => u.Id))
             .Select(FlowLabel).Distinct().ToList();
         var testProjects = reach.Where(id => nodes[id].Tags?.Contains("test") == true).Select(id => nodes[id].File).Order(StringComparer.Ordinal).ToList();
         var tests = uses.SelectMany(u => u.Tests).Select(TestLinks.Name).Distinct().Order(StringComparer.Ordinal).ToList();
@@ -262,7 +262,7 @@ static class Remediations
             uses, flows, tests, testProjects, ImpactNote) { Public = uses.Count(u => nodes[u.Id].Visibility == "public") };
     }
 
-    static string FlowLabel(Node entry) => entry.Kind == "route" ? $"route {entry.Route ?? entry.Name}" : Generator.EndpointLabel(entry);
+    static string FlowLabel(Node entry) => entry.Kind == "route" ? $"route {entry.Route ?? entry.Name}" : Naming.EndpointLabel(entry);
 
     // Risk from the kind of update and what the code shows; never "safe", whatever the version numbers say.
     static StaticAssessment Assess(string kind, string target, List<PackageChange> changes, PackageImpact impact)
@@ -304,7 +304,7 @@ static class Remediations
         string Top(string id) => parent.TryGetValue(id, out var p) ? Top(p) : id;
         var touched = changed.Select(n => n.Id).ToList();
         var types = touched.Select(Top).ToHashSet();
-        var flows = Generator.FlowsThrough(model, config, touched).Select(FlowLabel).ToHashSet();
+        var flows = FlowGraph.FlowsThrough(model, touched).Select(FlowLabel).ToHashSet();
         var outside = impact.Uses.Count(u => !types.Contains(Top(u.Id)));
         var outsideFlows = impact.Flows.Count(f => !flows.Contains(f));
         if (impact.Uses.Count + impact.Flows.Count == 0) return "no code DocWizz can see imports the package, inside the change or outside it";

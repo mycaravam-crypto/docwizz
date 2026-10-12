@@ -75,13 +75,13 @@ static class Diff
         var pages = new SortedSet<string>();
         foreach (var n in added.Concat(removed).Concat(changed))
         {
-            pages.Add($"modules/{Generator.Slug(Generator.Folder(n.File))}.md");
+            pages.Add($"modules/{Naming.Slug(Naming.Folder(n.File))}.md");
             if (n.Kind == "endpoint" || n.Tags?.Contains("endpoint") == true) pages.Add("api.md");
             if (n.Kind is "component" or "route") pages.Add("frontend.md");
         }
         // Flows passing through a touched symbol: a changed service marks the endpoints and routes that reach it.
-        pages.UnionWith(Generator.FlowPages(after, config, added.Concat(changed).Select(n => n.Id)));
-        pages.UnionWith(Generator.FlowPages(before, config, removed.Select(n => n.Id)));
+        pages.UnionWith(FlowGraph.FlowPages(after, added.Concat(changed).Select(n => n.Id)));
+        pages.UnionWith(FlowGraph.FlowPages(before, removed.Select(n => n.Id)));
         if (added.Count + removed.Count > 0) pages.Add("index.md");
         if (depsAdded.Count + depsRemoved.Count + newViolations.Count > 0)
             pages.UnionWith(["architecture.md", "architecture-description.md", "views/components.md"]);
@@ -141,7 +141,7 @@ static class Diff
 
     static HashSet<string> ModuleDeps(CodeModel m)
     {
-        var files = m.Nodes.ToDictionary(n => n.Id, n => Generator.Folder(n.File));
+        var files = m.Nodes.ToDictionary(n => n.Id, n => Naming.Folder(n.File));
         return m.Edges.Where(e => CodeModel.DependencyKinds.Contains(e.Kind) && files.ContainsKey(e.From) && files.ContainsKey(e.To))
             .Select(e => (From: files[e.From], To: files[e.To])).Where(d => d.From != d.To)
             .Select(d => $"{d.From} → {d.To}").ToHashSet();
@@ -175,7 +175,7 @@ static class Diff
             o.WriteLine();
             o.WriteLine($"Possibly stale docs ({d.Stale.Count}) — the contract changed, the doc comment didn't");
             foreach (var s in d.Stale.OrderBy(s => s.After.File).ThenBy(s => s.After.Line))
-                o.WriteLine($"  ! {s.After.File}:{s.After.Line}  {Generator.Display(s.After)}  changed: {string.Join(", ", s.Changes)}");
+                o.WriteLine($"  ! {s.After.File}:{s.After.Line}  {Naming.Display(s.After)}  changed: {string.Join(", ", s.Changes)}");
         }
         if (d.Packages.Count > 0)
         {
@@ -190,14 +190,14 @@ static class Diff
             o.WriteLine();
             o.WriteLine($"Test traceability ({d.Tests.Count(t => t.Tests.Count > 0)} of {d.Tests.Count} changed symbols linked) — {TestLinks.Note}");
             foreach (var t in d.Tests.Where(t => t.Tests.Count > 0))
-                o.WriteLine($"  {(t.Added ? "+" : "~")} {Generator.Display(t.Symbol)}  ← " + string.Join(", ", t.Tests.Select(l =>
+                o.WriteLine($"  {(t.Added ? "+" : "~")} {Naming.Display(t.Symbol)}  ← " + string.Join(", ", t.Tests.Select(l =>
                     TestLinks.Name(l.Test) + (l.Via is null ? "" : $" (via {TestLinks.Name(l.Via)})"))));
             var none = d.Tests.Where(t => t.Tests.Count == 0).ToList();
             if (none.Count > 0)
             {
                 o.WriteLine($"  No linked test ({none.Count})");
                 foreach (var t in none.OrderByDescending(t => t.Level))
-                    o.WriteLine($"    {(t.Added ? "+" : "~")} {Generator.Display(t.Symbol)}{(t.Level >= Level.Medium ? $"  [{t.Level.ToString().ToLowerInvariant()}]" : "")}");
+                    o.WriteLine($"    {(t.Added ? "+" : "~")} {Naming.Display(t.Symbol)}{(t.Level >= Level.Medium ? $"  [{t.Level.ToString().ToLowerInvariant()}]" : "")}");
             }
         }
         o.WriteLine();
@@ -205,17 +205,17 @@ static class Diff
                     $"{d.NewGaps.Count(f => !Analyzer.IsCritical(f))} other documentation gaps, {d.NewViolations.Count} architecture violations, " +
                     $"{d.NewFlags.Count} doc quality flags");
         foreach (var f in d.NewGaps.OrderByDescending(f => f.Level))
-            o.WriteLine($"  {f.Level,-6} {f.Node.File}:{f.Node.Line}  {Generator.Display(f.Node)}  missing: {string.Join(", ", f.Missing)}");
+            o.WriteLine($"  {f.Level,-6} {f.Node.File}:{f.Node.Line}  {Naming.Display(f.Node)}  missing: {string.Join(", ", f.Missing)}");
         foreach (var v in d.NewViolations)
             o.WriteLine($"  {v.Rule}  {v.FromLayer} → {v.ToLayer}  {v.FromFile} → {v.To}  [{v.Severity.ToString().ToLowerInvariant()}]");
         foreach (var (f, q) in d.NewFlags)
-            o.WriteLine($"  {q.Rule}{(q.Origin == Origin.Inferred ? " (inferred)" : "")}  {f.Node.File}:{f.Node.Line}  {Generator.Display(f.Node)}  {q.Detail}");
+            o.WriteLine($"  {q.Rule}{(q.Origin == Origin.Inferred ? " (inferred)" : "")}  {f.Node.File}:{f.Node.Line}  {Naming.Display(f.Node)}  {q.Detail}");
 
         void Section(string title, List<Node> ns, string sign)
         {
             if (ns.Count == 0) return;
             o.WriteLine($"{title} ({ns.Count})");
-            foreach (var n in ns.OrderBy(n => n.File).ThenBy(n => n.Line)) o.WriteLine($"  {sign} {Generator.Display(n)}");
+            foreach (var n in ns.OrderBy(n => n.File).ThenBy(n => n.Line)) o.WriteLine($"  {sign} {Naming.Display(n)}");
             o.WriteLine();
         }
     }

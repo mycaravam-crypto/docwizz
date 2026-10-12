@@ -76,7 +76,7 @@ partial class Generator
         sb.AppendLine($"## Modules ({project.Modules.Count})\n");
         if (project.Modules.Count == 0) sb.AppendLine("No production code modules detected for this project.");
         foreach (var folder in project.Modules.Order(StringComparer.Ordinal))
-            sb.AppendLine($"- [{folder}](../modules/{Slug(folder)}.md) — {Layer(folder) ?? "no layer"}");
+            sb.AppendLine($"- [{folder}](../modules/{Naming.Slug(folder)}.md) — {Layer(folder) ?? "no layer"}");
         sb.AppendLine();
 
         var tops = owned.Where(n => TopKinds.Contains(n.Kind) && n.Kind != "module"
@@ -87,9 +87,9 @@ partial class Generator
             sb.AppendLine($"## Components ({tops.Count})\n\n| Component | Kind | Module |\n|---|---|---|");
             foreach (var component in tops)
             {
-                var folder = Folder(component.File);
-                sb.AppendLine($"| [{Esc(component.Name)}](../modules/{Slug(folder)}.md#{Anchor(component.Id)}) | " +
-                    $"{component.Kind} | [{folder}](../modules/{Slug(folder)}.md) |");
+                var folder = Naming.Folder(component.File);
+                sb.AppendLine($"| [{Esc(component.Name)}](../modules/{Naming.Slug(folder)}.md#{Anchor(component.Id)}) | " +
+                    $"{component.Kind} | [{folder}](../modules/{Naming.Slug(folder)}.md) |");
             }
             sb.AppendLine();
         }
@@ -102,7 +102,7 @@ partial class Generator
             sb.AppendLine("Structural links to test code, not measured code coverage.\n");
             sb.AppendLine("| Component | Linked tests |\n|---|---|");
             foreach (var item in linked)
-                sb.AppendLine($"| [{Esc(item.Symbol.Name)}](../modules/{Slug(Folder(item.Symbol.File))}.md#{Anchor(item.Symbol.Id)}) | " +
+                sb.AppendLine($"| [{Esc(item.Symbol.Name)}](../modules/{Naming.Slug(Naming.Folder(item.Symbol.File))}.md#{Anchor(item.Symbol.Id)}) | " +
                     $"{Esc(string.Join(", ", item.Tests.Select(t => TestLinks.Short(t.Test))))} |");
             sb.AppendLine();
         }

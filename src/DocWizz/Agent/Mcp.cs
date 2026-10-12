@@ -261,7 +261,7 @@ sealed class McpServer(McpServer.Host host)
     object Describe(Node n) => new
     {
         id = n.Id, kind = n.Tags?.Contains("endpoint") == true && n.Kind != "endpoint" ? $"{n.Kind} (endpoint)" : n.Kind,
-        name = n.Tags?.Contains("endpoint") == true && n.Tags.Count > 1 ? Generator.EndpointLabel(n) : Generator.Display(n),
+        name = n.Tags?.Contains("endpoint") == true && n.Tags.Count > 1 ? Naming.EndpointLabel(n) : Naming.Display(n),
         location = CodeModel.Location(n),
     };
 
@@ -276,12 +276,12 @@ sealed class McpServer(McpServer.Host host)
             .Where(n => kind is null || n.Kind == kind || (kind == "endpoint" && n.Tags?.Contains("endpoint") == true))
             .Select(n =>
             {
-                var label = n.Tags?.Contains("endpoint") == true && n.Tags.Count > 1 ? Generator.EndpointLabel(n) : null;
-                var rank = new[] { Rank(n.Name, q), Rank(Generator.Display(n), q), label is null ? 3 : Rank(label, q) }.Min();
-                return (Rank: rank, Key: Generator.Display(n), Item: Describe(n));
+                var label = n.Tags?.Contains("endpoint") == true && n.Tags.Count > 1 ? Naming.EndpointLabel(n) : null;
+                var rank = new[] { Rank(n.Name, q), Rank(Naming.Display(n), q), label is null ? 3 : Rank(label, q) }.Min();
+                return (Rank: rank, Key: Naming.Display(n), Item: Describe(n));
             });
         var modules = kind is null or "module"
-            ? model.Nodes.Where(n => n.Kind is not ("external" or "config")).Select(n => Generator.Folder(n.File)).Distinct()
+            ? model.Nodes.Where(n => n.Kind is not ("external" or "config")).Select(n => Naming.Folder(n.File)).Distinct()
                 .Select(f => (Rank: Rank(f, q), Key: f, Item: (object)new { id = f, kind = "module", name = f, location = f }))
             : [];
         return Page(a, symbols.Concat(modules).Where(x => x.Rank < 3).OrderBy(x => x.Rank).ThenBy(x => x.Key.Length).ThenBy(x => x.Key, StringComparer.Ordinal).Select(x => x.Item), "matches");
@@ -325,7 +325,7 @@ sealed class McpServer(McpServer.Host host)
         var label = $"{Required(a, "verb")} {Required(a, "route")}";
         var endpoint = AgentContext.Resolve(model, label) is { Target: { Kind: "endpoint", Primary: { } n } } ? n
             : throw new ToolError($"no endpoint {label}; find_symbol with kind endpoint lists them");
-        var flow = Generator.FlowChains(model, host.Config, [endpoint.Id]).FirstOrDefault(f => f.Entry.Id == endpoint.Id);
+        var flow = FlowGraph.FlowChains(model, [endpoint.Id]).FirstOrDefault(f => f.Entry.Id == endpoint.Id);
         return new
         {
             endpoint = Describe(endpoint),
@@ -340,11 +340,11 @@ sealed class McpServer(McpServer.Host host)
     object ModuleSummary(JsonObject a)
     {
         var path = Required(a, "path").Replace('\\', '/').Trim('/');
-        var members = model.Nodes.Where(n => n.Kind is not ("external" or "config") && (Generator.Folder(n.File) == path || Generator.Folder(n.File).StartsWith(path + "/"))).ToList();
+        var members = model.Nodes.Where(n => n.Kind is not ("external" or "config") && (Naming.Folder(n.File) == path || Naming.Folder(n.File).StartsWith(path + "/"))).ToList();
         if (members.Count == 0) throw new ToolError($"no code under {path}; find_symbol with kind module lists the folders");
         var ids = members.Select(n => n.Id).ToHashSet();
         var parent = model.Edges.Where(e => e.Kind == "contains").GroupBy(e => e.To).ToDictionary(g => g.Key, g => g.First().From);
-        string? Module(string id) => graph.Nodes.TryGetValue(id, out var n) && n.Kind is not ("external" or "config") ? Generator.Folder(n.File) : null;
+        string? Module(string id) => graph.Nodes.TryGetValue(id, out var n) && n.Kind is not ("external" or "config") ? Naming.Folder(n.File) : null;
         var deps = model.Edges.Where(e => CodeModel.DependencyKinds.Contains(e.Kind)).ToList();
         var layers = members.Select(n => host.Config.Architecture.Layers.FirstOrDefault(kv => kv.Value.Any(g => System.IO.Enumeration.FileSystemName.MatchesSimpleExpression(g, n.File))).Key)
             .OfType<string>().Distinct().Order(StringComparer.Ordinal);
@@ -357,7 +357,7 @@ sealed class McpServer(McpServer.Host host)
         object Body() => new
         {
             module = path, layers, files = members.Select(n => n.File).Distinct().Count(),
-            endpoints = members.Where(n => n.Tags?.Contains("endpoint") == true && n.Tags.Count > 1).Select(Generator.EndpointLabel).Order(StringComparer.Ordinal),
+            endpoints = members.Where(n => n.Tags?.Contains("endpoint") == true && n.Tags.Count > 1).Select(Naming.EndpointLabel).Order(StringComparer.Ordinal),
             dependsOn = deps.Where(e => ids.Contains(e.From) && !ids.Contains(e.To)).Select(e => Module(e.To)).OfType<string>().Distinct().Order(StringComparer.Ordinal),
             usedBy = deps.Where(e => ids.Contains(e.To) && !ids.Contains(e.From)).Select(e => Module(e.From)).OfType<string>().Distinct().Order(StringComparer.Ordinal),
             externalSystems = model.Edges.Where(e => e.Kind == "connects" && ids.Contains(e.From)).Select(e => graph.Nodes.GetValueOrDefault(e.To)?.Name).OfType<string>().Distinct().Order(StringComparer.Ordinal),

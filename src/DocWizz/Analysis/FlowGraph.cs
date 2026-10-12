@@ -1,22 +1,31 @@
 // Flows: how a request travels through the code, from a frontend route or an endpoint over calls, member access,
 // interface dispatch and HTTP down to data and external systems. Shown per unit: a C# type, an endpoint, a TS
-// function or store, a component, an external system.
-partial class Generator
+// function or store, a component, an external system. Used by the pages, change impact, package remediation, security rule SEC-005
+// and agent context.
+
+// Units reached from the start, grouped by distance (the start itself excluded), and the unit-level steps between them.
+record FlowTrace(List<List<string>> Layers, List<(string From, string To)> Steps);
+
+class FlowGraph(CodeModel model)
 {
     static readonly string[] FlowKinds = ["calls", "accesses", "http", "renders", "routes-to", "connects"];
 
-    // Units reached from the start, grouped by distance (the start itself excluded), and the unit-level steps between them.
-    record FlowTrace(List<List<string>> Layers, List<(string From, string To)> Steps);
-
+    readonly Dictionary<string, Node> nodes = model.Nodes.ToDictionary(n => n.Id);
+    readonly Dictionary<string, string> parent = model.Edges.Where(e => e.Kind == "contains").ToDictionary(e => e.To, e => e.From);
+    readonly Dictionary<string, FlowTrace> traces = [];
     ILookup<string, Edge>? flowOut;
     ILookup<string, string>? implementedBy;
 
+    // The top-level symbol a member belongs to. A TS class/interface/type/enum stands on its own inside its file module.
+    public string Top(string id) => parent.TryGetValue(id, out var p)
+        && !(nodes[p].Kind == "module" && nodes[id].Kind is "class" or "interface" or "type" or "enum") ? Top(p) : id;
+
     // A C# member is shown as its type, except endpoints; TS functions, components, routes and external systems as themselves.
-    string Unit(string id) => nodes.TryGetValue(id, out var n) && n.Kind is "method" or "constructor" or "property" or "event"
+    public string Unit(string id) => nodes.TryGetValue(id, out var n) && n.Kind is "method" or "constructor" or "property" or "event"
         && n.Tags?.Contains("endpoint") != true && parent.ContainsKey(id) ? Top(id) : id;
 
     // stop: reached but not followed (e.g. endpoints, for frontend flows that link to api.md instead).
-    FlowTrace Trace(string start, Func<Node, bool>? stop = null)
+    public FlowTrace Trace(string start, Func<Node, bool>? stop = null)
     {
         flowOut ??= model.Edges.Where(e => FlowKinds.Contains(e.Kind)
             || (e.Kind == "injects" && nodes.GetValueOrDefault(e.From)?.Kind == "endpoint")).ToLookup(e => e.From); // minimal-API handler parameters
@@ -63,28 +72,29 @@ partial class Generator
         return new(layers, steps);
     }
 
-    string UnitLabel(string id) => nodes.TryGetValue(id, out var n)
-        ? n.Kind == "external" ? ExternalLabel(n) : n.Tags?.Contains("endpoint") == true ? EndpointLabel(n) : n.Name
+    // Frontend routes stop at the endpoints they reach; api.md continues from there.
+    public FlowTrace TraceOf(string id) => traces.TryGetValue(id, out var t) ? t
+        : traces[id] = nodes[id].Kind == "route" ? Trace(id, stop: n => n.Tags?.Contains("endpoint") == true) : Trace(id);
+
+    public string UnitLabel(string id) => nodes.TryGetValue(id, out var n)
+        ? n.Kind == "external" ? Externals.Label(n) : n.Tags?.Contains("endpoint") == true ? Naming.EndpointLabel(n) : n.Name
         : id.StartsWith("http:") ? $"{id[5..]} (no endpoint found)" : id;
 
     // "A → B, C → D": each hop lists every unit first reached at that distance.
-    string Chain(FlowTrace t, int perLayer = 6) => string.Join(" → ", t.Layers.Select(l =>
+    public string Chain(FlowTrace t, int perLayer = 6) => string.Join(" → ", t.Layers.Select(l =>
         string.Join(", ", l.Take(perLayer).Select(UnitLabel)) + (l.Count > perLayer ? $", +{l.Count - perLayer} more" : "")));
 
-    // What the flow from `start` can reach, for checks outside the generator (security rules).
+    // What the flow from `start` can reach (security rules).
     public IEnumerable<Node> ReachedFrom(string start, Func<Node, bool> match) => Reached(TraceOf(start), match);
 
     // What a flow ends up touching: DbContexts, and external systems.
-    IEnumerable<Node> Reached(FlowTrace t, Func<Node, bool> match) =>
+    public IEnumerable<Node> Reached(FlowTrace t, Func<Node, bool> match) =>
         t.Layers.SelectMany(l => l).Select(nodes.GetValueOrDefault).OfType<Node>().Where(match);
-}
 
-partial class Generator
-{
     // Entry points (endpoints, frontend routes) whose flow starts at or passes through any of the touched symbols.
-    public static List<Node> FlowsThrough(CodeModel model, Config config, IEnumerable<string> touched)
+    public static List<Node> FlowsThrough(CodeModel model, IEnumerable<string> touched)
     {
-        var g = new Generator("", "", model, [], null!, config, []);
+        var g = new FlowGraph(model);
         var units = touched.Where(g.nodes.ContainsKey).Select(g.Unit).ToHashSet();
         return model.Nodes.Where(n => n.Kind == "route" || n.Tags?.Contains("endpoint") == true)
             .Where(n => units.Contains(g.Unit(n.Id)) || g.TraceOf(n.Id).Layers.SelectMany(l => l).Any(units.Contains))
@@ -93,9 +103,9 @@ partial class Generator
 
     // Change impact: pages that show a flow passing through any touched symbol — api.md / frontend.md, and the module
     // page of every unit on that flow (module pages list each flow that starts or passes there).
-    public static IEnumerable<string> FlowPages(CodeModel model, Config config, IEnumerable<string> touched)
+    public static IEnumerable<string> FlowPages(CodeModel model, IEnumerable<string> touched)
     {
-        var g = new Generator("", "", model, [], null!, config, []);
+        var g = new FlowGraph(model);
         var units = touched.Where(g.nodes.ContainsKey).Select(g.Unit).ToHashSet();
         foreach (var n in model.Nodes.Where(n => n.Kind == "route" || n.Tags?.Contains("endpoint") == true))
         {
@@ -103,22 +113,19 @@ partial class Generator
             if (!on.Skip(1).Any(units.Contains)) continue;
             yield return n.Kind == "route" ? "frontend.md" : "api.md";
             foreach (var u in on)
-                if (g.nodes.TryGetValue(u, out var x) && x.Kind != "external") yield return $"modules/{Slug(Folder(x.File))}.md";
+                if (g.nodes.TryGetValue(u, out var x) && x.Kind != "external") yield return $"modules/{Naming.Slug(Naming.Folder(x.File))}.md";
         }
     }
-}
 
-partial class Generator
-{
     // Entry points (endpoints, frontend routes) whose flow starts at or passes through the touched symbols, each with its
     // chain as api.md shows it and the external systems it reaches: the request-flow facts of an agent context package.
-    public static List<(Node Entry, string Chain, List<Node> Externals)> FlowChains(CodeModel model, Config config, IEnumerable<string> touched)
+    public static List<(Node Entry, string Chain, List<Node> Externals)> FlowChains(CodeModel model, IEnumerable<string> touched)
     {
-        var g = new Generator("", "", model, [], null!, config, []);
-        return [.. FlowsThrough(model, config, touched).Select(n =>
+        var g = new FlowGraph(model);
+        return [.. FlowsThrough(model, touched).Select(n =>
         {
             var trace = g.TraceOf(n.Id);
-            var start = n.Kind == "route" ? n.Route ?? n.Name : EndpointLabel(n);
+            var start = n.Kind == "route" ? n.Route ?? n.Name : Naming.EndpointLabel(n);
             return (n, trace.Layers.Count == 0 ? start : $"{start} → {g.Chain(trace)}", g.Reached(trace, x => x.Kind == "external").OrderBy(x => x.Id, StringComparer.Ordinal).ToList());
         })];
     }
