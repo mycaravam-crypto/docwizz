@@ -100,7 +100,7 @@ static class Projects
     }
 
     // Project path (relative to the solution) → its solution folder ("API/Public"; "" at the root).
-    static IEnumerable<(string Path, string Folder)> SolutionFolders(string file)
+    internal static IEnumerable<(string Path, string Folder)> SolutionFolders(string file)
     {
         var text = File.ReadAllText(file);
         if (file.EndsWith(".slnx"))
