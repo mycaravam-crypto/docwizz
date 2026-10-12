@@ -17,6 +17,7 @@ an example and its options.
 
 | Command / option | Primary use | Typical user | Default path? |
 |---|---|---|---|
+| `discover` | project and solution inventory | developers | optional |
 | `setup` | first repository setup | all users | **yes, start here** |
 | `generate` | write or refresh documentation | developers | yes |
 | `check` | quality gate | CI, developers | yes |
@@ -42,6 +43,11 @@ an example and its options.
 | `--version`, `-v` | which build is installed | bug reports, CI logs | optional |
 
 ## Workflows by goal
+
+### Project discovery (Epic #124 P0)
+
+`docwizz discover .` lists project manifests, solution memberships and unresolved references. `docwizz discover . --format json` returns a deterministic inventory. Discovery does not run language scanners, build tools or AI and does not select projects for generation yet.
+
 
 ### 1. First setup
 
@@ -322,6 +328,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 
 | Command | Syntax | Purpose | Use |
 |---|---|---|---|
+| `discover` | `docwizz discover [dir] [--format console\|json]` | read-only inventory of solutions, projects and references | everyday |
 | `setup` | `docwizz setup [dir] [--force] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | detect the stack, write `docwizz.yaml`, analyze, architecture, generate, check | start here |
 | `generate` | `docwizz generate <dir> [out] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
 | `check` | `docwizz check <dir> [--since ref] [--format f] [--profile p]` | quality gate; exit 1 when thresholds fail | CI |
@@ -345,7 +352,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 |---|---|---|---|---|
 | `--context <file.yaml>` | off | product | validates sourced project statements against template before writing | product documents |
 | `--profile <name\|file.yaml>` | `profile:` in `docwizz.yaml`, else `default` | setup, generate, check, analyze, architecture, diff | overrides `profile:` and the file's own `patterns:` | normal |
-| `--format console\|json` | `console` | analyze, check, architecture, context, diff, product, remediate | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
+| `--format console\|json` | `console` | discover, analyze, check, architecture, context, diff, product, remediate | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
 | `--for <target>` | — | context | required; a symbol id or qualified name, a file, a folder, or `VERB /route`; ambiguous or unknown exits 1 with candidates | coding agents |
 | `--hops <n>` | 2 | context | how far neighbours are listed, 1 to 4; hops beyond 1 are signature only | coding agents |
 | `--budget <tokens>` | 6000 | context | at least 100; estimated as characters / 4; lower-priority sections are cut first, and the cut is reported | coding agents |
@@ -388,7 +395,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 | `setup` | every stage ran (`SUCCESS` or `SUCCESS_WITH_FINDINGS`) | a stage failed (`FAILED`; the others are still reported), or bad arguments |
 | `check` | thresholds pass | thresholds fail, or bad arguments/config |
 | `architecture` | within `max_violations`/`max_cycles` | above them |
-| `analyze`, `generate`, `scan`, `sbom` | done | bad arguments or config |
+| `discover`, `analyze`, `generate`, `scan`, `sbom` | done | bad arguments or config |
 | `product` | draft written or unchanged; `check`: no errors (warnings allowed) | invalid template, unsafe overwrite, bad arguments; `check`: an error finding |
 | `remediate` | done (suggestions alone never fail) | a `--validate` run failed, or bad arguments |
 | `context` | package written | no `--for`, an ambiguous or unknown target (candidates on stderr), or bad arguments |
