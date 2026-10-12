@@ -103,6 +103,6 @@ public class SetupProjectWizardJourneyTests
         Assert.Equal(0, r.Exit);
         Assert.Contains("[2/8] select", r.Out);
         Assert.Contains("[4/8] config       ok       written", r.Out);
-        Assert.Null(Config.Load(repo.Root).Scope);
+        Assert.Null(global::Config.Load(repo.Root).Scope);
     }
 }
