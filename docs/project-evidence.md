@@ -56,3 +56,9 @@ strictly from requirement through architecture to test, directed cycles are
 impossible by construction; no separate cycle solver is needed. Existing YAML
 files without `links` remain valid and yield an empty link list. This step
 introduces no CLI command or inferred traceability; the gap report follows in #120.
+
+## Traceability report (P2.3, #120)
+
+`docwizz trace <dir> <evidence.yaml> [--format json]` renders explicit links as a stable Markdown matrix or machine-readable JSON on stdout. Each requirement is classified as `linked`, `no-architecture`, or `no-test`. Separate lists identify architecture records without incoming requirement links or outgoing test links. Invalid link IDs are rejected by the schema parser before reporting. Missing source documents and stale versions are **not** verified in this report, so it makes no freshness or conformity claim. Report findings do not affect exit status; invalid YAML does.
+
+The report uses camelCase JSON keys. `partial` marks a requirement linked to multiple architecture records when at least one of those has no test; `orphanedTests` lists tests with no incoming architecture link. `OFFEN` in Markdown means missing explicit evidence, not a failed test. Source file names resolve from the current working directory first, then from `<dir>`, as for product templates.
