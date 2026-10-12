@@ -141,8 +141,8 @@ static class SetupProjectSelection
         if (positions.Count > 1)
             throw new ScopeException("docwizz.yaml: multiple top-level scope: blocks; remove duplicates before selection");
 
-        var rendered = scope is null ? "" : string.Join(newline, new[]
-        {
+        var rendered = scope is null ? "" : string.Join(newline, (List<string>)[
+
             "scope:",
             "  projects:",
             "    include:",
@@ -152,7 +152,7 @@ static class SetupProjectSelection
             "  unassigned_sources: " + scope.UnassignedSources,
             "  repository_files: " + scope.RepositoryFiles,
             ""
-        });
+        ]);
         if (positions.Count == 0)
         {
             if (rendered.Length == 0) return yaml;
@@ -164,7 +164,7 @@ static class SetupProjectSelection
         while (last < lines.Count)
         {
             var text = lines[last].Text;
-            if (text.Length > 0 && text[0] is not (' ' or '\t' or '\r' or '\n' or '#')) break;
+            if (text.Length > 0 && text[0] is not (' ' or '\t' or '\r' or '\n')) break;
             last++;
         }
         return yaml[..lines[first].From] + rendered + (last < lines.Count ? yaml[lines[last].From..] : "");
