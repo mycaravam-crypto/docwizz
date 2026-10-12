@@ -126,6 +126,24 @@ a sidebar to every page and keyboard search. For example, `api.md` traces every 
 - `PUT /api/materials/{id}`: MaterialController → MaterialService → SqlMaterialRepository → AppDbContext → SQL Server (inferred)
 ```
 
+Optional, **AI-free route screenshots** (requires a running frontend and an installed Playwright Chromium browser):
+
+```sh
+docwizz generate . --html --screenshots --base-url http://localhost:5173
+```
+
+Most applications require login for almost every route. Save a browser session **once** with Playwright (sign in interactively in the opened browser; no password is given to DocWizz):
+
+```sh
+npx playwright codegen --save-storage=.auth/docwizz-state.json http://localhost:5173
+docwizz generate . --html --screenshots --base-url http://localhost:5173 \
+  --storage-state .auth/docwizz-state.json
+```
+
+Paths passed to `--storage-state` are relative to the scanned project directory. Without the flag, each route is captured anonymously. With it, every route gets a fresh, isolated browser context initialized with the same saved Playwright storage state (cookies and localStorage). An expired session or a route that redirects to login is skipped with a warning; DocWizz never automates login or handles passwords. Dynamic routes, HTTP errors (400+) and URL redirects are skipped as well. A login overlay without a URL change cannot be recognized, and a client-side guard that redirects more than about 400 ms after the page load may still be captured. SessionStorage-based authentication may require other tooling because Playwright storage-state files do not preserve sessionStorage.
+
+DocWizz saves successful captures to `docs/screenshots/` and links them from `frontend.md` / `frontend.html`. Install Chromium for the matching Playwright version once: `npx playwright@1.63.0 install chromium` (Node is already needed for the frontend scanner), or, with PowerShell, `pwsh src/DocWizz/bin/Release/net10.0/playwright.ps1 install chromium` after the Quick start build. **The storage-state JSON contains sensitive session tokens:** keep it out of Git (for example ignore `.auth/`), restrict access to the file, and use a dedicated low-privilege test account with sanitized test data. Screenshots themselves may also contain sensitive information.
+
 The HTML reader includes a responsive navigation, page filtering, keyboard search (`/`), reading outline, reading progress, and light/dark appearance switch. The report shell is embedded into each generated HTML file, so it works offline with `file://`; Mermaid diagrams still require network access to the pinned CDN. For a visual update after rebuilding DocWizz, run `docwizz generate . --html` in the target repository and open `docs/index.html` (not `docs/index.md`). If the browser shows an old page, use a hard reload and verify the updated `docs/index.html` timestamp.\n\nEvery HTML page names the DocWizz version that generated it in its footer, so an upgrade refreshes all of them. To also rewrite them when nothing else changed, use `docwizz generate . --refresh-html-on-version-change` (implies `--html`). The version stamp is `docs/.docwizz/html-version.txt`. Progress bars appear automatically on interactive stderr; add `--progress` to force them in redirected output. Regenerating otherwise rewrites only the pages that changed. Pages you write yourself, such as anything in `docs/architecture/`,
 are linked and never overwritten.
 

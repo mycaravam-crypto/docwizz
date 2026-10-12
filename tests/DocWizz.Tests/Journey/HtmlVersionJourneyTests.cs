@@ -29,6 +29,17 @@ public class HtmlVersionJourneyTests
     }
 
     [Fact]
+    public void Missing_storage_state_fails_before_browser_or_generation()
+    {
+        using var repo = Repos.ConsoleApp();
+        var result = Docwizz.Run("generate", repo.Root, "--screenshots",
+            "--base-url", "http://localhost:5173", "--storage-state", ".auth/missing.json");
+        Assert.Equal(1, result.Exit);
+        Assert.Contains("--storage-state file not found", result.Err);
+        Assert.False(File.Exists(Path.Combine(repo.Root, "docs", "frontend.md")));
+    }
+
+    [Fact]
     public void Forced_progress_is_visible_only_on_stderr()
     {
         using var repo = Repos.ConsoleApp();
