@@ -245,7 +245,7 @@ See [AI drafts](#ai-drafts) for the privacy rules.
 | Command | Does |
 |---|---|
 | `docwizz discover [dir] [--format json]` | Read-only inventory of project manifests, solutions, references and unassigned code |
-| `docwizz setup [dir] [--force]` | **First run:** detect the stack, write `docwizz.yaml` from evidence, analyze, generate the docs, check |
+| `docwizz setup [dir] [--select-projects] [--all-projects] [--yes] [--force]` | **First run:** detect the stack, write `docwizz.yaml` from evidence, analyze, generate the docs, check |
 | `docwizz analyze <dir>` | Documentation report |
 | `docwizz architecture <dir>` | Layers, layer dependencies, violations, cycles |
 | `docwizz check <dir> [--since <ref>]` | Report; exit 1 if thresholds fail (only on new problems with `--since`) |
@@ -276,10 +276,10 @@ monorepos.
 
 ## Configuration
 
-**Multi-project documentation:** To document only selected manifests, add `scope.projects.include` using their root-relative paths. `references: metadata` retains dependency-only stubs; `include` scans reachable dependencies; `exclude` omits them. `test_links: true` includes referencing test projects only for traceability. By default, `repository_files: include` preserves system-wide deployment, CI and configuration descriptors; `unassigned_sources` controls loose code, not those descriptors. Excluded reference edges are explicitly listed in the generated scope report. With no `scope:` all previous scans remain unchanged. Changing a scope invalidates the saved context model; regenerate docs before using the saved-model `diff` baseline. The full schema, precedence and CI behavior are in [CLI.md](CLI.md#explicit-project-scope-epic-124-p1).
+**Multi-project documentation:** Run `docwizz setup . --select-projects` on an interactive console, or add `scope.projects.include` using root-relative manifest paths. `references: metadata` retains dependency-only stubs; `include` scans reachable dependencies; `exclude` omits them. `test_links: true` includes referencing test projects only for traceability. By default, `repository_files: include` preserves system-wide deployment, CI and configuration descriptors; `unassigned_sources` controls loose code, not those descriptors. Excluded reference edges are explicitly listed in the generated scope report. With no `scope:` all previous scans remain unchanged. Changing a scope invalidates the saved context model; regenerate docs before using the saved-model `diff` baseline. The full schema, precedence and CI behavior are in [CLI.md](CLI.md#explicit-project-scope-epic-124-p1).
 
 
-For multi-solution repositories, run `docwizz discover . --format json` to inspect the complete project inventory without a full code scan. Project selection can be configured with `scope:` in `docwizz.yaml` (see [CLI.md](CLI.md#explicit-project-scope-epic-124-p1)). The interactive setup wizard and hierarchical navigation remain subsequent stages of [Epic #124](https://github.com/mycaravam-crypto/docwizz/issues/124).
+For multi-solution repositories, run `docwizz discover . --format json` to inspect the complete project inventory without a full code scan. Project selection can be configured with `scope:` in `docwizz.yaml` (see [CLI.md](CLI.md#explicit-project-scope-epic-124-p1)). The interactive project-selection wizard is now part of setup (P2). On a new, ambiguous multi-solution repository with a real terminal, it offers project selection after discovery and before the scan. Use `docwizz setup . --select-projects` to update the `scope:` block in an existing config, `--all-projects` to clear it, or `--yes` for scripts/CI without prompts. The remaining hierarchical documentation navigation is P3 of [Epic #124](https://github.com/mycaravam-crypto/docwizz/issues/124).
 
 
 `docwizz setup` writes a `docwizz.yaml` from what the repository shows (`docwizz init` writes the plain defaults).
