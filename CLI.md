@@ -1,101 +1,38 @@
 # docwizz CLI reference
 
-New here? Run `docwizz setup .` and read what it prints. You only need this page when you want something specific.
+New here? Run `docwizz setup .` and read what it prints. This page is for when you want something specific.
 
-- [Workflows by goal](#workflows-by-goal): what to run for the thing you want to do
-- [Commands](#commands) and [options](#options): every command and flag
-- [Precedence and conflicts](#precedence-and-conflicts): what wins when settings overlap
-- [Exit codes](#exit-codes)
-- [Versioning](#versioning): what `docwizz --version` prints and how releases are numbered
-- [Generated vs. your files](#generated-vs-your-files)
-- [Context for coding agents](#8-context-for-coding-agents): the docs as an agent's map of the code
+- [Workflows by goal](#workflows-by-goal): what to run for the thing you want to do, in the order you'll need it
+- [Multi-project repositories](#multi-project-repositories): discovery, project selection and scope
+- [SBOM inventory](#sbom-inventory) and [project evidence](#project-evidence): supply chain, traceability, product drafts
+- Reference: [commands](#commands), [options](#options), [precedence](#precedence-and-conflicts),
+  [exit codes](#exit-codes), [generated vs. your files](#generated-vs-your-files), [versioning](#versioning)
 
 `docwizz help` lists the commands. `docwizz help <command>` or `docwizz <command> --help` shows one command's purpose,
 an example and its options.
 
 ## At a glance
 
-| Command / option | Primary use | Typical user | Default path? |
+| Command | Primary use | Typical user | Default path? |
 |---|---|---|---|
-| `discover` | project and solution inventory | developers | optional |
 | `setup` | first repository setup | all users | **yes, start here** |
-| `generate` | write or refresh documentation | developers | yes |
-| `check` | quality gate | CI, developers | yes |
+| `discover` | project and solution inventory | developers | optional |
 | `analyze` | documentation report | developers | yes |
 | `architecture` | architecture diagnostics | architects | optional |
+| `generate` | write or refresh documentation | developers | yes |
 | `diff` | change impact | developers, CI | optional |
+| `check` | quality gate | CI, developers | yes |
 | `context` | token-budgeted facts about one target, for coding agents | coding agents | optional |
 | `mcp` | read-only MCP server over the code model | coding agents | optional |
-| `evidence-diff` | compare two evidence snapshots and explicit test impact | product documents | optional |
-| `trace` | explicit traceability gaps from a YAML catalog | product documents | optional |
-| `product` | product draft from a YAML template, from code and project evidence | architects | optional |
 | `sbom` | CycloneDX manifest SBOM | supply-chain inventory | optional |
 | `remediate` | package update suggestions | maintainers | optional |
+| `trace` | explicit traceability gaps from a YAML catalog | product documents | optional |
+| `evidence-diff` | compare two evidence snapshots and explicit test impact | product documents | optional |
+| `product` | product draft from a YAML template, from code and project evidence | architects | optional |
 | `init` | blank config with every default | manual setup | no |
 | `scan` | raw code model | advanced, debugging | no |
-| `--html` | HTML next to the Markdown | documentation readers | optional |
-| `--screenshots` | optional Playwright route PNGs (`generate` only) | documentation readers | opt-in |
-| `--ai` | local AI drafts | opt-in users | optional |
-| `--profile` | what counts as documented | teams with their own rules | optional |
-| `--format json` | machine-readable output | CI, tooling | advanced |
-| `--since <ref>` | gate only what a change introduces | CI | optional |
-| `--for <target>` | what a context package is about | coding agents | optional |
-| `--validate` | build and test remediations in a temporary copy | maintainers | optional |
-| `--force` | regenerate `docwizz.yaml` during setup | setup only | no |
-| `--select-projects` | run the TTY project-selection wizard, fail if input/output is redirected | setup only | no |
-| `--all-projects` | explicitly clear a saved `scope:` (preserve other YAML) | setup only | no |
-| `--yes` | never prompt; on a new config retain the legacy all-projects default | setup only | no |
-| `--timings` | time and memory per stage | benchmarks | advanced |
-| `--version`, `-v` | which build is installed | bug reports, CI logs | optional |
 
 ## Workflows by goal
-
-### Explicit project scope (Epic #124 P1)
-
-```yaml
-scope:
-  projects:
-    include: ["Cargo-Core/Cargo-Core.csproj", "FileAPI/FileAPI.csproj"]
-    references: metadata   # metadata | include | exclude
-    test_links: true
-  unassigned_sources: exclude  # include | exclude: source files outside project ownership
-  repository_files: include   # include | exclude: repository-wide deployment, CI and configuration descriptors
-```
-
-The manifest paths are **relative to the scan root**, case-sensitive and separated by `/`. Copy them from `docwizz discover . --format json`; no globs, absolute paths or `..`. Omitting `scope:` retains the old whole-repository behavior. An invalid or undiscovered project path is an actionable configuration error rather than a silent fallback. Multiple project manifests in one directory must be selected together because their source ownership cannot be inferred reliably. A root-level manifest owns only its matching language source files (C# for `.csproj`, JS/TS/Vue for `package.json`, Java for Maven/Gradle); unrelated sibling sources follow `unassigned_sources`.
-
-`metadata` (default for explicit scope) leaves referenced, unselected projects as labeled **dependency-only project stubs**, without scanning their code or including their package details. `include` follows project references recursively, scanning each reachable local project. `exclude` omits unselected projects and their reference edges, but lists each omitted reference in the generated scope report; missing/out-of-root references are separately reported as unresolved. `test_links: true` also scans test-project code with a direct reference to a selected project for traceability; test symbols remain excluded from production documentation and coverage. Test-only references do not create metadata-only production project stubs. `unassigned_sources: exclude` applies to *source files* without a project owner (not to CI/deployment descriptors). `repository_files: include` (default with explicit scope) retains recognized repository-wide Docker/Compose, Kubernetes, Terraform, CI and configuration descriptors for the system view, even outside selected project directories; `exclude` omits them. Descriptors belonging to an explicitly excluded project remain excluded.
-
-The scope is applied **before** language scanning and is shared by `scan`, `generate`, `setup`, `analyze`, `check`, architecture analysis, context, and SBOM/deployment file enumeration. Discovery itself always inventories all files visible through `.gitignore` and `exclude:`. Existing `exclude:` rules win: an excluded manifest cannot be selected. The generated `docs/index.md` discloses the requested and effective project selections (including test evidence), metadata-only dependencies, omitted `exclude` references, missing references and repository file policy. The persisted code model includes a deterministic **scope-configuration** fingerprint; `context`/MCP will rescan instead of reusing a model generated under another scope, while `diff` without an explicit baseline requires `generate` again after a scope change. The fingerprint does **not** include the discovered inventory or the contents of project manifests; regenerate after new project references or project moves to refresh those facts. P1 keeps `setup` inference-compatible (`discover → scan → config → ...`), but an existing `scope:` is resolved in the discovery stage and applied before scan; the interactive selection/config reordering is deferred to P2.
-
-
-### Final acceptance, legacy projects and benchmarking (Epic #124 P4)
-
-The multi-project acceptance matrix and migration notes are in [MULTI_PROJECT_ACCEPTANCE.md](MULTI_PROJECT_ACCEPTANCE.md). Non-SDK .NET Framework / ASP.NET MVC project manifests are recognized as projects, but conventional MVC `MapRoute` routing cannot be fully inferred statically; the generated API page explicitly warns when a classic `.csproj` is present. On Linux with .NET 10 use `bash scripts/benchmark-multi-project.sh` for repeatable full-versus-scoped scan measurements. CI publishes samples and medians; no arbitrary machine-specific wall-clock limit is used as a correctness gate. Discovery, scanner scope and documentation hierarchy use the **same** project-ownership rules, including root-level npm manifests.
-
-### Generated project and solution hierarchy (Epic #124 P3)
-
-`docwizz generate . --html` produces `docs/index.md` → `docs/solutions/*.md` → `docs/projects/*.md` → existing `docs/modules/*.md` and per-component anchors. A shared project is analyzed once but linked from all containing solutions. A project without any solution appears in a separate branch; source modules that cannot be attributed remain under **Unassigned modules**. Each project page shows its path identity, role/SDK/TFMs, solution folders, represented source-file count, local modules, component links, structural test traceability (not measured coverage), project references and direct package dependencies. Scoped references marked `metadata-only` lead to disclosure-only project pages without source details or packages. The container architecture view disambiguates duplicate project names with their manifest paths while retaining the existing labels for unique names. P4 indexes project-owned nodes, modules and direct project/package edges once per generation (no CLI or path migration). Markdown/HTML links retain the existing folder-module URLs. HTML adds a nested sidebar, breadcrumbs and solution/project search hits. Generated pages under `docs/projects/` and `docs/solutions/` carry the generator marker and are removed on scope change; manually maintained pages are never overwritten. Filenames use a readable manifest slug plus a stable path-derived suffix; do not hardcode these filenames externally. Container views add the manifest path to a project name only when two projects share that name (e.g. two `Shared.csproj`). A project in several solutions lists all of them on its page; the HTML breadcrumb shows the first solution in path order. The `projects/` and `solutions/` folders are created only when the model contains projects or solutions.
-
-### Interactive project selection (Epic #124 P2)
-
-```bash
-docwizz setup .                   # new ambiguous repository in a TTY: offers selection
-docwizz setup . --select-projects # explicitly select/reselect projects (TTY required)
-docwizz setup . --yes             # non-interactive / CI: no prompt
-docwizz setup . --all-projects    # clear an existing scope without rewriting other config keys
-```
-
-After the read-only discovery stage, a new repository with multiple Solutions or standalone projects offers an **interactive selection only when stdin and stdout are TTYs and `CI` is unset or empty**. Even CI jobs with allocated pseudo-terminals never prompt; `--select-projects` fails fast if `CI` is set. Existing configurations never get a surprise prompt; use `--select-projects` to edit them. The wizard lists projects by stable path ID, role (including test projects), solution membership and direct project-reference count. Type project numbers to toggle, `s1` / `s2` to toggle all projects from a solution, `a` for all, `n` for none, `d` to confirm and `q` to cancel. You can enter multiple commands separated by commas/spaces. Initial selection prefers root-level Solutions and excludes test projects; `test_links: true` continues to include related test evidence without documenting tests as production. At least one project must be selected. Selections that violate scope rules (for example, splitting two manifests in one directory) show a validation message and can be corrected without restarting setup. Cancelling or EOF does not change the config and aborts setup before a full scan.
-
-**Selection is resolved before C#/Frontend/Java/SQL parsing.** For a new configuration, setup first applies the chosen scope in memory and writes it alongside inferred layers/test globs after the scoped scan. For an existing config, `--select-projects` updates **only the top-level `scope:` block** (without `--force`), retaining the existing profile/check/architecture settings. Whitespace and comments **outside** the `scope:` block are retained, including trailing blank separators; comments **inside** the regenerated `scope:` block are not preserved. `--all-projects` removes only that block. Existing `scope:` reference modes and test-link settings are retained by the wizard. Running again with no selection flag keeps the configuration unchanged. A non-TTY call with `--select-projects` fails promptly; `--yes` or a default redirected `setup` never prompts and never silently narrows the scope.
-
-For normal redirected/CI runs the setup stages remain `discover → scan → config → analyze → architecture → generate → check`. With a selection stage (`--select-projects`, `--all-projects`, or a new setup in an interactive TTY), the stage order is `discover → select → scan → config → analyze → architecture → generate → check`. The config stage intentionally remains after scanning so the inferred layer/test defaults are based on evidence. Scope selection is nonetheless complete before the scan.
-
-### Project discovery (Epic #124 P0)
-
-`docwizz discover .` lists project manifests, solution memberships and unresolved references. `docwizz discover . --format json` returns a deterministic inventory. Discovery does not run language scanners, build tools or AI. In P1, an explicit `scope:` in `docwizz.yaml` selects projects for generation; interactive selection in `setup` is still P2.
-
 
 ### 1. First setup
 
@@ -103,7 +40,7 @@ For normal redirected/CI runs the setup stages remain `discover → scan → con
 docwizz setup .
 ```
 
-This runs the seven non-interactive stages in the table below and prints one summary at the end. On an interactive setup or with a selection flag, an extra `select` stage is inserted between `discover` and `scan` (see above). In all cases the project scope is resolved before the source scan:
+`setup` runs these stages and prints one summary at the end:
 
 | # | Stage | Does | If it fails |
 |---|---|---|---|
@@ -115,8 +52,9 @@ This runs the seven non-interactive stages in the table below and prints one sum
 | 6 | generate | writes the docs to `<dir>/docs` | reported; the next stages still run |
 | 7 | check | the quality gate at the configured thresholds | reported |
 
-`setup` never prompts when redirected or with `--yes`. In an interactive terminal, a new ambiguous multi-project repository offers the wizard; an existing config requires explicit `--select-projects`. If multiple solutions or standalone projects are found, setup adds an informational project inventory to freshly generated YAML as comments (no active `scope:`). Existing YAML is preserved. Without a configured scope, the full source-code scan is unchanged. With a saved scope, the selection is applied before source scanners as described above. The summary starts with a status
-that keeps problems in the repository apart from problems running docwizz:
+With project selection, a `select` stage runs between `discover` and `scan`
+([Multi-project repositories](#multi-project-repositories)). The summary starts with a status that keeps problems in
+the repository apart from problems running docwizz:
 
 | Status | Means | Exit |
 |---|---|---|
@@ -124,44 +62,56 @@ that keeps problems in the repository apart from problems running docwizz:
 | `SUCCESS_WITH_FINDINGS` | every stage ran; the check fails or there are findings. On a new repository this is the starting point, not an error | 0 |
 | `FAILED` | a stage could not run (invalid `docwizz.yaml`, unreadable files, a scanner error); its error is listed | 1 |
 
-`setup` never contacts an AI endpoint without `--ai`. It never runs the repository's build, tests or package tools
-(`dotnet`, `npm`, `mvn`, `docker`, …): it only reads files. It never copies configuration values into
-`docwizz.yaml`.
+**What `setup` never does:** contact an AI endpoint without `--ai`; run the repository's build, tests or package tools
+(`dotnet`, `npm`, `mvn`, `docker`, …); copy configuration values into `docwizz.yaml`.
 
-**The `docwizz.yaml` it writes** starts from the defaults (`docwizz init` writes the same defaults). It changes
-only what the repository shows evidence for:
+**The `docwizz.yaml` it writes** starts from the defaults (the same as `docwizz init`) and changes only what the
+repository shows evidence for:
 
-- `architecture.layers`: keeps the default layers that at least one source file falls into. Each kept layer is
-  commented with `# inferred: N files, e.g. <path>`. `architecture.allow` is narrowed to the same layers. If no
-  layer matches, the defaults stay and a comment says to configure them.
-- `tests`: keeps the default test globs that match test files and comments them as inferred. If none match, all
-  the defaults stay.
+- `architecture.layers` keeps the default layers that at least one source file falls into, each commented
+  `# inferred: N files, e.g. <path>`; `architecture.allow` is narrowed to them. If none match, the defaults stay.
+- `tests` keeps the default test globs that match test files. If none match, all defaults stay.
+- In a repository with several solutions or standalone projects, a project inventory is added as comments.
 
-Nothing about intent is inferred. The profile, `check` thresholds, allowed dependencies, `exclude`, `comment_docs` and
-security stay at their defaults. P0/P1 write project inventory comments only when discovery finds an ambiguous multi-project layout; it does not infer a project selection. The summary's *Follow-up* list says which of them to decide yourself, and suggests a
-profile when the stack has one (`aspnet` for an ASP.NET Core backend, `vue` for a Vue frontend). The same repository
-and docwizz version always produce the same file, with no timestamps.
+Intent is never inferred: the profile, `check` thresholds, allowed dependencies, `exclude`, `comment_docs` and security
+stay at their defaults. The summary's *Follow-up* list names what to decide yourself and suggests a profile when the
+stack has one (`aspnet`, `vue`). The same repository and docwizz version always produce the same file.
 
-**On an existing `docwizz.yaml`:** `setup` keeps it and runs every other stage with it. Pass `--force` to replace it
-with a generated one. When the generated file would be identical, `setup` leaves it untouched and reports
-`unchanged`. Running `setup` again is safe, because the docs are regenerated the same way `generate` does it.
+**On an existing `docwizz.yaml`,** `setup` keeps it and runs every other stage with it. `--force` replaces it; an
+identical result is reported as `unchanged`. Running `setup` again is safe.
 
 Then read `docs/index.md` (or `docs/index.html` with `--html`) and the summary's *Next useful actions*.
 
 ### 2. Documentation generation
 
 ```bash
-docwizz generate .              # Markdown in ./docs
-docwizz generate . site --html  # Markdown and HTML in ./site
-docwizz generate . site --html --screenshots --base-url http://localhost:5173  # capture detected static routes
-docwizz generate . site --html --screenshots --base-url http://localhost:5173 --storage-state .auth/docwizz-state.json  # authenticated routes
- docwizz generate . site --refresh-html-on-version-change  # re-render HTML on DocWizz upgrades
+docwizz generate .                                         # Markdown in ./docs
+docwizz generate . site --html                             # Markdown and HTML in ./site
+docwizz generate . site --refresh-html-on-version-change   # re-render all HTML after a docwizz upgrade
 ```
 
-Every HTML page ends with a footer naming the DocWizz version that generated it (`Generated by docwizz 0.2.2`), so upgrading DocWizz updates every HTML page on the next `--html` run. The optional `--refresh-html-on-version-change` implies `--html`, and rewrites all generated HTML if `<out>/.docwizz/html-version.txt` is absent or differs from the running DocWizz version. Markdown stays incremental. The summary counts a page as changed only when its content differs. Interactive progress bars go to stderr; `--progress` forces them in CI and redirected logs. Machine-readable stdout remains unchanged.
+Only pages whose content changed are rewritten, and the summary counts them. Every HTML page names the docwizz version
+in its footer; `--refresh-html-on-version-change` (implies `--html`) rewrites all HTML when
+`<out>/.docwizz/html-version.txt` differs from the running version. Progress bars go to stderr on interactive
+terminals; `--progress` forces them in CI logs. See [Generated vs. your files](#generated-vs-your-files) for what you
+may edit.
 
-Regenerating rewrites only the pages whose content changed and prints how many changed. See
-[Generated vs. your files](#generated-vs-your-files) for what you may edit.
+**Route screenshots** capture detected static frontend routes from an already running app with Playwright Chromium
+(`npx playwright@1.63.0 install chromium`):
+
+```bash
+docwizz generate . --html --screenshots --base-url http://localhost:5173
+npx playwright codegen --save-storage=.auth/docwizz-state.json http://localhost:5173   # once: sign in by hand
+docwizz generate . --html --screenshots --base-url http://localhost:5173 --storage-state .auth/docwizz-state.json
+```
+
+- Each route gets a fresh, isolated browser context: anonymous by default, or initialized from the saved storage state
+  (cookies and localStorage; sessionStorage is not preserved). docwizz never automates login or handles passwords.
+- `--storage-state` paths are relative to the scanned directory.
+- Dynamic routes, HTTP errors (400+), URL redirects and expired sessions are skipped with a warning. A login overlay
+  without a URL change, or a client-side guard redirecting more than ~400 ms after load, can't be recognized.
+- Captures go to `docs/screenshots/`, linked from `frontend.md`. **The storage-state file holds session tokens:** keep
+  it out of Git, restrict access, and use a low-privilege test account with sanitized data.
 
 ### 3. Architecture analysis
 
@@ -170,10 +120,10 @@ docwizz architecture .
 docwizz architecture . --format json
 ```
 
-This lists the layers, the dependencies between them, violations (each `ARCH-…` rule with a severity) and module
-cycles. Set the layers (path globs, first match wins) and `architecture.allow` (which layer may depend on which) in
-`docwizz.yaml`. `check.fail_on` sets the lowest severity that counts against `max_violations`, and lower ones are only
-reported. To write your own rules, see [README: Architecture rules](README.md#architecture-rules).
+Lists the layers, the dependencies between them, violations (each `ARCH-…` rule with a severity) and module cycles.
+Set the layers (path globs, first match wins) and `architecture.allow` in `docwizz.yaml`. `check.fail_on` sets the
+lowest severity that counts against `max_violations`; lower ones are only reported. Custom rules:
+[README: Architecture rules](README.md#architecture-rules).
 
 ### 4. Quality gates and CI
 
@@ -182,10 +132,10 @@ docwizz check .                      # everything: thresholds in `check:`
 docwizz check . --since origin/main  # only what the change introduces
 ```
 
-Set the thresholds under `check:` (`min_coverage`, `max_critical`, `max_violations`, `max_cycles`, `fail_on`, and
-optionally `min_quality`, `max_complexity`, `require_tests`). On an older codebase, `--since` lets you adopt the gate
-without first fixing everything. It fails on new critical gaps, new failing violations, docs that now contradict the
-code, new symbols over `max_complexity`, and, with `require_tests`, new symbols that no test code links to.
+Thresholds live under `check:` (`min_coverage`, `max_critical`, `max_violations`, `max_cycles`, `fail_on`, and
+optionally `min_quality`, `max_complexity`, `require_tests`). `--since` lets an older codebase adopt the gate without
+fixing everything first. It fails on new critical gaps, new failing violations, docs that now contradict the code, new
+symbols over `max_complexity`, and, with `require_tests`, new symbols that no test code links to.
 
 GitHub Actions (posts the result on the pull request):
 
@@ -201,7 +151,7 @@ jobs:
       - uses: mycaravam-crypto/docwizz@main
 ```
 
-Any other CI system can run the command directly. The step fails when the gate fails (exit 1):
+Any other CI system runs the command directly; the step fails when the gate fails (exit 1):
 
 ```bash
 docwizz check . --since "$BASE_SHA" --format json > docwizz.json
@@ -216,15 +166,12 @@ docwizz generate . --ai
 docwizz setup . --ai
 ```
 
-Use `--ai` when you want drafts for missing summaries and module overviews to start writing from. It is off unless you
-pass it, including in `setup`. The model must be **self-hosted** on a loopback or private address: a local Ollama
-(the default), or any server with an OpenAI-compatible API (vLLM, NVIDIA NIM, Nutanix Enterprise AI, a LiteLLM gateway)
-configured under `ai:` in `docwizz.yaml`. Cloud models and public hosts are refused and proxies are bypassed. Drafts are marked 🤖 and cite the facts they rest on.
-They fill only empty sections and **never** close a documentation gap, raise coverage or pass a check. AI ratings of
-written docs are advisory and not part of any gate. Drafts are cached by code hash, so unchanged code is not sent
-again. Without `--ai`, nothing is sent. See [README: AI drafts](README.md#draft-missing-docs-with-a-local-ai).
-
-An OpenAI-compatible server, for example vLLM on an internal GPU host:
+`--ai` drafts missing summaries and module overviews to start writing from. It is off unless passed, including in
+`setup`. The model must be **self-hosted** on a loopback or private address: Ollama (default) or any OpenAI-compatible
+server (vLLM, NVIDIA NIM, Nutanix Enterprise AI, a LiteLLM gateway). Cloud models and public hosts are refused and
+proxies are bypassed. Drafts are marked 🤖, cite their facts, fill only empty sections and **never** close a gap, raise
+coverage or pass a check. Drafts are cached by code hash; without `--ai`, nothing is sent. More:
+[README: AI drafts](README.md#draft-missing-docs-with-a-local-ai).
 
 ```yaml
 ai:
@@ -238,10 +185,9 @@ ai:
 DOCWIZZ_AI_KEY=... docwizz generate . --ai
 ```
 
-The key is read only from the variable `api_key_env` names. It never goes in `docwizz.yaml`, which refuses an `api_key`
-setting, and it is never printed. If the variable is named but empty, `--ai` is skipped with a message. `DOCWIZZ_MODEL`
-overrides `model` (and, for Ollama, `OLLAMA_HOST` overrides `endpoint`). Drafts are cached per provider and model:
-switching models drafts afresh with `--ai`, and without `--ai` any cached draft of unchanged code is used.
+The key is read only from the variable `api_key_env` names; `docwizz.yaml` refuses an `api_key` setting and the key is
+never printed. If the variable is named but empty, `--ai` is skipped with a message. `DOCWIZZ_MODEL` overrides
+`model`; for Ollama, `OLLAMA_HOST` overrides `endpoint`. Drafts are cached per provider and model.
 
 ### 6. Diff and impact analysis
 
@@ -251,9 +197,8 @@ docwizz diff . origin/main    # vs a git ref
 docwizz diff HEAD~1 HEAD      # between two refs (directory defaults to .)
 ```
 
-The output lists the changed, added and removed symbols, the doc pages they affect, docs that may now be stale, new
-gaps and violations, and the test code linked to each changed symbol. A test link means test code *uses* the symbol.
-It is not coverage.
+Lists changed, added and removed symbols, the pages they affect, docs that may now be stale, new gaps and violations,
+and the test code linked to each changed symbol. A test link means test code *uses* the symbol; it is not coverage.
 
 ### 7. Raw model (advanced)
 
@@ -261,8 +206,8 @@ It is not coverage.
 docwizz scan . model.json
 ```
 
-This writes every node and edge the scanners found. It is useful when debugging why a symbol is or isn't reported,
-or for building your own tooling on top. Everyday workflows don't need it.
+Writes every node and edge the scanners found: for debugging why a symbol is or isn't reported, or building your own
+tooling. Everyday workflows don't need it.
 
 ### 8. Context for coding agents
 
@@ -272,24 +217,21 @@ cp templates/AGENTS.md ./AGENTS.md                    # or append it to the agen
 ```
 
 Coding agents (Claude Code, OpenCode, Qwen Code, Cline, Aider) can read the generated docs instead of exploring the
-code file by file, which is where local models with small context windows drift on long runs. docwizz does the
-exploration; the agent reads the result. [templates/AGENTS.md](templates/AGENTS.md) is a section to copy into
-`AGENTS.md`, `CLAUDE.md`, `.clinerules` or `CONVENTIONS.md`. It tells the agent:
+code file by file, which is where local models with small context windows drift on long runs.
+[templates/AGENTS.md](templates/AGENTS.md) is a section for `AGENTS.md`, `CLAUDE.md`, `.clinerules` or
+`CONVENTIONS.md`. It tells the agent:
 
-- **what to read first:** `docs/index.md`, `docs/solutions/<solution>.md`, `docs/projects/<project>.md`, then `docs/modules/<module>.md` and `docs/architecture.md`
-  for the folders it will touch (the folder path with `/` replaced by `-`);
+- **what to read first:** `docs/index.md`, `docs/solutions/<solution>.md`, `docs/projects/<project>.md`, then
+  `docs/modules/<module>.md` and `docs/architecture.md` for the folders it will touch (folder path with `/` → `-`);
 - **how much to trust it:** detected facts over `(inferred)` ones; 🤖 marks a draft, never a fact;
 - **that the docs are navigation:** read the real code before changing it, starting at the `file:line` links;
-- **when it is done:** `docwizz check . --since <base> --format json` reports no new problems, `docwizz diff`
-  has been reviewed, and `docwizz generate .` has refreshed the docs so the next task doesn't read a stale model.
+- **when it is done:** `docwizz check . --since <base> --format json` reports no new problems, `docwizz diff` has been
+  reviewed, and `docwizz generate .` has refreshed the docs.
 
-What helps an agent most, from trying the template on `fixture/`: a module page's *Flows through this module*
-answers "what does this endpoint touch" in one read (`POST /api/materials`: controller → service → repository →
-`AppDbContext` → SQL Server); `api.md` maps a route to its handler's `file:line` and its frontend callers; and the
-*Documentation gaps* list on the same page is the to-do list for a documentation task.
-
-**Limits of the pages.** Generated pages are written for people, not for a token budget: a large module page can
-crowd out the agent's context, and an agent has to know which page to open. For that, use `docwizz context`.
+Most useful in practice: a module page's *Flows through this module* answers "what does this endpoint touch" in one
+read; `api.md` maps a route to its handler's `file:line` and frontend callers; *Documentation gaps* is the to-do list.
+Generated pages are written for people, though: a large page can crowd out an agent's context. For a budgeted slice,
+use `docwizz context` or the MCP server.
 
 #### A context package per target
 
@@ -300,32 +242,24 @@ docwizz context . --for backend/Infrastructure                            # a fo
 docwizz context . --for "POST /api/materials" --budget 2000 --format json # an endpoint, as data
 ```
 
-`context` writes the slice of the model that matters for one target, within a token budget (default 6000, estimated
-as characters / 4, no tokenizer). Highest priority first, and cut from the end when the budget runs out:
+`context` writes the slice of the model that matters for one target within a token budget (default 6000, estimated as
+characters / 4). Sections in priority order, cut from the end when the budget runs out:
 
-1. a header: repository, the commit the model was scanned at, the budget, and a warning when the model is stale;
-2. the target: kind, signature, visibility, layer, `file:line`, its documentation and where each part comes from,
-   complexity, parameters, responses, exceptions, and its members;
-3. its neighbours one hop away: callers, callees, injections, implementations, HTTP callers;
+1. header: repository, scanned commit, budget, a warning when the model is stale;
+2. the target: kind, signature, visibility, layer, `file:line`, documentation and its sources, complexity, parameters,
+   responses, exceptions, members;
+3. neighbours one hop away: callers, callees, injections, implementations, HTTP callers;
 4. further neighbours up to `--hops` (default 2, at most 4), signature and location only;
-5. request flows through it (as `api.md` shows them), external systems with their certainty, configuration keys it
-   reads (names only, never values);
+5. request flows through it, external systems with their certainty, configuration keys it reads (names only);
 6. linked tests, documentation gaps and architecture findings around it;
-7. *Read before you change it*: the `file:line` of the target and of the code on the other side of its edges.
+7. *Read before you change it*: the `file:line` of the target and of the code across its edges.
 
-The header says what was cut (`truncated to fit the budget: 7 lines of Further neighbours`). Every line ends with its
-provenance: `[detected]`, `[inferred]`, `[human]` or `[ai-drafted]`. AI drafts are **left out** unless you pass
-`--include-ai`, so an agent never reads a draft back as a fact. The same model, target and budget give byte-identical
-output.
-
-`--for` is resolved in this order: an exact id (`cs:Fixture.Domain.Material`), a qualified name with or without its
-parameter list, a file, a folder, then `VERB /route`. When several symbols match (overloads) or none does, `context`
-exits 1, prints the candidates on stderr and nothing on stdout: it never guesses.
-
-`context` reads `docs/.docwizz/model.json` when `generate` wrote one, and scans the code when there is none. When the
-model is from another commit than `HEAD`, or source files changed after it was written, the package says it is stale
-and so does stderr: run `docwizz generate .`. It makes no network calls, runs no build and calls no AI. `--format json`
-gives the same lines as data (compact, since whitespace costs tokens).
+- The header says what was cut. Every line ends with its provenance: `[detected]`, `[inferred]`, `[human]` or
+  `[ai-drafted]`. AI drafts are left out unless you pass `--include-ai`. Output is byte-identical for the same inputs.
+- `--for` resolves as: exact id (`cs:Fixture.Domain.Material`), qualified name with or without parameters, file,
+  folder, then `VERB /route`. Ambiguous or unknown targets exit 1 with the candidates on stderr: it never guesses.
+- It reads `docs/.docwizz/model.json` when present, else scans. A model from another commit, or older than the source
+  files, is reported as stale. No network, no build, no AI. `--format json` is compact, since whitespace costs tokens.
 
 #### A read-only MCP server
 
@@ -334,8 +268,7 @@ docwizz mcp .                  # stdio; the agent's harness starts it
 docwizz mcp . --auto-rescan    # rescan when the model is stale instead of only saying so
 ```
 
-`mcp` serves the code model to agents over the [Model Context Protocol](https://modelcontextprotocol.io) on stdio,
-so an agent can ask instead of searching files:
+`mcp` serves the code model over the [Model Context Protocol](https://modelcontextprotocol.io) on stdio:
 
 | Tool | Answers |
 |---|---|
@@ -349,18 +282,15 @@ so an agent can ask instead of searching files:
 | `check(since?)` | the quality gate as JSON; with `since`, only what the change introduces |
 | `rescan()` | scan the code again, in memory |
 
-It is **read-only**: stdio only, no network listener, nothing is written (`generate` and `setup` are not tools).
-Every answer has a `model` object with the commit the model was scanned at, `HEAD`, and `stale: true` with the reasons
-when they differ or source files changed since; then call `rescan` (or start with `--auto-rescan`). Answers take a
-`budget` in tokens (default 4000) and long lists are paged (`offset`, `limit`, `nextOffset`); what didn't fit is listed
-under `truncated`. AI drafts stay out unless `context` is asked for them. Configuration values never appear, only
-keys. The model is `docs/.docwizz/model.json` when `generate` wrote one, else a scan at startup.
+It is **read-only**: stdio only, no network listener, nothing written. Every answer carries a `model` object with the
+scanned commit, `HEAD`, and `stale: true` with reasons when they differ. Answers take a `budget` in tokens (default
+4000); long lists are paged (`offset`, `limit`, `nextOffset`) and cuts listed under `truncated`. Configuration values
+never appear, only keys.
 
 Register it with your agent (replace the path with your build of docwizz):
 
 ```bash
-# Claude Code
-claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
+claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .     # Claude Code
 ```
 
 ```jsonc
@@ -371,9 +301,161 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 { "mcpServers": { "docwizz": { "command": "dotnet", "args": ["/opt/docwizz/DocWizz.dll", "mcp", "/path/to/repo"] } } }
 ```
 
+## Multi-project repositories
+
+### Discover
+
+`docwizz discover .` lists project manifests, solution memberships and unresolved references; `--format json` gives a
+deterministic inventory. It runs no language scanners, build tools or AI, and ignores `scope:` so you always see
+everything available.
+
+### Select projects
+
+```bash
+docwizz setup .                   # new ambiguous repository in a terminal: offers selection
+docwizz setup . --select-projects # select or reselect (terminal required)
+docwizz setup . --all-projects    # clear the saved scope, keep the rest of docwizz.yaml
+docwizz setup . --yes             # scripts and CI: never prompt
+```
+
+- **When it prompts:** only on a new repository with several solutions or standalone projects, when stdin and stdout
+  are terminals and `CI` is unset. Existing configs never prompt unexpectedly. `--select-projects` fails fast without a
+  terminal or with `CI` set.
+- **The wizard** lists projects by path, role, solutions and reference count. Type numbers to toggle, `s1`/`s2` to
+  toggle a solution, `a` all, `n` none, `d` done, `q` cancel (several commands separated by commas or spaces). It
+  starts with root-level solutions selected and test projects excluded. Invalid selections show a message and can be
+  corrected; cancelling changes nothing and aborts before the scan.
+- **What it writes:** only the top-level `scope:` block. Other settings, comments and whitespace outside it are kept;
+  comments inside it are not.
+- **Stages** become `discover → select → scan → config → …`. Config still runs after the scan, so inferred layers and
+  test globs are based on the selected code.
+
+### Scope
+
+```yaml
+scope:
+  projects:
+    include: ["Cargo-Core/Cargo-Core.csproj", "FileAPI/FileAPI.csproj"]
+    references: metadata          # metadata | include | exclude
+    test_links: true
+  unassigned_sources: exclude     # source files no project owns
+  repository_files: include       # repository-wide deployment, CI and configuration descriptors
+```
+
+- **Paths** are manifest paths relative to the scan root, case-sensitive, with `/`; copy them from
+  `docwizz discover . --format json`. No globs, absolute paths or `..`. An invalid path is an error, never a fallback
+  to all projects. Several manifests in one directory must be selected together.
+- **`references`:** `metadata` (default) keeps referenced, unselected projects as labeled dependency-only stubs, without
+  code or packages; `include` scans every reachable referenced project; `exclude` omits them and lists each omitted
+  reference in the scope report.
+- **`test_links: true`** also scans test projects that reference a selected project, for traceability only; test code
+  stays out of production docs and coverage.
+- **`unassigned_sources`** controls loose source files. A root-level manifest owns only its own language's files (C#
+  for `.csproj`, JS/TS/Vue for `package.json`, Java for Maven/Gradle).
+- **`repository_files: include`** (default) keeps Docker/Compose, Kubernetes, Terraform, CI and configuration
+  descriptors for the system view, except those of an excluded project.
+- The scope applies **before** scanning, to every command except `discover`. `exclude:` still wins. `docs/index.md`
+  discloses the requested and effective selection, stubs, omitted and missing references.
+- Changing the scope makes `context` and `mcp` rescan and requires `generate` before a baseline `diff`. New project
+  references or moved projects also need a fresh `generate`.
+
+Without `scope:`, the whole repository is scanned as before.
+
+### Generated hierarchy
+
+With projects or solutions in the model, `generate` writes `docs/index.md` → `docs/solutions/*.md` →
+`docs/projects/*.md` → `docs/modules/*.md` → components; `--html` adds a nested sidebar, breadcrumbs and search entries.
+
+- A project page shows its path, role, SDK and frameworks, solutions, source-file count, modules, components, linked
+  tests (not coverage), project references and direct packages. Metadata-only projects get a disclosure-only page.
+- A shared project has one page, linked from every solution that contains it. Projects without a solution and
+  unassigned modules get their own branch.
+- File names combine a readable slug with a stable suffix; don't hard-code them. Generated project and solution pages
+  are removed on a scope change; hand-written pages are never touched.
+
+### Limits
+
+Classic non-SDK ASP.NET MVC projects are inventoried, but conventional `MapRoute` routing can't be fully inferred
+statically; `api.md` warns when such a project is present. The acceptance matrix and migration notes are in
+[MULTI_PROJECT_ACCEPTANCE.md](MULTI_PROJECT_ACCEPTANCE.md); `bash scripts/benchmark-multi-project.sh` measures full
+versus scoped scans.
+
 ## SBOM inventory
 
-`docwizz sbom .` writes `sbom.cdx.json` (or use `docwizz sbom . output.json`). The exporter reads NuGet, npm, Maven and Gradle **manifests only**. It records direct declared dependencies with a package URL (`purl`) and their version literals or expressions, not resolved or installed packages; ranges, wildcards and property references are kept as declared and left out of `version` and the purl. Project-to-project references appear in the dependency graph. Transitive dependencies, lockfiles, licenses and vulnerability analysis are intentionally outside the MVP. No restore, build or network access occurs. Output is deterministic for identical inputs. `docwizz generate` writes the same inventory as `views/packages.md` for readers, listing packages declared at more than one version first.
+`docwizz sbom .` writes `sbom.cdx.json` (or `docwizz sbom . output.json`): CycloneDX 1.6 from NuGet, npm, Maven and
+Gradle **manifests only**.
+
+- Direct declared dependencies with a package URL (`purl`) and their declared version. Ranges, wildcards and property
+  references are kept as declared but left out of `version` and the purl.
+- Project-to-project references appear in the dependency graph.
+- Not included: transitive dependencies, lockfiles, licenses, vulnerabilities. No restore, build or network access.
+  Output is deterministic.
+
+`generate` writes the same inventory to `views/packages.md`, listing packages declared at several versions first.
+
+## Project evidence
+
+These commands work on requirement and project evidence kept as YAML, CSV or Markdown, in the format described in
+[docs/project-evidence.md](docs/project-evidence.md). None of them make network or AI calls (except `product --ai`),
+overwrite source files, or claim conformity.
+
+### Traceability report
+
+```bash
+docwizz trace . project-evidence.yaml [--format json]
+```
+
+Reports declared requirement → architecture → test links and the missing ones, as Markdown on stdout or JSON. CSV and
+Markdown inputs contain records only, without links. Missing links are gaps, not failures; an invalid or missing
+catalog exits 1. With a `source_hash`, each source is reported as current, stale, missing or unverified. It checks
+declared links only, not test success.
+
+### Evidence snapshot comparison
+
+```bash
+docwizz evidence-diff . before.yaml after.yaml [--format json]
+```
+
+Compares two evidence snapshots: changed fields, direct links, tests reachable along declared relations, added and
+removed links. Output is deterministically ordered. It doesn't inspect file contents or decide whether evidence is
+current.
+
+### Product drafts
+
+```bash
+docwizz product . templates/vmodell-xt/sw-architecture.yaml [out.md] [--context project.yaml] [--ai]
+docwizz product check . templates/vmodell-xt/sw-architecture.yaml --context project.yaml [--format json]
+```
+
+Renders a work product from a template, filled from the code model; anything without evidence stays `OFFEN`. Output
+defaults to `docs/products/<product_id>.md`. Paths resolve from the current directory, then from `<dir>`. Unchanged
+output isn't rewritten, and hand-maintained output is never replaced. The V-Modell XT templates are illustrative, not
+official templates or a conformity claim.
+
+- **`--context project.yaml`** adds sourced project statements. Statements that don't fit a section exit 1; nothing is
+  silently dropped.
+- **`--ai`** has a self-hosted model (the `ai:` provider) word each section that has evidence. Each piece of evidence
+  gets an id (`E1`, `E2`, …) and every sentence must cite ids from its own section. A sentence that cites nothing, cites
+  wrongly, or claims approval, review, completeness or conformity is dropped, and model text can't become links or
+  HTML. Sentences are marked 🤖; sections without evidence are never sent; project statements are sent as data only.
+  Results are cached in `docs/.docwizz/product-ai-cache.json`. If nothing could be worded, the output equals the draft
+  without `--ai`.
+- **`<product_id>.evidence.json`** lists per section its status (`evidenced`, `open`, `empty`), every piece of evidence
+  with id, kind, origin (`detected` or `human`) and source, and any 🤖 sentences with their citations. `required`
+  summarizes which required sections are evidenced or open. It is an inventory, not a statement of review.
+
+`product check` validates a draft's references and freshness before review (exit 1 on an error; warnings never fail):
+
+| Rule | Severity | Finds |
+|---|---|---|
+| PROD-001 | warning | a required section without evidence (`OFFEN`) |
+| PROD-002 | error | a project statement whose source file doesn't exist |
+| PROD-003 | error | a product in `dependencies` without a draft next to this one |
+| PROD-004 | error | the draft or its evidence report missing, not docwizz's, or stale |
+| PROD-005 | warning | a project statement that reads like an instruction to a model |
+| PROD-006 | error | a 🤖 sentence citing an id that isn't evidence of its section |
+
+It never judges content: whether a statement is true or a product can be approved stays a human decision.
 
 ## Commands
 
@@ -388,9 +470,9 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 | `diff` | `docwizz diff [dir] [base] [head] [--format f] [--profile p]` | change impact vs the last `generate` or git refs | reviews, CI |
 | `context` | `docwizz context <dir> --for target [--hops n] [--budget tokens] [--format md\|json] [--include-ai]` | token-budgeted context package for one symbol, file, folder or endpoint | coding agents |
 | `mcp` | `docwizz mcp <dir> [--auto-rescan]` | read-only MCP server on stdio: find_symbol, context, callers, impact, check, … | coding agents |
-| `evidence-diff` | `docwizz evidence-diff <dir> <before.yaml> <after.yaml> [--format json]` | deterministic explicit evidence changes and affected tests | product documents |
-| `trace` | `docwizz trace <dir> <evidence.yaml> [--format json]` | report explicit traceability and missing links; stdout, no inference or network | product documents |
-| `product` | `docwizz product [check] <dir> <template.yaml> [out.md] [--context file.yaml] [--ai] [--format f]` | versioned product draft from evidence; `--ai`: a local model words sections, citing evidence ids; `check`: references and freshness of the draft | architects |
+| `evidence-diff` | `docwizz evidence-diff <dir> <before.yaml> <after.yaml> [--format json]` | explicit evidence changes and affected tests | product documents |
+| `trace` | `docwizz trace <dir> <evidence.yaml> [--format json]` | explicit traceability and missing links | product documents |
+| `product` | `docwizz product [check] <dir> <template.yaml> [out.md] [--context file.yaml] [--ai] [--format f]` | product draft from evidence; `check`: references and freshness | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
 | `init` | `docwizz init [dir]` | write a `docwizz.yaml` with every default; refuses to overwrite | manual setup |
@@ -403,49 +485,49 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 
 | Option | Default | Applies to | Interaction | Use |
 |---|---|---|---|---|
-| `--context <file.yaml>` | off | product | validates sourced project statements against template before writing | product documents |
 | `--profile <name\|file.yaml>` | `profile:` in `docwizz.yaml`, else `default` | setup, generate, check, analyze, architecture, diff | overrides `profile:` and the file's own `patterns:` | normal |
 | `--format console\|json` | `console` | discover, analyze, check, architecture, context, diff, trace, evidence-diff, product, remediate | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
+| `--html` | off | generate, setup | adds HTML pages; the Markdown is written either way | normal |
+| `--progress` | interactive terminals | generate, setup | forces progress bars on stderr when output is redirected | normal |
+| `--refresh-html-on-version-change` | off | generate, setup | implies `--html`; rewrites all HTML when the docwizz version changed | normal |
+| `--screenshots --base-url <url>` | off | generate | captures detected static routes from a running frontend; anonymous isolated contexts by default; HTTP errors and redirects are skipped | opt-in |
+| `--storage-state <file>` | off | generate | with `--screenshots`, starts each route's context from a saved Playwright login state; path relative to the scanned directory; keep it out of Git | opt-in |
+| `--ai` | off | generate, product, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it, nothing new is sent | opt-in |
+| `--since <ref>` | — | check, remediate | check: only problems introduced since `<ref>` fail; remediate: says whether each update touches only what changed since `<ref>` | CI |
 | `--for <target>` | — | context | required; a symbol id or qualified name, a file, a folder, or `VERB /route`; ambiguous or unknown exits 1 with candidates | coding agents |
 | `--hops <n>` | 2 | context | how far neighbours are listed, 1 to 4; hops beyond 1 are signature only | coding agents |
 | `--budget <tokens>` | 6000 | context | at least 100; estimated as characters / 4; lower-priority sections are cut first, and the cut is reported | coding agents |
-| `--auto-rescan` | off | mcp | rescans the code when the model is stale (other commit or changed files) instead of only reporting `stale: true` | coding agents |
 | `--include-ai` | off | context | includes cached 🤖 drafts, marked `ai-drafted`; never calls a model | coding agents |
-| `--since <ref>` | — | check, remediate | check: compares against the tree at `<ref>`, so only introduced problems fail; remediate: says whether each update touches only what changed since `<ref>` | CI |
+| `--auto-rescan` | off | mcp | rescans when the model is stale instead of only reporting `stale: true` | coding agents |
 | `--package <name> --to <version>` | `remediation.targets` and version drift | remediate | given together or not at all | maintenance |
 | `--validate` | off | remediate | runs the configured restore/build/test commands in a temporary copy, never the working tree | maintenance |
-| `--html` | off | generate, setup | adds HTML pages; the Markdown is written either way | normal |
-| `--screenshots --base-url <url>` | off | generate | captures detected static routes against an already running frontend; isolated anonymous browser contexts by default; HTTP errors and redirects are skipped | opt-in |
-| `--storage-state <file>` | off | generate | with `--screenshots`, initializes each route's isolated context with the same saved Playwright login state; relative paths start at scanned project root; keep session tokens out of Git; login overlays without URL changes, and guards that redirect more than ~400 ms after load, remain undetectable | opt-in |
-| `--progress` | interactive terminals | generate, setup | Force progress bars on stderr when output is redirected | normal |
-| `--refresh-html-on-version-change` | off | generate, setup | Implies HTML; rebuild on generator version change | normal |
-| `--ai` | off | generate, product, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it, nothing new is sent | opt-in |
+| `--context <file.yaml>` | off | product | validates sourced project statements against the template before writing | product documents |
 | `--force` | off | setup | replaces an existing `docwizz.yaml`; any other command rejects it | setup only |
-| `--select-projects` | off | setup | TTY-only project selection after discovery; only replaces the `scope:` block on an existing config | setup only |
+| `--select-projects` | off | setup | terminal-only project selection after discovery; on an existing config replaces only `scope:` | setup only |
 | `--all-projects` | off | setup | removes a saved project scope while keeping other YAML | setup only |
-| `--yes` | off | setup | skips TTY prompts; does not change an existing scope | setup only |
+| `--yes` | off | setup | never prompts; does not change an existing scope | setup only |
 | `--timings` | off | all | time and peak memory per stage, on stderr | benchmarks |
 | `--help`, `-h` | — | all | prints the command's help and exits | — |
 | `--version`, `-v` | — | all | prints `docwizz <version> (commit <sha>, .NET <runtime>, <platform>)` and exits 0, whatever the command; `docwizz version` does the same | bug reports, CI logs |
 
 ## Precedence and conflicts
 
-- **Configuration file:** `<dir>/docwizz.yaml`, else `./docwizz.yaml` in the current directory, else the built-in
-  defaults. `setup` never reads the current directory's file. It uses `<dir>/docwizz.yaml` or writes one there.
-- **Project scope:** `scope.projects.include` applies before scanning and only within the files permitted by `.gitignore`/`exclude:`. `discover` ignores the scope to show the full available project inventory; absent `scope:` means all available code. Invalid paths are errors, never interpreted as all-projects.
+- **Configuration file:** `<dir>/docwizz.yaml`, else `./docwizz.yaml`, else built-in defaults. `setup` only uses or
+  writes `<dir>/docwizz.yaml`.
+- **Project scope:** `scope:` applies before scanning, within what `.gitignore` and `exclude:` allow. No `scope:` means
+  all code. `discover` ignores it.
 - **Profile:** `--profile` beats `profile:` in the file, which beats `default`. A file with its own `patterns:` uses
   them unless `--profile` is given.
-- **Existing configuration:** `init` never overwrites. Plain `setup` keeps the file unless you pass `--force`; `setup --select-projects` and `--all-projects` edit only the scope block (and preserve other YAML).
-- **Options a command doesn't use** (for example `--format` with `generate`, or `--html` with `analyze`) are
-  rejected, with the commands that do take them. An option is never silently ignored. Only `--help`, `--timings` and
-  `--version` apply everywhere.
-- **`--version` first:** with `--version` (or `-v`), docwizz prints the version and exits 0 instead of running the
-  command, even when `--help` is given too. Bad arguments are still reported first.
-- **Mistakes** (an unknown command or option, a missing value, `--format xml`, `--package` without `--to`) print one
-  line saying what is wrong, with a suggestion for a likely typo, and where to find the command's options. Exit 1.
-- **`diff` arguments:** if the first argument is not a directory, it is a ref and the directory is `.`. One ref
-  compares against the working tree, two refs compare against each other, and none compares against the last
-  `generate`.
+- **Existing configuration:** `init` never overwrites. `setup` keeps the file unless `--force`; `--select-projects`
+  and `--all-projects` edit only the `scope:` block.
+- **Unused options** (`--format` with `generate`, `--html` with `analyze`) are rejected, naming the commands that take
+  them. Only `--help`, `--timings` and `--version` apply everywhere.
+- **`--version` first:** it prints the version and exits 0 instead of running the command, even with `--help`. Bad
+  arguments are still reported first.
+- **Mistakes** (unknown command or option, missing value, `--format xml`, `--package` without `--to`) print one line
+  with what is wrong and a suggestion for a likely typo. Exit 1.
+- **`diff` arguments:** if the first argument is not a directory, it is a ref and the directory is `.`. No ref compares
+  against the last `generate`, one against the working tree, two against each other.
 
 ## Exit codes
 
@@ -455,13 +537,13 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 | `check` | thresholds pass | thresholds fail, or bad arguments/config |
 | `architecture` | within `max_violations`/`max_cycles` | above them |
 | `discover`, `analyze`, `generate`, `scan`, `sbom` | done | bad arguments or config |
-| `evidence-diff` | report on stdout | invalid/missing evidence catalogs; no data written |
-| `trace` | report on stdout | invalid/missing YAML; no data written |
-| `product` | draft written or unchanged; `check`: no errors (warnings allowed) | invalid template, unsafe overwrite, bad arguments; `check`: an error finding |
-| `remediate` | done (suggestions alone never fail) | a `--validate` run failed, or bad arguments |
+| `diff` | done | no baseline (`generate` first or pass a ref), unknown ref |
 | `context` | package written | no `--for`, an ambiguous or unknown target (candidates on stderr), or bad arguments |
 | `mcp` | stdin closed | bad arguments or config |
-| `diff` | done | no baseline (`generate` first or pass a ref), unknown ref |
+| `remediate` | done (suggestions alone never fail) | a `--validate` run failed, or bad arguments |
+| `trace` | report on stdout | invalid/missing YAML; no data written |
+| `evidence-diff` | report on stdout | invalid/missing evidence catalogs; no data written |
+| `product` | draft written or unchanged; `check`: no errors (warnings allowed) | invalid template, unsafe overwrite, bad arguments; `check`: an error finding |
 | `init` | written | `docwizz.yaml` exists |
 | no command | — | prints how to start |
 | `--version`, `version` | prints the version | — |
@@ -470,6 +552,17 @@ Every command exits **2** when docwizz itself fails unexpectedly (a bug, a full 
 line instead of a stack trace, so CI can tell "docwizz broke" from "the gate failed". Set `DOCWIZZ_DEBUG=1` for the
 full trace.
 
+## Generated vs. your files
+
+| Path | Who owns it |
+|---|---|
+| `docwizz.yaml` | **you**. `setup`/`init` create it once and then leave it alone (`setup --force` replaces it). |
+| `docs/*.md`, `docs/solutions/`, `docs/projects/`, `docs/modules/`, `docs/views/`, `*.html` | docwizz. Regenerated, so don't edit them. |
+| `docs/products/*.md`, `*.evidence.json` | docwizz `product`: the draft and its evidence report; untouched by `generate`. |
+| `docs/architecture/*.md` | **you**. Linked from the generated pages and never overwritten. |
+| `docs/.docwizz/model.json`, `documentation.json` | docwizz: the baseline `diff` compares against, and the documentation model as data. |
+| `docs/.docwizz/ai-cache.json`, `ai-assessments.json` | docwizz: AI drafts and ratings, cached by code hash. Commit them to avoid re-sending code. |
+
 ## Versioning
 
 ```
@@ -477,15 +570,13 @@ $ docwizz --version
 docwizz 0.1.0 (commit e4320bd, .NET 10.0.12, linux-x64)
 ```
 
-The line names the docwizz version, the git commit it was built from, the .NET runtime and the platform: paste it into
-bug reports, and print it at the start of CI jobs so a result can be traced to the build that produced it. A build
-made outside a git checkout has no commit and leaves it out. `docwizz setup` writes the same version into the header
-of the `docwizz.yaml` it creates.
+The line names the version, the commit it was built from, the .NET runtime and the platform: paste it into bug reports
+and print it at the start of CI jobs. `docwizz setup` writes the same version into the header of the `docwizz.yaml` it
+creates.
 
-Versions follow [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`, with a pre-release suffix such as
-`-rc.1` when needed. While the major version is `0`, a minor release may change command-line options or output. The
-git tags (`vX.Y.Z`) are the version: the release workflow builds with `-p:Version` from the tag it creates, and any
-other build derives it from the tags in its checkout ([DocWizz.csproj](src/DocWizz/DocWizz.csproj)):
+Versions follow [Semantic Versioning](https://semver.org). While the major version is `0`, a minor release may change
+options or output. Git tags (`vX.Y.Z`) are the version: releases build with `-p:Version` from their tag, and any other
+build derives it from the tags in its checkout ([DocWizz.csproj](src/DocWizz/DocWizz.csproj)):
 
 | Built from | `docwizz --version` |
 |---|---|
@@ -493,13 +584,13 @@ other build derives it from the tags in its checkout ([DocWizz.csproj](src/DocWi
 | 4 commits after `v0.2.2` | `0.2.3-dev.4`: a pre-release of the next patch |
 | no git, or no tags (a shallow clone, a source archive) | `0.0.0-dev` |
 
-`git fetch --tags` updates the tags of an existing clone. The commit is added by the .NET SDK at build time.
+`git fetch --tags` updates the tags of an existing clone.
 
 ### Releases
 
-Every pull request merged into `main` is a release. The [release workflow](.github/workflows/release.yml) takes the
-latest `vX.Y.Z` tag, bumps it according to the PR's label, builds and tests that version, then tags the merge commit
-and creates a GitHub release with generated notes. Nothing is committed to `main`:
+Every pull request merged into `main` is a release. The [release workflow](.github/workflows/release.yml) bumps the
+latest `vX.Y.Z` tag according to the PR's label, builds and tests that version, tags the merge commit and creates a
+GitHub release with generated notes. Nothing is committed to `main`.
 
 | PR label | Release |
 |---|---|
@@ -508,66 +599,8 @@ and creates a GitHub release with generated notes. Nothing is committed to `main
 | `release:major` | major: `0.4.2` → `1.0.0` (breaking changes) |
 | `release:none` | nothing (docs, CI); the next merge without it releases |
 
-- **No tag yet:** the first release is `0.1.0`.
-- **Two release labels on one PR** fail the workflow instead of guessing. Remove one and re-run the job.
-- **A commit already covered** by a newer tag (a queued run that finished late) is not released again.
-- The bump rule is [semver-next.sh](.github/scripts/semver-next.sh). [semver-next.test.sh](.github/scripts/semver-next.test.sh)
-  specifies it, and the release workflow runs it before every release.
-
-## Generated vs. your files
-
-| Path | Who owns it |
-|---|---|
-| `docwizz.yaml` | **you**. `setup`/`init` create it once and then leave it alone (`setup --force` replaces it). |
-| `docs/*.md`, `docs/solutions/`, `docs/projects/`, `docs/modules/`, `docs/views/`, `*.html` | docwizz. Regenerated, so don't edit them. |
-| `docs/products/*.md`, `*.evidence.json` | docwizz product: the draft and its evidence and gap report; separate marker, preserved by ordinary generate. |
-| `docs/architecture/*.md` | **you**. Linked from the generated pages and never overwritten. |
-| `docs/.docwizz/model.json`, `documentation.json` | docwizz: the baseline `diff` compares against, and the documentation model as data. |
-| `docs/.docwizz/ai-cache.json`, `ai-assessments.json` | docwizz: AI drafts and ratings, cached by code hash. Commit them to avoid re-sending code. |
-
-## Product draft (deterministic MVP)
-
-Run `docwizz product . templates/vmodell-xt/sw-architecture.yaml` using a path from the current directory, or from `<dir>` if not found. The optional third positional argument specifies the Markdown output relative to the current directory. Default: `docs/products/<product_id>.md`. Product facts come from the existing CodeModel; fields that cannot be evidenced remain marked `OFFEN`. Without `--ai` this command makes no AI calls. It refuses to replace manually maintained output. Re-running an unchanged generation does not rewrite the file. The template is illustrative, not a V-Modell XT compliance assertion.
-
-Optional `--context project.yaml` loads sourced project statements. The path is resolved from the current directory, falling back to `<dir>`. Unmapped statements or sources incompatible with the selected section cause exit 1; statements are never silently discarded. No network or AI calls are made.
-
-With `--ai`, a self-hosted model (the `ai:` provider, as for `generate --ai`) words each section that has evidence.
-Every piece of evidence gets a document-wide id (`E1`, `E2`, …) and each sentence must cite the ids it rests on. The
-reply is validated, not trusted: a sentence that cites nothing, cites another section's evidence or an id that doesn't
-exist, or claims approval, release, review, completeness or conformity is dropped, and model text can't become Markdown
-links or HTML. Sentences are marked 🤖 and shown above the evidence they cite; the evidence list stays the authority.
-Sections without evidence stay `OFFEN` and are never sent. Project statements are sent as data inside the evidence
-list, with the instruction not to follow anything written in them. Results are cached in
-`docs/.docwizz/product-ai-cache.json` by template, section, evidence and model, so unchanged inputs are not sent again.
-If nothing could be worded (no server, no valid sentence) the output is exactly the draft without `--ai`.
-
-Next to the draft, `product` writes `<product_id>.evidence.json`: per section its status (`evidenced`, `open` when a
-required section has no evidence, `empty` when an optional one has none), every piece of evidence with its id, kind,
-origin (`detected` for code facts, `human` for project statements) and source, and, with `--ai`, the synthesized
-sentences with the ids they cite (`ai-drafted`). `required` sums it up: how many required sections there are, how many
-have evidence, and which are open. Every required section is either evidenced or listed as open; nothing is left out
-silently. The report is an inventory, not a statement of review, approval or conformity, and says so. A report file
-that docwizz didn't write is never overwritten.
-
-`docwizz product check . templates/vmodell-xt/sw-architecture.yaml --context project.yaml` checks a generated draft
-before someone reviews it (`--format json` for CI; exit 1 on an error, warnings never fail):
-
-| Rule | Severity | Finds |
-|---|---|---|
-| PROD-001 | warning | a required section without evidence (`OFFEN`; allowed in a draft, listed so nobody misses it) |
-| PROD-002 | error | a project statement whose source file doesn't exist |
-| PROD-003 | error | a product in `dependencies` without a draft next to this one |
-| PROD-004 | error | the draft or its evidence report missing, not docwizz's, or stale: the evidence changed since it was generated |
-| PROD-005 | warning | a project statement that reads like an instruction to a model (it is only ever sent as data) |
-| PROD-006 | error | a 🤖 sentence in the draft citing an id that isn't evidence of its section |
-
-It checks references and freshness, never content: whether a statement is true or a product can be approved stays a
-human decision, and the check says so.
-
-## Traceability report (P2.3)
-
-`docwizz trace . project-evidence.yaml` (also `.csv` or `.md` evidence tables) writes a read-only Markdown report to stdout; `--format json` writes the same relationships and gap classifications as JSON. The file path resolves from the working directory, then from `<dir>`. Input must obey `docs/project-evidence.md`; CSV/Markdown files contain records only, without explicit links. Exit 1 for missing/invalid catalogs; missing links are reported as gaps and do not fail. The report checks declared links only; it does not establish test success or V-Modell conformity. With an explicit YAML `source_hash`, it also reports the source as current, stale, missing or unverified; see `docs/project-evidence.md`. No file is overwritten and no AI or network request is made.
-
-## Evidence snapshot comparison
-
-`docwizz evidence-diff . before.yaml after.yaml [--format json]` compares two explicitly approved evidence snapshots (YAML, CSV or Markdown). It reports changed declaration fields, direct links, reachable tests along declared relations and link additions/removals. Output is deterministically ordered. It does not inspect file contents or decide whether evidence is current. Files resolve from CWD first, then `<dir>`; neither source nor output files are modified.
+- The first release, with no tag yet, is `0.1.0`.
+- Two release labels on one PR fail the workflow instead of guessing.
+- A commit already covered by a newer tag is not released again.
+- The bump rule is [semver-next.sh](.github/scripts/semver-next.sh), specified by
+  [semver-next.test.sh](.github/scripts/semver-next.test.sh), which runs before every release.
