@@ -119,8 +119,8 @@ public class MultiProjectAcceptanceJourneyTests
         var index = File.ReadAllText(Path.Combine(docs, "index.md"));
         Assert.Contains("## Documentation scope", index);
         Assert.Contains("apps/Mailer/Mailer.csproj", index);
-        Assert.Contains("backend/Tests/Tests.csproj (test evidence only)", index);
-        Assert.Contains("backend/Core/Core.csproj (metadata-only)", index);
+        Assert.Contains("backend/Tests/Tests.csproj` (test evidence only)", index);
+        Assert.Contains("backend/Core/Core.csproj` (metadata-only)", index);
         var api = File.ReadAllText(Path.Combine(docs, "api.md"));
         Assert.Contains("ASP.NET MVC conventional routes", api);
         Assert.Contains("not a complete runtime routing inventory", api);
