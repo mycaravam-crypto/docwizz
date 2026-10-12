@@ -62,6 +62,7 @@ static class ProjectDiscovery
         return File.Exists(Path.Combine(root, path.Replace('/', Path.DirectorySeparatorChar))) ? "not-scanned" : "not-found";
     }
 
+    /// <summary>Discovers project manifests and solution memberships without parsing source code, building or executing repository code. Paths and output order are stable.</summary>
     public static Inventory Scan(string root, IEnumerable<string> files)
     {
         root = Path.GetFullPath(root);
@@ -150,6 +151,7 @@ static class ProjectDiscovery
         return new(foundSolutions, projects, unassigned);
     }
 
+    /// <summary>Formats a deterministic, human-readable inventory of solutions, standalone projects and unresolved references.</summary>
     public static string ConsoleReport(Inventory inventory)
     {
         var lines = new List<string> { $"Solutions: {inventory.Solutions.Count}; projects: {inventory.Projects.Count}" };
