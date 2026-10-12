@@ -93,8 +93,6 @@ public class SetupProjectSelectionTests
         Assert.Contains("      - \"B/B.csproj\"\r\n", updated);
         Assert.EndsWith("# keep this comment\r\ncheck:\r\n  min_coverage: 10\r\n", updated);
         Assert.DoesNotContain("A/A.csproj", updated);
-        Assert.Equal(original, SetupProjectSelection.WithScope(original, null).Contains("scope:")
-            ? original : "not equal"); // scope removal validated in the separate assertion below
         var cleared = SetupProjectSelection.WithScope(updated, null);
         Assert.DoesNotContain("scope:", cleared);
         Assert.Equal("# my configuration\r\nprofile: api\r\n# keep this comment\r\ncheck:\r\n  min_coverage: 10\r\n", cleared);
