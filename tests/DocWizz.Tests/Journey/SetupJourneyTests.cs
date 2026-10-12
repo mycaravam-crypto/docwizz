@@ -36,7 +36,7 @@ public class SetupJourneyTests
         var r = Setup(repo);
         FirstRun(r, repo);
         var at = new[] { "discover", "scan", "config", "analyze", "architecture", "generate", "check" }
-            .Select((s, i) => r.Out.IndexOf($"[{i + 1}/6] {s,-13}ok", StringComparison.Ordinal)).ToList();
+            .Select((s, i) => r.Out.IndexOf($"[{i + 1}/7] {s,-13}ok", StringComparison.Ordinal)).ToList();
         Assert.DoesNotContain(-1, at);
         Assert.Equal(at.Order(), at);
     }
