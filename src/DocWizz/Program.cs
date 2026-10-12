@@ -61,6 +61,8 @@ static async Task<int> Dispatch(string[] args)
             return ContextCommand(path, config, opts);
         case "mcp":
             return await McpCommand(path, config, opts.ContainsKey("auto-rescan"));
+        case "trace":
+            return TraceCommand(path, pos.ElementAtOrDefault(2), json);
         case "product":
             return await ProductCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), opts.GetValueOrDefault("context"), config, opts.ContainsKey("ai"), productCheck, json);
         case "sbom":
@@ -85,6 +87,21 @@ static async Task<int> Dispatch(string[] args)
         default:
             return Usage($"unknown command {cmd}");
     }
+}
+
+// P2 traceability uses only explicit YAML links. No scan, inference or network calls.
+static int TraceCommand(string root, string? name, bool json)
+{
+    if (string.IsNullOrWhiteSpace(name)) return Usage("trace needs an evidence YAML file", "trace");
+    var file = File.Exists(name) ? name : Path.Combine(root, name);
+    try
+    {
+        var report = TraceabilityReport.Build(ProjectEvidenceCatalog.Load(file));
+        Console.Write(json ? TraceabilityReport.Json(report) : TraceabilityReport.Markdown(report));
+        return 0;
+    }
+    catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
+    catch (IOException e) { Console.Error.WriteLine($"{file}: {e.Message}"); return 1; }
 }
 
 // A context package for a coding agent, from the model the docs were generated from (docs/.docwizz/model.json), or from a
