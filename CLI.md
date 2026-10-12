@@ -73,7 +73,7 @@ The scope is applied **before** language scanning and is shared by `scan`, `gene
 docwizz setup .
 ```
 
-This runs every stage once, in this order, and prints one summary at the end. The first stage inventories solutions and project files before the full source-code scan; project filtering is planned for P1/P2 of Epic #124:
+This runs every stage once, in this order, and prints one summary at the end. The first stage inventories solutions and project files before the full source-code scan; P1 now filters scanned files when an explicit `scope:` exists; the interactive choice remains P2:
 
 | # | Stage | Does | If it fails |
 |---|---|---|---|
@@ -85,7 +85,7 @@ This runs every stage once, in this order, and prints one summary at the end. Th
 | 6 | generate | writes the docs to `<dir>/docs` | reported; the next stages still run |
 | 7 | check | the quality gate at the configured thresholds | reported |
 
-`setup` never prompts in P0, so it works the same way in a terminal and in a script. If multiple solutions or standalone projects are found, setup adds an informational project inventory to freshly generated YAML as comments (no active `scope:`). Existing YAML is preserved. Without a configured scope, the full source-code scan is unchanged. With a saved scope, the selection is applied before source scanners as described above. The summary starts with a status
+`setup` does not prompt in P1, so it works the same way in a terminal and in a script. If multiple solutions or standalone projects are found, setup adds an informational project inventory to freshly generated YAML as comments (no active `scope:`). Existing YAML is preserved. Without a configured scope, the full source-code scan is unchanged. With a saved scope, the selection is applied before source scanners as described above. The summary starts with a status
 that keeps problems in the repository apart from problems running docwizz:
 
 | Status | Means | Exit |
