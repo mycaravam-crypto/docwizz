@@ -347,7 +347,7 @@ static partial class Analyzer
             {
                 "none" => "`<inheritdoc/>`, but there is nothing to inherit from",
                 "interface" when implOf[node.Id].Any() && !implOf[node.Id].Any(i => nodes.GetValueOrDefault(i)?.Doc is not null)
-                    => $"`<inheritdoc/>` from `{Generator.Display(nodes[implOf[node.Id].First()])}`, which has no docs",
+                    => $"`<inheritdoc/>` from `{Naming.Display(nodes[implOf[node.Id].First()])}`, which has no docs",
                 _ => null,
             };
             var required = pattern.Sections.Select(Canonical).Distinct().Where(s => Applies(s, node)).ToList();

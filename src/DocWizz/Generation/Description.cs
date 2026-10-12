@@ -51,7 +51,7 @@ partial class Generator
 
         sb.AppendLine("## Components _(derived)_\n");
         var tops = model.Nodes.Where(n => TopKinds.Contains(n.Kind) && n.Kind != "module" && Top(n.Id) == n.Id).ToList();
-        sb.AppendLine(string.Join(", ", tops.GroupBy(n => Layer(Folder(n.File)) ?? "no layer").OrderBy(g => g.Key)
+        sb.AppendLine(string.Join(", ", tops.GroupBy(n => Layer(Naming.Folder(n.File)) ?? "no layer").OrderBy(g => g.Key)
             .Select(g => $"{g.Key}: {g.Count()}")) + $" — see [components](views/components.md).\n");
 
         sb.AppendLine("## Interfaces _(derived)_\n");
@@ -84,7 +84,7 @@ partial class Generator
         {
             sb.AppendLine("_Derived:_ endpoint authorization as declared in code — " + string.Join(", ", auth.Select(g => $"{g.Key}: {g.Count()}")) + ".\n");
             var open = auth.FirstOrDefault(g => g.Key == "none declared")?.ToList() ?? [];
-            if (open.Count > 0) sb.AppendLine("Endpoints without declared authorization: " + string.Join(", ", open.Select(e => $"`{EndpointLabel(e)}`").Order()) + "\n");
+            if (open.Count > 0) sb.AppendLine("Endpoints without declared authorization: " + string.Join(", ", open.Select(e => $"`{Naming.EndpointLabel(e)}`").Order()) + "\n");
         }
         if (config.Security.Enabled) sb.Append(SecuritySection());
         sb.AppendLine(HumanLink("security", "Threat model, authentication scheme, data protection"));

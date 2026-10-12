@@ -30,6 +30,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     readonly ILookup<string, string> implOf = model.Edges.Where(e => e.Kind == "implements").ToLookup(e => e.From, e => e.To);
     readonly Dictionary<string, DocumentationItem> findingOf = findings.ToDictionary(f => f.Node.Id);
     readonly TestLinks testLinks = new(model);
+    readonly FlowGraph flowGraph = new(model);
 
     // Renders every page, then writes only those whose content changed and removes generated pages that are gone:
     // unchanged pages keep their file (and timestamp), so regenerating after a small change touches only what it affects.
@@ -41,13 +42,13 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         void Write(string rel, string body) => pages[rel] = $"{Marker}\n{body}";
 
         var modules = model.Nodes.Where(n => n.Kind is not ("route" or "project" or "package" or "external" or "config") || parent.ContainsKey(n.Id))
-            .GroupBy(n => Folder(n.File)).OrderBy(g => g.Key).ToList();
+            .GroupBy(n => Naming.Folder(n.File)).OrderBy(g => g.Key).ToList();
         hierarchy = new ProjectHierarchy(root, model, Files, modules.Select(m => m.Key).ToList());
         if (hierarchy.Projects.Count > 0) Directory.CreateDirectory(Path.Combine(outDir, "projects"));
         if (hierarchy.Solutions.Count > 0) Directory.CreateDirectory(Path.Combine(outDir, "solutions"));
         foreach (var project in hierarchy.Projects) Write(project.Page, RenderProject(project));
         foreach (var solution in hierarchy.Solutions) Write(solution.Page, RenderSolution(solution));
-        foreach (var m in modules) Write($"modules/{Slug(m.Key)}.md", Module(m.Key, m.ToList()));
+        foreach (var m in modules) Write($"modules/{Naming.Slug(m.Key)}.md", Module(m.Key, m.ToList()));
         Write("index.md", Index(modules.Select(m => m.Key).ToList()));
         Write("architecture.md", ArchitecturePage(modules.Select(m => m.Key).ToList()));
         Write("api.md", Api());
@@ -86,9 +87,9 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         var entries = new List<SearchEntry>();
         void Entry(string name, string kind, string page, string? summary) => entries.Add(new(name, kind, page, summary));
         foreach (var n in model.Nodes.Where(n => TopKinds.Contains(n.Kind) && n.Kind != "module" && Top(n.Id) == n.Id))
-            Entry(n.Name, n.Kind, $"modules/{Slug(Folder(n.File))}.md#{Anchor(n.Id)}", WrittenSummary(n));
+            Entry(n.Name, n.Kind, $"modules/{Naming.Slug(Naming.Folder(n.File))}.md#{Anchor(n.Id)}", WrittenSummary(n));
         foreach (var n in model.Nodes.Where(n => n.Tags?.Contains("endpoint") == true))
-            Entry(EndpointLabel(n), "endpoint", "api.md", WrittenSummary(n));
+            Entry(Naming.EndpointLabel(n), "endpoint", "api.md", WrittenSummary(n));
         foreach (var n in model.Nodes.Where(n => n.Kind == "route")) Entry(n.Route ?? n.Name, "route", "frontend.md", null);
         if (hierarchy is not null)
         {
@@ -99,8 +100,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
                     project.Page, project.MetadataOnly ? "Metadata-only dependency, not source-scanned" : "Project overview, modules and components");
         }
         foreach (var n in model.Nodes.Where(n => n.Kind == "config")) Entry(n.Name, "config", "views/deployment.md#configuration", null);
-        foreach (var f in model.Nodes.Where(n => n.Kind is not ("route" or "project" or "package" or "external" or "config")).Select(n => Folder(n.File)).Distinct())
-            Entry(f, "module", $"modules/{Slug(f)}.md", null);
+        foreach (var f in model.Nodes.Where(n => n.Kind is not ("route" or "project" or "package" or "external" or "config")).Select(n => Naming.Folder(n.File)).Distinct())
+            Entry(f, "module", $"modules/{Naming.Slug(f)}.md", null);
         return System.Text.Json.JsonSerializer.Serialize(entries.OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase).ThenBy(e => e.Kind),
             new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)
             { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
@@ -180,7 +181,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         if (blocks.Count > 0)
             sb.AppendLine("## Building blocks\n\n| Role | Count |\n|---|---|\n" + string.Join("\n", blocks.Select(b => $"| {b.Label} | {b.Count} |")) + "\n");
         sb.AppendLine("## Modules\n");
-        foreach (var m in modules) sb.AppendLine($"- [{m}](modules/{Slug(m)}.md) — {Layer(m) ?? "no layer"}");
+        foreach (var m in modules) sb.AppendLine($"- [{m}](modules/{Naming.Slug(m)}.md) — {Layer(m) ?? "no layer"}");
         return sb.ToString();
     }
 
@@ -244,8 +245,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     {
         var sb = new StringBuilder("# Architecture\n\n");
         // Layer graph: any HTTP call is a dependency on `http`. Module graph: HTTP calls point at the endpoint's module.
-        var deps = Dependencies().Select(d => (From: Folder(nodes[d.From].File),
-            To: nodes.TryGetValue(d.To, out var t) ? Folder(t.File) : null, Http: d.Kind == "http")).ToList();
+        var deps = Dependencies().Select(d => (From: Naming.Folder(nodes[d.From].File),
+            To: nodes.TryGetValue(d.To, out var t) ? Naming.Folder(t.File) : null, Http: d.Kind == "http")).ToList();
 
         sb.AppendLine("Views: " + string.Join(" · ", Views().Select(v => $"[{v.Title}](views/{v.Page}.md)")) + "\n");
         sb.AppendLine("## Layers\n");
@@ -281,7 +282,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             sb.AppendLine();
         }
         sb.AppendLine($"## Cycles ({arch.Cycles.Count})\n");
-        foreach (var c in arch.Cycles) sb.AppendLine($"- {string.Join(" ↔ ", c.Select(m => $"[{m}](modules/{Slug(m)}.md)"))}");
+        foreach (var c in arch.Cycles) sb.AppendLine($"- {string.Join(" ↔ ", c.Select(m => $"[{m}](modules/{Naming.Slug(m)}.md)"))}");
         if (arch.Cycles.Count == 0) sb.AppendLine("None.");
 
         // Coupling: fan-in (Ca) = modules depending on this one, fan-out (Ce) = modules it depends on,
@@ -296,7 +297,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
                 "Instability = fan-out / (fan-in + fan-out); stable modules (near 0) are costly to change, so they should not depend on unstable ones.\n");
             sb.AppendLine("| Module | Layer | Fan-in | Fan-out | Instability |\n|---|---|---|---|---|");
             foreach (var c in coupled.Take(MaxListed * 2))
-                sb.AppendLine($"| [{c.Module}](modules/{Slug(c.Module)}.md) | {Layer(c.Module) ?? "—"} | {c.In} | {c.Out} | {(double)c.Out / (c.In + c.Out):0.00} |");
+                sb.AppendLine($"| [{c.Module}](modules/{Naming.Slug(c.Module)}.md) | {Layer(c.Module) ?? "—"} | {c.In} | {c.Out} | {(double)c.Out / (c.In + c.Out):0.00} |");
             if (coupled.Count > MaxListed * 2) sb.AppendLine($"\n_… {coupled.Count - MaxListed * 2} more modules._");
         }
 
@@ -318,13 +319,13 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             var types = (e.Responses ?? []).Append(e.Returns ?? "");
             var leaked = entities.Where(x => types.Any(t => Regex.IsMatch(t, $@"\b{Regex.Escape(x.Name)}\b"))).Select(x => $"`{x.Name}`").ToList();
             if (leaked.Count > 0)
-                yield return $"Entity exposed: `{EndpointLabel(e)}` returns {string.Join(", ", leaked)} — persistence shape becomes the API contract; return a DTO";
+                yield return $"Entity exposed: `{Naming.EndpointLabel(e)}` returns {string.Join(", ", leaked)} — persistence shape becomes the API contract; return a DTO";
         }
         foreach (var n in model.Nodes.Where(n => n.Kind is "method" or "endpoint" && n.Complexity >= ApiLogicComplexity
-                && (Layer(Folder(n.File)) == "api" || n.Tags?.Contains("endpoint") == true)).OrderByDescending(n => n.Complexity))
+                && (Layer(Naming.Folder(n.File)) == "api" || n.Tags?.Contains("endpoint") == true)).OrderByDescending(n => n.Complexity))
             yield return $"Logic in the API layer: `{Esc(ShortName(n))}` has complexity {n.Complexity} — move the decisions into the application layer " +
                 $"({SourceLink(n.File, n.Line, Path.GetFileName(n.File))})";
-        foreach (var g in model.Edges.Where(e => e.Kind == "uses-namespace" && nodes.TryGetValue(e.From, out var n) && Layer(Folder(n.File)) == "domain")
+        foreach (var g in model.Edges.Where(e => e.Kind == "uses-namespace" && nodes.TryGetValue(e.From, out var n) && Layer(Naming.Folder(n.File)) == "domain")
                 .GroupBy(e => e.To[3..]).OrderBy(g => g.Key))
             yield return $"Domain depends on `{g.Key}` ({string.Join(", ", g.Select(e => $"`{nodes[e.From].Name}`").Distinct())}) — " +
                 "the domain layer should need nothing outside the language and its own code";
@@ -357,7 +358,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         // Middleware in registration order, per place that configures it (a project's top-level code, Startup.Configure).
         foreach (var g in model.Edges.Where(e => e.Kind == "pipeline").GroupBy(e => e.From))
         {
-            var at = nodes.TryGetValue(g.Key, out var owner) ? owner.Kind == "project" ? $"project `{owner.Name}`" : $"`{Display(owner)}`" : g.Key;
+            var at = nodes.TryGetValue(g.Key, out var owner) ? owner.Kind == "project" ? $"project `{owner.Name}`" : $"`{Naming.Display(owner)}`" : g.Key;
             sb.AppendLine($"\n## Request pipeline ({at})\n\nMiddleware in the order it is registered; each request passes through it top to bottom.\n");
             var i = 0;
             foreach (var e in g)
@@ -368,17 +369,17 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         var flowEdges = new List<(string From, string To, int Count)>();
         foreach (var n in endpoints)
         {
-            var trace = Trace(n.Id);
+            var trace = flowGraph.Trace(n.Id);
             var handler = parent.TryGetValue(n.Id, out var owner) ? owner : null;
-            var label = EndpointLabel(n);
+            var label = Naming.EndpointLabel(n);
             foreach (var c in callers[n.Id].Where(nodes.ContainsKey)) flowEdges.Add((nodes[c].Name, label, 0));
             if (handler is not null) flowEdges.Add((label, nodes[handler].Name, 0));
             foreach (var (from, to) in trace.Steps)
-                flowEdges.Add((from == n.Id ? handler is null ? label : nodes[handler].Name : UnitLabel(from), UnitLabel(to), 0));
+                flowEdges.Add((from == n.Id ? handler is null ? label : nodes[handler].Name : flowGraph.UnitLabel(from), flowGraph.UnitLabel(to), 0));
             if (trace.Layers.Count == 0) continue;
-            var data = Reached(trace, x => x.Tags?.Contains("dbcontext") == true).Select(x => x.Name).ToList();
-            var external = Reached(trace, x => x.Kind == "external").Select(ExternalLabel).ToList();
-            flowLines.Add($"- `{label}`: {(handler is null ? "" : $"{nodes[handler].Name} → ")}{Esc(Chain(trace))}" +
+            var data = flowGraph.Reached(trace, x => x.Tags?.Contains("dbcontext") == true).Select(x => x.Name).ToList();
+            var external = flowGraph.Reached(trace, x => x.Kind == "external").Select(Externals.Label).ToList();
+            flowLines.Add($"- `{label}`: {(handler is null ? "" : $"{nodes[handler].Name} → ")}{Esc(flowGraph.Chain(trace))}" +
                 (data.Count + external.Count > 0 ? $"  \n  _data:_ {(data.Count > 0 ? string.Join(", ", data) : "—")} · _external:_ {(external.Count > 0 ? string.Join(", ", external) : "—")}" : ""));
         }
         if (flowLines.Count > 0)
@@ -443,8 +444,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         if (routes.Count > 0)
         {
             // Route → page → children → stores/composables → API client → backend endpoint (followed further in api.md).
-            var lines = routes.Select(r => (r, Trace(r.Id, stop: n => n.Tags?.Contains("endpoint") == true))).Where(x => x.Item2.Layers.Count > 0)
-                .Select(x => $"- `{x.r.Route}` → {Esc(Chain(x.Item2))}").ToList();
+            var lines = routes.Select(r => (r, flowGraph.Trace(r.Id, stop: n => n.Tags?.Contains("endpoint") == true))).Where(x => x.Item2.Layers.Count > 0)
+                .Select(x => $"- `{x.r.Route}` → {Esc(flowGraph.Chain(x.Item2))}").ToList();
             if (lines.Count > 0)
                 sb.AppendLine("\n## Flows\n\nFrom each route to the backend endpoints it can reach, hop by hop; see [API](api.md) for what the endpoints do.\n\n" +
                     string.Join("\n", lines));
@@ -466,7 +467,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             "That is a structural link, not code coverage.\n");
         sb.AppendLine("| Level | Item | Status | Missing | Why it needs docs | Tested |\n|---|---|---|---|---|---|");
         foreach (var f in open)
-            sb.AppendLine($"| {f.Level} | {SourceLink(f.Node.File, f.Node.Line, $"`{Esc(Display(f.Node))}`")} | {f.Status} | {string.Join(", ", f.Missing)} | {Esc(string.Join("; ", f.Reasons))} | {(f.Tested ? "✓" : "—")} |");
+            sb.AppendLine($"| {f.Level} | {SourceLink(f.Node.File, f.Node.Line, $"`{Esc(Naming.Display(f.Node))}`")} | {f.Status} | {string.Join(", ", f.Missing)} | {Esc(string.Join("; ", f.Reasons))} | {(f.Tested ? "✓" : "—")} |");
         var flagged = findings.Where(f => f.Flags is { Count: > 0 }).OrderBy(f => f.Node.File).ThenBy(f => f.Node.Line).ToList();
         if (flagged.Count > 0)
         {
@@ -474,7 +475,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             sb.AppendLine("| Item | Rule | Basis | Problem |\n|---|---|---|---|");
             foreach (var f in flagged)
                 foreach (var q in f.Flags!)
-                    sb.AppendLine($"| {SourceLink(f.Node.File, f.Node.Line, $"`{Esc(Display(f.Node))}`")} | {q.Rule} | {(q.Origin == Origin.Fact ? "fact" : "inferred")} | {Esc(q.Detail)} |");
+                    sb.AppendLine($"| {SourceLink(f.Node.File, f.Node.Line, $"`{Esc(Naming.Display(f.Node))}`")} | {q.Rule} | {(q.Origin == Origin.Fact ? "fact" : "inferred")} | {Esc(q.Detail)} |");
         }
         var rated = findings.Where(f => assessments?.ContainsKey(f.Node.Id) == true)
             .OrderBy(f => assessments![f.Node.Id].Score).ThenBy(f => f.Node.File).ThenBy(f => f.Node.Line).ToList();
@@ -486,7 +487,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             foreach (var f in rated)
             {
                 var a = assessments![f.Node.Id];
-                sb.AppendLine($"| {SourceLink(f.Node.File, f.Node.Line, $"`{Esc(Display(f.Node))}`")} | {a.Score} | {Esc(string.Join(", ", a.Missing))} | {Esc(a.Note)} |");
+                sb.AppendLine($"| {SourceLink(f.Node.File, f.Node.Line, $"`{Esc(Naming.Display(f.Node))}`")} | {a.Score} | {Esc(string.Join(", ", a.Missing))} | {Esc(a.Note)} |");
             }
         }
         var ai = findings.Where(f => f.Sections.GetValueOrDefault("summary")?.Origin == Origin.Ai).ToList();
@@ -495,12 +496,12 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             sb.AppendLine($"\n## AI drafts ({ai.Count})\n\nDrafted from these facts only; review, then move into the code.\n");
             sb.AppendLine("| Item | Draft | Generated from |\n|---|---|---|");
             foreach (var f in ai)
-                sb.AppendLine($"| `{Esc(Display(f.Node))}` | {Esc(f.Sections["summary"].Text)} | " +
-                    $"{string.Join(", ", (f.Sections["summary"].From ?? []).Select(id => $"`{Esc(nodes.TryGetValue(id, out var x) ? Display(x) : id)}`"))} |");
+                sb.AppendLine($"| `{Esc(Naming.Display(f.Node))}` | {Esc(f.Sections["summary"].Text)} | " +
+                    $"{string.Join(", ", (f.Sections["summary"].From ?? []).Select(id => $"`{Esc(nodes.TryGetValue(id, out var x) ? Naming.Display(x) : id)}`"))} |");
         }
         sb.AppendLine("\n## Most complex\n\n| Complexity | Item |\n|---|---|");
         foreach (var n in model.Nodes.Where(n => n.Complexity > 1 && n.Kind != "component").OrderByDescending(n => n.Complexity).Take(20))
-            sb.AppendLine($"| {n.Complexity} | {SourceLink(n.File, n.Line, $"`{Esc(Display(n))}`")} |");
+            sb.AppendLine($"| {n.Complexity} | {SourceLink(n.File, n.Line, $"`{Esc(Naming.Display(n))}`")} |");
         return sb.ToString();
     }
 
@@ -509,15 +510,14 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
 
     // A member as shown under its type: `Attach(Fixture.Application.MaterialService)`, not the full id.
     static string MemberName(Node m, Node owner) =>
-        Display(m).StartsWith(Display(owner)) && Display(m).Length > Display(owner).Length ? Display(m)[(Display(owner).Length + 1)..] : m.Name;
+        Naming.Display(m).StartsWith(Naming.Display(owner)) && Naming.Display(m).Length > Naming.Display(owner).Length ? Naming.Display(m)[(Naming.Display(owner).Length + 1)..] : m.Name;
 
     // The top-level symbol a member belongs to. A TS class/interface/type/enum stands on its own inside its file module.
-    string Top(string id) => parent.TryGetValue(id, out var p)
-        && !(nodes[p].Kind == "module" && nodes[id].Kind is "class" or "interface" or "type" or "enum") ? Top(p) : id;
+    string Top(string id) => flowGraph.Top(id);
 
     // A folder's layer is the layer of its first file that matches one.
     Dictionary<string, string?>? folderLayers;
-    string? Layer(string folder) => (folderLayers ??= model.Nodes.GroupBy(n => Folder(n.File)).ToDictionary(g => g.Key,
+    string? Layer(string folder) => (folderLayers ??= model.Nodes.GroupBy(n => Naming.Folder(n.File)).ToDictionary(g => g.Key,
         g => g.Select(n => archConfig.Layers.FirstOrDefault(kv => kv.Value.Any(glob =>
             System.IO.Enumeration.FileSystemName.MatchesSimpleExpression(glob, n.File))).Key).FirstOrDefault(l => l is not null)))
         .GetValueOrDefault(folder);
@@ -544,7 +544,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     // ⚠ marks items the analyzer says need (more) docs.
     string Badge(Node n) => findingOf.TryGetValue(n.Id, out var f) && f.Status != Status.Documented ? " ⚠" : "";
 
-    string ModuleLink(Node n) => $"[{n.Name}](modules/{Slug(Folder(n.File))}.md#{Anchor(Top(n.Id))})";
+    string ModuleLink(Node n) => $"[{n.Name}](modules/{Naming.Slug(Naming.Folder(n.File))}.md#{Anchor(Top(n.Id))})";
     string Anchor(string id) => Regex.Replace(nodes[id].Name.ToLowerInvariant(), @"[^a-z0-9\- ]", "").Replace(' ', '-');
 
     string SourceLink(string file, string label) => SourceLink(file, 0, label == "" ? file : label);
@@ -567,9 +567,5 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         return sb.Append("```\n").ToString();
     }
 
-    public static string EndpointLabel(Node n) => $"{n.Tags![1]} /{n.Route?.TrimStart('/')}";
-    public static string Display(Node n) => n.Id[(n.Id.IndexOf(':') + 1)..];
-    public static string Folder(string file) => Path.GetDirectoryName(file)?.Replace('\\', '/') is { Length: > 0 } d ? d : ".";
-    public static string Slug(string folder) => folder == "." ? "root" : Regex.Replace(folder, @"[^A-Za-z0-9.\-]+", "-");
     static string Esc(string s) => s.Replace("|", "\\|").Replace("\n", " ");
 }

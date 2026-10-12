@@ -102,7 +102,7 @@ sealed class ProjectHierarchy
             if (!nodesByProject.TryGetValue(project.Id, out var owned))
                 nodesByProject[project.Id] = owned = [];
             owned.Add(node);
-            var folder = Generator.Folder(node.File);
+            var folder = Naming.Folder(node.File);
             if (!ownersByFolder.TryGetValue(folder, out var ids))
                 ownersByFolder[folder] = ids = new HashSet<string>(StringComparer.Ordinal);
             ids.Add(project.Id);
@@ -114,7 +114,7 @@ sealed class ProjectHierarchy
             if (owners.Count == 0) UnassignedModules.Add(folder);
             else
             {
-                modulePages.Add($"modules/{Generator.Slug(folder)}.md", owners);
+                modulePages.Add($"modules/{Naming.Slug(folder)}.md", owners);
                 foreach (var p in owners) p.Modules.Add(folder);
             }
         }
@@ -137,7 +137,7 @@ sealed class ProjectHierarchy
     public Solution? SolutionByPage(string page) => solutionPages.GetValueOrDefault(page);
 
     public IReadOnlyList<Project> ForModule(string folder) =>
-        modulePages.GetValueOrDefault($"modules/{Generator.Slug(folder)}.md") ?? [];
+        modulePages.GetValueOrDefault($"modules/{Naming.Slug(folder)}.md") ?? [];
     public Project? ById(string id) => projectsById.GetValueOrDefault(id);
 
     public string Index()
@@ -166,7 +166,7 @@ sealed class ProjectHierarchy
         {
             sb.AppendLine("- **Unassigned modules**");
             foreach (var m in UnassignedModules)
-                sb.AppendLine($"  - [{m}](modules/{Generator.Slug(m)}.md)");
+                sb.AppendLine($"  - [{m}](modules/{Naming.Slug(m)}.md)");
         }
         return sb.AppendLine().ToString();
     }
@@ -183,7 +183,7 @@ sealed class ProjectHierarchy
             {
                 b.Append("<ul>");
                 foreach (var module in p.Modules.Order(StringComparer.Ordinal))
-                    b.Append("<li>").Append(link($"modules/{Generator.Slug(module)}.md", module)).Append("</li>");
+                    b.Append("<li>").Append(link($"modules/{Naming.Slug(module)}.md", module)).Append("</li>");
                 b.Append("</ul>");
             }
             b.Append("</li>");
@@ -206,7 +206,7 @@ sealed class ProjectHierarchy
         {
             b.Append("<li>Unassigned modules<ul>");
             foreach (var folder in UnassignedModules)
-                b.Append("<li>").Append(link($"modules/{Generator.Slug(folder)}.md", folder)).Append("</li>");
+                b.Append("<li>").Append(link($"modules/{Naming.Slug(folder)}.md", folder)).Append("</li>");
             b.Append("</ul></li>");
         }
         return b.Append("</ul></details>").ToString();

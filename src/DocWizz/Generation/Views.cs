@@ -51,7 +51,7 @@ partial class Generator
         .SelectMany(Configuration.Environments).Distinct();
 
     string ConfigReaderList(Node key) => string.Join(", ", ConfigReaders[key.Id].Where(e => nodes.ContainsKey(e.From))
-        .Select(e => UnitLabel(Unit(e.From)) + (e.Kind == "binds" ? " (binds)" : "")).Distinct().Order());
+        .Select(e => flowGraph.UnitLabel(flowGraph.Unit(e.From)) + (e.Kind == "binds" ? " (binds)" : "")).Distinct().Order());
 
     // Configuration keys: where they are defined (per environment), who reads them, and what is not known from the repository.
     string ConfigurationSection()
@@ -76,7 +76,6 @@ partial class Generator
     }
 
     // "SQL Server _(inferred)_": the name with its certainty unless detected.
-    static string ExternalLabel(Node ext) => Externals.Certainty(ext) == "detected" ? ext.Name : $"{ext.Name} ({Externals.Certainty(ext)})";
 
     // The container (project) a symbol lives in; code outside any project is grouped by language.
     // Projects are named by their manifest name; the manifest path is added only when two projects share a name.
@@ -108,7 +107,7 @@ partial class Generator
         var edges = new List<(string, string, int)>();
         if (HasFrontend) edges.Add(("Users (browser)", SystemName, 0));
         else if (model.Nodes.Any(n => n.Tags?.Contains("endpoint") == true)) edges.Add(("API clients", SystemName, 0));
-        foreach (var ext in ExternalSystems) edges.Add((SystemName, ExternalLabel(ext), 0));
+        foreach (var ext in ExternalSystems) edges.Add((SystemName, Externals.Label(ext), 0));
         sb.AppendLine(edges.Count > 0 ? Mermaid("graph LR", edges, x => x) : "_No users, databases or external services detected._\n");
 
         if (ExternalSystems.Count > 0)
@@ -154,7 +153,7 @@ partial class Generator
         }
         foreach (var ext in ExternalSystems)
             foreach (var e in Connections[ext.Id].Where(e => nodes.ContainsKey(e.From)))
-                edges.Add((Container(nodes[e.From]), ExternalLabel(ext), Externals.Category(ext) == "database" ? "reads/writes" : "uses"));
+                edges.Add((Container(nodes[e.From]), Externals.Label(ext), Externals.Category(ext) == "database" ? "reads/writes" : "uses"));
         var grouped = edges.Distinct().ToList();
         if (grouped.Count > 0)
         {
@@ -162,7 +161,7 @@ partial class Generator
             string Id(string x) => ids.TryGetValue(x, out var id) ? id : ids[x] = $"c{ids.Count}";
             var lines = grouped.Select(e => $"    {Id(e.From)} -->|{e.Label}| {Id(e.To)}").ToList();
             sb.AppendLine("```mermaid\ngraph LR");
-            var databases = ExternalSystems.Where(x => Externals.Category(x) == "database").Select(ExternalLabel).ToHashSet();
+            var databases = ExternalSystems.Where(x => Externals.Category(x) == "database").Select(Externals.Label).ToHashSet();
             foreach (var (x, id) in ids) sb.AppendLine(databases.Contains(x) ? $"    {id}[(\"{x}\")]" : $"    {id}[\"{x.Replace("\"", "'")}\"]");
             foreach (var l in lines) sb.AppendLine(l);
             sb.AppendLine("```\n");
@@ -195,7 +194,7 @@ partial class Generator
 
         var ids = shown.Order().Select((x, i) => (x, i)).ToDictionary(p => p.x, p => $"n{p.i}");
         sb.AppendLine("```mermaid\ngraph LR");
-        foreach (var layer in shown.GroupBy(x => Layer(Folder(nodes[x].File)) ?? "(no layer)").OrderBy(g => g.Key))
+        foreach (var layer in shown.GroupBy(x => Layer(Naming.Folder(nodes[x].File)) ?? "(no layer)").OrderBy(g => g.Key))
         {
             sb.AppendLine($"    subgraph {Regex.Replace(layer.Key, @"\W", "_")}[\"{layer.Key}\"]");
             foreach (var x in layer.Order()) sb.AppendLine($"        {ids[x]}[\"{nodes[x].Name}\"]");
@@ -206,10 +205,10 @@ partial class Generator
         sb.AppendLine("```\n");
 
         sb.AppendLine("| Component | Kind | Layer | Depends on | Used by | Summary |\n|---|---|---|---|---|---|");
-        foreach (var x in shown.OrderBy(x => Layer(Folder(nodes[x].File))).ThenBy(x => nodes[x].Name))
+        foreach (var x in shown.OrderBy(x => Layer(Naming.Folder(nodes[x].File))).ThenBy(x => nodes[x].Name))
         {
             var n = nodes[x];
-            sb.AppendLine($"| [{n.Name}](../modules/{Slug(Folder(n.File))}.md#{Anchor(x)}) | {n.Kind} | {Layer(Folder(n.File)) ?? "—"} | " +
+            sb.AppendLine($"| [{n.Name}](../modules/{Naming.Slug(Naming.Folder(n.File))}.md#{Anchor(x)}) | {n.Kind} | {Layer(Naming.Folder(n.File)) ?? "—"} | " +
                 $"{string.Join(", ", deps.Where(d => d.From == x).Select(d => nodes[d.To].Name).Order())} | " +
                 $"{string.Join(", ", deps.Where(d => d.To == x).Select(d => nodes[d.From].Name).Order())} | {Esc(Summary(n) ?? "")} |");
         }
@@ -217,7 +216,7 @@ partial class Generator
     }
 
     // A symbol's section on its module page, linked from a views/ page.
-    string ViewLink(Node n) => $"[{n.Name}](../modules/{Slug(Folder(n.File))}.md#{Anchor(Top(n.Id))})";
+    string ViewLink(Node n) => $"[{n.Name}](../modules/{Naming.Slug(Naming.Folder(n.File))}.md#{Anchor(Top(n.Id))})";
 
     string DataView()
     {
@@ -232,14 +231,14 @@ partial class Generator
             foreach (var ctx in DbContexts)
             {
                 foreach (var a in injectedBy[ctx.Id].Where(nodes.ContainsKey)) edges.Add((nodes[a].Name, ctx.Name, 0));
-                foreach (var db in DatabasesOf(ctx)) edges.Add((ctx.Name, ExternalLabel(db), 0));
+                foreach (var db in DatabasesOf(ctx)) edges.Add((ctx.Name, Externals.Label(db), 0));
                 foreach (var en in persists[ctx.Id].Where(nodes.ContainsKey)) edges.Add((ctx.Name, nodes[en].Name, 0));
             }
             sb.AppendLine(Mermaid("graph LR", edges.Distinct(), x => x));
             sb.AppendLine("| Entity | Stored via | Database | Accessed by | Summary |\n|---|---|---|---|---|");
             foreach (var ctx in DbContexts)
                 foreach (var en in persists[ctx.Id].Where(nodes.ContainsKey).Select(x => nodes[x]))
-                    sb.AppendLine($"| {en.Name} | {ctx.Name} | {string.Join(", ", DatabasesOf(ctx).Select(ExternalLabel))} | {string.Join(", ", injectedBy[ctx.Id].Where(nodes.ContainsKey).Select(a => nodes[a].Name).Distinct().Order())} | {Esc(Summary(en) ?? "")} |");
+                    sb.AppendLine($"| {en.Name} | {ctx.Name} | {string.Join(", ", DatabasesOf(ctx).Select(Externals.Label))} | {string.Join(", ", injectedBy[ctx.Id].Where(nodes.ContainsKey).Select(a => nodes[a].Name).Distinct().Order())} | {Esc(Summary(en) ?? "")} |");
             sb.AppendLine();
         }
 
@@ -251,7 +250,7 @@ partial class Generator
             var accesses = model.Edges.Where(e => e.Kind == "accesses" && e.To.StartsWith("sql:")).ToLookup(e => e.To, e => e.From);
             var touches = model.Edges.Where(e => e.Kind == "accesses" && e.From.StartsWith("sql:")).ToLookup(e => e.From, e => e.To);
             var callers = model.Edges.Where(e => e.Kind == "calls" && e.To.StartsWith("sql:") && !e.From.StartsWith("sql:")).ToLookup(e => e.To, e => e.From);
-            string Names(IEnumerable<string> ids) => string.Join(", ", ids.Where(nodes.ContainsKey).Select(id => UnitLabel(Unit(id))).Distinct().Order());
+            string Names(IEnumerable<string> ids) => string.Join(", ", ids.Where(nodes.ContainsKey).Select(id => flowGraph.UnitLabel(flowGraph.Unit(id))).Distinct().Order());
             sb.AppendLine("## Database objects (SQL)\n");
             if (tables.Count > 0)
             {

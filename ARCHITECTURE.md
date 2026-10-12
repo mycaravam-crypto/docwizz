@@ -129,7 +129,7 @@ P4: `ProjectHierarchy` builds one `nodesByProject` index and one module-to-owner
 - **[Projects](src/DocWizz/Scanning/Projects.cs)** reads `.csproj` (SDK, target frameworks, package and project references,
   role: executable, library or test from `OutputType`, the SDK and test packages), `package.json`, and the solution
   folders of `.sln`/`.slnx`. Files in a test project count as test code, whatever their path.
-- **[Configuration](src/DocWizz/Model/Configuration.cs)** reads `appsettings*.json`, `.env`, Kubernetes ConfigMaps and the env
+- **[Configuration](src/DocWizz/Scanning/Configuration.cs)** reads `appsettings*.json`, `.env`, Kubernetes ConfigMaps and the env
   blocks of Helm `values*.yaml`: keys per environment, no values (only the host of a URL).
 - **[Externals](src/DocWizz/Scanning/Externals.cs)** holds the curated list of known systems (packages, calls, container
   images, IaC resource types) and the link step: absolute URLs, package-only evidence, and DbContexts without a known database.
@@ -161,10 +161,10 @@ P4: `ProjectHierarchy` builds one `nodesByProject` index and one module-to-owner
   removed symbols, the affected pages, and the gaps and violations a change introduced. A touched symbol also marks
   every flow passing through it: `api.md` / `frontend.md` and the module pages along that flow. New external systems
   and new layer dependencies are listed as ADR candidates: decisions to record, not decisions DocWizz makes. Every added
-  and changed symbol also gets its linked tests ([TestLinks](src/DocWizz/Analysis/TestLinks.cs): `tests` edges to it, its
+  and changed symbol also gets its linked tests ([TestLinks](src/DocWizz/Model/TestLinks.cs): `tests` edges to it, its
   interface, an implementation or a member — the same rule as the analyzer's "tested"), or is listed as unlinked.
   A project whose package version changed is listed with the update's kind and impact (see Remediation).
-- **[Sbom](src/DocWizz/Packages/Sbom.cs)** (`docwizz sbom`) writes CycloneDX 1.6 JSON from the Projects scan: one `application`
+- **[Sbom](src/DocWizz/Analysis/Sbom.cs)** (`docwizz sbom`) writes CycloneDX 1.6 JSON from the Projects scan: one `application`
   component per project (with its manifest), one `library` per declared package and version, with a package URL, and a
   dependency graph of project → package and project → project references. Only a plain literal (`1.2.3`) fills `version`
   and the purl's version; ranges, wildcards, properties and git/file specs stay as `docwizz:declaredVersion`, marked
@@ -172,13 +172,13 @@ P4: `ProjectHierarchy` builds one `nodesByProject` index and one module-to-owner
   byte-identical for identical inputs. The same inventory (`Sbom.Collect`) feeds the generated
   `views/packages.md`: every package with its declared versions per project and manifest, the ones declared at more than
   one version first; the page is left out when no manifest declares a package.
-- **[Remediation](src/DocWizz/Packages/Remediation.cs)** (`docwizz remediate`) turns package findings into suggestions. Targets
+- **[Remediation](src/DocWizz/Analysis/Remediation.cs)** (`docwizz remediate`) turns package findings into suggestions. Targets
   come from `--package/--to`, `remediation.targets`, or NuGet version drift (align on the highest version). Each
   suggestion keeps three kinds of evidence apart. *Detected*: the declared version and the line that declares it
   ([Projects.NuGet](src/DocWizz/Scanning/Projects.cs) resolves `Directory.Packages.props` and `VersionOverride`), and from them a
   `dotnet add package` command, or a one-line patch where versions are managed centrally. *Inferred*: types that
   import the package's namespaces in the referencing projects (and in projects referencing those), the flows through
-  them (`Generator.FlowsThrough`), and their linked tests. *Validated*: only with `--validate`, which copies the
+  them (`FlowGraph.FlowsThrough`), and their linked tests. *Validated*: only with `--validate`, which copies the
   directory to a temporary folder, applies the edits there and runs the configured restore/build/test steps. A version
   that isn't a literal (an MSBuild property, a range, `1.*`) gets no command. Status and confidence follow from the
   evidence: a major update without validation is always low confidence, a failed step makes it potentially breaking,
@@ -192,12 +192,13 @@ P4: `ProjectHierarchy` builds one `nodesByProject` index and one module-to-owner
 |---|---|
 | [Generator.cs](src/DocWizz/Generation/Generator.cs) | `index.md`, `architecture.md`, `api.md`, `frontend.md`, `quality.md`, shared helpers |
 | [Modules.cs](src/DocWizz/Generation/Modules.cs) | `modules/<folder>.md`: role, key components, API, data, external systems, configuration, flows, gaps, observations, then the component reference |
-| [Flows.cs](src/DocWizz/Generation/Flows.cs) | flow tracing used by api.md, frontend.md and module pages |
 | [Views.cs](src/DocWizz/Generation/Views.cs) | `views/context.md`, `containers.md`, `components.md`, `data.md`; the configuration table |
 | [Deployment.cs](src/DocWizz/Generation/Deployment.cs) | `views/deployment.md`: compose, Kubernetes, Dockerfiles, IaC, from the scan's file list (`exclude:`, `.gitignore`) |
 | [Description.cs](src/DocWizz/Generation/Description.cs) | `architecture-description.md`, structured after ISO/IEC/IEEE 42010 |
+| [PackagesView.cs](src/DocWizz/Generation/PackagesView.cs) | `views/packages.md`: the package inventory behind `docwizz sbom` |
 
-**Flows.** A flow is a 0-1 breadth-first search from an endpoint or route. It follows `calls`, `accesses`, `http`,
+**Flows.** [FlowGraph](src/DocWizz/Analysis/FlowGraph.cs) traces them for the pages, change impact, package
+remediation, security rule SEC-005 and agent context. A flow is a 0-1 breadth-first search from an endpoint or route. It follows `calls`, `accesses`, `http`,
 `renders`, `routes-to`, `connects` and minimal-API `injects`, and dispatches interface members to their
 implementations. Steps inside a unit (a C# type) and interface dispatch cost 0, so the hops shown are between
 units. Frontend flows stop at endpoints, because api.md continues from there.

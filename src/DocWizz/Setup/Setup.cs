@@ -78,7 +78,7 @@ static class Setup
 
         return new(languages, frameworks, projectFiles, layers, testGlobs,
             projects.Count(p => p.Tags?.Contains("test") == true),
-            [.. files.Where(f => Generator.IsDeploymentFile(root, f)).Order(StringComparer.Ordinal)]);
+            [.. files.Where(f => DeploymentDescriptors.Is(root, f)).Order(StringComparer.Ordinal)]);
     }
 
     // P0: a non-binding inventory before BuildModel. The interactive selection and scope filter are P1/P2.

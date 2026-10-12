@@ -68,6 +68,8 @@ static class Externals
         new($"ext:{key}", "external", name, file, line, Tags: [category, certainty]);
 
     public static string Certainty(Node n) => n.Tags?.ElementAtOrDefault(1) ?? "unknown";
+    // The system's name, with its certainty unless detected.
+    public static string Label(Node ext) => Certainty(ext) == "detected" ? ext.Name : $"{ext.Name} ({Certainty(ext)})";
     public static string Category(Node n) => n.Tags?.FirstOrDefault() ?? "unknown";
 
     // After all scanners ran: absolute URLs called over HTTP, package-only evidence, and DbContexts without a known database.
