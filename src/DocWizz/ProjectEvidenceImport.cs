@@ -37,31 +37,44 @@ internal static class ProjectEvidenceImport
     public static ProjectEvidenceCatalog ParseMarkdown(TextReader reader, string source = "project evidence Markdown")
     {
         var rows = new List<string[]>();
+        var sourceLines = new List<int>();
         var lines = reader.ReadToEnd().Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
-        foreach (var (line, i) in lines.Select((x, i) => (x, i)))
+        foreach (var (raw, i) in lines.Select((x, i) => (x, i)))
         {
-            if (string.IsNullOrWhiteSpace(line)) continue;
+            var line = raw.Trim();
+            if (line.Length == 0) continue;
             if (!line.StartsWith('|') || !line.EndsWith('|'))
                 throw new ArgumentException($"{source}: line {i + 1} must be a pipe-delimited table row");
             var cells = line[1..^1].Split('|').Select(x => x.Trim()).ToArray();
             if (rows.Count == 1 && cells.Length == Header.Length && cells.All(x => x.Length >= 3 && x.All(c => c == '-' || c == ':')))
                 continue;
             rows.Add(cells);
+            sourceLines.Add(i + 1);
         }
-        return FromRows(rows, source);
+        return FromRows(rows, source, sourceLines);
     }
 
-    static ProjectEvidenceCatalog FromRows(List<string[]> rows, string source)
+    static ProjectEvidenceCatalog FromRows(List<string[]> rows, string source, List<int>? sourceLines = null)
     {
         if (rows.Count == 0 || !rows[0].SequenceEqual(Header, StringComparer.Ordinal))
-            throw new ArgumentException($"{source}: expected header: {string.Join(",", Header)}");
+            throw new ArgumentException($"{source}: expected header: {string.Join(",", Header)}" +
+                (rows.Count > 0 && rows[0].Length == 1 && rows[0][0].Contains(';') ? " (semicolon-separated? export as comma-separated CSV)" : ""));
         var yaml = new StringBuilder(rows.Count == 1 ? "schema: 1\nevidence: []\n" : "schema: 1\nevidence:\n");
         foreach (var (row, i) in rows.Skip(1).Select((x, i) => (x, i)))
         {
-            if (row.Length != Header.Length) throw new ArgumentException($"{source}: row {i + 2} must have five fields");
+            if (row.Length != Header.Length) throw new ArgumentException($"{source}: line {(sourceLines is null ? i + 2 : sourceLines[i + 1])} must have five fields");
             for (var j = 0; j < Header.Length; j++)
                 yaml.Append(j == 0 ? "  - " : "    ").Append(Header[j]).Append(": ").Append(JsonSerializer.Serialize(row[j])).Append('\n');
         }
-        return ProjectEvidenceCatalog.Parse(new StringReader(yaml.ToString()), source);
+        try { return ProjectEvidenceCatalog.Parse(new StringReader(yaml.ToString()), source); }
+        catch (ArgumentException ex)
+        {
+            var message = System.Text.RegularExpressions.Regex.Replace(ex.Message, @"evidence\[(\d+)\]", match =>
+            {
+                var index = int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+                return index < rows.Count - 1 ? $"line {(sourceLines is null ? index + 2 : sourceLines[index + 1])}" : match.Value;
+            });
+            throw new ArgumentException(message, ex);
+        }
     }
 }
