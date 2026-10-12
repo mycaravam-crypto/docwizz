@@ -8,6 +8,8 @@ public class ScreenshotCaptureTests
     [InlineData("/", true)]
     [InlineData("/materials", true)]
     [InlineData("/inventory/item-1", true)]
+    [InlineData("/größen-prüfung", true)]
+    [InlineData("/gr%C3%B6%C3%9Fe", false)]
     [InlineData("/materials/:id", false)]
     [InlineData("/orders/{id}", false)]
     [InlineData("/items/*", false)]
@@ -53,6 +55,15 @@ public class ScreenshotCaptureTests
     {
         var origin = "http://localhost:5173";
         Assert.Equal(reason, ScreenshotCapture.NavigationFailure(new Uri(origin + requested), new Uri(origin + landed), status));
+    }
+
+    [Fact]
+    public void Umlaut_routes_match_the_percent_encoded_url_the_browser_reports()
+    {
+        var requested = new Uri(new Uri("http://localhost:5173/"), "größen-prüfung");
+        Assert.Null(ScreenshotCapture.NavigationFailure(requested, new Uri("http://localhost:5173/gr%c3%b6%c3%9fen-pr%c3%bcfung"), 200));
+        Assert.Equal("redirected to /anmeldung-für-kunden (needs authentication?)", ScreenshotCapture.NavigationFailure(
+            requested, new Uri("http://localhost:5173/anmeldung-f%C3%BCr-kunden"), 200));
     }
 
     [Fact]
