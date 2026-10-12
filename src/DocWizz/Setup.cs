@@ -110,8 +110,8 @@ static class Setup
         return string.Join("\n", lines) + "\n";
     }
 
-    // The default docwizz.yaml with `architecture.layers`/`allow` and `tests` narrowed to what the repository shows.
-    // Without evidence a section keeps its defaults (they match nothing, so they change nothing) and says so.
+    /// <summary>Generates the default YAML from detected layers and tests, optionally appending a non-binding project inventory as comments.</summary>
+    /// <remarks>Without matching evidence the defaults are preserved; an inventory never selects or excludes projects.</remarks>
     public static string Yaml(Detection d, string version, ProjectDiscovery.Inventory? inventory = null)
     {
         var lines = Config.Default.Split('\n').ToList();
