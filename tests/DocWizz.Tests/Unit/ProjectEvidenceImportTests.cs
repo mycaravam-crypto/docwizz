@@ -34,7 +34,7 @@ public class ProjectEvidenceImportTests
     }
 
     [Theory]
-    [InlineData("id,kind,text,source,version\nREQ-017,wrong,x,docs/requirements.md,v1", "unsupported")]
+    [InlineData("id,kind,text,source,version\nREQ-017,wrong,x,docs/requirements.md,v1", "kind must be")]
     [InlineData("id,kind,text,source,version\nREQ-017,requirement,x,../secret.md,v1", "source")]
     [InlineData("id,kind,text,source,version\nREQ-017,requirement", "five fields")]
     [InlineData("id,kind,text,source,version\nREQ-017,requirement,x,docs/req.md,v1\nREQ-017,requirement,x,docs/req.md,v1", "duplicate")]
