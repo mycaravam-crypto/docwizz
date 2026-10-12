@@ -670,7 +670,7 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
     // Cached drafts are always used; new ones are only requested with --ai.
     bar.Begin("AI summaries", ai ? "drafting" : "from cache");
     var drafts = await AiProse.Summaries(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-cache.json"), ai, config.Ai,
-        (done, total) => bar.Report(done, total, $"{done:N0}/{total:N0} drafts"));
+        AiProgress(bar, "drafts"));
     // A draft fills what is missing, never what is written or derived: the summary, and sections the item doesn't have.
     foreach (var f in findings)
     {
@@ -688,7 +688,7 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
     // Advisory ratings of written docs: shown in quality.md, never part of doc quality % or check.
     bar.Begin("AI assessments", ai ? "rating written docs" : "from cache");
     var assessments = await AiProse.Assessments(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-assessments.json"), ai, config.Ai,
-        (done, total) => bar.Report(done, total, $"{done:N0}/{total:N0} rated"));
+        AiProgress(bar, "rated"));
     bar.Advance("AI assessments", assessments.Count == 0 ? (ai ? "none" : "off (--ai)") : Plural(assessments.Count, "rating"));
 
     var screenshots = new Dictionary<string, string>();
@@ -765,6 +765,20 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
 }
 
 static string Plural(int n, string one, string? many = null) => $"{n:N0} {(n == 1 ? one : many ?? one + "s")}";
+
+// An AI stage's bar detail: "12/35 drafts · ~6m 02s left · MaterialController": what is left estimated from the average
+// time per finished request so far (requests run in parallel, so this is throughput, not one request's time), then the
+// item asked for most recently. The estimate comes first so a narrow terminal cuts the name, not the time.
+static Action<int, int, string?> AiProgress(CliProgress bar, string unit)
+{
+    var clock = Stopwatch.StartNew();
+    return (done, total, current) =>
+    {
+        if (done == 0 && current is null) clock.Restart(); // the first request starts now, not when the cache was read
+        var left = done > 0 && done < total ? $" · ~{CliProgress.Duration(clock.Elapsed / done * (total - done))} left" : "";
+        bar.Report(done, total, $"{done:N0}/{total:N0} {unit}{left}{(current is null ? "" : $" · {current}")}");
+    };
+}
 
 static int DiffCommand(string root, string? gitRef, Config config, bool enforce, string? head = null, bool json = false)
 {

@@ -9,6 +9,9 @@ using System.Text.Json;
 static class AiProse
 {
     const int Parallelism = 2; // Ollama queues requests beyond OLLAMA_NUM_PARALLEL anyway
+    // A folder with fewer members than this gets no overview requested: its members' own docs already say it all, and
+    // on a typical repo these small folders are most of the overview requests. Overviews already cached are still shown.
+    const int MinModuleMembers = 3;
 
     const string Instructions = """
         You write reference documentation for a codebase. You get facts about one symbol, produced by static
@@ -68,10 +71,11 @@ static class AiProse
     static readonly Assessment NoAssessment = new(0, [], "");
     static bool Usable(Draft d) => d.Text.Length > 0 || d.Sections is not { Count: 0 };
 
-    // Returns node id → summary, from cache and (when allowed) fresh API calls. progress: (drafts done, of total).
+    // Returns node id → summary, from cache and (when allowed) fresh API calls. progress: (drafts done, of total, the item
+    // asked for most recently).
     public static async Task<Dictionary<string, Draft>> Summaries(
         string root, CodeModel model, List<DocumentationItem> findings, string cacheFile, bool call, AiConfig? config = null,
-        Action<int, int>? progress = null)
+        Action<int, int, string?>? progress = null)
     {
         config ??= new();
         var cache = Load(cacheFile);
@@ -90,24 +94,22 @@ static class AiProse
         foreach (var (key, _, _) in modules)
             if (Cached(cache, key, tag) is { } d && Usable(d)) result[key.Split('@')[0]] = d;
         var moduleMisses = modules.Where(m => Cached(cache, m.Key, tag) is null).ToList();
+        var small = moduleMisses.RemoveAll(m => m.Members.Count(ContextBuilder.Shown) < MinModuleMembers);
 
         if (call && misses.Count + moduleMisses.Count > 0)
         {
             if (AiProviders.Create(config, "summaries") is not { } ai) return result;
             using var _ = ai;
             Console.Error.WriteLine($"docwizz: drafting {misses.Count} symbols and {moduleMisses.Count} module overviews with {ai.Model} at {ai.Endpoint} " +
-                $"({targets.Count - misses.Count} cached)");
+                $"({targets.Count - misses.Count} cached{(small > 0 ? $", {small} folders under {MinModuleMembers} members get no overview" : "")})");
             var facts = new ContextBuilder(root, model);
             var stop = new StrongBox<bool>();
-            var finished = 0;
-            var work = misses.Count + moduleMisses.Count;
-            void Done() => progress?.Invoke(Interlocked.Increment(ref finished), work);
-            progress?.Invoke(0, work);
+            var step = Steps(misses.Count + moduleMisses.Count, progress);
             var drafted = await Ask(misses, async t =>
             {
                 var (json, sources, names) = facts.For(t.Node, t.Item);
                 return Parse(await ai.Complete(Instructions, json), sources, names) ?? NoDraft;
-            }, "summaries", t => $"summary failed for {t.Node.Id}", stop, Done);
+            }, "summaries", t => Label(t.Node), t => $"summary failed for {t.Node.Id}", stop, step);
             foreach (var (t, d) in misses.Zip(drafted))
             {
                 if (d is null || (!Usable(d) && result.ContainsKey(t.Node.Id))) continue; // keep a summary-only draft over nothing
@@ -119,7 +121,7 @@ static class AiProse
             {
                 var (json, sources, names) = facts.ForModule(m.Folder, m.Members, result);
                 return Parse(await ai.Complete(ModuleInstructions, json), sources, names) ?? NoDraft;
-            }, "module overviews", m => $"overview failed for {m.Folder}", stop, Done);
+            }, "module overviews", m => m.Folder, m => $"overview failed for {m.Folder}", stop, step);
             foreach (var (m, d) in moduleMisses.Zip(overviews).Where(x => x.Second is not null))
             {
                 cache[$"{m.Key}@{tag}"] = d!;
@@ -137,7 +139,7 @@ static class AiProse
     // and body: a doc or code change asks again.
     public static async Task<Dictionary<string, Assessment>> Assessments(
         string root, CodeModel model, List<DocumentationItem> findings, string cacheFile, bool call, AiConfig? config = null,
-        Action<int, int>? progress = null)
+        Action<int, int, string?>? progress = null)
     {
         config ??= new();
         var tag = call ? AiProviders.Tag(config) : null;
@@ -154,10 +156,8 @@ static class AiProse
         using var _ = ai;
         Console.Error.WriteLine($"docwizz: assessing {misses.Count} written docs with {ai.Model} at {ai.Endpoint} ({result.Count} cached)");
         var facts = new ContextBuilder(root, model);
-        var assessed = 0;
-        progress?.Invoke(0, misses.Count);
         var answers = await Ask(misses, async f => ParseAssessment(await ai.Complete(AssessInstructions, facts.For(f.Node, f).Json)) ?? NoAssessment,
-            "assessments", f => $"assessment failed for {f.Node.Id}", new(), () => progress?.Invoke(Interlocked.Increment(ref assessed), misses.Count));
+            "assessments", f => Label(f.Node), f => $"assessment failed for {f.Node.Id}", new(), Steps(misses.Count, progress));
         foreach (var (f, a) in misses.Zip(answers).Where(x => x.Second is not null))
         {
             cache[$"{Key(f.Node)}@{tag}"] = a!;
@@ -173,15 +173,21 @@ static class AiProse
     // Asks for every item, Parallelism at a time (requests beyond what the server runs at once just queue there), and
     // returns the answers in order: null for an item that failed or was skipped. An HttpRequestException means the server
     // can't be used at all (not running, not local, model missing): it is reported once, as `what` skipped, and the rest
-    // are skipped, here and in later batches that share `stop`. `done` runs after every item.
-    static async Task<R?[]> Ask<T, R>(IEnumerable<T> items, Func<T, Task<R>> ask, string what, Func<T, string> failed,
-        StrongBox<bool> stop, Action done) where R : class
+    // are skipped, here and in later batches that share `stop`. `step` hears each item's `name` as it is asked, and null
+    // after every item.
+    static async Task<R?[]> Ask<T, R>(IEnumerable<T> items, Func<T, Task<R>> ask, string what, Func<T, string> name,
+        Func<T, string> failed, StrongBox<bool> stop, Action<string?> step) where R : class
     {
         using var gate = new SemaphoreSlim(Parallelism);
         return await Task.WhenAll(items.Select(async item =>
         {
             await gate.WaitAsync();
-            try { return Volatile.Read(ref stop.Value) ? null : await ask(item); }
+            try
+            {
+                if (Volatile.Read(ref stop.Value)) return null;
+                step(name(item));
+                return await ask(item);
+            }
             catch (HttpRequestException e)
             {
                 lock (stop)
@@ -193,8 +199,24 @@ static class AiProse
                 return null;
             }
             catch (Exception e) { Console.Error.WriteLine($"docwizz: AI {failed(item)}: {e.Message}"); return null; }
-            finally { gate.Release(); done(); }
+            finally { gate.Release(); step(null); }
         }));
+    }
+
+    // What the progress bar names an item by: a method with its type (MaterialController.Get), else the name.
+    static string Label(Node n) => n.Kind == "method" ? string.Join('.', Naming.Display(n).Split('(')[0].Split('.').TakeLast(2)) : n.Name;
+
+    // Ask's `step` for `work` items: reports (finished, work, the item asked for most recently), from (0, work) on.
+    static Action<string?> Steps(int work, Action<int, int, string?>? progress)
+    {
+        var finished = 0;
+        string? current = null;
+        progress?.Invoke(0, work, null);
+        return started =>
+        {
+            if (started is null) Interlocked.Increment(ref finished); else current = started;
+            progress?.Invoke(Volatile.Read(ref finished), work, current);
+        };
     }
 
     // {"score", "missing", "note"}; anything else (not JSON, score outside 1-5) is no assessment.
