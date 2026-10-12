@@ -102,6 +102,7 @@ main code { font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monos
 main pre { position: relative; margin: 18px 0; padding: 18px; overflow-x: auto; color: var(--ink); background: var(--surface-soft); border: 1px solid var(--line); border-radius: 10px; line-height: 1.55; }
 main pre code { padding: 0; background: none; }
 main pre.mermaid { background: transparent; border-color: var(--line); text-align: center; }
+main img { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; }
 main table { display: block; max-width: 100%; overflow-x: auto; border-spacing: 0; border-collapse: separate; margin: 18px 0 26px; font-size: 13px; border: 1px solid var(--line); border-radius: 10px; }
 main th, main td { padding: 10px 14px; vertical-align: top; text-align: left; border-bottom: 1px solid var(--line); }
 main th { position: sticky; top: 0; color: var(--muted); background: var(--surface-soft); font-size: 11px; letter-spacing: .045em; text-transform: uppercase; white-space: nowrap; }
