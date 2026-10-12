@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace DocWizz.Tests.Journey;
 
 // The CLI as a process: exit codes, what goes to stdout vs stderr, short usage on mistakes, never a stack trace.
@@ -31,6 +33,45 @@ public class CliContractTests
         Assert.Contains("docwizz init ", advanced);
         Assert.Contains("docwizz scan ", advanced);
         Assert.True(r.Out.IndexOf("docwizz setup ", StringComparison.Ordinal) < r.Out.IndexOf("docwizz generate ", StringComparison.Ordinal));
+    }
+
+    // The full reference is written by hand, so check it against the command table (Cli.Commands): each command's lines
+    // (`docwizz <command> ...` and the option lines under it) show exactly what that command accepts, and the shared
+    // options name exactly the commands that accept them.
+    [Fact]
+    public void Help_reference_shows_each_command_with_the_options_it_accepts()
+    {
+        var r = Docwizz.Run("help");
+        Assert.Equal(0, r.Exit);
+        string[] shared = ["profile", "format"];
+        var shown = new Dictionary<string, HashSet<string>>();
+        var listedFor = new Dictionary<string, string[]>();
+        var section = "";
+        string? command = null;
+        foreach (var line in r.Out.Split('\n').Select(l => l.TrimEnd('\r')))
+        {
+            if (line.Length > 0 && line[0] != ' ') section = line;
+            var commandLine = Regex.Match(line, @"^  docwizz (\S+)");
+            if (commandLine.Success) command = commandLine.Groups[1].Value;
+            else if (!line.StartsWith("    ")) command = null;   // an option line belongs to the command above it
+            if (section == "options:" && Regex.Match(line, @"^  --([a-z]+)") is { Success: true } o && shared.Contains(o.Groups[1].Value))
+                listedFor[o.Groups[1].Value] = [.. Regex.Match(line, @"(?:[a-z-]+/)+[a-z-]+").Value.Split('/')];
+            if (command is null || !Cli.Commands.ContainsKey(command)) continue;
+            foreach (var m in Regex.Matches(line, @"--([a-z]+(?:-[a-z]+)*)").Cast<System.Text.RegularExpressions.Match>())
+                (shown.TryGetValue(command, out var s) ? s : shown[command] = []).Add(m.Groups[1].Value);
+        }
+
+        foreach (var (name, c) in Cli.Commands)
+        {
+            var options = shown.GetValueOrDefault(name) ?? [];
+            Assert.All(c.Accepts.Except(shared), o => Assert.True(options.Contains(o), $"`docwizz help` doesn't show --{o} for {name}"));
+            Assert.All(options, o => Assert.True(c.Accepts.Contains(o), $"`docwizz help` shows --{o} for {name}, which doesn't accept it"));
+        }
+        foreach (var option in shared)
+        {
+            Assert.True(listedFor.TryGetValue(option, out var listed), $"`docwizz help` options don't say which commands take --{option}");
+            Assert.Equal(Cli.Commands.Where(c => c.Value.Accepts.Contains(option)).Select(c => c.Key).Order(), listed!.Order());
+        }
     }
 
     [Theory]
