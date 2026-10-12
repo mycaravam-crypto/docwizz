@@ -106,8 +106,8 @@ static class Setup
             "# Review with: docwizz discover . --format json",
         };
         foreach (var project in inventory.Projects)
-            lines.Add("#   - " + project.Path.Replace('\\r', ' ').Replace('\\n', ' '));
-        return string.Join("\\n", lines) + "\\n";
+            lines.Add("#   - " + project.Path.Replace('\r', ' ').Replace('\n', ' '));
+        return string.Join("\n", lines) + "\n";
     }
 
     // The default docwizz.yaml with `architecture.layers`/`allow` and `tests` narrowed to what the repository shows.
