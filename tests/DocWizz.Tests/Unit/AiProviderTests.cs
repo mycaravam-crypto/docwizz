@@ -247,4 +247,24 @@ public class AiProviderTests
         Assert.Equal("from m1", AiProse.Cached(cache, "b@h2", null));                              // without --ai: any draft
         Assert.Equal("openai-compatible/m", AiProviders.Tag(new AiConfig { Provider = "openai-compatible", Model = "m" }));
     }
+
+    [Fact]
+    public async Task Each_draft_is_cached_as_it_arrives_so_an_interrupted_run_keeps_it()
+    {
+        // The first answer arrives, the second never does: the run is still going when the first draft must be on disk.
+        using var server = new FakeServer((200, """{"message":{"content":"Places an order."}}"""), (0, ""));
+        using var dir = new Sources();
+        var cacheFile = Path.Combine(dir.Root, "ai-cache.json");
+        var model = Models.Model([
+            Models.N("cs:A.Orders.Place(int)", "a/Orders.cs", kind: "method", hash: "h1", tags: ["endpoint", "POST"], route: "api/orders", parameters: ["id: int"]),
+            Models.N("cs:B.Refunds.Refund(int)", "b/Refunds.cs", kind: "method", hash: "h2", tags: ["endpoint", "POST"], route: "api/refunds", parameters: ["id: int"]),
+        ]);
+        var findings = Analyzer.Analyze(model, Models.Config());
+        Assert.Equal(2, findings.Count(f => f.Missing.Contains("summary")));
+        _ = AiProse.Summaries(dir.Root, model, findings, cacheFile, call: true, new AiConfig { Endpoint = server.Uri.ToString(), Model = "local:7b" });
+
+        for (var i = 0; i < 100 && !File.Exists(cacheFile); i++) await Task.Delay(100, TestContext.Current.CancellationToken);
+        Assert.Contains("Places an order.", File.ReadAllText(cacheFile));
+        Assert.False(File.Exists(cacheFile + ".tmp"));
+    }
 }
