@@ -53,7 +53,7 @@ public class EvidenceLinksTests
     [Fact]
     public void Duplicate_link_is_rejected()
     {
-        var yaml = Valid + "  - from: REQ-017\n    to: ARC-004\n";
+        var yaml = Valid + "\n  - from: REQ-017\n    to: ARC-004\n";
         Assert.Contains("duplicate link", Assert.Throws<ArgumentException>(() => ProjectEvidenceCatalog.Parse(new StringReader(yaml))).Message);
     }
 
