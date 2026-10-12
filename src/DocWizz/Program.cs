@@ -104,7 +104,7 @@ static async Task<int> Dispatch(string[] args)
         case "remediate":
             return Remediate(path, config, opts.GetValueOrDefault("package"), opts.GetValueOrDefault("to"), opts.ContainsKey("validate"), opts.GetValueOrDefault("since"), json);
         case "generate":
-            Console.WriteLine(await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"), refreshHtmlOnVersionChange: opts.ContainsKey("refresh-html-on-version-change"), progress: opts.ContainsKey("progress")));
+            Console.WriteLine(await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"), refreshHtmlOnVersionChange: opts.ContainsKey("refresh-html-on-version-change"), progress: opts.ContainsKey("progress"), screenshotBaseUrl: opts.GetValueOrDefault("base-url")));
             return 0;
         default:
             return Usage($"unknown command {cmd}");
@@ -585,7 +585,7 @@ static object DocumentationJson(CodeModel model, Config config, List<Documentati
 }
 
 // Writes the docs; returns the one-line result.
-static async Task<string> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null, bool refreshHtmlOnVersionChange = false, bool progress = false)
+static async Task<string> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null, bool refreshHtmlOnVersionChange = false, bool progress = false, string? screenshotBaseUrl = null)
 {
     using var bar = CliProgress.ForConsole(7, progress);
     model ??= BuildModel(root, config).Model;
@@ -612,11 +612,14 @@ static async Task<string> Generate(string root, string outDir, Config config, bo
     // Advisory ratings of written docs: shown in quality.md, never part of doc quality % or check.
     var assessments = await AiProse.Assessments(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-assessments.json"), ai, config.Ai);
     bar.Advance("AI assessments");
+    var screenshots = screenshotBaseUrl is null ? new Dictionary<string, string>()
+        : await ScreenshotCapture.Run(model, outDir, screenshotBaseUrl);
     var rebuildHtml = html && refreshHtmlOnVersionChange && HtmlVersion.NeedsRefresh(outDir, AppVersion.Number);
     var (pages, changed) = Timings.Measure("generate", () => new Generator(root, outDir, model, findings, arch, config, summaries, overviews, assessments)
     {
         WriteHtml = html,
         RebuildHtml = rebuildHtml,
+        Screenshots = screenshots,
         Files = [.. RepoFiles(root, config, [".github", ".circleci"]).Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))],
     }.Run());
 
