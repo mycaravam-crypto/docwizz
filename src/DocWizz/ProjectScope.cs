@@ -26,6 +26,17 @@ static class ProjectScope
             throw new ArgumentException("scope.projects.include: duplicate project manifest path");
     }
 
+    /// <summary>Stable identifier for the scope configuration, used to invalidate a model generated under a different selection.</summary>
+    public static string? Fingerprint(ScopeConfig? scope)
+    {
+        if (scope is null) return null;
+        Validate(scope);
+        var text = string.Join("\n", scope.Projects.Include.Order(StringComparer.Ordinal)) +
+            $"\nreferences={scope.Projects.References}\ntest_links={scope.Projects.TestLinks}\nunassigned={scope.UnassignedSources}";
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(text)))[..16].ToLowerInvariant();
+    }
+
     /// <summary>Resolves selected manifests, referenced projects and test links, then filters files before source scanning.</summary>
     public static Plan Resolve(string root, ScopeConfig? scope, List<string> candidates)
     {
