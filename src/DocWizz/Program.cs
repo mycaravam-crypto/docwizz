@@ -139,7 +139,10 @@ static (CodeModel Model, string Source, DateTime Since) LoadModel(string root, C
     var fingerprint = Path.Combine(root, "docs", ".docwizz", "model.json");
     if (!File.Exists(fingerprint)) return (BuildModel(root, config).Model, "a fresh scan (no docs/.docwizz/model.json)", DateTime.UtcNow);
     var written = File.GetLastWriteTimeUtc(fingerprint);
-    return (JsonSerializer.Deserialize<CodeModel>(File.ReadAllText(fingerprint), JsonOptions())!, $"docs/.docwizz/model.json (written {written:yyyy-MM-dd HH:mm} UTC)", written);
+    var saved = JsonSerializer.Deserialize<CodeModel>(File.ReadAllText(fingerprint), JsonOptions())!;
+    if (saved.ScopeFingerprint != ProjectScope.Fingerprint(config.Scope))
+        return (BuildModel(root, config).Model, "a fresh scan (the project scope changed since generate)", DateTime.UtcNow);
+    return (saved, $"docs/.docwizz/model.json (written {written:yyyy-MM-dd HH:mm} UTC)", written);
 }
 
 // `docwizz mcp`: the read-only MCP server on stdio. stdout carries only protocol messages.
@@ -453,7 +456,8 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     link.Dispose();
 
     var files = scanned.Where(f => !testFiles.Contains(Path.GetRelativePath(root, f).Replace('\\', '/'))).ToList();
-    return (new CodeModel(Git(root, "rev-parse --short HEAD")?.Trim(), nodes, edges), files);
+    return (new CodeModel(Git(root, "rev-parse --short HEAD")?.Trim(), nodes, edges,
+        ProjectScope.Fingerprint(config.Scope)), files);
 }
 
 static string? Language(string file) => Path.GetExtension(file) switch
@@ -579,6 +583,11 @@ static int DiffCommand(string root, string? gitRef, Config config, bool enforce,
             return 1;
         }
         before = JsonSerializer.Deserialize<CodeModel>(File.ReadAllText(fingerprint), JsonOptions());
+        if (before?.ScopeFingerprint != ProjectScope.Fingerprint(config.Scope))
+        {
+            Console.Error.WriteLine("scope changed since the last generate; regenerate docs before comparing against the saved model");
+            return 1;
+        }
         baseline = $"docs generated at {before?.Commit ?? "unknown"}";
     }
     if (before is null) return 1;
