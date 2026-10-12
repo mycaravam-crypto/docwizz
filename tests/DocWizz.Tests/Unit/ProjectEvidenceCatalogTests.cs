@@ -34,7 +34,6 @@ public class ProjectEvidenceCatalogTests
     }
 
     [Theory]
-    [InlineData("evidence:", "evidence: {}", "catalog.evidence")]
     [InlineData("schema: 1", "schema: '1'", "unquoted 1")]
     [InlineData("id: REQ-017", "id: ../../escape", "evidence[0].id")]
     [InlineData("kind: requirement", "kind: decision", "evidence[0].kind")]
@@ -48,6 +47,14 @@ public class ProjectEvidenceCatalogTests
         var ex = Assert.Throws<ArgumentException>(() => ProjectEvidenceCatalog.Parse(new StringReader(yaml), "project.yaml"));
         Assert.Contains("project.yaml:", ex.Message);
         Assert.Contains(expected, ex.Message);
+    }
+
+    [Fact]
+    public void Missing_evidence_list_is_rejected()
+    {
+        var error = Assert.Throws<ArgumentException>(() =>
+            ProjectEvidenceCatalog.Parse(new StringReader("schema: 1"), "project.yaml"));
+        Assert.Contains("catalog.evidence", error.Message);
     }
 
     [Fact]
