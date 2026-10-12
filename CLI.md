@@ -347,7 +347,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 |---|---|---|---|---|
 | `--context <file.yaml>` | off | product | validates sourced project statements against template before writing | product documents |
 | `--profile <name\|file.yaml>` | `profile:` in `docwizz.yaml`, else `default` | setup, generate, check, analyze, architecture, diff | overrides `profile:` and the file's own `patterns:` | normal |
-| `--format console\|json` | `console` | analyze, check, architecture, context, diff, product, remediate | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
+| `--format console\|json` | `console` | analyze, check, architecture, context, diff, trace, product, remediate | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
 | `--for <target>` | — | context | required; a symbol id or qualified name, a file, a folder, or `VERB /route`; ambiguous or unknown exits 1 with candidates | coding agents |
 | `--hops <n>` | 2 | context | how far neighbours are listed, 1 to 4; hops beyond 1 are signature only | coding agents |
 | `--budget <tokens>` | 6000 | context | at least 100; estimated as characters / 4; lower-priority sections are cut first, and the cut is reported | coding agents |
