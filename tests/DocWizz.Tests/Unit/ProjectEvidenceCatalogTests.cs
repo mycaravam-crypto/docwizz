@@ -34,22 +34,17 @@ public class ProjectEvidenceCatalogTests
     }
 
     [Theory]
-    [InlineData("schema: 1", "catalog.evidence")]
-    [InlineData("schema: '1'", "unquoted 1")]
-    [InlineData("id: ../../escape", "evidence[0].id")]
-    [InlineData("kind: decision", "evidence[0].kind")]
-    [InlineData("source: ../secrets.md", "evidence[0].source")]
-    [InlineData("version: ''", "evidence[0].version")]
-    [InlineData("unknown: yes", "unknown key")]
-    public void Invalid_fields_report_context(string replacement, string expected)
+    [InlineData("schema: 1\nevidence:", "schema: 1\nmissing:", "catalog.evidence")]
+    [InlineData("schema: 1", "schema: '1'", "unquoted 1")]
+    [InlineData("id: REQ-017", "id: ../../escape", "evidence[0].id")]
+    [InlineData("kind: requirement", "kind: decision", "evidence[0].kind")]
+    [InlineData("source: docs/requirements.md", "source: ../secrets.md", "evidence[0].source")]
+    [InlineData("version: v1", "version: ''", "evidence[0].version")]
+    [InlineData("version: v2", "version: v2\n    unknown: yes", "unknown key")]
+    public void Invalid_fields_report_context(string find, string replacement, string expected)
     {
-        var yaml = replacement.StartsWith("schema:", StringComparison.Ordinal) && replacement == "schema: 1"
-            ? replacement : replacement.StartsWith("schema:", StringComparison.Ordinal)
-                ? Valid.Replace("schema: 1", replacement)
-                : Valid.Replace(Valid.Split('\n').First(x => x.TrimStart().StartsWith(replacement.Split(':')[0] + ":", StringComparison.Ordinal)).Trim(),
-                    replacement);
-        if (replacement == "unknown: yes")
-            yaml = Valid.Replace("version: v2", "version: v2\n    unknown: yes");
+        Assert.Contains(find, Valid);
+        var yaml = Valid.Replace(find, replacement, StringComparison.Ordinal);
         var ex = Assert.Throws<ArgumentException>(() => ProjectEvidenceCatalog.Parse(new StringReader(yaml), "project.yaml"));
         Assert.Contains("project.yaml:", ex.Message);
         Assert.Contains(expected, ex.Message);
