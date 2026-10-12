@@ -353,7 +353,7 @@ function scanScript(file, sf, owner, lineOffset, component) {
     if ((ts.isJsxSelfClosingElement(n) || ts.isJsxOpeningElement(n)) && n.tagName.getText(sf) === 'Route') {
       const attr = k => n.attributes.properties.find(a => ts.isJsxAttribute(a) && a.name.getText(sf) === k)?.initializer
       const p = attr('path')
-      if (p && ts.isStringLiteral(p)) addRoute(file, p.text, line(n), jsxTarget(attr('element'), imports, file, sf))
+      if (p && ts.isStringLiteral(p)) addRoute(file, p.text, line(n), jsxTarget(attr('element'), imports, file, sf), /<HashRouter\b/.test(sf.text))
     }
     ts.forEachChild(n, c => visit(c, cur))
   }
@@ -414,10 +414,11 @@ function emitsOf(call, sf) {
 }
 
 // Route paths as the router sees them: Angular's are relative ('materials' → /materials).
-function addRoute(file, raw, line, target) {
+// Routes of a hash-history router live in the URL fragment (/#/materials), tagged 'hash'.
+function addRoute(file, raw, line, target, hash = false) {
   const route = raw.startsWith('/') ? raw : `/${raw}`
   const id = `route:${route}`
-  nodes.push({ id, kind: 'route', name: route, file: rel(file), line, route })
+  nodes.push({ id, kind: 'route', name: route, file: rel(file), line, route, tags: hash ? ['hash'] : undefined })
   if (target) edge(id, target, 'routes-to')
 }
 
@@ -526,6 +527,8 @@ let routesScanned = new Set()
 function scanRoutes(file, sf, imports, line) {
   if (routesScanned.has(file)) return
   routesScanned.add(file)
+  // Vue createWebHashHistory(), React createHashRouter / <HashRouter>, Angular useHash: true / withHashLocation().
+  const hash = /\bcreateWebHashHistory\s*\(|\bcreateHashRouter\s*\(|<HashRouter\b|\buseHash\s*:\s*true|\bwithHashLocation\s*\(/.test(sf.text)
   // Nested `children` paths are relative to their parent's (Vue Router, Angular): '/app' + 'settings' → /app/settings.
   const join = (parent, raw) => raw.startsWith('/') ? raw : `${parent.replace(/\/$/, '')}/${raw}`.replace(/(.)\/$/, '$1')
   const walk = (n, parent = '/') => {
@@ -544,7 +547,7 @@ function scanRoutes(file, sf, imports, line) {
           if (file2) target = componentId(file2, text.match(/\.then\(\s*\(?\s*\w+\s*\)?\s*=>\s*\w+\.(\w+)/)?.[1] ?? 'default')
         }
         const route = join(parent, p.text)
-        addRoute(file, route, line(n), target ?? jsxTarget(prop('element'), imports, file, sf))
+        addRoute(file, route, line(n), target ?? jsxTarget(prop('element'), imports, file, sf), hash)
         for (const child of n.properties)
           walk(child, ts.isPropertyAssignment(child) && child.name.getText(sf) === 'children' ? route : parent)
         return

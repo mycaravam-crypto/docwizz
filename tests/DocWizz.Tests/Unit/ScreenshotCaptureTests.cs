@@ -100,6 +100,40 @@ public class ScreenshotCaptureTests
         Assert.Equal(1440, carried.ViewportSize?.Width);
     }
 
+    [Fact]
+    public void Hash_router_routes_are_opened_in_the_fragment()
+    {
+        var model = Model([
+            N("route:/orders", "src/router.ts", "route", tags: ["hash"], route: "/orders"),
+            N("route:/plain", "src/other.ts", "route", route: "/plain")
+        ]);
+        Assert.Equal(["/orders"], ScreenshotCapture.HashRoutes(model));
+        var target = new Uri("http://localhost:5173/app/");
+        Assert.Equal("http://localhost:5173/app/#/orders", ScreenshotCapture.RouteUrl(target, "/orders", hash: true).ToString());
+        Assert.Equal("http://localhost:5173/app/plain", ScreenshotCapture.RouteUrl(target, "/plain", hash: false).ToString());
+    }
+
+    [Theory]
+    [InlineData("/#/orders", null)]
+    [InlineData("/#/orders?tab=all", null)]
+    [InlineData("/#/login?redirect=/orders", "redirected to #/login (needs authentication?)")]
+    [InlineData("/", "redirected to #/ (needs authentication?)")]
+    public void Hash_router_guard_redirects_are_recognized(string landed, string? reason)
+    {
+        var origin = "http://localhost:5173";
+        Assert.Equal(reason, ScreenshotCapture.NavigationFailure(new Uri(origin + "/#/orders"), new Uri(origin + landed), 200, hash: true));
+    }
+
+    [Fact]
+    public void Api_calls_rejected_with_401_or_403_mean_the_page_lacks_access()
+    {
+        Assert.Null(ScreenshotCapture.ApiFailure([(200, "http://localhost/api/me"), (404, "http://localhost/api/avatar"), (500, "http://localhost/api/x")]));
+        Assert.Equal("API answered 401 for /api/me (session not accepted?)",
+            ScreenshotCapture.ApiFailure([(200, "http://localhost/api/a"), (401, "http://localhost/api/me?token=secret")]));
+        Assert.Equal("API answered 403 for /api/admin (session not accepted?)",
+            ScreenshotCapture.ApiFailure([(403, "https://api.example.test/api/admin")]));
+    }
+
     [Theory]
     [InlineData("/logout", true)]
     [InlineData("/auth/sign-out", true)]
