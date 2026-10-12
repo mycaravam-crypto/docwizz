@@ -277,6 +277,8 @@ monorepos.
 
 ## Configuration
 
+**Final multi-project acceptance and migration:** The full P0–P4 requirements/verification map, safe limits and repeatable performance baseline are recorded in [MULTI_PROJECT_ACCEPTANCE.md](MULTI_PROJECT_ACCEPTANCE.md). Classic non-SDK ASP.NET MVC project manifests are inventoried, but conventional MVC routing is **not** an exhaustively supported static endpoint model; generated `api.md` displays this limitation when such projects are present.
+
 **Hierarchical project navigation (P3):** In multi-project repositories, generation now writes root-relative, path-unique `docs/solutions/*.md` and `docs/projects/*.md` pages. Start at `docs/index.md` → Solutions → Projects → existing folder Modules → Components; or use `--html` for nested sidebar navigation, breadcrumbs and search entries. Project overviews show manifest metadata, linked solutions, analyzed source-file counts, modules, components, structural test links (not code coverage) and dependencies; a referenced but excluded project is clearly marked **metadata-only** without code or package details. Shared projects have one stable page even if several solutions use them. Legacy `docs/modules/*.md` paths remain valid. Generation uses a per-project/per-module node index rather than rescanning all model nodes for every project. Generated project/solution pages are regenerated; hand-authored pages without the generator marker are preserved.
 
 
