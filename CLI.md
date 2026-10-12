@@ -150,6 +150,7 @@ Then read `docs/index.md` (or `docs/index.html` with `--html`) and the summary's
 docwizz generate .              # Markdown in ./docs
 docwizz generate . site --html  # Markdown and HTML in ./site
 docwizz generate . site --html --screenshots --base-url http://localhost:5173  # capture detected static routes
+docwizz generate . site --html --screenshots --base-url http://localhost:5173 --storage-state .auth/docwizz-state.json  # authenticated routes
  docwizz generate . site --refresh-html-on-version-change  # re-render HTML on DocWizz upgrades
 ```
 
@@ -376,7 +377,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 |---|---|---|---|
 | `discover` | `docwizz discover [dir] [--format console\|json]` | read-only inventory of solutions, projects and references | everyday |
 | `setup` | `docwizz setup [dir] [--select-projects] [--all-projects] [--yes] [--force] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | detect the stack, write `docwizz.yaml`, analyze, architecture, generate, check | start here |
-| `generate` | `docwizz generate <dir> [out] [--html] [--screenshots --base-url <url>] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
+| `generate` | `docwizz generate <dir> [out] [--html] [--screenshots --base-url <url> [--storage-state <file>]] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
 | `check` | `docwizz check <dir> [--since ref] [--format f] [--profile p]` | quality gate; exit 1 when thresholds fail | CI |
 | `analyze` | `docwizz analyze <dir> [--format f] [--profile p]` | documentation and architecture report, no gate | everyday |
 | `architecture` | `docwizz architecture <dir> [--format f] [--profile p]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
@@ -410,7 +411,8 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 | `--package <name> --to <version>` | `remediation.targets` and version drift | remediate | given together or not at all | maintenance |
 | `--validate` | off | remediate | runs the configured restore/build/test commands in a temporary copy, never the working tree | maintenance |
 | `--html` | off | generate, setup | adds HTML pages; the Markdown is written either way | normal |
-| `--screenshots --base-url <url>` | off | generate | captures each detected static route in a fresh anonymous browser context; HTTP errors and URL redirects (e.g. to /login) are skipped; login overlays without URL changes cannot be detected (requires running frontend and Playwright Chromium) | opt-in |
+| `--screenshots --base-url <url>` | off | generate | captures detected static routes against an already running frontend; isolated anonymous browser contexts by default; HTTP errors and redirects are skipped | opt-in |
+| `--storage-state <file>` | off | generate | with `--screenshots`, initializes each route's isolated context with the same saved Playwright login state; relative paths start at scanned project root; keep session tokens out of Git; login overlays without URL changes remain undetectable | opt-in |
 | `--progress` | interactive terminals | generate, setup | Force progress bars on stderr when output is redirected | normal |
 | `--refresh-html-on-version-change` | off | generate, setup | Implies HTML; rebuild on generator version change | normal |
 | `--ai` | off | generate, product, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it, nothing new is sent | opt-in |
