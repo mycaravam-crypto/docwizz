@@ -170,6 +170,20 @@ public class SetupProjectSelectionTests
     }
 
     [Fact]
+    public void Scope_save_preserves_restrictive_unix_permissions()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var repo = Fixtures();
+        var file = Path.Combine(repo.Root, "docwizz.yaml");
+        File.WriteAllText(file, "profile: default\n");
+        var restrictive = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        File.SetUnixFileMode(file, restrictive);
+        Assert.Equal("scope-updated", SetupProjectSelection.Save(repo.Root,
+            SetupProjectSelection.Scope(["A/A.csproj"], null)));
+        Assert.Equal(restrictive, File.GetUnixFileMode(file));
+    }
+
+    [Fact]
     public void Scope_save_changes_only_scope_and_is_idempotent()
     {
         using var repo = Fixtures();
