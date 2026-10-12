@@ -10,7 +10,7 @@ partial class Generator
     {
         var projects = Inventory.Projects.ToDictionary(p => p.Id);
         string Users(Sbom.Library l) => string.Join(", ", l.Projects.Select(p => SourceLink(projects[p].File, 0, projects[p].Name, sub: "views")));
-        string Declared(Sbom.Library l) => l.Declared is null ? "_unspecified_" : $"`{Esc(l.Declared)}`" + (l.Exact ? "" : " _(unresolved)_");
+        string Declared(Sbom.Library l) => l.Declared is null ? "_unspecified_" : $"{Code(l.Declared)}" + (l.Exact ? "" : " _(unresolved)_");
         // One line per declared version, with the projects declaring it, so versions and projects stay paired.
         string Versions(IEnumerable<Sbom.Library> g) => string.Join("<br>", g.Select(l => $"{Declared(l)} in {Users(l)}"));
         var byPackage = Inventory.Libraries.GroupBy(l => l.Package)
@@ -26,14 +26,14 @@ partial class Generator
             sb.AppendLine("## Declared at more than one version\n");
             sb.AppendLine("| Package | Ecosystem | Versions |\n|---|---|---|");
             foreach (var g in conflicts)
-                sb.AppendLine($"| `{Esc(g.First().Name)}` | {g.First().Ecosystem} | {Versions(g)} |");
+                sb.AppendLine($"| {Code(g.First().Name)} | {g.First().Ecosystem} | {Versions(g)} |");
             sb.AppendLine();
         }
         sb.AppendLine("## All packages\n");
         sb.AppendLine("| Package | Ecosystem | Declared | Package URL |\n|---|---|---|---|");
         foreach (var g in byPackage)
-            sb.AppendLine($"| `{Esc(g.First().Name)}`{(g.Count() > 1 ? " ⚠" : "")} | {g.First().Ecosystem} | {Versions(g)} | " +
-                $"{(g.First().Purl is { } purl ? $"`{Esc(purl.Split('@')[0])}`" : "—")} |");
+            sb.AppendLine($"| {Code(g.First().Name)}{(g.Count() > 1 ? " ⚠" : "")} | {g.First().Ecosystem} | {Versions(g)} | " +
+                $"{(g.First().Purl is { } purl ? $"{Code(purl.Split('@')[0])}" : "—")} |");
         return sb.ToString();
     }
 }

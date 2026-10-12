@@ -39,6 +39,22 @@ public class HtmlTests
     }
 
     [Theory]
+    [InlineData("Foo<T>")]
+    [InlineData("Grid of rows typed as Array<Row> with a <slot> per cell.")]
+    [InlineData("a <b>bold</b> tag")]
+    public void Angle_brackets_in_names_and_docs_stay_text(string text)
+    {
+        var html = Html.Page("modules/src-Core.md", $"# src/Core\n\n### {Generator.Text(text)}\n\n{Generator.Text(text)}\n", Pages);
+        var encoded = System.Net.WebUtility.HtmlEncode(text).Replace("&#39;", "'");
+        Assert.Contains($"<h3 id=\"{Naming.Anchor(text)}\">{encoded}</h3>", html);
+        Assert.Contains($"<p>{encoded}</p>", html);
+    }
+
+    [Fact]
+    public void Code_spans_keep_their_angle_brackets_unescaped() =>
+        Assert.Equal("returns `List<T>` or Map\\<K>", Generator.Text("returns `List<T>` or Map<K>"));
+
+    [Theory]
     [InlineData("Prüfung/Übersicht", "Pruefung-Uebersicht")]
     [InlineData("src/Größe", "src-Groesse")]
     [InlineData("src/Café", "src-Cafe")]

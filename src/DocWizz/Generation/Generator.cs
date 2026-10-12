@@ -323,7 +323,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         }
         foreach (var n in model.Nodes.Where(n => n.Kind is "method" or "endpoint" && n.Complexity >= ApiLogicComplexity
                 && (Layer(Naming.Folder(n.File)) == "api" || n.Tags?.Contains("endpoint") == true)).OrderByDescending(n => n.Complexity))
-            yield return $"Logic in the API layer: `{Esc(ShortName(n))}` has complexity {n.Complexity} — move the decisions into the application layer " +
+            yield return $"Logic in the API layer: {Code(ShortName(n))} has complexity {n.Complexity} — move the decisions into the application layer " +
                 $"({SourceLink(n.File, n.Line, Path.GetFileName(n.File))})";
         foreach (var g in model.Edges.Where(e => e.Kind == "uses-namespace" && nodes.TryGetValue(e.From, out var n) && Layer(Naming.Folder(n.File)) == "domain")
                 .GroupBy(e => e.To[3..]).OrderBy(g => g.Key))
@@ -351,7 +351,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         foreach (var n in endpoints)
         {
             var from = callers[n.Id].Select(c => nodes.TryGetValue(c, out var cn) ? $"`{cn.Name}`" : c).Distinct();
-            var input = string.Join("<br>", (n.Parameters ?? []).Select(p => $"`{Esc(p)}`"));
+            var input = string.Join("<br>", (n.Parameters ?? []).Select(p => $"{Code(p)}"));
             var auth = n.Tags!.Contains("anonymous") ? "anonymous" : n.Tags.Contains("authorize") ? "required" : "—";
             sb.AppendLine($"| {n.Tags![1]} | `/{n.Route?.TrimStart('/')}` | {Esc(Summary(n) ?? "—")} | {(input == "" ? "—" : input)} | " +
                 $"{Response(n)} | {auth} | {SourceLink(n.File, n.Line, $"{Path.GetFileName(n.File)}:{n.Line}")} | {string.Join(", ", from)} |");
@@ -404,8 +404,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     static string Response(Node n)
     {
         var parts = new List<string>();
-        if (n.Returns is not null) parts.Add($"`{Esc(n.Returns)}`");
-        if (n.Responses is { Count: > 0 } r) parts.Add(string.Join(", ", r.Select(x => x.Split(' ', 2) is [var code, var type] ? $"{code} `{Esc(type)}`" : x)));
+        if (n.Returns is not null) parts.Add($"{Code(n.Returns)}");
+        if (n.Responses is { Count: > 0 } r) parts.Add(string.Join(", ", r.Select(x => x.Split(' ', 2) is [var code, var type] ? $"{code} {Code(type)}" : x)));
         return parts.Count > 0 ? string.Join("<br>", parts) : "—";
     }
 
@@ -468,7 +468,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             "That is a structural link, not code coverage.\n");
         sb.AppendLine("| Level | Item | Status | Missing | Why it needs docs | Tested |\n|---|---|---|---|---|---|");
         foreach (var f in open)
-            sb.AppendLine($"| {f.Level} | {SourceLink(f.Node.File, f.Node.Line, $"`{Esc(Naming.Display(f.Node))}`")} | {f.Status} | {string.Join(", ", f.Missing)} | {Esc(string.Join("; ", f.Reasons))} | {(f.Tested ? "✓" : "—")} |");
+            sb.AppendLine($"| {f.Level} | {SourceLink(f.Node.File, f.Node.Line, $"{Code(Naming.Display(f.Node))}")} | {f.Status} | {string.Join(", ", f.Missing)} | {Esc(string.Join("; ", f.Reasons))} | {(f.Tested ? "✓" : "—")} |");
         var flagged = findings.Where(f => f.Flags is { Count: > 0 }).OrderBy(f => f.Node.File).ThenBy(f => f.Node.Line).ToList();
         if (flagged.Count > 0)
         {
@@ -476,7 +476,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             sb.AppendLine("| Item | Rule | Basis | Problem |\n|---|---|---|---|");
             foreach (var f in flagged)
                 foreach (var q in f.Flags!)
-                    sb.AppendLine($"| {SourceLink(f.Node.File, f.Node.Line, $"`{Esc(Naming.Display(f.Node))}`")} | {q.Rule} | {(q.Origin == Origin.Fact ? "fact" : "inferred")} | {Esc(q.Detail)} |");
+                    sb.AppendLine($"| {SourceLink(f.Node.File, f.Node.Line, $"{Code(Naming.Display(f.Node))}")} | {q.Rule} | {(q.Origin == Origin.Fact ? "fact" : "inferred")} | {Esc(q.Detail)} |");
         }
         var rated = findings.Where(f => assessments?.ContainsKey(f.Node.Id) == true)
             .OrderBy(f => assessments![f.Node.Id].Score).ThenBy(f => f.Node.File).ThenBy(f => f.Node.Line).ToList();
@@ -488,7 +488,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             foreach (var f in rated)
             {
                 var a = assessments![f.Node.Id];
-                sb.AppendLine($"| {SourceLink(f.Node.File, f.Node.Line, $"`{Esc(Naming.Display(f.Node))}`")} | {a.Score} | {Esc(string.Join(", ", a.Missing))} | {Esc(a.Note)} |");
+                sb.AppendLine($"| {SourceLink(f.Node.File, f.Node.Line, $"{Code(Naming.Display(f.Node))}")} | {a.Score} | {Esc(string.Join(", ", a.Missing))} | {Esc(a.Note)} |");
             }
         }
         var ai = findings.Where(f => f.Sections.GetValueOrDefault("summary")?.Origin == Origin.Ai).ToList();
@@ -497,12 +497,12 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             sb.AppendLine($"\n## AI drafts ({ai.Count})\n\nDrafted from these facts only; review, then move into the code.\n");
             sb.AppendLine("| Item | Draft | Generated from |\n|---|---|---|");
             foreach (var f in ai)
-                sb.AppendLine($"| `{Esc(Naming.Display(f.Node))}` | {Esc(f.Sections["summary"].Text)} | " +
-                    $"{string.Join(", ", (f.Sections["summary"].From ?? []).Select(id => $"`{Esc(nodes.TryGetValue(id, out var x) ? Naming.Display(x) : id)}`"))} |");
+                sb.AppendLine($"| {Code(Naming.Display(f.Node))} | {Esc(f.Sections["summary"].Text)} | " +
+                    $"{string.Join(", ", (f.Sections["summary"].From ?? []).Select(id => $"{Code(nodes.TryGetValue(id, out var x) ? Naming.Display(x) : id)}"))} |");
         }
         sb.AppendLine("\n## Most complex\n\n| Complexity | Item |\n|---|---|");
         foreach (var n in model.Nodes.Where(n => n.Complexity > 1 && n.Kind != "component").OrderByDescending(n => n.Complexity).Take(20))
-            sb.AppendLine($"| {n.Complexity} | {SourceLink(n.File, n.Line, $"`{Esc(Naming.Display(n))}`")} |");
+            sb.AppendLine($"| {n.Complexity} | {SourceLink(n.File, n.Line, $"{Code(Naming.Display(n))}")} |");
         return sb.ToString();
     }
 
@@ -545,7 +545,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     // ⚠ marks items the analyzer says need (more) docs.
     string Badge(Node n) => findingOf.TryGetValue(n.Id, out var f) && f.Status != Status.Documented ? " ⚠" : "";
 
-    string ModuleLink(Node n) => $"[{n.Name}](modules/{Naming.Slug(Naming.Folder(n.File))}.md#{Anchor(Top(n.Id))})";
+    string ModuleLink(Node n) => $"[{Text(n.Name)}](modules/{Naming.Slug(Naming.Folder(n.File))}.md#{Anchor(Top(n.Id))})";
     string Anchor(string id) => Naming.Anchor(nodes[id].Name);
 
     string SourceLink(string file, string label) => SourceLink(file, 0, label == "" ? file : label);
@@ -563,10 +563,22 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         var sb = new StringBuilder($"```mermaid\n{header}\n");
         var lines = edges.Select(e => $"    {Id(e.From)} -->{(e.Count > 0 ? $"|{e.Count}|" : "")} {Id(e.To)}").ToList();
         if (lines.Count == 0) return "None.\n";
-        foreach (var (x, id) in ids) sb.AppendLine($"    {id}[\"{label(x).Replace("\"", "'")}\"]");
+        foreach (var (x, id) in ids) sb.AppendLine($"    {id}[\"{MermaidText(label(x))}\"]");
         foreach (var l in lines) sb.AppendLine(l);
         return sb.Append("```\n").ToString();
     }
 
-    static string Esc(string s) => s.Replace("|", "\\|").Replace("\n", " ");
+    // Prose for a table cell or list item: pipes escaped, one line, and `<` escaped as in Text.
+    static string Esc(string s) => Text(s.Replace("|", "\\|").Replace("\n", " "));
+    // Names and doc text in Markdown: `<` outside code spans escaped, else Markdown passes Array<Row>, Foo<T> or <slot>
+    // through as an HTML tag the browser hides. Code spans stay as written.
+    internal static string Text(string s) => Regex.Replace(s, @"(`+)[^`].*?\1(?!`)|<", m => m.Value == "<" ? "\\<" : m.Value);
+    // A code span for a table cell: pipes escaped, one line; a value with a backtick is fenced with two.
+    static string Code(string s)
+    {
+        var value = s.Replace("|", "\\|").Replace("\n", " ");
+        return value.Contains('`') ? $"`` {value} ``" : $"`{value}`";
+    }
+    // A Mermaid node label: Mermaid renders labels as HTML and ends them at a double quote.
+    static string MermaidText(string s) => s.Replace("\"", "'").Replace("<", "#lt;").Replace(">", "#gt;");
 }

@@ -162,7 +162,7 @@ partial class Generator
             var lines = grouped.Select(e => $"    {Id(e.From)} -->|{e.Label}| {Id(e.To)}").ToList();
             sb.AppendLine("```mermaid\ngraph LR");
             var databases = ExternalSystems.Where(x => Externals.Category(x) == "database").Select(Externals.Label).ToHashSet();
-            foreach (var (x, id) in ids) sb.AppendLine(databases.Contains(x) ? $"    {id}[(\"{x}\")]" : $"    {id}[\"{x.Replace("\"", "'")}\"]");
+            foreach (var (x, id) in ids) sb.AppendLine(databases.Contains(x) ? $"    {id}[(\"{x}\")]" : $"    {id}[\"{MermaidText(x)}\"]");
             foreach (var l in lines) sb.AppendLine(l);
             sb.AppendLine("```\n");
         }
@@ -197,7 +197,7 @@ partial class Generator
         foreach (var layer in shown.GroupBy(x => Layer(Naming.Folder(nodes[x].File)) ?? "(no layer)").OrderBy(g => g.Key))
         {
             sb.AppendLine($"    subgraph {Regex.Replace(layer.Key, @"\W", "_")}[\"{layer.Key}\"]");
-            foreach (var x in layer.Order()) sb.AppendLine($"        {ids[x]}[\"{nodes[x].Name}\"]");
+            foreach (var x in layer.Order()) sb.AppendLine($"        {ids[x]}[\"{MermaidText(nodes[x].Name)}\"]");
             sb.AppendLine("    end");
         }
         foreach (var (from, to) in deps.Where(d => shown.Contains(d.From) && shown.Contains(d.To)))
@@ -208,7 +208,7 @@ partial class Generator
         foreach (var x in shown.OrderBy(x => Layer(Naming.Folder(nodes[x].File))).ThenBy(x => nodes[x].Name))
         {
             var n = nodes[x];
-            sb.AppendLine($"| [{n.Name}](../modules/{Naming.Slug(Naming.Folder(n.File))}.md#{Anchor(x)}) | {n.Kind} | {Layer(Naming.Folder(n.File)) ?? "—"} | " +
+            sb.AppendLine($"| [{Text(n.Name)}](../modules/{Naming.Slug(Naming.Folder(n.File))}.md#{Anchor(x)}) | {n.Kind} | {Layer(Naming.Folder(n.File)) ?? "—"} | " +
                 $"{string.Join(", ", deps.Where(d => d.From == x).Select(d => nodes[d.To].Name).Order())} | " +
                 $"{string.Join(", ", deps.Where(d => d.To == x).Select(d => nodes[d.From].Name).Order())} | {Esc(Summary(n) ?? "")} |");
         }
@@ -216,7 +216,7 @@ partial class Generator
     }
 
     // A symbol's section on its module page, linked from a views/ page.
-    string ViewLink(Node n) => $"[{n.Name}](../modules/{Naming.Slug(Naming.Folder(n.File))}.md#{Anchor(Top(n.Id))})";
+    string ViewLink(Node n) => $"[{Text(n.Name)}](../modules/{Naming.Slug(Naming.Folder(n.File))}.md#{Anchor(Top(n.Id))})";
 
     string DataView()
     {

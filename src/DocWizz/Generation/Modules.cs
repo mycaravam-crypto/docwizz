@@ -48,7 +48,7 @@ partial class Generator
         {
             sb.AppendLine("## Key components\n\n| Component | Kind | Used by | Summary |\n|---|---|---|---|");
             foreach (var t in key)
-                sb.AppendLine($"| [{t.Name}](#{Anchor(t.Id)}) | {string.Join(", ", (t.Tags ?? []).Where(x => Roles.Any(r => r.Match == x)).DefaultIfEmpty(t.Kind))} | " +
+                sb.AppendLine($"| [{Text(t.Name)}](#{Anchor(t.Id)}) | {string.Join(", ", (t.Tags ?? []).Where(x => Roles.Any(r => r.Match == x)).DefaultIfEmpty(t.Kind))} | " +
                     $"{usedByCount[t.Id]} | {Esc(Summary(t) ?? "")} |");
             sb.AppendLine();
         }
@@ -115,7 +115,7 @@ partial class Generator
         {
             sb.AppendLine($"## Documentation gaps\n\n{gaps.Count} items need documentation ({gaps.Count(Analyzer.IsCritical)} critical):\n");
             foreach (var f in gaps.Take(MaxListed))
-                sb.AppendLine($"- {f.Level.ToString().ToLowerInvariant()}: `{Esc(ShortName(f.Node))}` " +
+                sb.AppendLine($"- {f.Level.ToString().ToLowerInvariant()}: {Code(ShortName(f.Node))} " +
                     $"— missing {string.Join(", ", f.Missing)} ({Esc(string.Join("; ", f.Reasons))})");
             if (gaps.Count > MaxListed) sb.AppendLine($"- … see [quality](../quality.md)");
             sb.AppendLine();
@@ -139,10 +139,10 @@ partial class Generator
         if (tops.Count > 0) sb.AppendLine("## Components\n");
         foreach (var t in tops)
         {
-            sb.AppendLine($"### {t.Name}\n");
+            sb.AppendLine($"### {Text(t.Name)}\n");
             sb.AppendLine($"_{t.Kind}_ · {SourceLink(t.File, t.Line, Path.GetFileName(t.File), sub: "modules")}{Badge(t)}\n");
-            if (Summary(t) is { } s) sb.AppendLine(s + "\n");
-            if (t.Kind == "component" && t.Params > 0) sb.AppendLine($"Props: {string.Join(", ", t.Parameters ?? [$"{t.Params}"])}\n");
+            if (Summary(t) is { } s) sb.AppendLine(Text(s) + "\n");
+            if (t.Kind == "component" && t.Params > 0) sb.AppendLine($"Props: {Text(string.Join(", ", t.Parameters ?? [$"{t.Params}"]))}\n");
             if (t.Events is { Count: > 0 }) sb.AppendLine($"Emits: {string.Join(", ", t.Events)}\n");
             foreach (var (name, section) in Derived(t))
                 sb.AppendLine($"- **{name}** _({(section.Origin == Origin.Ai ? "🤖 draft" : section.Origin.ToString().ToLowerInvariant())})_: {Esc(section.Text)}");
@@ -158,7 +158,7 @@ partial class Generator
             if (ms.Count == 0) continue;
             sb.AppendLine("| Member | Summary | Derived from code | Complexity |\n|---|---|---|---|");
             foreach (var m in ms)
-                sb.AppendLine($"| {SourceLink(m.File, m.Line, $"`{Esc(MemberName(m, t))}`", sub: "modules")}{Badge(m)} | {Esc(Summary(m) ?? "")} | " +
+                sb.AppendLine($"| {SourceLink(m.File, m.Line, $"{Code(MemberName(m, t))}", sub: "modules")}{Badge(m)} | {Esc(Summary(m) ?? "")} | " +
                     $"{Esc(string.Join("; ", Derived(m).Select(d => $"{d.Name}{d.Section.Origin switch { Origin.Inferred => " (inferred)", Origin.Ai => " 🤖", _ => "" }}: {d.Section.Text}")))} | {m.Complexity} |");
             sb.AppendLine();
         }
@@ -194,7 +194,7 @@ partial class Generator
         if (keys.Count > 0) parts.Add("_Configuration:_ " + string.Join(", ", keys.Select(k => $"[`{k}`](../views/deployment.md#configuration)")));
         if (testLinks.Of(t.Id) is { Count: > 0 } tests)
             parts.Add("_Linked tests:_ " + string.Join(", ", tests.Take(MaxListed).Select(l => $"`{TestLinks.Short(l.Test)}`" +
-                (l.Via is { } via && nodes.TryGetValue(via, out var v) ? $" (via `{Esc(ShortName(v))}`)" : ""))) +
+                (l.Via is { } via && nodes.TryGetValue(via, out var v) ? $" (via {Code(ShortName(v))})" : ""))) +
                 (tests.Count > MaxListed ? $", +{tests.Count - MaxListed} more" : "") + " — test code that uses it, not coverage");
         return string.Join(" · ", parts);
     }
@@ -215,7 +215,7 @@ partial class Generator
             .OrderByDescending(n => n.Complexity).ToList();
         if (complex.Count > 0)
             yield return $"{complex.Count} {(complex.Count == 1 ? "member has" : "members have")} cyclomatic complexity ≥ {HighComplexity} (many paths to test and explain): " +
-                string.Join(", ", complex.Take(5).Select(n => $"`{Esc(ShortName(n))}` ({n.Complexity})")) + (complex.Count > 5 ? ", … see [quality](../quality.md)" : "");
+                string.Join(", ", complex.Take(5).Select(n => $"{Code(ShortName(n))} ({n.Complexity})")) + (complex.Count > 5 ? ", … see [quality](../quality.md)" : "");
         foreach (var t in tops)
             if (deps.Where(d => d.From == t.Id).Select(d => d.To).Distinct().Count() is var fanOut and >= HighFanOut)
                 yield return $"`{t.Name}` depends on {fanOut} other components — high coupling, possibly several responsibilities";
