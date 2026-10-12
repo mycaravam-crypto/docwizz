@@ -410,7 +410,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 | `--package <name> --to <version>` | `remediation.targets` and version drift | remediate | given together or not at all | maintenance |
 | `--validate` | off | remediate | runs the configured restore/build/test commands in a temporary copy, never the working tree | maintenance |
 | `--html` | off | generate, setup | adds HTML pages; the Markdown is written either way | normal |
-| `--screenshots --base-url <url>` | off | generate | visits statically discovered routes against a running frontend; saves PNGs and embeds only successful captures (requires installed Playwright Chromium) | opt-in |
+| `--screenshots --base-url <url>` | off | generate | captures each detected static route in a fresh anonymous browser context; HTTP errors and URL redirects (e.g. to /login) are skipped; login overlays without URL changes cannot be detected (requires running frontend and Playwright Chromium) | opt-in |
 | `--progress` | interactive terminals | generate, setup | Force progress bars on stderr when output is redirected | normal |
 | `--refresh-html-on-version-change` | off | generate, setup | Implies HTML; rebuild on generator version change | normal |
 | `--ai` | off | generate, product, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it, nothing new is sent | opt-in |
