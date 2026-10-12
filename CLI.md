@@ -40,6 +40,9 @@ an example and its options.
 | `--for <target>` | what a context package is about | coding agents | optional |
 | `--validate` | build and test remediations in a temporary copy | maintainers | optional |
 | `--force` | regenerate `docwizz.yaml` during setup | setup only | no |
+| `--select-projects` | run the TTY project-selection wizard, fail if input/output is redirected | setup only | no |
+| `--all-projects` | explicitly clear a saved `scope:` (preserve other YAML) | setup only | no |
+| `--yes` | never prompt; on a new config retain the legacy all-projects default | setup only | no |
 | `--timings` | time and memory per stage | benchmarks | advanced |
 | `--version`, `-v` | which build is installed | bug reports, CI logs | optional |
 
@@ -64,6 +67,21 @@ The manifest paths are **relative to the scan root**, case-sensitive and separat
 The scope is applied **before** language scanning and is shared by `scan`, `generate`, `setup`, `analyze`, `check`, architecture analysis, context, and SBOM/deployment file enumeration. Discovery itself always inventories all files visible through `.gitignore` and `exclude:`. Existing `exclude:` rules win: an excluded manifest cannot be selected. The generated `docs/index.md` discloses the requested and effective project selections (including test evidence), metadata-only dependencies, omitted `exclude` references, missing references and repository file policy. The persisted code model includes a deterministic **scope-configuration** fingerprint; `context`/MCP will rescan instead of reusing a model generated under another scope, while `diff` without an explicit baseline requires `generate` again after a scope change. The fingerprint does **not** include the discovered inventory or the contents of project manifests; regenerate after new project references or project moves to refresh those facts. P1 keeps `setup` inference-compatible (`discover → scan → config → ...`), but an existing `scope:` is resolved in the discovery stage and applied before scan; the interactive selection/config reordering is deferred to P2.
 
 
+### Interactive project selection (Epic #124 P2)
+
+```bash
+docwizz setup .                   # new ambiguous repository in a TTY: offers selection
+docwizz setup . --select-projects # explicitly select/reselect projects (TTY required)
+docwizz setup . --yes             # non-interactive / CI: no prompt
+docwizz setup . --all-projects    # clear an existing scope without rewriting other config keys
+```
+
+After the read-only discovery stage, a new repository with multiple Solutions or standalone projects offers an **interactive selection only when stdin and stdout are TTYs**. Existing configurations never get a surprise prompt; use `--select-projects` to edit them. The wizard lists projects by stable path ID, role (including test projects), solution membership and direct project-reference count. Type project numbers to toggle, `s1` / `s2` to include all projects from a solution, `a` for all, `n` for none, `d` to confirm and `q` to cancel. You can enter multiple commands separated by commas/spaces. Initial selection prefers root-level Solutions and excludes test projects; `test_links: true` continues to include related test evidence without documenting tests as production. At least one project must be selected. Cancelling or EOF does not change the config and aborts setup before a full scan.
+
+**Selection is resolved before C#/Frontend/Java/SQL parsing.** For a new configuration, setup first applies the chosen scope in memory and writes it alongside inferred layers/test globs after the scoped scan. For an existing config, `--select-projects` updates **only the top-level `scope:` block** (without `--force`), retaining the existing profile/check/architecture settings; a validation error aborts before writing. `--all-projects` removes only that block. Existing `scope:` reference modes and test-link settings are retained by the wizard. Running again with no selection flag keeps the configuration unchanged. A non-TTY call with `--select-projects` fails promptly; `--yes` or a default redirected `setup` never prompts and never silently narrows the scope.
+
+For normal redirected/CI runs the setup stages remain `discover → scan → config → analyze → architecture → generate → check`. With a selection stage (`--select-projects`, `--all-projects`, or a new setup in an interactive TTY), the stage order is `discover → select → scan → config → analyze → architecture → generate → check`. The config stage intentionally remains after scanning so the inferred layer/test defaults are based on evidence. Scope selection is nonetheless complete before the scan.
+
 ### Project discovery (Epic #124 P0)
 
 `docwizz discover .` lists project manifests, solution memberships and unresolved references. `docwizz discover . --format json` returns a deterministic inventory. Discovery does not run language scanners, build tools or AI. In P1, an explicit `scope:` in `docwizz.yaml` selects projects for generation; interactive selection in `setup` is still P2.
@@ -75,7 +93,7 @@ The scope is applied **before** language scanning and is shared by `scan`, `gene
 docwizz setup .
 ```
 
-This runs every stage once, in this order, and prints one summary at the end. The first stage inventories solutions and project files before the full source-code scan; P1 now filters scanned files when an explicit `scope:` exists; the interactive choice remains P2:
+This runs the seven non-interactive stages in the table below and prints one summary at the end. On an interactive setup or with a selection flag, an extra `select` stage is inserted between `discover` and `scan` (see above). In all cases the project scope is resolved before the source scan:
 
 | # | Stage | Does | If it fails |
 |---|---|---|---|
@@ -87,7 +105,7 @@ This runs every stage once, in this order, and prints one summary at the end. Th
 | 6 | generate | writes the docs to `<dir>/docs` | reported; the next stages still run |
 | 7 | check | the quality gate at the configured thresholds | reported |
 
-`setup` does not prompt in P1, so it works the same way in a terminal and in a script. If multiple solutions or standalone projects are found, setup adds an informational project inventory to freshly generated YAML as comments (no active `scope:`). Existing YAML is preserved. Without a configured scope, the full source-code scan is unchanged. With a saved scope, the selection is applied before source scanners as described above. The summary starts with a status
+`setup` never prompts when redirected or with `--yes`. In an interactive terminal, a new ambiguous multi-project repository offers the wizard; an existing config requires explicit `--select-projects`. If multiple solutions or standalone projects are found, setup adds an informational project inventory to freshly generated YAML as comments (no active `scope:`). Existing YAML is preserved. Without a configured scope, the full source-code scan is unchanged. With a saved scope, the selection is applied before source scanners as described above. The summary starts with a status
 that keeps problems in the repository apart from problems running docwizz:
 
 | Status | Means | Exit |
@@ -350,7 +368,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 | Command | Syntax | Purpose | Use |
 |---|---|---|---|
 | `discover` | `docwizz discover [dir] [--format console\|json]` | read-only inventory of solutions, projects and references | everyday |
-| `setup` | `docwizz setup [dir] [--force] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | detect the stack, write `docwizz.yaml`, analyze, architecture, generate, check | start here |
+| `setup` | `docwizz setup [dir] [--select-projects] [--all-projects] [--yes] [--force] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | detect the stack, write `docwizz.yaml`, analyze, architecture, generate, check | start here |
 | `generate` | `docwizz generate <dir> [out] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
 | `check` | `docwizz check <dir> [--since ref] [--format f] [--profile p]` | quality gate; exit 1 when thresholds fail | CI |
 | `analyze` | `docwizz analyze <dir> [--format f] [--profile p]` | documentation and architecture report, no gate | everyday |
@@ -388,6 +406,9 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 | `--refresh-html-on-version-change` | off | generate, setup | Implies HTML; rebuild on generator version change | normal |
 | `--ai` | off | generate, product, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it, nothing new is sent | opt-in |
 | `--force` | off | setup | replaces an existing `docwizz.yaml`; any other command rejects it | setup only |
+| `--select-projects` | off | setup | TTY-only project selection after discovery; only replaces the `scope:` block on an existing config | setup only |
+| `--all-projects` | off | setup | removes a saved project scope while keeping other YAML | setup only |
+| `--yes` | off | setup | skips TTY prompts; does not change an existing scope | setup only |
 | `--timings` | off | all | time and peak memory per stage, on stderr | benchmarks |
 | `--help`, `-h` | — | all | prints the command's help and exits | — |
 | `--version`, `-v` | — | all | prints `docwizz <version> (commit <sha>, .NET <runtime>, <platform>)` and exits 0, whatever the command; `docwizz version` does the same | bug reports, CI logs |
@@ -399,7 +420,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 - **Project scope:** `scope.projects.include` applies before scanning and only within the files permitted by `.gitignore`/`exclude:`. `discover` ignores the scope to show the full available project inventory; absent `scope:` means all available code. Invalid paths are errors, never interpreted as all-projects.
 - **Profile:** `--profile` beats `profile:` in the file, which beats `default`. A file with its own `patterns:` uses
   them unless `--profile` is given.
-- **Existing configuration:** `init` never overwrites. `setup` keeps the file unless you pass `--force`.
+- **Existing configuration:** `init` never overwrites. Plain `setup` keeps the file unless you pass `--force`; `setup --select-projects` and `--all-projects` edit only the scope block (and preserve other YAML).
 - **Options a command doesn't use** (for example `--format` with `generate`, or `--html` with `analyze`) are
   rejected, with the commands that do take them. An option is never silently ignored. Only `--help`, `--timings` and
   `--version` apply everywhere.
