@@ -104,7 +104,7 @@ public class SetupProjectSelectionTests
         var original = "# authored manually\nprofile: default\ncheck:\n  min_coverage: 10\n";
         var added = SetupProjectSelection.WithScope(original, SetupProjectSelection.Scope(["A/A.csproj"], null));
         Assert.StartsWith(original, added);
-        Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(added, "(?m)^scope:").Count);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(added, "(?m)^scope:"));
     }
 
     [Fact]
