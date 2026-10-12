@@ -55,8 +55,28 @@ sealed class ProjectHierarchy
         {
             var members = item.Projects.Where(m => projectsById.ContainsKey(m.ProjectId))
                 .Select(m => (m.ProjectId, m.Folder)).OrderBy(m => m.ProjectId, StringComparer.Ordinal).ToList();
+            // A referenced metadata-only project is present in the code model even though its manifest
+            // was deliberately excluded from the source scan. Retain its solution membership.
+            var slnFile = Path.Combine(root, item.Path.Replace('/', Path.DirectorySeparatorChar));
+            foreach (var (declared, folder) in global::Projects.SolutionFolders(slnFile))
+            {
+                string relative;
+                try
+                {
+                    relative = Path.GetRelativePath(root, Path.GetFullPath(
+                        Path.Combine(Path.GetDirectoryName(slnFile)!, declared))).Replace('\\', '/');
+                }
+                catch (ArgumentException) { continue; }
+                if (relative == ".." || relative.StartsWith("../", StringComparison.Ordinal)) continue;
+                var id = "proj:" + relative;
+                if (!projectsById.TryGetValue(id, out var p) || !p.MetadataOnly || members.Any(m => m.ProjectId == id)) continue;
+                members.Add((id, folder));
+                p.Solutions.Add(new Membership(SolutionPage(item.Path), folder));
+            }
+            members = members.OrderBy(m => m.ProjectId, StringComparer.Ordinal).ToList();
             if (members.Count == 0) continue;
-            var solution = new Solution(item.Path, SolutionPage(item.Path), members, item.UnresolvedProjects);
+            var unresolved = item.UnresolvedProjects.Where(m => !members.Any(p => p.ProjectId == "proj:" + m.Path)).ToList();
+            var solution = new Solution(item.Path, SolutionPage(item.Path), members, unresolved);
             Solutions.Add(solution);
             solutionPages.Add(solution.Page, solution);
         }
