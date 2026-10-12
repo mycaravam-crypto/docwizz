@@ -765,10 +765,13 @@ class H(http.server.BaseHTTPRequestHandler):
         req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         assert self.path == "/api/chat" and req["model"] == "local:7b" and not req["stream"] and req["format"] == "json", req
         facts = json.loads(req["messages"][1]["content"])
+        open(sys.argv[1] + ".requests", "a").write(".")
         S = lambda text, *cites: {"text": text, "from": list(cites)}
         if req["messages"][0]["content"].startswith("You review"):  # assessing written docs
             reply = {"score": 2, "missing": ["purpose", "side effects", "vibes"], "note": "Says what, not why."} \
                 if facts["existingDocs"] else "not json"
+        elif facts.get("module") == "db":  # nothing usable: cached as such, never asked again
+            reply = {"summary": [S("Stores things.", "NotInFacts")]}
         elif "module" in facts:  # module overview: one supported sentence, one citing nothing in the facts
             reply = {"summary": [S(f"Module for {facts['module']}.", facts["members"][0]["name"])], "responsibilities": [S("Owns pricing.", "NotInFacts")]}
         elif facts["symbol"].startswith("Fixture.Api.MaterialController.Create("):
@@ -807,6 +810,11 @@ grep -q '| \[`Fixture.Api.MaterialController.Rename(int, Fixture.Api.RenameMater
     || { grep -A5 "Usefulness" "$docs/quality.md"; exit 1; }
 grep -q "AI-assessed and advisory: not part of doc quality" "$docs/quality.md"
 grep -q '"score": 2' "$docs/.docwizz/ai-assessments.json"
+# a second --ai run sends nothing: every answer is cached, the unusable one (module db) too
+sent=$(wc -c <"$port_file.requests")
+OLLAMA_HOST="127.0.0.1:$(cat "$port_file")" DOCWIZZ_MODEL=local:7b dw generate fixture "$docs" --ai >/dev/null 2>&1
+[ "$(wc -c <"$port_file.requests")" = "$sent" ] || { echo "second --ai run re-sent $(( $(wc -c <"$port_file.requests") - sent )) requests"; exit 1; }
+if grep -q "^## Overview 🤖" "$docs/modules/db.md" 2>/dev/null; then echo "unusable overview shown"; exit 1; fi
 public=$(OLLAMA_HOST=8.8.8.8 dw generate fixture "$(mktemp -d)" --ai 2>&1 >/dev/null)
 grep -q "8.8.8.8 is not a local or private address" <<<"$public" || { echo "$public"; exit 1; }
 cloud=$(OLLAMA_HOST="127.0.0.1:$(cat "$port_file")" DOCWIZZ_MODEL=gpt-oss:120b-cloud dw generate fixture "$(mktemp -d)" --ai 2>&1 >/dev/null)
@@ -814,7 +822,7 @@ grep -q "gpt-oss:120b-cloud is an Ollama cloud model" <<<"$cloud" || { echo "$cl
 kill $fake
 dw generate fixture "$docs" >/dev/null 2>&1   # no --ai, no server: from the cache
 grep -q '| 2 | purpose, side effects | Says what, not why. |' "$docs/quality.md"
-rm -rf "$docs" "$port_file"
+rm -rf "$docs" "$port_file" "$port_file.requests"
 
 # --ai with provider openai-compatible (vLLM, NIM, LiteLLM): /v1/chat/completions on a private address, the key from the
 # variable ai.api_key_env names, never from docwizz.yaml; drafts are filed under provider and model
