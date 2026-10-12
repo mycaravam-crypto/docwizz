@@ -62,6 +62,13 @@ public class AiProviderTests
                     while (true)
                     {
                         using var c = await listener.AcceptTcpClientAsync();
+                        // For a silent server, keep the connection open without parsing a request.
+                        // This isolates the timeout test from unrelated request-parser failures.
+                        if (replies.Length == 1 && replies[0].Status == 0)
+                        {
+                            await Task.Delay(Timeout.Infinite);
+                            continue;
+                        }
                         var stream = c.GetStream();
                         var reader = new StreamReader(stream, Encoding.UTF8);
                         var length = 0;
