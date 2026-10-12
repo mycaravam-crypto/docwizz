@@ -51,7 +51,18 @@ static async Task<int> Dispatch(string[] args)
         return 1;
     }
     if (cmd == "init") return Init(path);
-    if (cmd == "setup") return await SetupCommand(path, opts.GetValueOrDefault("profile"), opts.ContainsKey("force"), opts.ContainsKey("ai"), opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"), opts.ContainsKey("refresh-html-on-version-change"), opts.ContainsKey("progress"));
+    if (cmd == "setup")
+    {
+        if (opts.ContainsKey("select-projects") && !SetupProjectSelection.Interactive)
+        {
+            Console.Error.WriteLine("setup --select-projects requires an interactive terminal (TTY); use --all-projects or edit scope: in docwizz.yaml for CI");
+            return 1;
+        }
+        return await SetupCommand(path, opts.GetValueOrDefault("profile"), opts.ContainsKey("force"), opts.ContainsKey("ai"),
+            opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"),
+            opts.ContainsKey("refresh-html-on-version-change"), opts.ContainsKey("progress"),
+            opts.ContainsKey("select-projects"), opts.ContainsKey("all-projects"), opts.ContainsKey("yes"));
+    }
     Config config;
     try { config = Config.Load(path, opts.GetValueOrDefault("profile")); }
     catch (ArgumentException e)
@@ -351,6 +362,9 @@ static string Reference() => $"""
     start here:
       docwizz setup [dir]               detect the stack, write docwizz.yaml, analyze, generate docs, check
         [--force]                       overwrite an existing docwizz.yaml
+        [--select-projects]             choose projects interactively (TTY required)
+        [--all-projects]                clear a saved project scope, preserving other config
+        [--yes]                          no prompt for scripts and CI
 
     everyday:
       docwizz discover [dir]             read-only project and solution inventory [--format json]
@@ -764,10 +778,12 @@ static (List<string> Failures, List<string> MissingSections) CheckFailures(strin
     return (failures, missingSections);
 }
 
-// First run: discovery → scope resolution before language scanning → inferred config → analysis → generation → check.
-// Keep the config stage after scan until inferred layer/test defaults can be computed without the full model.
+// First run: discovery → optional TTY selection (scope in memory and/or persisted) → source scan →
+// inferred config → analysis → generation → check. The scope is ALWAYS resolved before BuildModel.
+// Inferred layer/test config is written after scan so existing setup output remains stable.
 // Exit 1 only when a stage fails: a failing check is the baseline to improve on, reported with what to do next.
-static async Task<int> SetupCommand(string root, string? profile, bool force, bool ai, bool html, bool refreshHtmlOnVersionChange = false, bool progress = false)
+static async Task<int> SetupCommand(string root, string? profile, bool force, bool ai, bool html, bool refreshHtmlOnVersionChange = false, bool progress = false,
+    bool selectProjects = false, bool allProjects = false, bool yes = false)
 {
     var file = Path.Combine(root, "docwizz.yaml");
     var outDir = Path.Combine(root, "docs");
@@ -780,11 +796,13 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
     ArchitectureResult? arch = null;
     string configStatus = "";
     bool? passed = null;
+    string? selectedConfigStatus = null;
+    var selectionStage = selectProjects || allProjects || (SetupProjectSelection.Interactive && !yes && !existing);
 
-    using var bar = CliProgress.ForConsole(7, progress);
+    using var bar = CliProgress.ForConsole(selectionStage ? 8 : 7, progress);
     Console.WriteLine($"docwizz setup {Path.GetFullPath(root)}");
-    var results = Setup.Run(
-    [
+    var stages = new List<Setup.Stage>
+    {
         new("discover", () =>
         {
             // Always before BuildModel. An existing explicit scope is loaded and validated before language scanning.
@@ -793,6 +811,45 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
             inventory = ProjectDiscovery.Scan(root, RepoFilesUnscoped(root, config));
             return Setup.DiscoverySummary(inventory);
         }, Required: true),
+    };
+    if (selectionStage)
+        stages.Add(new("select", () =>
+        {
+            if (inventory is null) throw new ScopeException("setup: discovery did not return a project inventory");
+            if (allProjects)
+            {
+                selectedConfigStatus = existing ? SetupProjectSelection.Save(root, null, profile) : null;
+                if (existing) config = Config.Load(root, profile);
+                else config.Scope = null;
+                return "all projects (explicit scope removed)";
+            }
+            if (!selectProjects && (existing || !Setup.NeedsProjectSelection(inventory)))
+                return "not needed (existing configuration preserved or one unambiguous project)";
+
+            var initial = SetupProjectSelection.Initial(inventory, config.Scope);
+            var available = inventory.Projects.Select(p => p.Path).ToHashSet(StringComparer.Ordinal);
+            var missing = config.Scope?.Projects.Include.Where(p => !available.Contains(p)).ToList() ?? [];
+            if (missing.Count > 0)
+                Console.WriteLine("Previously selected projects no longer found: " + string.Join(", ", missing) +
+                    " — review and confirm a new selection to update scope:");
+            // Cache the read-only candidates and validate each proposed choice before accepting it.
+            // Invalid shared-directory selections can be corrected without restarting setup.
+            var candidates = RepoFilesUnscoped(root, config);
+            var choice = SetupProjectSelection.Prompt(inventory, initial, Console.In, Console.Out,
+                selected => { ProjectScope.Resolve(root, SetupProjectSelection.Scope(selected, config.Scope), candidates); });
+            if (choice.Cancelled) throw new ScopeException("setup: project selection cancelled; no configuration changed");
+            var proposed = SetupProjectSelection.Scope(choice.Projects, config.Scope);
+            if (existing)
+            {
+                selectedConfigStatus = SetupProjectSelection.Save(root, proposed, profile);
+                config = Config.Load(root, profile);
+            }
+            else config.Scope = proposed;
+            return $"selected {choice.Projects.Count} projects (references: {proposed.Projects.References})" +
+                (existing ? $"; {selectedConfigStatus} docwizz.yaml" : "; scope will be written with generated config");
+        }, Required: true));
+    stages.AddRange(
+    [
         new("scan", () =>
         {
             var (m, files) = BuildModel(root, config);
@@ -803,10 +860,13 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
         }, Required: true),
         new("config", () =>
         {
-            configStatus = existing ? "kept" : Setup.WriteConfig(root, Setup.Yaml(detection, AppVersion.Number, inventory), force);
-            // The generated file only narrows layers and test globs to those files matched, so the model stands.
+            configStatus = existing ? selectedConfigStatus ?? "kept" : Setup.WriteConfig(root,
+                SetupProjectSelection.WithScope(Setup.Yaml(detection, AppVersion.Number, inventory), config.Scope), force);
+            // The generated file only narrows layers and test globs to those files matched; selection ran before scan.
             if (!existing) config = Config.Load(root, profile);
-            return $"{configStatus} {file}" + (existing ? " (--force to regenerate)" : $" ({detection.Layers.Count} layers, {detection.TestGlobs.Count} test globs inferred)");
+            return $"{configStatus} {file}" + (existing
+                ? (configStatus == "kept" ? " (--force to regenerate)" : " (only scope: modified)")
+                : $" ({detection.Layers.Count} layers, {detection.TestGlobs.Count} test globs inferred)");
         }, Required: true),
         new("analyze", () =>
         {
@@ -829,7 +889,8 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
             passed = failures.Count == 0;
             return passed.Value ? "PASS" : "FAIL — " + string.Join("; ", failures);
         }),
-    ], Console.Out, bar.Advance);
+    ]);
+    var results = Setup.Run(stages, Console.Out, bar.Advance);
 
     var failed = results.Where(r => !r.Ok).ToList();
     var rel = (string p) => "./" + Path.GetRelativePath(".", p).Replace('\\', '/');
@@ -870,7 +931,8 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
         foreach (var t in Setup.FollowUp(detection, configStatus, config, passed != false)) Console.WriteLine($"  - {t}");
         if (inventory is not null && Setup.NeedsProjectSelection(inventory))
             Console.WriteLine("  - multiple solutions or standalone projects detected: review with docwizz discover " +
-                root + " --format json; configure scope.projects.include in docwizz.yaml (interactive setup wizard: Epic #124 P2)");
+                root + " --format json; run docwizz setup " + root +
+                " --select-projects in a terminal or configure scope.projects.include in docwizz.yaml");
     }
     Console.WriteLine();
     Console.WriteLine("Next useful actions:");
