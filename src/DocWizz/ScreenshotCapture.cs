@@ -78,6 +78,7 @@ static class ScreenshotCapture
                     var failure = NavigationFailure(url, new Uri(page.Url), response?.Status);
                     if (failure is not null)
                     {
+                        if (File.Exists(fullPath)) File.Delete(fullPath);
                         Console.Error.WriteLine($"docwizz: screenshot skipped: {route} {failure}");
                         continue;
                     }
