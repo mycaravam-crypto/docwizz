@@ -118,7 +118,14 @@ changes between two validated evidence catalogs. It reports added, removed or
 modified declarations (based on the canonical evidence hash); for each changed
 ID it lists direct neighbors from **explicit** links in either snapshot.
 Added and removed links are also reported independently, even if no declaration
-changed. The implementation does not infer transitive or semantic dependencies.
+changed; the links of a removed record therefore appear both in its related IDs
+and under removed links. For a `changed` record, `fields` names what differs
+(`kind`, `text`, `source`, `version`), so a version bump can be told apart from a
+changed kind, which makes the record's old links questionable.
+
+`affectedTests` lists the test records reachable from a changed record along
+**explicit** links in either snapshot (requirement → architecture → test). This
+follows declared, typed links only; no semantic or inferred dependency is added.
 
 This is an internal foundation and not yet a CLI surface. Importantly it
 **does not read the source Markdown files**: identical catalog entries with

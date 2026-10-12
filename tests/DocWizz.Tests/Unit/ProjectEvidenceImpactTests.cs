@@ -47,6 +47,75 @@ public class ProjectEvidenceImpactTests
         Assert.Empty(ProjectEvidenceImpact.Compare(a, b).Evidence);
     }
 
+    const string Chain = """
+        schema: 1
+        evidence:
+          - id: REQ-001
+            kind: requirement
+            text: A requirement
+            source: docs/requirements.md
+            version: v1
+          - id: ARC-001
+            kind: architecture
+            text: A component
+            source: docs/architecture.md
+            version: v1
+          - id: TEST-001
+            kind: test
+            text: Acceptance
+            source: docs/test.md
+            version: v1
+          - id: TEST-002
+            kind: test
+            text: Regression
+            source: docs/test.md
+            version: v1
+        links:
+          - from: REQ-001
+            to: ARC-001
+          - from: ARC-001
+            to: TEST-001
+          - from: ARC-001
+            to: TEST-002
+        """;
+
+    static ProjectEvidenceCatalog Parse(string yaml) => ProjectEvidenceCatalog.Parse(new StringReader(yaml));
+
+    [Fact]
+    public void Changed_requirement_reports_tests_reachable_through_explicit_links()
+    {
+        var report = ProjectEvidenceImpact.Compare(Parse(Chain), Parse(Chain.Replace("text: A requirement", "text: A sharper requirement")));
+        var change = Assert.Single(report.Evidence);
+        Assert.Equal("REQ-001", change.Id);
+        Assert.Equal(["text"], change.Fields);
+        Assert.Equal(["ARC-001"], change.RelatedIds);
+        Assert.Equal(["TEST-001", "TEST-002"], change.AffectedTests);
+    }
+
+    [Fact]
+    public void Changed_fields_are_named_and_a_test_change_affects_no_other_tests()
+    {
+        var after = Parse(Chain.Replace("text: Acceptance\n    source: docs/test.md\n    version: v1", "text: Acceptance\n    source: docs/acceptance.md\n    version: v2"));
+        var change = Assert.Single(ProjectEvidenceImpact.Compare(Parse(Chain), after).Evidence);
+        Assert.Equal("TEST-001", change.Id);
+        Assert.Equal(["source", "version"], change.Fields);
+        Assert.Equal(["ARC-001"], change.RelatedIds);
+        Assert.Empty(change.AffectedTests);
+    }
+
+    [Fact]
+    public void Removed_record_keeps_its_old_links_as_related_and_removed_links()
+    {
+        var withoutTest = Parse(Chain.Replace("  - id: TEST-002\n    kind: test\n    text: Regression\n    source: docs/test.md\n    version: v1\n", "")
+            .Replace("\n  - from: ARC-001\n    to: TEST-002", ""));
+        var report = ProjectEvidenceImpact.Compare(Parse(Chain), withoutTest);
+        var change = Assert.Single(report.Evidence);
+        Assert.Equal(("TEST-002", "removed"), (change.Id, change.Change));
+        Assert.Empty(change.Fields);
+        Assert.Equal(["ARC-001"], change.RelatedIds);
+        Assert.Equal([new EvidenceLink("ARC-001", "TEST-002")], report.RemovedLinks);
+    }
+
     [Fact]
     public void Identical_snapshots_produce_empty_differences()
     {
