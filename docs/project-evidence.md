@@ -110,3 +110,17 @@ version and source path, **not the contents of the referenced source file**.
 Consequently this change does not detect stale source files or changed link
 impact: those remain tracked as a separate part of #122. Importers perform
 no network access, LLM inference, filesystem write or silent approval.
+
+## Snapshot change impact (P2.5, #122)
+
+`ProjectEvidenceImpact.Compare(before, after)` computes stable, ordinal-sorted
+changes between two validated evidence catalogs. It reports added, removed or
+modified declarations (based on the canonical evidence hash); for each changed
+ID it lists direct neighbors from **explicit** links in either snapshot.
+Added and removed links are also reported independently, even if no declaration
+changed. The implementation does not infer transitive or semantic dependencies.
+
+This is an internal foundation and not yet a CLI surface. Importantly it
+**does not read the source Markdown files**: identical catalog entries with
+modified referenced files are invisible to this comparison. File-content
+hashing / freshness checks and a user-facing impact command remain open in #122.
