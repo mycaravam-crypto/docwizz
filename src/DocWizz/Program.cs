@@ -116,7 +116,7 @@ static int TraceCommand(string root, string? name, bool json)
     var file = File.Exists(name) ? name : Path.Combine(root, name);
     try
     {
-        var report = TraceabilityReport.Build(ProjectEvidenceCatalog.Load(file));
+        var report = TraceabilityReport.Build(ProjectEvidenceImport.Load(file));
         Console.Write(json ? TraceabilityReport.Json(report) : TraceabilityReport.Markdown(report));
         return 0;
     }

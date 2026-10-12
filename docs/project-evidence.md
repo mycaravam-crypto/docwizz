@@ -83,3 +83,30 @@ use the explicit evidence relationships and `docwizz trace` report, not an
 assumed relationship inferred from a chapter title. The existing `docwizz product check` verifies that the dependent
 draft exists, not its professional approval or correctness. Chapters backed
 only by project sources remain **OFFEN** until evidence is explicitly provided.
+
+## Evidence import formats (P2.5, #122)
+
+`docwizz trace <dir> <evidence.csv|evidence.md|evidence.yaml> [--format json]`
+accepts CSV and Markdown **evidence records** in addition to YAML. All formats
+pass through the same strict schema-v1 validator; only YAML currently supports
+explicit `links`. Imported CSV/Markdown records have no implicit links.
+
+CSV requires the exact header `id,kind,text,source,version` and comma separators (for German Excel exports choose comma-separated CSV, not semicolon-separated CSV); UTF-8 quoted
+CSV fields may contain commas, but all evidence values must remain single-line.
+Markdown accepts surrounding whitespace/indentation and requires only a five-column pipe table with the same field names
+and a separator row; no headings, inline pipe characters or multiline cells.
+This deliberately narrow format avoids guessing semantics from arbitrary prose.
+
+Example Markdown:
+
+```markdown
+| id | kind | text | source | version |
+|---|---|---|---|---|
+| REQ-017 | requirement | Authenticate users | docs/requirements.md | v1 |
+```
+
+The existing canonical SHA-256 field hash includes the explicit record
+version and source path, **not the contents of the referenced source file**.
+Consequently this change does not detect stale source files or changed link
+impact: those remain tracked as a separate part of #122. Importers perform
+no network access, LLM inference, filesystem write or silent approval.
