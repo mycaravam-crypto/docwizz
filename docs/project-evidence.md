@@ -131,3 +131,7 @@ This is an internal foundation and not yet a CLI surface. Importantly it
 **does not read the source Markdown files**: identical catalog entries with
 modified referenced files are invisible to this comparison. File-content
 hashing / freshness checks and a user-facing impact command remain open in #122.
+
+## Evidence-diff command (P2.5)
+
+`docwizz evidence-diff <dir> <before.yaml> <after.yaml> [--format json]` compares two validated evidence snapshots. It reports changed fields, direct linked evidence IDs, and tests reachable through explicit relations, together with link additions or removals. YAML, CSV and Markdown catalogs are supported, but only YAML supplies relations. It does not read source Markdown contents or establish source freshness. Exit 1 indicates invalid input; output is read-only.
