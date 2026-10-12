@@ -1,6 +1,3 @@
-using System.Text.Json;
-using System.Xml.Linq;
-
 // Lightweight, read-only inventory. This deliberately does not call BuildModel or any language scanner.
 // It reuses the existing project-manifest parser and solution-folder parser, so their classification
 // semantics stay consistent with the generated documentation.
@@ -93,7 +90,9 @@ static class ProjectDiscovery
         {
             if (!byId.TryGetValue(edge.From, out var source)) continue;
             if (byId.ContainsKey(edge.To))
-                source.References.Add(edge.To);
+            {
+                if (!source.References.Contains(edge.To, StringComparer.Ordinal)) source.References.Add(edge.To);
+            }
             else
             {
                 var target = edge.To.StartsWith("proj:", StringComparison.Ordinal) ? edge.To[5..] : edge.To;
