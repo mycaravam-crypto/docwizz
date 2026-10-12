@@ -135,3 +135,27 @@ hashing / freshness checks remain open in #122.
 ## Evidence-diff command (P2.5)
 
 `docwizz evidence-diff <dir> <before.yaml> <after.yaml> [--format json]` compares two validated evidence snapshots. It reports changed fields, direct linked evidence IDs, and tests reachable through explicit relations, together with link additions or removals. YAML, CSV and Markdown catalogs are supported, but only YAML supplies relations. It does not read source Markdown contents or establish source freshness. Exit 1 indicates invalid input; output is read-only.
+
+## File content freshness (P2.5)
+
+YAML schema 1 evidence records may carry an optional `source_hash`: a lowercase
+64-character SHA-256 digest of the **actual UTF-8 Markdown file bytes**, not
+the evidence record hash. For example:
+
+```yaml
+  - id: REQ-017
+    kind: requirement
+    text: Users authenticate.
+    source: docs/requirements.md
+    version: v1
+    source_hash: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+```
+
+`docwizz trace . evidence.yaml --format json` reads only declared repository-relative
+`docs/*.md` paths and reports `sources[]` entries with status `current`
+(expected digest matches), `stale` (mismatch), `missing` or `unverified`
+(no explicit digest). Symlink sources are rejected. A missing file is never
+presented as current, and no version is inferred from filesystem timestamps.
+The CLI remains report-only: findings do not fail the command and do not imply
+human approval. CSV/Markdown adapters cannot encode a source hash; use YAML
+when a pinned source-content baseline is required.
