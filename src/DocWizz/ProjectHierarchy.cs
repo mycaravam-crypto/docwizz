@@ -36,7 +36,8 @@ sealed class ProjectHierarchy
     public ProjectHierarchy(string root, CodeModel model, IEnumerable<string> acceptedFiles, IReadOnlyCollection<string> moduleFolders)
     {
         // Do not discover any manifests excluded by the project's active scan scope.
-        var files = acceptedFiles.Where(f => File.Exists(f) && ProjectDiscovery.SafeFile(root, Path.GetFullPath(f))).ToList();
+        var files = acceptedFiles.Select(f => Path.IsPathRooted(f) ? f : Path.Combine(root, f))
+            .Where(f => File.Exists(f) && ProjectDiscovery.SafeFile(root, Path.GetFullPath(f))).ToList();
         var inventory = ProjectDiscovery.Scan(root, files);
         var memberships = inventory.Projects.ToDictionary(p => p.Id, p => p.Solutions, StringComparer.Ordinal);
         foreach (var n in model.Nodes.Where(n => n.Kind == "project").OrderBy(n => n.File, StringComparer.Ordinal))
