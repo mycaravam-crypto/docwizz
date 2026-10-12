@@ -18,7 +18,8 @@ static class ProjectScope
         {
             if (string.IsNullOrWhiteSpace(path) || path.Contains('\\') || path.StartsWith('/')
                 || path.EndsWith('/') || path.Split('/').Any(p => p is "" or "." or "..")
-                || path.Contains(':') || path.Contains('*') || path.Contains('?'))
+                || path.Contains(':') || path.Contains('*') || path.Contains('?')
+                || path.Any(char.IsControl) || path.Contains('`'))
                 throw new ArgumentException($"scope.projects.include: invalid relative project manifest path '{path}' (use '/' separators, no globbing or '..')");
         }
         if (scope.Projects.Include.Count != scope.Projects.Include.Distinct(StringComparer.Ordinal).Count())
@@ -40,6 +41,15 @@ static class ProjectScope
             if (!projects.ContainsKey(id))
                 throw new ArgumentException($"scope.projects.include: '{manifest}' was not discovered below the scan root (check .gitignore, exclude: and paths)");
             selected.Add(id);
+        }
+
+        // MSBuild can place multiple manifests in one directory. Files cannot be safely assigned to only
+        // one of them; require an all-or-none selection instead of leaking symbols from an unselected project.
+        foreach (var group in inventory.Projects.GroupBy(p => Path.GetDirectoryName(p.Path)?.Replace('\\', '/') ?? ""))
+        {
+            if (group.Count() > 1 && group.Any(p => selected.Contains(p.Id)) && group.Any(p => !selected.Contains(p.Id)))
+                throw new ArgumentException("scope.projects.include: manifests share directory '" + group.Key
+                    + "'; select all projects in that directory or move them to separate directories");
         }
 
         if (scope.Projects.References == "include")
