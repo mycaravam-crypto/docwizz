@@ -71,6 +71,61 @@ public class SetupProjectSelectionTests
         Assert.Empty(picked.Projects);
     }
 
+    [Theory]
+    [InlineData(false, false, true, null, true)]
+    [InlineData(false, false, true, "true", false)]
+    [InlineData(false, false, true, "1", false)]
+    [InlineData(false, false, true, "false", false)]
+    [InlineData(false, false, false, null, false)]
+    [InlineData(true, false, true, null, false)]
+    [InlineData(false, true, true, null, false)]
+    public void Tty_policy_never_prompts_when_CI_is_set(bool inputRedirected, bool outputRedirected,
+        bool userInteractive, string? ci, bool expected) =>
+        Assert.Equal(expected, SetupProjectSelection.CanPrompt(inputRedirected, outputRedirected, userInteractive, ci));
+
+    [Fact]
+    public void Whole_solution_command_toggles_all_of_its_projects()
+    {
+        using var repo = Fixtures();
+        var picked = SetupProjectSelection.Prompt(Inventory(repo), [], new StringReader("s1\ns1\n3\nd\n"),
+            new StringWriter());
+        Assert.Equal(["C/C.csproj"], picked.Projects);
+    }
+
+    [Fact]
+    public void Invalid_selection_is_retained_for_correction_and_revalidated()
+    {
+        using var repo = new Sources(
+            ("Shared/First.csproj", """<Project Sdk="Microsoft.NET.Sdk" />"""),
+            ("Shared/Second.csproj", """<Project Sdk="Microsoft.NET.Sdk" />"""));
+        var inventory = Inventory(repo);
+        var output = new StringWriter();
+        var choices = new List<string>();
+        var picked = SetupProjectSelection.Prompt(inventory, [], new StringReader("1\nd\n2\nd\n"), output,
+            paths =>
+            {
+                choices.Add(string.Join(",", paths));
+                var selection = SetupProjectSelection.Scope(paths, null);
+                ProjectScope.Resolve(repo.Root, selection, repo.Files);
+            });
+        Assert.Equal(["Shared/First.csproj", "Shared/Second.csproj"], picked.Projects);
+        Assert.Equal(2, choices.Count);
+        Assert.Contains("manifests share directory", output.ToString());
+        Assert.Contains("Change the selection", output.ToString());
+    }
+
+    [Fact]
+    public void Scope_editor_preserves_blank_lines_after_replaced_block()
+    {
+        var original = "profile: default\nscope:\n  projects:\n    include: [\"A/A.csproj\"]\n\n\ncheck:\n  min_coverage: 20\n";
+        var edited = SetupProjectSelection.WithScope(original, SetupProjectSelection.Scope(["B/B.csproj"], null));
+        Assert.Contains("repository_files: include\n\n\ncheck:\n", edited);
+        var repeated = SetupProjectSelection.WithScope(edited, SetupProjectSelection.Scope(["B/B.csproj"], null));
+        Assert.Equal(edited, repeated);
+        var cleared = SetupProjectSelection.WithScope(edited, null);
+        Assert.Equal("profile: default\n\n\ncheck:\n  min_coverage: 20\n", cleared);
+    }
+
     [Fact]
     public void Generated_scope_uses_existing_reference_and_test_policies()
     {
