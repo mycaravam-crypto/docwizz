@@ -23,7 +23,7 @@ public class ProductJourneyTests
         var json = Docwizz.Run("trace", repo.Root, "evidence.yaml", "--format", "json");
         Assert.Equal(0, json.Exit);
         Assert.Equal("no-architecture", System.Text.Json.JsonDocument.Parse(json.Out).RootElement
-            .GetProperty("Requirements")[0].GetProperty("Status").GetString());
+            .GetProperty("requirements")[0].GetProperty("status").GetString());
         Assert.Equal(1, Docwizz.Run("trace", repo.Root, "missing.yaml").Exit);
         Assert.False(File.Exists(Path.Combine(repo.Root, "trace.md")));
     }
