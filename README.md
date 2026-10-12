@@ -122,8 +122,22 @@ your intent.
 
 ```console
 $ docwizz generate fixture docs --html
-32 pages → docs (commit af4fd7c): 32 changed
+80 pages → docs (commit 619426e): 80 changed
+
+  Scanned       33 source files → 96 symbols, 10 endpoints, 6 projects, 4 routes
+  Coverage      ███████░░░░░░░░░░░░░  37%  4 documented, 3 partial, 8 missing (profile default)
+  Doc quality   █████████████████░░░  86%  of 7 items with written docs
+  Gaps          10 critical, 1 warning → docs/quality.html
+  Architecture  3 violations, 1 cycle → docs/architecture.html
+  Pages         80 Markdown + HTML: 80 changed, 0 unchanged
+  Time          5.4s  (scan 4.5s · write pages 0.7s · metadata 0.1s)
+
+  Open          docs/index.html
+  Next          docwizz generate fixture --ai   drafts 8 missing summaries
+                docwizz check fixture   gates coverage in CI
 ```
+
+The first line is the stable one-line result for scripts; the report below it says what was found and where to look.
 
 You get `index`, `architecture`, `api`, `frontend` and `quality` pages, one page per module, and `views/` for context,
 containers, components, data and deployment. `api.md` traces every endpoint to where it ends up:

@@ -112,7 +112,11 @@ static async Task<int> Dispatch(string[] args)
                 Console.Error.WriteLine("docwizz: --storage-state file not found");
                 return 1;
             }
-            Console.WriteLine(await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"), refreshHtmlOnVersionChange: opts.ContainsKey("refresh-html-on-version-change"), progress: opts.ContainsKey("progress"), screenshotBaseUrl: opts.GetValueOrDefault("base-url"), screenshotStorageState: stateFile));
+            var report = await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"), refreshHtmlOnVersionChange: opts.ContainsKey("refresh-html-on-version-change"), progress: opts.ContainsKey("progress"), screenshotBaseUrl: opts.GetValueOrDefault("base-url"), screenshotStorageState: stateFile);
+            // The first line stays the stable one-line result scripts match; the report follows it.
+            Console.WriteLine(report.Line);
+            Console.WriteLine();
+            foreach (var l in report.Details) Console.WriteLine(l.Length == 0 ? "" : "  " + l);
             return 0;
         default:
             return Usage($"unknown command {cmd}");
@@ -492,20 +496,49 @@ static List<string> RepoFiles(string root, Config config, string[]? dotDirs = nu
     return ProjectScope.Resolve(root, config.Scope, all).Files;
 }
 
-static (CodeModel Model, List<string> Files) BuildModel(string root, Config config)
+// progress, when given, hears about every step from the first file listing on: a large repository spends most of a
+// generate here, and a bar that only moves once the scan is over looks hung.
+static (CodeModel Model, List<string> Files) BuildModel(string root, Config config, CliProgress? progress = null)
 {
     string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java", ".php"];
+    progress?.Report(0, 1, "listing files");
     var raw = Timings.Measure("files", () => RepoFilesUnscoped(root, config));
     var plan = ProjectScope.Resolve(root, config.Scope, raw);
     var candidates = plan.Files;
     var scanned = candidates.Where(f => exts.Contains(Path.GetExtension(f)) && !f.EndsWith(".d.ts") && !f.EndsWith(".min.js")
         && !f.Replace('\\', '/').Contains("/wwwroot/lib/")).ToList(); // ponytail: libman/bower vendor dir only; other vendored JS needs exclude:
 
-    var (nodes, edges) = Timings.Measure("scan:csharp", () => CSharpScanner.Scan(root, scanned.Where(f => f.EndsWith(".cs")), config.CommentDocs));
-    var (feNodes, feEdges) = Timings.Measure("scan:frontend", () => Frontend.Scan(root, scanned.Where(f => Path.GetExtension(f) is ".vue" or ".ts" or ".tsx" or ".js" or ".jsx" or ".mjs").ToList()));
-    var (sqlNodes, sqlEdges) = Timings.Measure("scan:sql", () => Sql.Scan(root, scanned.Where(f => f.EndsWith(".sql"))));
-    var (javaNodes, javaEdges) = Timings.Measure("scan:java", () => JavaScanner.Scan(root, scanned.Where(f => f.EndsWith(".java"))));
-    var (phpNodes, phpEdges) = Timings.Measure("scan:php", () => PhpScanner.Scan(root, scanned.Where(f => f.EndsWith(".php"))));
+    var csFiles = scanned.Where(f => f.EndsWith(".cs")).ToList();
+    var feFiles = scanned.Where(f => Path.GetExtension(f) is ".vue" or ".ts" or ".tsx" or ".js" or ".jsx" or ".mjs").ToList();
+    var sqlFiles = scanned.Where(f => f.EndsWith(".sql")).ToList();
+    var javaFiles = scanned.Where(f => f.EndsWith(".java")).ToList();
+    var phpFiles = scanned.Where(f => f.EndsWith(".php")).ToList();
+    // Work units for the bar: a file each, plus the start of a Node process for the scanners that need one.
+    // C# files cost about twice the others, and loading the reference assemblies is a fixed cost of its own.
+    var csUnits = csFiles.Count == 0 ? 0 : 2 * csFiles.Count + 20;
+    var total = 2 + csUnits + feFiles.Count + (feFiles.Count > 0 ? 20 : 0) + sqlFiles.Count + javaFiles.Count + (javaFiles.Count > 0 ? 10 : 0) + phpFiles.Count;
+    var done = 1;
+    string Files(int n, string what) => $"{what} · {n:N0} file{(n == 1 ? "" : "s")}";
+    progress?.Report(done, total, $"found {scanned.Count:N0} source files");
+
+    // The scanner counts parsing as the first half, the semantic pass as the second; reference loading sits between.
+    var (nodes, edges) = Timings.Measure("scan:csharp", () => CSharpScanner.Scan(root, csFiles, config.CommentDocs, (i, n) =>
+        progress?.Report(done + (i < csFiles.Count ? i : i + 20), total, i < csFiles.Count ? $"C# parsing {i + 1:N0}/{csFiles.Count:N0}"
+            : i == csFiles.Count ? "C# loading references" : $"C# symbols {i - csFiles.Count + 1:N0}/{csFiles.Count:N0}")));
+    done += csUnits;
+    if (feFiles.Count > 0) progress?.Report(done, total, Files(feFiles.Count, "Vue/TS/JS"));
+    var (feNodes, feEdges) = Timings.Measure("scan:frontend", () => Frontend.Scan(root, feFiles));
+    done += feFiles.Count + (feFiles.Count > 0 ? 20 : 0);
+    if (sqlFiles.Count > 0) progress?.Report(done, total, Files(sqlFiles.Count, "SQL"));
+    var (sqlNodes, sqlEdges) = Timings.Measure("scan:sql", () => Sql.Scan(root, sqlFiles));
+    done += sqlFiles.Count;
+    if (javaFiles.Count > 0) progress?.Report(done, total, Files(javaFiles.Count, "Java"));
+    var (javaNodes, javaEdges) = Timings.Measure("scan:java", () => JavaScanner.Scan(root, javaFiles));
+    done += javaFiles.Count + (javaFiles.Count > 0 ? 10 : 0);
+    if (phpFiles.Count > 0) progress?.Report(done, total, Files(phpFiles.Count, "PHP"));
+    var (phpNodes, phpEdges) = Timings.Measure("scan:php", () => PhpScanner.Scan(root, phpFiles));
+    done += phpFiles.Count;
+    progress?.Report(done, total, "projects and configuration");
     var (projNodes, projEdges) = Timings.Measure("scan:projects", () => Projects.Scan(root, candidates.Where(f => f.EndsWith(".csproj") || f.EndsWith(".sln") || f.EndsWith(".slnx")
         || Path.GetFileName(f) is "package.json" or "pom.xml" or "build.gradle" or "build.gradle.kts")));
     if (config.Scope is not null) ProjectScope.CompleteReferences(plan, projNodes, projEdges);
@@ -513,6 +546,7 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     var settings = Timings.Measure("scan:configuration", () => Configuration.Scan(root, candidates.Where(Configuration.IsConfigFile)));
     var defined = settings.Select(n => n.Id).ToHashSet();
     nodes.RemoveAll(n => n.Kind == "config" && defined.Contains(n.Id));
+    progress?.Report(total - 1, total, "linking the code graph");
     var link = Timings.Stage("link");
     var testFiles = scanned.Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))
         .Where(f => config.Tests.Any(g => FileSystemName.MatchesSimpleExpression(g, f))
@@ -596,19 +630,46 @@ static object DocumentationJson(CodeModel model, Config config, List<Documentati
     };
 }
 
-// Writes the docs; returns the one-line result.
-static async Task<string> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null, bool refreshHtmlOnVersionChange = false, bool progress = false, string? screenshotBaseUrl = null, string? screenshotStorageState = null)
+// Writes the docs; returns the one-line result (setup shows it as the stage detail) and the full report `generate`
+// prints below it.
+static async Task<GenerateReport> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null, bool refreshHtmlOnVersionChange = false, bool progress = false, string? screenshotBaseUrl = null, string? screenshotStorageState = null)
 {
-    using var bar = CliProgress.ForConsole(7, progress);
-    model ??= BuildModel(root, config).Model;
-    bar.Advance("scan");
+    // Weights: each stage's usual share of the wall time (bench/baseline.json); the scan dominates, AI calls when on.
+    List<CliProgress.Stage> stages =
+    [
+        new("scan", model is null ? 70 : 0, "Scanning code"),
+        new("analyze", 3, "Analyzing docs"),
+        new("architecture", 2, "Architecture"),
+        new("AI summaries", ai ? 40 : 1, "AI summaries"),
+        new("AI assessments", ai ? 20 : 1, "AI assessments"),
+    ];
+    if (screenshotBaseUrl is not null) stages.Add(new("screenshots", 15, "Screenshots"));
+    stages.AddRange([new("write pages", 12, "Writing pages"), new("metadata", 2, "Metadata")]);
+    using var bar = CliProgress.ForConsole(stages, progress);
+
+    bar.Begin("scan", "starting");
+    int? sourceFiles = null;
+    if (model is null)
+    {
+        var built = BuildModel(root, config, bar);
+        (model, sourceFiles) = (built.Model, built.Files.Count);
+    }
+    var symbols = model.Nodes.Count(n => n.Kind is not ("route" or "project" or "package" or "external" or "config"));
+    bar.Advance("scan", (sourceFiles is { } sf ? $"{sf:N0} files, " : "") + $"{symbols:N0} symbols");
+
+    bar.Begin("analyze");
     var findings = Timings.Measure("analyze", () => Analyzer.Analyze(model, config));
-    bar.Advance("analyze");
+    var critical = findings.Count(Analyzer.IsCritical);
+    bar.Advance("analyze", $"coverage {Analyzer.Coverage(findings):0}%, {critical} critical");
+
+    bar.Begin("architecture");
     var arch = Timings.Measure("architecture", () => Architecture.Check(model, config));
-    bar.Advance("architecture");
+    bar.Advance("architecture", $"{Plural(arch.Violations.Count, "violation")}, {Plural(arch.Cycles.Count, "cycle")}");
+
     // Cached drafts are always used; new ones are only requested with --ai.
-    var drafts = await AiProse.Summaries(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-cache.json"), ai, config.Ai);
-    bar.Advance("AI summaries");
+    bar.Begin("AI summaries", ai ? "drafting" : "from cache");
+    var drafts = await AiProse.Summaries(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-cache.json"), ai, config.Ai,
+        (done, total) => bar.Report(done, total, $"{done:N0}/{total:N0} drafts"));
     // A draft fills what is missing, never what is written or derived: the summary, and sections the item doesn't have.
     foreach (var f in findings)
     {
@@ -621,11 +682,23 @@ static async Task<string> Generate(string root, string outDir, Config config, bo
     }
     var summaries = drafts.Where(d => !d.Key.StartsWith("module:") && d.Value.Text.Length > 0).ToDictionary(d => d.Key, d => d.Value.Text);
     var overviews = drafts.Where(d => d.Key.StartsWith("module:")).ToDictionary(d => d.Key["module:".Length..], d => d.Value);
+    bar.Advance("AI summaries", drafts.Count == 0 ? (ai ? "none" : "off (--ai)") : $"{Plural(summaries.Count, "summary", "summaries")}, {Plural(overviews.Count, "overview")}");
+
     // Advisory ratings of written docs: shown in quality.md, never part of doc quality % or check.
-    var assessments = await AiProse.Assessments(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-assessments.json"), ai, config.Ai);
-    bar.Advance("AI assessments");
-    var screenshots = screenshotBaseUrl is null ? new Dictionary<string, string>()
-        : await ScreenshotCapture.Run(model, outDir, screenshotBaseUrl, screenshotStorageState);
+    bar.Begin("AI assessments", ai ? "rating written docs" : "from cache");
+    var assessments = await AiProse.Assessments(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-assessments.json"), ai, config.Ai,
+        (done, total) => bar.Report(done, total, $"{done:N0}/{total:N0} rated"));
+    bar.Advance("AI assessments", assessments.Count == 0 ? (ai ? "none" : "off (--ai)") : Plural(assessments.Count, "rating"));
+
+    var screenshots = new Dictionary<string, string>();
+    if (screenshotBaseUrl is not null)
+    {
+        bar.Begin("screenshots", screenshotBaseUrl);
+        screenshots = await ScreenshotCapture.Run(model, outDir, screenshotBaseUrl, screenshotStorageState);
+        bar.Advance("screenshots", Plural(screenshots.Count, "route"));
+    }
+
+    bar.Begin("write pages", html ? "Markdown and HTML" : "Markdown");
     var rebuildHtml = html && refreshHtmlOnVersionChange && HtmlVersion.NeedsRefresh(outDir, AppVersion.Number);
     var (pages, changed) = Timings.Measure("generate", () => new Generator(root, outDir, model, findings, arch, config, summaries, overviews, assessments)
     {
@@ -634,8 +707,9 @@ static async Task<string> Generate(string root, string outDir, Config config, bo
         Screenshots = screenshots,
         Files = [.. RepoFiles(root, config, [".github", ".circleci"]).Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))],
     }.Run());
+    bar.Advance("write pages", $"{Plural(pages.Count, "page")}, {changed.Count} changed");
 
-    bar.Advance("write pages");
+    bar.Begin("metadata");
     if (html) HtmlVersion.Record(outDir, AppVersion.Number);
     // Fingerprint for `docwizz diff`: the model these docs were generated from.
     Directory.CreateDirectory(Path.Combine(outDir, ".docwizz"));
@@ -643,9 +717,53 @@ static async Task<string> Generate(string root, string outDir, Config config, bo
     File.WriteAllText(Path.Combine(outDir, ".docwizz", "documentation.json"),
         JsonSerializer.Serialize(DocumentationJson(model, config, findings), JsonOptions()));
     bar.Advance("metadata");
-    return $"{pages.Count} pages → {outDir} (commit {model.Commit ?? "unknown"}): {changed.Count} changed" +
+
+    var line = $"{pages.Count} pages → {outDir} (commit {model.Commit ?? "unknown"}): {changed.Count} changed" +
         (changed.Count is > 0 and <= 10 ? $" ({string.Join(", ", changed.Order())})" : "");
+
+    // The report: what was found, how good the docs are, where to look next, and where the time went.
+    static string Meter(double pct) => new string('█', (int)Math.Round(pct / 5)) + new string('░', 20 - (int)Math.Round(pct / 5));
+    var kinds = model.Nodes.GroupBy(n => n.Kind).ToDictionary(g => g.Key, g => g.Count());
+    var endpoints = model.Nodes.Count(n => n.Tags is ["endpoint", ..]);
+    var coverage = Analyzer.Coverage(findings);
+    var quality = Analyzer.Quality(findings);
+    var written = Analyzer.WithWrittenDocs(findings).Count;
+    var warnings = findings.Count(f => f.Level == Level.Medium && f.Status != Status.Documented);
+    var undocumented = findings.Count(f => f.Status == Status.Undocumented);
+    var documented = findings.Count(f => f.Status == Status.Documented);
+    var partial = findings.Count - documented - undocumented;
+    var security = arch.Violations.Count(v => v.Rule.StartsWith("SEC-"));
+    var page = (string name) => Path.Combine(outDir, html ? Path.ChangeExtension(name, ".html") : name);
+    var details = new List<string>
+    {
+        $"Scanned       {(sourceFiles is { } n ? $"{Plural(n, "source file")} → " : "")}{Plural(symbols, "symbol")}" +
+            (endpoints > 0 ? $", {Plural(endpoints, "endpoint")}" : "") +
+            (kinds.GetValueOrDefault("project") is > 0 and var projects ? $", {Plural(projects, "project")}" : "") +
+            (kinds.GetValueOrDefault("route") is > 0 and var routes ? $", {Plural(routes, "route")}" : ""),
+        $"Coverage      {Meter(coverage)} {coverage,3:0}%  {documented:N0} documented, {partial:N0} partial, {undocumented:N0} missing (profile {config.Profile})",
+        $"Doc quality   {Meter(quality)} {quality,3:0}%  of {Plural(written, "item")} with written docs",
+        $"Gaps          {critical} critical, {warnings} warning{(warnings == 1 ? "" : "s")}" + (critical + warnings > 0 ? $" → {page("quality.md")}" : ""),
+        $"Architecture  {Plural(arch.Violations.Count - security, "violation")}, {Plural(arch.Cycles.Count, "cycle")}" +
+            (config.Security.Enabled ? $", {Plural(security, "security finding")}" : "") +
+            (arch.Violations.Count + arch.Cycles.Count > 0 ? $" → {page("architecture.md")}" : ""),
+    };
+    if (ai || drafts.Count + assessments.Count > 0)
+        details.Add($"AI            {Plural(summaries.Count, "summary", "summaries")}, {Plural(overviews.Count, "module overview")}, {Plural(assessments.Count, "rating")}" +
+            (ai ? "" : " (cached; --ai drafts more)"));
+    if (screenshotBaseUrl is not null) details.Add($"Screenshots   {Plural(screenshots.Count, "route")} from {screenshotBaseUrl}");
+    details.Add($"Pages         {pages.Count:N0} {(html ? "Markdown + HTML" : "Markdown")}: {changed.Count:N0} changed, {pages.Count - changed.Count:N0} unchanged");
+    var slowest = bar.Durations.Where(d => d.Time.TotalSeconds >= 0.05).OrderByDescending(d => d.Time).Take(3)
+        .Select(d => $"{d.Stage} {CliProgress.Duration(d.Time)}").ToList();
+    details.Add($"Time          {CliProgress.Duration(bar.Elapsed)}" + (slowest.Count > 0 ? $"  ({string.Join(" · ", slowest)})" : ""));
+    details.Add("");
+    details.Add($"Open          {page("index.md")}");
+    if (!ai && findings.Count(f => f.Missing.Contains("summary")) is > 0 and var missing)
+        details.Add($"Next          docwizz generate {root} --ai   drafts {Plural(missing, "missing summary", "missing summaries")}");
+    details.Add($"{(details[^1].StartsWith("Next") ? "             " : "Next         ")} docwizz check {root}   gates coverage in CI");
+    return new(line, details);
 }
+
+static string Plural(int n, string one, string? many = null) => $"{n:N0} {(n == 1 ? one : many ?? one + "s")}";
 
 static int DiffCommand(string root, string? gitRef, Config config, bool enforce, string? head = null, bool json = false)
 {
@@ -848,7 +966,12 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
     string? selectedConfigStatus = null;
     var selectionStage = selectProjects || allProjects || (SetupProjectSelection.Interactive && !yes && !existing);
 
-    using var bar = CliProgress.ForConsole(selectionStage ? 8 : 7, progress);
+    // Named as the stages below, weighted by their usual share of the time; setup logs each finished stage itself.
+    List<CliProgress.Stage> barStages = [new("discover", 2, "Discovering")];
+    if (selectionStage) barStages.Add(new("select", 1, "Selecting"));
+    barStages.AddRange([new("scan", 50, "Scanning code"), new("config", 1, "Configuration"), new("analyze", 2, "Analyzing docs"),
+        new("architecture", 2, "Architecture"), new("generate", 30, "Generating docs"), new("check", 2, "Checking")]);
+    using var bar = CliProgress.ForConsole(barStages, progress, checklist: false);
     Console.WriteLine($"docwizz setup {Path.GetFullPath(root)}");
     var stages = new List<Setup.Stage>
     {
@@ -884,8 +1007,10 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
             // Cache the read-only candidates and validate each proposed choice before accepting it.
             // Invalid shared-directory selections can be corrected without restarting setup.
             var candidates = RepoFilesUnscoped(root, config);
-            var choice = SetupProjectSelection.Prompt(inventory, initial, Console.In, Console.Out,
-                selected => { ProjectScope.Resolve(root, SetupProjectSelection.Scope(selected, config.Scope), candidates); });
+            SetupProjectSelection.Choice choice;
+            using (bar.Suspend())   // the prompt owns the terminal
+                choice = SetupProjectSelection.Prompt(inventory, initial, Console.In, Console.Out,
+                    selected => { ProjectScope.Resolve(root, SetupProjectSelection.Scope(selected, config.Scope), candidates); });
             if (choice.Cancelled) throw new ScopeException("setup: project selection cancelled; no configuration changed");
             var proposed = SetupProjectSelection.Scope(choice.Projects, config.Scope);
             if (existing)
@@ -901,7 +1026,7 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
     [
         new("scan", () =>
         {
-            var (m, files) = BuildModel(root, config);
+            var (m, files) = BuildModel(root, config, bar);
             model = m;
             var all = RepoFiles(root, config, [".github", ".circleci"]).Select(f => Path.GetRelativePath(root, f).Replace('\\', '/')).ToList();
             detection = Setup.Detect(root, model, all, config);
@@ -929,7 +1054,7 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
             return $"{arch.Violations.Count - security} violations ({Architecture.Failing(arch.Violations, config.Check).Count - security} failing), {arch.Cycles.Count} cycles" +
                 (config.Security.Enabled ? $", {security} security findings" : ", security rules off");
         }),
-        new("generate", () => Generate(root, outDir, config, ai, html, model, refreshHtmlOnVersionChange: refreshHtmlOnVersionChange).GetAwaiter().GetResult()),
+        new("generate", () => Generate(root, outDir, config, ai, html, model, refreshHtmlOnVersionChange: refreshHtmlOnVersionChange).GetAwaiter().GetResult().Line),
         new("check", () =>
         {
             findings ??= Analyzer.Analyze(model, config);
@@ -939,7 +1064,7 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
             return passed.Value ? "PASS" : "FAIL — " + string.Join("; ", failures);
         }),
     ]);
-    var results = Setup.Run(stages, Console.Out, bar.Advance);
+    var results = Setup.Run(stages, Console.Out, s => bar.Advance(s));
 
     var failed = results.Where(r => !r.Ok).ToList();
     var rel = (string p) => "./" + Path.GetRelativePath(".", p).Replace('\\', '/');
@@ -1042,3 +1167,6 @@ static string? Git(string dir, string args)
     }
     catch { return null; }
 }
+
+// `generate`: the stable one-line result, and the report printed below it.
+record GenerateReport(string Line, List<string> Details);
