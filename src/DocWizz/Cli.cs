@@ -8,7 +8,7 @@ static class Cli
 
     public record Request(string? Command, Dictionary<string, string> Options, List<string> Positional, string? Error);
 
-    public static readonly string[] Flags = ["ai", "html", "progress", "refresh-html-on-version-change", "timings", "validate", "force", "include-ai", "auto-rescan", "select-projects", "all-projects", "yes", "help", "version"];
+    public static readonly string[] Flags = ["ai", "html", "screenshots", "progress", "refresh-html-on-version-change", "timings", "validate", "force", "include-ai", "auto-rescan", "select-projects", "all-projects", "yes", "help", "version"];
 
     // Valued option → what its value is, for the error when it is missing.
     public static readonly Dictionary<string, string> Valued = new()
@@ -16,7 +16,7 @@ static class Cli
         ["format"] = "console or json", ["profile"] = $"a profile ({string.Join(", ", Profiles.Names)}) or a .yaml file",
         ["context"] = "a project context YAML file", ["since"] = "a git ref, e.g. origin/main", ["package"] = "a package name", ["to"] = "a version",
         ["for"] = "a symbol, file, folder or endpoint (\"POST /api/orders\")", ["hops"] = $"a number of hops, 1 to {AgentContext.MaxHops}",
-        ["budget"] = "a number of tokens",
+        ["budget"] = "a number of tokens", ["base-url"] = "a running application URL (http or https)",
     };
 
     // Meaningful for every command.
@@ -30,7 +30,7 @@ static class Cli
         ["setup"] = new("setup [dir]", "first run: detect the stack, write docwizz.yaml, analyze, generate docs, check", "start here",
             "docwizz setup . --select-projects", "--select-projects (TTY wizard), --all-projects (clear scope), --yes (no prompts), --force (overwrite docwizz.yaml), --html, --progress, --refresh-html-on-version-change, --ai, --profile <name|file>", ["select-projects", "all-projects", "yes", "force", "html", "progress", "refresh-html-on-version-change", "ai", "profile"]),
         ["generate"] = new("generate <dir> [out]", "write Markdown docs (default <dir>/docs)", "everyday",
-            "docwizz generate . --html", "--html (HTML next to every page), --progress, --refresh-html-on-version-change, --ai (local Ollama drafts), --profile", ["html", "progress", "refresh-html-on-version-change", "ai", "profile"]),
+            "docwizz generate . --html", "--html (HTML next to every page), --screenshots --base-url <url> (Playwright captures detected routes), --progress, --refresh-html-on-version-change, --ai (local Ollama drafts), --profile", ["html", "screenshots", "base-url", "progress", "refresh-html-on-version-change", "ai", "profile"]),
         ["check"] = new("check <dir> [--since <ref>]", "quality gate: exit 1 when thresholds fail (only new problems with --since)", "CI",
             "docwizz check . --since origin/main", "--since <ref>, --format json, --profile", ["since", "format", "profile"]),
         ["analyze"] = new("analyze <dir>", "documentation report: gaps, coverage, quality, architecture", "everyday",
@@ -94,6 +94,18 @@ static class Cli
                 error ??= "--select-projects cannot be combined with --all-projects or --yes";
             if (opts.ContainsKey("package") != opts.ContainsKey("to"))
                 error ??= "--package and --to go together: --package <name> --to <version>";
+            if (cmd == "generate")
+            {
+                if (opts.ContainsKey("screenshots") && !opts.ContainsKey("base-url"))
+                    error ??= "--screenshots requires --base-url <url>";
+                if (!opts.ContainsKey("screenshots") && opts.ContainsKey("base-url"))
+                    error ??= "--base-url requires --screenshots";
+                if (opts.GetValueOrDefault("base-url") is { } url &&
+                    (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+                     uri.Scheme is not ("http" or "https") || uri.UserInfo.Length > 0 ||
+                     uri.Query.Length > 0 || uri.Fragment.Length > 0))
+                    error ??= "--base-url must be an absolute http(s) URL without credentials, query or fragment";
+            }
         }
         return new(cmd, opts, pos, error);
     }
