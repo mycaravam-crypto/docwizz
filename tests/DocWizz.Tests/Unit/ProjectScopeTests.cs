@@ -10,7 +10,7 @@ public class ProjectScopeTests
     public void Invalid_project_paths_fail_during_config_parse(string manifests, string message)
     {
         var yaml = $"scope:\n  projects:\n    include: {manifests}\n";
-        var ex = Assert.Throws<ArgumentException>(() => Models.Config(yaml));
+        var ex = Assert.Throws<ScopeException>(() => Models.Config(yaml));
         Assert.Contains(message, ex.Message);
     }
 
@@ -20,7 +20,7 @@ public class ProjectScopeTests
     public void Invalid_scope_modes_fail_during_config_parse(string references, string unassigned, string message)
     {
         var yaml = $"scope:\n  projects:\n    include: [A/A.csproj]\n    references: {references}\n  unassigned_sources: {unassigned}\n";
-        var ex = Assert.Throws<ArgumentException>(() => Models.Config(yaml));
+        var ex = Assert.Throws<ScopeException>(() => Models.Config(yaml));
         Assert.Contains(message, ex.Message);
     }
 
@@ -42,7 +42,7 @@ public class ProjectScopeTests
             ("A/Two.csproj", """<Project Sdk="Microsoft.NET.Sdk" />"""),
             ("A/Class.cs", "public class Shared { }"));
         var scope = new ScopeConfig { Projects = new ScopeProjectsConfig { Include = ["A/One.csproj"] } };
-        var ex = Assert.Throws<ArgumentException>(() => ProjectScope.Resolve(repo.Root, scope, repo.Files));
+        var ex = Assert.Throws<ScopeException>(() => ProjectScope.Resolve(repo.Root, scope, repo.Files));
         Assert.Contains("share directory", ex.Message);
     }
 
@@ -55,6 +55,52 @@ public class ProjectScopeTests
         b.Projects.References = "include";
         Assert.NotEqual(ProjectScope.Fingerprint(a), ProjectScope.Fingerprint(b));
         Assert.Null(ProjectScope.Fingerprint(null));
+    }
+
+    [Fact]
+    public void Root_npm_manifest_does_not_own_arbitrary_unassigned_sources_or_deployment()
+    {
+        using var repo = new Sources(
+            ("package.json", """{"name":"tooling","version":"1.0.0"}"""),
+            ("App/App.csproj", """<Project Sdk="Microsoft.NET.Sdk" />"""),
+            ("App/App.cs", "public class App { }"),
+            ("Other/Loose.cs", "public class Loose { }"),
+            ("docker-compose.yml", "services:\n  cache:\n    image: redis"),
+            (".github/workflows/ci.yml", "name: CI\non: push\njobs: {}"));
+        var scope = new ScopeConfig
+        {
+            Projects = new ScopeProjectsConfig { Include = ["App/App.csproj"] },
+            UnassignedSources = "include"
+        };
+        var included = ProjectScope.Resolve(repo.Root, scope, repo.Files);
+        Assert.Contains(included.Files, p => p.EndsWith("Other/Loose.cs"));
+        Assert.DoesNotContain(included.Files, p => p.EndsWith("package.json"));
+        Assert.Contains(included.Files, p => p.EndsWith("docker-compose.yml"));
+        Assert.Contains(included.Files, p => p.EndsWith(".github/workflows/ci.yml"));
+
+        scope.UnassignedSources = "exclude";
+        var restricted = ProjectScope.Resolve(repo.Root, scope, repo.Files);
+        Assert.DoesNotContain(restricted.Files, p => p.EndsWith("Other/Loose.cs"));
+        Assert.Contains(restricted.Files, p => p.EndsWith("docker-compose.yml"));
+        Assert.Contains(restricted.Files, p => p.EndsWith(".github/workflows/ci.yml"));
+
+        scope.RepositoryFiles = "exclude";
+        var privateDeployment = ProjectScope.Resolve(repo.Root, scope, repo.Files);
+        Assert.DoesNotContain(privateDeployment.Files, p => p.EndsWith("docker-compose.yml"));
+        Assert.DoesNotContain(privateDeployment.Files, p => p.EndsWith(".github/workflows/ci.yml"));
+    }
+
+    [Fact]
+    public void Root_npm_manifest_only_owns_its_ecosystem_sources()
+    {
+        using var repo = new Sources(
+            ("package.json", """{"name":"website","version":"1.0.0"}"""),
+            ("src/index.ts", "export const app = true;"),
+            ("Loose.cs", "public class Loose { }"));
+        var scope = new ScopeConfig { Projects = new ScopeProjectsConfig { Include = ["package.json"] } };
+        var plan = ProjectScope.Resolve(repo.Root, scope, repo.Files);
+        Assert.Contains(plan.Files, p => p.EndsWith("src/index.ts"));
+        Assert.DoesNotContain(plan.Files, p => p.EndsWith("Loose.cs"));
     }
 
     [Fact]
