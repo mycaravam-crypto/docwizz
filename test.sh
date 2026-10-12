@@ -775,7 +775,9 @@ class H(http.server.BaseHTTPRequestHandler):
         elif "module" in facts:  # module overview: one supported sentence, one citing nothing in the facts
             reply = {"summary": [S(f"Module for {facts['module']}.", facts["members"][0]["name"])], "responsibilities": [S("Owns pricing.", "NotInFacts")]}
         elif facts["symbol"].startswith("Fixture.Api.MaterialController.Create("):
-            reply = {"summary": [S("Creates a material.", "source")], "behaviour": [S("Delegates to the service.", facts["calls"][0])],
+            reply = {"summary": [S("Creates a material.", "source")],
+                     "behaviour": [S("Delegates to the service.", facts["calls"][0]), S("Takes the new material's fields.", "parameters"),
+                                   S("Hands them on.", "calls")],   # fact fields cite the symbol, neighbour lists their members
                      "errors": [S("Invented failure.", "Nope")]}
         else:
             reply = "<think>hmm</think>Drafted locally."   # not JSON: taken as a plain summary
@@ -807,6 +809,8 @@ import json, sys
 i = {i["id"]: i for i in json.load(open(sys.argv[1]))["items"]}["cs:Fixture.Api.MaterialController.Create(string, int, string, string, string, bool)"]
 b = i["sections"]["behaviour"]
 assert b["origin"] == "ai" and b["sentences"][0]["from"][0].startswith("cs:Fixture.Application.IMaterialService.CreateAsync("), b
+assert [x["text"] for x in b["sentences"]] == ["Delegates to the service.", "Takes the new material's fields.", "Hands them on."], b
+assert b["sentences"][1]["from"] == [i["id"]] and b["sentences"][2]["from"] == b["sentences"][0]["from"], b
 assert "exception" not in i["sections"] and "summary" in i["missing"], i
 PY2
 # assessments of written docs: listed in quality.md (unknown gaps dropped), cached, never part of doc quality
