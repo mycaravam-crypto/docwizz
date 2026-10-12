@@ -40,6 +40,31 @@ public class ScreenshotCaptureTests
         Assert.StartsWith("home-", ScreenshotCapture.FileName("/"));
     }
 
+    [Theory]
+    [InlineData(200, "/orders", "/login?redirect=/orders", "redirected to /login (needs authentication?)")]
+    [InlineData(200, "/orders", "/dashboard", "redirected to /dashboard (needs authentication?)")]
+    [InlineData(200, "/orders", "/orders?tab=all", null)]
+    [InlineData(401, "/orders", "/orders", "HTTP 401")]
+    [InlineData(403, "/orders", "/orders", "HTTP 403")]
+    [InlineData(404, "/orders", "/orders", "HTTP 404")]
+    [InlineData(500, "/orders", "/orders", "HTTP 500")]
+    public void Guard_redirects_and_http_failures_are_not_captured(int status, string requested, string landed, string? reason)
+    {
+        var origin = "http://localhost:5173";
+        Assert.Equal(reason, ScreenshotCapture.NavigationFailure(new Uri(origin + requested), new Uri(origin + landed), status));
+    }
+
+    [Fact]
+    public void Cross_origin_redirect_is_not_accepted_even_when_path_is_unchanged()
+    {
+        var reason = ScreenshotCapture.NavigationFailure(
+            new Uri("http://localhost:5173/orders"), new Uri("https://other.example/orders?token=secret"), 200);
+        Assert.Contains("redirected to another origin", reason);
+        Assert.DoesNotContain("token=secret", reason);
+        Assert.Equal("no HTTP response", ScreenshotCapture.NavigationFailure(
+            new Uri("http://localhost/orders"), new Uri("http://localhost/orders"), null));
+    }
+
     [Fact]
     public void Generated_markdown_and_html_link_only_successfully_captured_images()
     {
@@ -68,6 +93,8 @@ public class ScreenshotCaptureTests
         var markdown = File.ReadAllText(Path.Combine(outDir, "frontend.md"));
         var html = File.ReadAllText(Path.Combine(outDir, "frontend.html"));
         Assert.Contains("![Screenshot of /materials](screenshots/materials.png)", markdown);
+        Assert.Contains("| `/materials` |", markdown);
+        Assert.Contains("| `/missing` |", markdown);
         Assert.Contains("src=\"screenshots/materials.png\"", html);
         Assert.DoesNotContain("not-created.png", markdown);
         Assert.DoesNotContain("not-created.png", html);
