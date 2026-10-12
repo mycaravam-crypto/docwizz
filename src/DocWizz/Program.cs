@@ -57,6 +57,10 @@ static async Task<int> Dispatch(string[] args)
 
     switch (cmd)
     {
+        case "discover":
+            var inventory = ProjectDiscovery.Scan(path, RepoFiles(path, config));
+            Console.WriteLine(json ? JsonSerializer.Serialize(inventory, JsonOptions()) : ProjectDiscovery.ConsoleReport(inventory));
+            return 0;
         case "context":
             return ContextCommand(path, config, opts);
         case "mcp":
@@ -324,6 +328,7 @@ static string Reference() => $"""
         [--force]                       overwrite an existing docwizz.yaml
 
     everyday:
+      docwizz discover [dir]             read-only project and solution inventory [--format json]
       docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
         [--html]                        also write an HTML page next to every Markdown page
         [--refresh-html-on-version-change]  rewrite HTML when the docwizz version changes
@@ -355,7 +360,7 @@ static string Reference() => $"""
 
     options:
       --profile <name|file.yaml>        documentation profile: {string.Join(", ", Profiles.Names)}, or your own file
-      --format console|json             analyze/check/architecture/diff/remediate output
+      --format console|json             discover/analyze/check/architecture/diff/remediate output
       --timings                         time per stage and peak memory, on stderr (benchmarks)
       --help, -h                        help for a command: docwizz <command> --help
       --version, -v                     version, commit and runtime (also: docwizz version)
