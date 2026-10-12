@@ -150,4 +150,29 @@ public class MultiProjectAcceptanceJourneyTests
         Assert.True(second.Exit == 0, second.ToString());
         Assert.Equal(first, Docwizz.Snapshot(docs));
     }
+
+    [Fact]
+    public void Metadata_only_sdk_dependency_does_not_trigger_the_legacy_routing_warning()
+    {
+        using var repo = new Sources(
+            ("Api/Api.csproj", """
+                <Project Sdk="Microsoft.NET.Sdk.Web"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+                <ItemGroup><ProjectReference Include="../Core/Core.csproj" /></ItemGroup></Project>
+                """),
+            ("Core/Core.csproj", """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>"""),
+            ("Api/Program.cs", "public class Program { }"),
+            ("Core/Order.cs", "public record Order(int Id);"),
+            ("docwizz.yaml", """
+                profile: default
+                scope:
+                  projects:
+                    include: ["Api/Api.csproj"]
+                    references: metadata
+                """));
+        var result = Docwizz.Run("generate", repo.Root);
+        Assert.True(result.Exit == 0, result.ToString());
+        var docs = Path.Combine(repo.Root, "docs");
+        Assert.Contains("Core/Core.csproj` (metadata-only)", File.ReadAllText(Path.Combine(docs, "index.md")));
+        Assert.DoesNotContain("Legacy .NET project", File.ReadAllText(Path.Combine(docs, "api.md")));
+    }
 }
