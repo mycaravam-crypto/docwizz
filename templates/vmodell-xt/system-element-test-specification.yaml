@@ -1,0 +1,25 @@
+# Illustrative product structure, not an official V-Modell XT template.
+# A dependency is an example of a project-specific tailoring decision.
+schema: 1
+product_id: system-element-test-specification
+xt_variant: V-Modell XT
+xt_version: "2.4"
+tailoring: project-specific
+sections:
+  - id: scope
+    title: Pruefgegenstand und Pruefziele
+    required: true
+    sources: [project]
+  - id: test-cases
+    title: Prueffaelle mit Bezug auf Anforderungen
+    required: true
+    sources: [project]
+  - id: test-environment
+    title: Pruefumgebung und Voraussetzungen
+    required: true
+    sources: [project]
+  - id: acceptance
+    title: Erwartete Ergebnisse und Bewertungskriterien
+    required: true
+    sources: [project]
+dependencies: [sw-specification]
