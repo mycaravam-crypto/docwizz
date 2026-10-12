@@ -3,7 +3,7 @@ using System.Text;
 using YamlDotNet.RepresentationModel;
 
 // P2 evidence inventory: explicit, versioned project facts only. No inferred relationships.
-internal sealed record ProjectEvidence(string Id, string Kind, string Text, string Source, string Version, string Hash);
+internal sealed record ProjectEvidence(string Id, string Kind, string Text, string Source, string Version, string Hash, string? SourceHash = null);
 internal sealed record EvidenceLink(string From, string To);
 internal sealed record ProjectEvidenceCatalog(IReadOnlyList<ProjectEvidence> Items, IReadOnlyList<EvidenceLink> Links)
 {
@@ -39,12 +39,15 @@ internal sealed record ProjectEvidenceCatalog(IReadOnlyList<ProjectEvidence> Ite
         {
             var at = $"evidence[{i}]";
             if (entry is not YamlMappingNode item) throw new ArgumentException($"{at} must be a mapping");
-            Keys(item, ["id", "kind", "text", "source", "version"], at);
+            Keys(item, ["id", "kind", "text", "source", "version", "source_hash"], at);
             var id = Value(item, "id", at);
             var kind = Value(item, "kind", at);
             var text = Value(item, "text", at);
             var path = Value(item, "source", at);
             var version = Value(item, "version", at);
+            var sourceHash = Node(item, "source_hash") is null ? null : Value(item, "source_hash", at);
+            if (sourceHash is not null && !System.Text.RegularExpressions.Regex.IsMatch(sourceHash, "^[a-f0-9]{64}$"))
+                throw new ArgumentException($"{at}.source_hash must be a lowercase SHA-256 hex digest");
             if (!System.Text.RegularExpressions.Regex.IsMatch(id, "^[A-Z][A-Z0-9]*-[0-9]+$"))
                 throw new ArgumentException($"{at}.id must look like REQ-017");
             if (!seen.Add(id)) throw new ArgumentException($"{at}.id duplicate '{id}'");
@@ -56,7 +59,7 @@ internal sealed record ProjectEvidenceCatalog(IReadOnlyList<ProjectEvidence> Ite
                 throw new ArgumentException($"{at}.source must be a repository-relative docs/*.md path");
             var bytes = Encoding.UTF8.GetBytes(string.Join("\n", id, kind, text, path, version));
             var hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
-            items.Add(new(id, kind, text, path, version, hash));
+            items.Add(new(id, kind, text, path, version, hash, sourceHash));
         }
         var links = new List<EvidenceLink>();
         if (Node(root, "links") is { } linkNode)
