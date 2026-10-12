@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 // Drafts documentation for items that need docs and have no summary, and an overview per module. Deterministic facts go
@@ -61,6 +62,12 @@ static class AiProse
     // Drafts cached before sections existed have Sections = null.
     public record Draft(string Text, List<string> Sources, Dictionary<string, List<Sentence>>? Sections = null);
 
+    // A reply with nothing usable in it (no cited sentence, no answer), cached like a result so the same code isn't asked
+    // again: at temperature 0 it would answer the same. Never shown.
+    static readonly Draft NoDraft = new("", [], []);
+    static readonly Assessment NoAssessment = new(0, [], "");
+    static bool Usable(Draft d) => d.Text.Length > 0 || d.Sections is not { Count: 0 };
+
     // Returns node id → summary, from cache and (when allowed) fresh API calls. progress: (drafts done, of total).
     public static async Task<Dictionary<string, Draft>> Summaries(
         string root, CodeModel model, List<DocumentationItem> findings, string cacheFile, bool call, AiConfig? config = null,
@@ -76,12 +83,12 @@ static class AiProse
         foreach (var t in targets)
         {
             var text = Cached(cache, Key(t.Node), tag);
-            if (text is not null) result[t.Node.Id] = text;
+            if (text is not null && Usable(text)) result[t.Node.Id] = text;
             if (text is null || (call && text.Sections is null)) misses.Add(t); // with --ai, summary-only drafts get their sections
         }
         var modules = ModuleTargets(model);
         foreach (var (key, _, _) in modules)
-            if (Cached(cache, key, tag) is { } d) result[key.Split('@')[0]] = d;
+            if (Cached(cache, key, tag) is { } d && Usable(d)) result[key.Split('@')[0]] = d;
         var moduleMisses = modules.Where(m => Cached(cache, m.Key, tag) is null).ToList();
 
         if (call && misses.Count + moduleMisses.Count > 0)
@@ -91,52 +98,32 @@ static class AiProse
             Console.Error.WriteLine($"docwizz: drafting {misses.Count} symbols and {moduleMisses.Count} module overviews with {ai.Model} at {ai.Endpoint} " +
                 $"({targets.Count - misses.Count} cached)");
             var facts = new ContextBuilder(root, model);
-            using var gate = new SemaphoreSlim(Parallelism);
-            var stopped = 0;
+            var stop = new StrongBox<bool>();
             var finished = 0;
             var work = misses.Count + moduleMisses.Count;
+            void Done() => progress?.Invoke(Interlocked.Increment(ref finished), work);
             progress?.Invoke(0, work);
-            var drafted = await Task.WhenAll(misses.Select(async t =>
+            var drafted = await Ask(misses, async t =>
             {
-                await gate.WaitAsync();
-                try
-                {
-                    if (Volatile.Read(ref stopped) == 1) return (t.Node, Draft: null);
-                    var (json, sources, names) = facts.For(t.Node, t.Item);
-                    return (t.Node, Draft: Parse(await ai.Complete(Instructions, json), sources, names));
-                }
-                catch (HttpRequestException e)
-                {
-                    // Not running, not local, model missing: every other call would fail the same way; say it once and stop.
-                    if (Interlocked.Exchange(ref stopped, 1) == 0)
-                        Console.Error.WriteLine($"docwizz: AI summaries skipped — {e.InnerException?.Message ?? e.Message}");
-                    return (t.Node, Draft: null);
-                }
-                catch (Exception e)
-                {
-                    Console.Error.WriteLine($"docwizz: AI summary failed for {t.Node.Id}: {e.Message}");
-                    return (t.Node, Draft: null);
-                }
-                finally
-                {
-                    gate.Release();
-                    progress?.Invoke(Interlocked.Increment(ref finished), work);
-                }
-            }));
-            foreach (var (node, draft) in drafted.Where(d => d.Draft is not null))
-                result[node.Id] = cache[$"{Key(node)}@{tag}"] = draft!;
-            // Module overviews after the symbols, so they build on the fresh drafts; one at a time is plenty.
-            foreach (var (key, folder, members) in moduleMisses)
+                var (json, sources, names) = facts.For(t.Node, t.Item);
+                return Parse(await ai.Complete(Instructions, json), sources, names) ?? NoDraft;
+            }, "summaries", t => $"summary failed for {t.Node.Id}", stop, Done);
+            foreach (var (t, d) in misses.Zip(drafted))
             {
-                if (Volatile.Read(ref stopped) == 1) break;
-                try
-                {
-                    var (json, sources, names) = facts.ForModule(folder, members, result);
-                    if (Parse(await ai.Complete(ModuleInstructions, json), sources, names) is { } d) result[key.Split('@')[0]] = cache[$"{key}@{tag}"] = d;
-                }
-                catch (HttpRequestException e) { Console.Error.WriteLine($"docwizz: AI module overviews skipped — {e.InnerException?.Message ?? e.Message}"); break; }
-                catch (Exception e) { Console.Error.WriteLine($"docwizz: AI overview failed for {folder}: {e.Message}"); }
-                progress?.Invoke(++finished, work);
+                if (d is null || (!Usable(d) && result.ContainsKey(t.Node.Id))) continue; // keep a summary-only draft over nothing
+                cache[$"{Key(t.Node)}@{tag}"] = d;
+                if (Usable(d)) result[t.Node.Id] = d;
+            }
+            // Module overviews after the symbols, so they build on the fresh drafts.
+            var overviews = await Ask(moduleMisses, async m =>
+            {
+                var (json, sources, names) = facts.ForModule(m.Folder, m.Members, result);
+                return Parse(await ai.Complete(ModuleInstructions, json), sources, names) ?? NoDraft;
+            }, "module overviews", m => $"overview failed for {m.Folder}", stop, Done);
+            foreach (var (m, d) in moduleMisses.Zip(overviews).Where(x => x.Second is not null))
+            {
+                cache[$"{m.Key}@{tag}"] = d!;
+                if (Usable(d!)) result[m.Key.Split('@')[0]] = d!;
             }
             Save(cacheFile, cache);
         }
@@ -160,7 +147,7 @@ static class AiProse
         static string Key(Node n) => $"{n.Id}@{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes($"{n.Doc}|{n.Hash}")))[..12].ToLowerInvariant()}";
         var targets = findings.Where(f => f.Node.Doc is not null && f.Sections.GetValueOrDefault("summary")?.Origin == Origin.Written).ToList();
-        var result = targets.Where(f => Cached(cache, Key(f.Node), tag) is not null).ToDictionary(f => f.Node.Id, f => Cached(cache, Key(f.Node), tag)!);
+        var result = targets.Where(f => Cached(cache, Key(f.Node), tag) is { Score: > 0 }).ToDictionary(f => f.Node.Id, f => Cached(cache, Key(f.Node), tag)!);
         var misses = targets.Where(f => Cached(cache, Key(f.Node), tag) is null).ToList();
         if (!call || misses.Count == 0 || AiProviders.Create(config, "assessments") is not { } ai) return result;
 
@@ -168,16 +155,13 @@ static class AiProse
         Console.Error.WriteLine($"docwizz: assessing {misses.Count} written docs with {ai.Model} at {ai.Endpoint} ({result.Count} cached)");
         var facts = new ContextBuilder(root, model);
         var assessed = 0;
-        foreach (var f in misses)
+        progress?.Invoke(0, misses.Count);
+        var answers = await Ask(misses, async f => ParseAssessment(await ai.Complete(AssessInstructions, facts.For(f.Node, f).Json)) ?? NoAssessment,
+            "assessments", f => $"assessment failed for {f.Node.Id}", new(), () => progress?.Invoke(Interlocked.Increment(ref assessed), misses.Count));
+        foreach (var (f, a) in misses.Zip(answers).Where(x => x.Second is not null))
         {
-            progress?.Invoke(assessed++, misses.Count);
-            try
-            {
-                if (ParseAssessment(await ai.Complete(AssessInstructions, facts.For(f.Node, f).Json)) is { } a)
-                    result[f.Node.Id] = cache[$"{Key(f.Node)}@{tag}"] = a;
-            }
-            catch (HttpRequestException e) { Console.Error.WriteLine($"docwizz: AI assessments skipped — {e.InnerException?.Message ?? e.Message}"); break; }
-            catch (Exception e) { Console.Error.WriteLine($"docwizz: AI assessment failed for {f.Node.Id}: {e.Message}"); }
+            cache[$"{Key(f.Node)}@{tag}"] = a!;
+            if (a!.Score > 0) result[f.Node.Id] = a;
         }
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(cacheFile))!);
         File.WriteAllText(cacheFile, JsonSerializer.Serialize(new SortedDictionary<string, Assessment>(cache), new JsonSerializerOptions(Web) { WriteIndented = true }));
@@ -185,6 +169,33 @@ static class AiProse
     }
 
     static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
+
+    // Asks for every item, Parallelism at a time (requests beyond what the server runs at once just queue there), and
+    // returns the answers in order: null for an item that failed or was skipped. An HttpRequestException means the server
+    // can't be used at all (not running, not local, model missing): it is reported once, as `what` skipped, and the rest
+    // are skipped, here and in later batches that share `stop`. `done` runs after every item.
+    static async Task<R?[]> Ask<T, R>(IEnumerable<T> items, Func<T, Task<R>> ask, string what, Func<T, string> failed,
+        StrongBox<bool> stop, Action done) where R : class
+    {
+        using var gate = new SemaphoreSlim(Parallelism);
+        return await Task.WhenAll(items.Select(async item =>
+        {
+            await gate.WaitAsync();
+            try { return Volatile.Read(ref stop.Value) ? null : await ask(item); }
+            catch (HttpRequestException e)
+            {
+                lock (stop)
+                    if (!stop.Value)
+                    {
+                        stop.Value = true;
+                        Console.Error.WriteLine($"docwizz: AI {what} skipped — {e.InnerException?.Message ?? e.Message}");
+                    }
+                return null;
+            }
+            catch (Exception e) { Console.Error.WriteLine($"docwizz: AI {failed(item)}: {e.Message}"); return null; }
+            finally { gate.Release(); done(); }
+        }));
+    }
 
     // {"score", "missing", "note"}; anything else (not JSON, score outside 1-5) is no assessment.
     static Assessment? ParseAssessment(string? reply)
@@ -210,8 +221,8 @@ static class AiProse
         if (reply is null) return null;
         JsonElement json;
         try { json = JsonDocument.Parse(reply).RootElement; }
-        catch (JsonException) { return new Draft(reply, sources); }
-        if (json.ValueKind != JsonValueKind.Object) return new Draft(reply, sources);
+        catch (JsonException) { return new Draft(reply, sources, []); } // no sections, not a draft from before sections
+        if (json.ValueKind != JsonValueKind.Object) return new Draft(reply, sources, []);
 
         var sections = new Dictionary<string, List<Sentence>>();
         foreach (var section in json.EnumerateObject().Where(p => p.Value.ValueKind == JsonValueKind.Array))
@@ -255,7 +266,7 @@ static class AiProse
     public static Dictionary<string, Draft> Cached(CodeModel model, string cacheFile)
     {
         var cache = Load(cacheFile);
-        return model.Nodes.Where(n => n.Hash is not null && Cached(cache, Key(n), null) is not null).ToDictionary(n => n.Id, n => Cached(cache, Key(n), null)!);
+        return model.Nodes.Where(n => n.Hash is not null && Cached(cache, Key(n), null) is { } d && Usable(d)).ToDictionary(n => n.Id, n => Cached(cache, Key(n), null)!);
     }
 
     // Cache: "<id>@<hash>" → { text, sources }. Entries from before provenance was recorded are plain strings.
