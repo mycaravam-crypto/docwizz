@@ -171,52 +171,58 @@ sealed class ProjectHierarchy
         return sb.AppendLine().ToString();
     }
 
-    public string Sidebar(Func<string, string, string> link)
+    // The sidebar tree: solution → project → module, then projects without a solution and unassigned modules.
+    // Applications before libraries before tests, then by name; module labels drop the folder prefix their project's
+    // modules share, so `backend/Api` reads `Api` under its project (the full folder stays in the hint).
+    public IReadOnlyList<NavNode> Navigation()
     {
-        if (Projects.Count == 0) return "";
-        var b = new StringBuilder("<details open><summary>Solutions &amp; projects</summary><ul>");
-        void ProjectLine(Project p)
+        if (Projects.Count == 0) return [];
+        var duplicateNames = Projects.GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        static int Rank(Project p) => p.Role switch { "executable" => 0, "library" => 1, "test" => 3, _ => 2 };
+        IEnumerable<Project> Sorted(IEnumerable<Project> projects) => projects.OrderBy(Rank)
+            .ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ThenBy(p => p.Path, StringComparer.Ordinal);
+        NavNode ProjectNode(Project p)
         {
-            b.Append("<li>").Append(link(p.Page, p.Name)).Append(" <small>(")
-                .Append(System.Net.WebUtility.HtmlEncode(p.Path)).Append(")</small>");
-            if (p.Modules.Count > 0)
-            {
-                b.Append("<ul>");
-                foreach (var module in p.Modules.Order(StringComparer.Ordinal))
-                    b.Append("<li>").Append(link($"modules/{Naming.Slug(module)}.md", module)).Append("</li>");
-                b.Append("</ul>");
-            }
-            b.Append("</li>");
+            var dir = Path.GetDirectoryName(p.Path)?.Replace('\\', '/') ?? "";
+            var label = duplicateNames.Contains(p.Name) && dir.Length > 0 ? $"{p.Name} ({dir})" : p.Name;
+            var badge = p.MetadataOnly ? "stub" : p.Role switch { "test" => "test", "executable" => "app", _ => null };
+            return new NavNode(label, p.Page, "project", badge, p.Path, ModuleNodes(p.Modules));
         }
-        foreach (var solution in Solutions)
+        var roots = new List<NavNode>();
+        foreach (var solution in Solutions.OrderBy(s => Path.GetFileName(s.Path), StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(s => s.Path, StringComparer.Ordinal))
         {
-            b.Append("<li>").Append(link(solution.Page, solution.Path)).Append("<ul>");
-            foreach (var (id, _) in solution.Projects)
-                if (ById(id) is { } p) ProjectLine(p);
-            b.Append("</ul></li>");
+            var members = Sorted(solution.Projects.Select(m => ById(m.ProjectId)).OfType<Project>()).Select(ProjectNode).ToList();
+            roots.Add(new NavNode(Path.GetFileName(solution.Path), solution.Page, "solution", null, solution.Path, members));
         }
-        var standalone = Projects.Where(p => p.Solutions.Count == 0).ToList();
-        if (standalone.Count > 0)
-        {
-            b.Append("<li>Without a solution<ul>");
-            foreach (var p in standalone) ProjectLine(p);
-            b.Append("</ul></li>");
-        }
+        // Alone in the tree, projects need no folder of their own.
+        var standalone = Sorted(Projects.Where(p => p.Solutions.Count == 0)).Select(ProjectNode).ToList();
+        if (roots.Count == 0 && UnassignedModules.Count == 0) roots.AddRange(standalone);
+        else if (standalone.Count > 0) roots.Add(new NavNode("Projects without a solution", null, "folder", null, null, standalone));
         if (UnassignedModules.Count > 0)
-        {
-            b.Append("<li>Unassigned modules<ul>");
-            foreach (var folder in UnassignedModules)
-                b.Append("<li>").Append(link($"modules/{Naming.Slug(folder)}.md", folder)).Append("</li>");
-            b.Append("</ul></li>");
-        }
-        return b.Append("</ul></details>").ToString();
+            roots.Add(new NavNode("Unassigned modules", null, "folder", null, "Folders no project owns", ModuleNodes(UnassignedModules)));
+        return roots;
     }
 
-    public string Breadcrumbs(string rel, Func<string, string, string> link)
+    // Labels relative to the folder the modules share; the module at that folder itself keeps its full name and comes first.
+    static List<NavNode> ModuleNodes(IReadOnlyCollection<string> folders)
+    {
+        var common = folders.Count < 2 ? "" : folders.Select(f => f.Split('/')).Aggregate((a, b) =>
+            a.Zip(b).TakeWhile(x => x.First == x.Second).Select(x => x.First).ToArray()) is { Length: > 0 } shared
+            ? string.Join('/', shared) : "";
+        string Label(string folder) =>
+            common.Length == 0 || folder == common ? (folder == "." ? "(root)" : folder)
+            : folder.StartsWith(common + "/", StringComparison.Ordinal) ? folder[(common.Length + 1)..] : folder;
+        return folders.Select(f => new NavNode(Label(f), $"modules/{Naming.Slug(f)}.md", "module", null, f))
+            .OrderBy(n => n.Hint == common ? 0 : 1).ThenBy(n => n.Label, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    public string Breadcrumbs(string rel, Func<string, string, string> link, string? title = null)
     {
         var parts = new List<string>();
         if (solutionPages.TryGetValue(rel, out var sol))
-            parts.Add(System.Net.WebUtility.HtmlEncode(sol.Path));
+            parts.Add(Html.Crumb(sol.Path));
         else
         {
             Project? project = projectPages.GetValueOrDefault(rel);
@@ -227,12 +233,12 @@ sealed class ProjectHierarchy
                 var membership = project.Solutions.FirstOrDefault(m => solutionPages.ContainsKey(m.SolutionPage));
                 if (membership is not null)
                     parts.Add(link(membership.SolutionPage, solutionPages[membership.SolutionPage].Path));
-                parts.Add(rel == project.Page ? System.Net.WebUtility.HtmlEncode(project.Name)
+                parts.Add(rel == project.Page ? Html.Crumb(project.Name)
                     : link(project.Page, project.Name));
             }
             if (rel.StartsWith("modules/", StringComparison.Ordinal))
-                parts.Add(System.Net.WebUtility.HtmlEncode(Path.GetFileNameWithoutExtension(rel)));
+                parts.Add(Html.Crumb(title ?? Path.GetFileNameWithoutExtension(rel)));
         }
-        return string.Join("<span aria-hidden=\"true\">/</span>", parts);
+        return string.Join(Html.CrumbSeparator, parts);
     }
 }

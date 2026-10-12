@@ -69,13 +69,24 @@ public class HtmlTests
         foreach (var page in Pages.Keys)
             Assert.Contains($"href=\"../{Path.ChangeExtension(page, ".html")}\"", html);
         Assert.Contains("href=\"../modules/src-Core.html\" aria-current=\"page\"", html);
-        // The group holding the current page is open, the others closed.
-        Assert.Contains("<details open><summary>Modules</summary>", html);
-        Assert.Contains("<details><summary>Views</summary>", html);
+        // Short groups are open; the long module list opens only when it holds the current page.
+        Assert.Contains("data-key=\"group:Modules\" open>", html);
+        Assert.Contains("data-key=\"group:Architecture views\" open>", html);
 
         var index = Html.Page("index.md", "# demo\n", Pages);
         Assert.Contains("href=\"modules/src-Web.html\"", index);
         Assert.Contains("href=\"index.html\" aria-current=\"page\"", index);
+        Assert.Contains("data-key=\"group:Modules\">", index);
+    }
+
+    [Fact]
+    public void Breadcrumbs_and_pager_follow_the_sidebar_order()
+    {
+        var html = Html.Page("views/context.md", "# System context\n", Pages);
+        Assert.Contains("<span>System context</span>", html);
+        // Documentation pages come first, so the first view follows the last of them.
+        Assert.Contains("class=\"prev\" href=\"../api.html\"", html);
+        Assert.Contains("class=\"next\" href=\"../modules/src-Core.html\"", html);
     }
 
     [Fact]

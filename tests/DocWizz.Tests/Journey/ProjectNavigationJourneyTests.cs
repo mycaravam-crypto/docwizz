@@ -81,7 +81,7 @@ public class ProjectNavigationJourneyTests
         var projectMd = ProjectHierarchy.ProjectPage("Core/Shared.csproj");
         var solutionMd = ProjectHierarchy.SolutionPage("Backend.slnx");
         var projectHtml = File.ReadAllText(FileAt(repo, Path.ChangeExtension(projectMd, ".html")));
-        Assert.Contains("Solutions &amp; projects", projectHtml);
+        Assert.Contains("data-key=\"group:Projects\"", projectHtml);
         Assert.Contains("href=\"../" + Path.ChangeExtension(solutionMd, ".html") + "\"", projectHtml);
         Assert.Contains("href=\"../modules/Core-Domain.html\"", projectHtml);
         Assert.Contains("aria-label=\"Site\"", projectHtml);
