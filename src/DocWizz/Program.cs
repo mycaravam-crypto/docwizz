@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 // An exception that escapes a command is a bug or an environment problem (disk, permissions), never a finding: one
 // line and exit 2, so CI can tell "docwizz broke" from "the gate failed" (1). DOCWIZZ_DEBUG=1 lets it through with the trace.
 try { return await Dispatch(args); }
-catch (ArgumentException e) when (e.Message.StartsWith("scope.", StringComparison.Ordinal))
+catch (ScopeException e)
 {
     Console.Error.WriteLine(e.Message);
     return 1;
