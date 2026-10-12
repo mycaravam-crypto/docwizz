@@ -26,6 +26,7 @@ an example and its options.
 | `diff` | change impact | developers, CI | optional |
 | `context` | token-budgeted facts about one target, for coding agents | coding agents | optional |
 | `mcp` | read-only MCP server over the code model | coding agents | optional |
+| `trace` | explicit traceability gaps from a YAML catalog | product documents | optional |
 | `product` | product draft from a YAML template, from code and project evidence | architects | optional |
 | `sbom` | CycloneDX manifest SBOM | supply-chain inventory | optional |
 | `remediate` | package update suggestions | maintainers | optional |
@@ -338,6 +339,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 | `diff` | `docwizz diff [dir] [base] [head] [--format f] [--profile p]` | change impact vs the last `generate` or git refs | reviews, CI |
 | `context` | `docwizz context <dir> --for target [--hops n] [--budget tokens] [--format md\|json] [--include-ai]` | token-budgeted context package for one symbol, file, folder or endpoint | coding agents |
 | `mcp` | `docwizz mcp <dir> [--auto-rescan]` | read-only MCP server on stdio: find_symbol, context, callers, impact, check, … | coding agents |
+| `trace` | `docwizz trace <dir> <evidence.yaml> [--format json]` | report explicit traceability and missing links; stdout, no inference or network | product documents |
 | `product` | `docwizz product [check] <dir> <template.yaml> [out.md] [--context file.yaml] [--ai] [--format f]` | versioned product draft from evidence; `--ai`: a local model words sections, citing evidence ids; `check`: references and freshness of the draft | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
@@ -353,7 +355,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 |---|---|---|---|---|
 | `--context <file.yaml>` | off | product | validates sourced project statements against template before writing | product documents |
 | `--profile <name\|file.yaml>` | `profile:` in `docwizz.yaml`, else `default` | setup, generate, check, analyze, architecture, diff | overrides `profile:` and the file's own `patterns:` | normal |
-| `--format console\|json` | `console` | discover, analyze, check, architecture, context, diff, product, remediate | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
+| `--format console\|json` | `console` | discover, analyze, check, architecture, context, diff, trace, product, remediate | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
 | `--for <target>` | — | context | required; a symbol id or qualified name, a file, a folder, or `VERB /route`; ambiguous or unknown exits 1 with candidates | coding agents |
 | `--hops <n>` | 2 | context | how far neighbours are listed, 1 to 4; hops beyond 1 are signature only | coding agents |
 | `--budget <tokens>` | 6000 | context | at least 100; estimated as characters / 4; lower-priority sections are cut first, and the cut is reported | coding agents |
@@ -397,6 +399,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 | `check` | thresholds pass | thresholds fail, or bad arguments/config |
 | `architecture` | within `max_violations`/`max_cycles` | above them |
 | `discover`, `analyze`, `generate`, `scan`, `sbom` | done | bad arguments or config |
+| `trace` | report on stdout | invalid/missing YAML; no data written |
 | `product` | draft written or unchanged; `check`: no errors (warnings allowed) | invalid template, unsafe overwrite, bad arguments; `check`: an error finding |
 | `remediate` | done (suggestions alone never fail) | a `--validate` run failed, or bad arguments |
 | `context` | package written | no `--for`, an ambiguous or unknown target (candidates on stderr), or bad arguments |
@@ -503,3 +506,7 @@ before someone reviews it (`--format json` for CI; exit 1 on an error, warnings 
 
 It checks references and freshness, never content: whether a statement is true or a product can be approved stays a
 human decision, and the check says so.
+
+## Traceability report (P2.3)
+
+`docwizz trace . project-evidence.yaml` writes a read-only Markdown report to stdout; `--format json` writes the same relationships and gap classifications as JSON. The file path resolves from the working directory, then from `<dir>`. Input must obey `docs/project-evidence.md`. Exit 1 for missing/invalid catalogs; missing links are reported as gaps and do not fail. The report checks declared links only; it does not establish test success, document freshness or V-Modell conformity. No file is overwritten and no AI or network request is made.
