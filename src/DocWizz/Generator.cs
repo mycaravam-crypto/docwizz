@@ -36,11 +36,16 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     {
         Directory.CreateDirectory(Path.Combine(outDir, "modules"));
         Directory.CreateDirectory(Path.Combine(outDir, "views"));
+        Directory.CreateDirectory(Path.Combine(outDir, "solutions"));
+        Directory.CreateDirectory(Path.Combine(outDir, "projects"));
         var pages = new Dictionary<string, string>();
         void Write(string rel, string body) => pages[rel] = $"{Marker}\n{body}";
 
         var modules = model.Nodes.Where(n => n.Kind is not ("route" or "project" or "package" or "external" or "config") || parent.ContainsKey(n.Id))
             .GroupBy(n => Folder(n.File)).OrderBy(g => g.Key).ToList();
+        hierarchy = new ProjectHierarchy(root, model, Files, modules.Select(m => m.Key).ToList());
+        foreach (var project in hierarchy.Projects) Write(project.Page, RenderProject(project));
+        foreach (var solution in hierarchy.Solutions) Write(solution.Page, RenderSolution(solution));
         foreach (var m in modules) Write($"modules/{Slug(m.Key)}.md", Module(m.Key, m.ToList()));
         Write("index.md", Index(modules.Select(m => m.Key).ToList()));
         Write("architecture.md", ArchitecturePage(modules.Select(m => m.Key).ToList()));
@@ -53,7 +58,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         if (WriteHtml)
         {
             var markdown = pages.Where(p => p.Key.EndsWith(".md")).ToDictionary(p => p.Key, p => Html.Title(p.Key, p.Value));
-            foreach (var rel in markdown.Keys) pages[Path.ChangeExtension(rel, ".html")] = Html.Page(rel, pages[rel], markdown);
+            foreach (var rel in markdown.Keys) pages[Path.ChangeExtension(rel, ".html")] = Html.Page(rel, pages[rel], markdown, hierarchy);
             pages["search.js"] = $"window.docwizzSearch = {pages["search.json"]};\n";
         }
 
@@ -84,6 +89,14 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         foreach (var n in model.Nodes.Where(n => n.Tags?.Contains("endpoint") == true))
             Entry(EndpointLabel(n), "endpoint", "api.md", WrittenSummary(n));
         foreach (var n in model.Nodes.Where(n => n.Kind == "route")) Entry(n.Route ?? n.Name, "route", "frontend.md", null);
+        if (hierarchy is not null)
+        {
+            foreach (var solution in hierarchy.Solutions)
+                Entry(solution.Path, "solution", solution.Page, "Solution and its selected projects");
+            foreach (var project in hierarchy.Projects)
+                Entry(project.Name + " (" + project.Path + ")", project.MetadataOnly ? "dependency-only project" : "project",
+                    project.Page, project.MetadataOnly ? "Metadata-only dependency, not source-scanned" : "Project overview, modules and components");
+        }
         foreach (var n in model.Nodes.Where(n => n.Kind == "config")) Entry(n.Name, "config", "views/deployment.md#configuration", null);
         foreach (var f in model.Nodes.Where(n => n.Kind is not ("route" or "project" or "package" or "external" or "config")).Select(n => Folder(n.File)).Distinct())
             Entry(f, "module", $"modules/{Slug(f)}.md", null);
@@ -158,6 +171,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             sb.AppendLine($"🤖 marks {drafts.Count} AI-drafted summaries for code that has no docs yet — review them, then move them into the code.\n");
         sb.AppendLine("- [Architecture description](architecture-description.md)\n- [Architecture](architecture.md)\n- [API endpoints](api.md)\n" +
             "- [Frontend](frontend.md)\n- [Quality](quality.md)\n");
+        if (hierarchy is not null) sb.Append(hierarchy.Index());
         if (Technology().ToList() is { Count: > 0 } tech)
             sb.AppendLine("## Technology\n\n" + string.Join("\n", tech.Select(t => $"- {t}")) + "\n");
         var blocks = Roles.Select(r => (r.Label, Count: model.Nodes.Count(n => n.Kind == r.Match || n.Tags?.Contains(r.Match) == true)))
