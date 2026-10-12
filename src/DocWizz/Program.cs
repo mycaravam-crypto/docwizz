@@ -125,8 +125,13 @@ static int EvidenceDiffCommand(string root, string? before, string? after, bool 
         else
         {
             Console.WriteLine("Explicit evidence changes (not source-file freshness):");
+            if (report.Evidence.Count == 0 && report.AddedLinks.Count == 0 && report.RemovedLinks.Count == 0)
+                Console.WriteLine("No evidence changes.");
             foreach (var item in report.Evidence)
-                Console.WriteLine($"{item.Id}: {item.Change}; fields: {string.Join(", ", item.Fields)}; related: {string.Join(", ", item.RelatedIds)}; affected tests: {string.Join(", ", item.AffectedTests)}");
+                Console.WriteLine($"{item.Id}: {item.Change}" +
+                    (item.Fields.Length == 0 ? "" : $"; fields: {string.Join(", ", item.Fields)}") +
+                    (item.RelatedIds.Length == 0 ? "" : $"; related: {string.Join(", ", item.RelatedIds)}") +
+                    (item.AffectedTests.Length == 0 ? "" : $"; affected tests: {string.Join(", ", item.AffectedTests)}"));
             foreach (var link in report.AddedLinks) Console.WriteLine($"+ link {link.From} -> {link.To}");
             foreach (var link in report.RemovedLinks) Console.WriteLine($"- link {link.From} -> {link.To}");
         }
