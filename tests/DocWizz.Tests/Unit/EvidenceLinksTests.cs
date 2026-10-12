@@ -67,7 +67,7 @@ public class EvidenceLinksTests
     [Fact]
     public void Non_list_links_is_rejected()
     {
-        var yaml = Valid.Replace("links:\n", "links: none\n", StringComparison.Ordinal);
+        var yaml = Valid[..Valid.IndexOf("links:", StringComparison.Ordinal)] + "links: none\n";
         Assert.Contains("catalog.links must be a list", Assert.Throws<ArgumentException>(() => ProjectEvidenceCatalog.Parse(new StringReader(yaml))).Message);
     }
 }
