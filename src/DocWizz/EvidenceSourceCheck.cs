@@ -18,10 +18,14 @@ internal static class EvidenceSourceCheck
             foreach (var segment in relative)
             {
                 current = Path.Combine(current, segment);
+                if (!File.Exists(current) && !Directory.Exists(current))
+                    return new Finding(x.Id, x.Source, "missing", x.SourceHash, null);
                 var attr = File.GetAttributes(current);
                 if ((attr & FileAttributes.ReparsePoint) != 0)
                     throw new ArgumentException($"symlink evidence source rejected: {x.Source}");
             }
+            if ((File.GetAttributes(path) & FileAttributes.Directory) != 0)
+                throw new ArgumentException($"evidence source is not a file: {x.Source}");
             using var input = File.OpenRead(path);
             var actual = Convert.ToHexString(SHA256.HashData(input)).ToLowerInvariant();
             var status = x.SourceHash is null ? "unverified" : actual == x.SourceHash ? "current" : "stale";
