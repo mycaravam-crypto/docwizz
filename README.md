@@ -3,7 +3,7 @@
 **Point it at a repository and find out what's undocumented, what breaks the architecture, and how a request travels
 through the code. Then generate the docs that can be derived from the code itself.**
 
-docwizz reads C#, Java/Spring, Vue, React, Angular, TypeScript, SQL and deployment files and builds a model of the code:
+docwizz reads C#, Java/Spring, PHP, Vue, React, Angular, TypeScript, SQL and deployment files and builds a model of the code:
 symbols, endpoints, calls, dependencies and external systems. Everything it reports comes from that model. It never
 guesses intent, and it labels every item as *detected*, *inferred* or *AI-drafted*.
 
@@ -284,7 +284,7 @@ For projects that keep requirements as YAML evidence:
   freshness. Illustrative V-Modell XT 2.4 templates are in [templates/vmodell-xt/](templates/vmodell-xt/) (not
   official templates or a conformity claim).
 
-See [project evidence](docs/project-evidence.md) and [CLI.md](CLI.md#product-draft-deterministic-mvp).
+See [project evidence](docs/project-evidence.md) and [CLI.md](CLI.md#product-drafts).
 
 ## Configuration
 
@@ -407,7 +407,7 @@ invisible, so each finding says "unless".
   clears it; `--yes` skips prompts in CI.
 - Generated docs then navigate index → solutions → projects → modules → components.
 
-The `scope:` schema is in [CLI.md](CLI.md#explicit-project-scope-epic-124-p1); limits and the acceptance baseline in
+The `scope:` schema is in [CLI.md](CLI.md#scope); limits and the acceptance baseline in
 [MULTI_PROJECT_ACCEPTANCE.md](MULTI_PROJECT_ACCEPTANCE.md). Classic non-SDK ASP.NET MVC projects are inventoried, but
 conventional MVC routing is not fully modelled as endpoints.
 
@@ -440,6 +440,7 @@ The key is read only from that environment variable. More in [CLI.md](CLI.md#5-a
 |---|---|
 | C# (Roslyn) | types, members, doc comments, complexity, calls, DI, controllers and minimal APIs (routes, inputs, responses, auth), middleware, EF `DbContext`s |
 | Java / Spring | controllers, services, repositories, entities, `@*Mapping` endpoints, injection, `application.yml` |
+| PHP | classes, interfaces, traits, enums, functions, PHPDoc, complexity, calls, constructor injection (no framework routes yet) |
 | Vue, React, Angular, TS/JS | components, props, emits, hooks, state, stores, routes, HTTP calls linked to the endpoints they reach |
 | SQL | tables, procedures, functions, views, which code calls them, migrations in order |
 | Projects | `.csproj`/`.sln`, `package.json`, `pom.xml`, Gradle: packages, frameworks, what is executable |
