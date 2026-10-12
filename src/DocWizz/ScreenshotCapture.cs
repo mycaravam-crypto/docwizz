@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 
 // Optional runtime capture: reuse the routes detected by the existing frontend scanner.
-// No navigation crawler, credentials, test data or AI is involved.
+// Reuses an optional user-provided browser session; no login automation, passwords or AI.
 static class ScreenshotCapture
 {
     static readonly Regex StaticPath = new(@"^/(?:[a-zA-Z0-9._~-]+/?)*$", RegexOptions.CultureInvariant);
@@ -40,8 +40,16 @@ static class ScreenshotCapture
         return null;
     }
 
-    // Captures detected static routes anonymously and returns only successfully written images.
-    public static async Task<Dictionary<string, string>> Run(CodeModel model, string outDir, string baseUrl)
+    // Each route starts in a new context; Playwright loads (but does not modify) the saved session.
+    public static BrowserNewContextOptions ContextOptions(string? storageStateFile) => new()
+    {
+        ViewportSize = new() { Width = 1440, Height = 900 },
+        StorageStatePath = storageStateFile
+    };
+
+    // Captures static routes anonymously or with a provided session, returning only successful images.
+    public static async Task<Dictionary<string, string>> Run(CodeModel model, string outDir, string baseUrl,
+        string? storageStateFile = null)
     {
         var images = new Dictionary<string, string>(StringComparer.Ordinal);
         var routes = Routes(model);
@@ -65,11 +73,8 @@ static class ScreenshotCapture
                 var fullPath = Path.Combine(folder, fileName);
                 try
                 {
-                    // A fresh context per route prevents cookies and localStorage leaking between captures.
-                    await using var context = await browser.NewContextAsync(new()
-                    {
-                        ViewportSize = new() { Width = 1440, Height = 900 }
-                    });
+                    // Separate contexts prevent routes from altering one another's session.
+                    await using var context = await browser.NewContextAsync(ContextOptions(storageStateFile));
                     var page = await context.NewPageAsync();
                     var response = await page.GotoAsync(url.ToString(),
                         new() { WaitUntil = WaitUntilState.Load, Timeout = 10000 });
