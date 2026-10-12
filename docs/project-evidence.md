@@ -91,9 +91,9 @@ accepts CSV and Markdown **evidence records** in addition to YAML. All formats
 pass through the same strict schema-v1 validator; only YAML currently supports
 explicit `links`. Imported CSV/Markdown records have no implicit links.
 
-CSV requires the exact header `id,kind,text,source,version`; UTF-8 quoted
+CSV requires the exact header `id,kind,text,source,version` and comma separators (for German Excel exports choose comma-separated CSV, not semicolon-separated CSV); UTF-8 quoted
 CSV fields may contain commas, but all evidence values must remain single-line.
-Markdown requires only a five-column pipe table with the same field names
+Markdown accepts surrounding whitespace/indentation and requires only a five-column pipe table with the same field names
 and a separator row; no headings, inline pipe characters or multiline cells.
 This deliberately narrow format avoids guessing semantics from arbitrary prose.
 
