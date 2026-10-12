@@ -7,15 +7,15 @@ xt_version: "2.4"
 tailoring: project-specific
 sections:
   - id: scope
-    title: Pruefgegenstand und Pruefziele
+    title: Prüfgegenstand und Prüfziele
     required: true
     sources: [project]
   - id: test-cases
-    title: Prueffaelle mit Bezug auf Anforderungen
+    title: Prüffälle mit Bezug auf Anforderungen
     required: true
     sources: [project]
   - id: test-environment
-    title: Pruefumgebung und Voraussetzungen
+    title: Prüfumgebung und Voraussetzungen
     required: true
     sources: [project]
   - id: acceptance
