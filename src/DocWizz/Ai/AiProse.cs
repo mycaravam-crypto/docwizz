@@ -108,7 +108,9 @@ static class AiProse
             var drafted = await Ask(misses, async t =>
             {
                 var (json, sources, names) = facts.For(t.Node, t.Item);
-                return Parse(await ai.Complete(Instructions, json), sources, names) ?? NoDraft;
+                var d = Parse(await ai.Complete(Instructions, json), sources, names) ?? NoDraft;
+                if (Usable(d) || !result.ContainsKey(t.Node.Id)) Keep(cacheFile, cache, $"{Key(t.Node)}@{tag}", d);
+                return d;
             }, "summaries", t => Label(t.Node), t => $"summary failed for {t.Node.Id}", stop, step);
             foreach (var (t, d) in misses.Zip(drafted))
             {
@@ -120,7 +122,9 @@ static class AiProse
             var overviews = await Ask(moduleMisses, async m =>
             {
                 var (json, sources, names) = facts.ForModule(m.Folder, m.Members, result);
-                return Parse(await ai.Complete(ModuleInstructions, json), sources, names) ?? NoDraft;
+                var d = Parse(await ai.Complete(ModuleInstructions, json), sources, names) ?? NoDraft;
+                Keep(cacheFile, cache, $"{m.Key}@{tag}", d);
+                return d;
             }, "module overviews", m => m.Folder, m => $"overview failed for {m.Folder}", stop, step);
             foreach (var (m, d) in moduleMisses.Zip(overviews).Where(x => x.Second is not null))
             {
@@ -305,10 +309,23 @@ static class AiProse
         catch (JsonException) { return []; }
     }
 
+    // Each draft is saved as it arrives: an interrupted hour-long run keeps what it already paid for.
+    static void Keep(string file, Dictionary<string, Draft> cache, string key, Draft draft)
+    {
+        lock (cache)
+        {
+            cache[key] = draft;
+            Save(file, cache);
+        }
+    }
+
+    // Written to a temp file and moved over, so a kill mid-write never leaves a truncated cache.
     static void Save(string file, Dictionary<string, Draft> cache)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
-        File.WriteAllText(file, JsonSerializer.Serialize(new SortedDictionary<string, Draft>(cache),
+        var temp = file + ".tmp";
+        File.WriteAllText(temp, JsonSerializer.Serialize(new SortedDictionary<string, Draft>(cache),
             new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
+        File.Move(temp, file, overwrite: true);
     }
 }
