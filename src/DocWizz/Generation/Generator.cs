@@ -546,7 +546,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     string Badge(Node n) => findingOf.TryGetValue(n.Id, out var f) && f.Status != Status.Documented ? " ⚠" : "";
 
     string ModuleLink(Node n) => $"[{n.Name}](modules/{Naming.Slug(Naming.Folder(n.File))}.md#{Anchor(Top(n.Id))})";
-    string Anchor(string id) => Regex.Replace(nodes[id].Name.ToLowerInvariant(), @"[^a-z0-9\- ]", "").Replace(' ', '-');
+    string Anchor(string id) => Naming.Anchor(nodes[id].Name);
 
     string SourceLink(string file, string label) => SourceLink(file, 0, label == "" ? file : label);
     string SourceLink(string file, int line, string label, string sub = "")

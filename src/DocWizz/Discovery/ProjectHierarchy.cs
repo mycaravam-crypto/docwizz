@@ -33,7 +33,7 @@ sealed class ProjectHierarchy
     {
         var stem = Path.GetFileNameWithoutExtension(relativePath);
         if (stem is "package" or "pom" or "build") stem = Path.GetFileName(Path.GetDirectoryName(relativePath)) ?? stem;
-        stem = Regex.Replace(stem, @"[^A-Za-z0-9-]+", "-").Trim('-');
+        stem = Regex.Replace(Naming.Ascii(stem), @"[^A-Za-z0-9-]+", "-").Trim('-');
         if (stem.Length == 0) stem = "item";
         if (stem.Length > 48) stem = stem[..48].TrimEnd('-');
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(relativePath)))[..12].ToLowerInvariant();

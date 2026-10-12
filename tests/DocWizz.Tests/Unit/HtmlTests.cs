@@ -20,6 +20,33 @@ public class HtmlTests
     }
 
     [Fact]
+    public void Tables_scroll_inside_a_wrapper()
+    {
+        var html = Html.Page("index.md", "# demo\n\n| A | B |\n|---|---|\n| 1 | 2 |\n", Pages);
+        Assert.Contains("<div class=\"table-wrap\"><table>", html);
+        Assert.Contains("</table></div>", html);
+    }
+
+    [Theory]
+    [InlineData("Größenprüfer")]
+    [InlineData("BestellÜbersicht")]
+    [InlineData("my_func")]
+    [InlineData("Order")]
+    public void Symbol_anchors_match_the_rendered_heading_ids(string name)
+    {
+        var html = Html.Page("modules/src-Core.md", $"# src/Core\n\n### {name}\n", Pages);
+        Assert.Contains($"<h3 id=\"{Naming.Anchor(name)}\">", html);
+    }
+
+    [Theory]
+    [InlineData("Prüfung/Übersicht", "Pruefung-Uebersicht")]
+    [InlineData("src/Größe", "src-Groesse")]
+    [InlineData("src/Café", "src-Cafe")]
+    [InlineData("src/Core", "src-Core")]
+    public void Module_page_names_spell_out_umlauts(string folder, string slug) =>
+        Assert.Equal(slug, Naming.Slug(folder));
+
+    [Fact]
     public void Sidebar_reaches_every_page_relative_to_the_current_one()
     {
         var html = Html.Page("modules/src-Core.md", "# src/Core\n", Pages);
