@@ -131,11 +131,24 @@ static class Html
             document.addEventListener('click', e => { if (!e.target.closest('.search')) { hits.replaceChildren(); q.setAttribute('aria-expanded', 'false'); } });
             </script>
             <script type="module">
-            if (document.querySelector('.mermaid')) {
+            // Diagrams take the page's colors and redraw when the reader switches the theme.
+            const diagrams = Array.from(document.querySelectorAll('pre.mermaid'));
+            if (diagrams.length) {
               const { default: mermaid } = await import('{{MermaidUrl}}');
-              const dark = getComputedStyle(document.documentElement).colorScheme.includes('dark');
-              mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default' });
-              await mermaid.run();
+              diagrams.forEach(d => { d.dataset.source = d.textContent; });
+              const draw = async () => {
+                const css = getComputedStyle(document.documentElement), token = name => css.getPropertyValue(name).trim();
+                mermaid.initialize({ startOnLoad: false, theme: 'base', themeVariables: {
+                  darkMode: css.colorScheme.includes('dark'), background: token('--surface'), fontFamily: 'system-ui, sans-serif',
+                  primaryColor: token('--surface-soft'), primaryTextColor: token('--ink'), primaryBorderColor: token('--accent'),
+                  secondaryColor: token('--accent-soft'), tertiaryColor: token('--surface'), lineColor: token('--muted'),
+                  textColor: token('--text'), clusterBkg: token('--surface-soft'), clusterBorder: token('--line'),
+                  edgeLabelBackground: token('--surface'), noteBkgColor: token('--accent-soft'), noteTextColor: token('--ink') } });
+                diagrams.forEach(d => { d.removeAttribute('data-processed'); d.textContent = d.dataset.source; });
+                await mermaid.run({ nodes: diagrams });
+              };
+              await draw();
+              document.addEventListener('docwizz:theme', draw);
             }
             </script>
             </body></html>

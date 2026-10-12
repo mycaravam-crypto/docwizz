@@ -269,8 +269,12 @@ main tbody tr:last-child td { border-bottom: 0; }
     root.dataset.theme = isDark() ? 'light' : 'dark';
     try { if (local) local.setItem(themeKey, root.dataset.theme); } catch (_) { /* optional */ }
     updateThemeLabel();
+    document.dispatchEvent(new Event('docwizz:theme'));
   });
-  window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', updateThemeLabel);
+  window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
+    updateThemeLabel();
+    if (!root.dataset.theme) document.dispatchEvent(new Event('docwizz:theme'));
+  });
   updateThemeLabel();
 
   // Mobile drawer.
