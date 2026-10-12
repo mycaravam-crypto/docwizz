@@ -154,7 +154,7 @@ docwizz generate . --html --screenshots --base-url http://localhost:5173 --stora
 Screenshots land in `docs/screenshots/` and are linked from the frontend page. Without `--storage-state` routes are
 captured anonymously. Dynamic routes, HTTP errors, redirects and expired sessions are skipped with a warning.
 **The state file holds session tokens:** keep it out of Git, and use a low-privilege test account with sanitized data.
-Limits are listed in [CLI.md](CLI.md#options).
+Limits are listed in [CLI.md](CLI.md#options). For Windows installation errors, authenticated capture and diagnostics, see [Playwright screenshot troubleshooting](docs/PLAYWRIGHT_SCREENSHOTS.md).
 
 ### Draft missing docs with a local AI
 
