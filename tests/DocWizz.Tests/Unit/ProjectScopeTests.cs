@@ -47,6 +47,17 @@ public class ProjectScopeTests
     }
 
     [Fact]
+    public void Fingerprint_is_order_independent_but_detects_scope_changes()
+    {
+        var a = new ScopeConfig { Projects = new ScopeProjectsConfig { Include = ["B/B.csproj", "A/A.csproj"] } };
+        var b = new ScopeConfig { Projects = new ScopeProjectsConfig { Include = ["A/A.csproj", "B/B.csproj"] } };
+        Assert.Equal(ProjectScope.Fingerprint(a), ProjectScope.Fingerprint(b));
+        b.Projects.References = "include";
+        Assert.NotEqual(ProjectScope.Fingerprint(a), ProjectScope.Fingerprint(b));
+        Assert.Null(ProjectScope.Fingerprint(null));
+    }
+
+    [Fact]
     public void Selected_project_does_not_claim_files_in_a_nested_unselected_project()
     {
         using var repo = new Sources(("Root.csproj", """<Project Sdk="Microsoft.NET.Sdk" />"""),
