@@ -763,7 +763,9 @@ import http.server, json, sys
 class H(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        assert self.path == "/api/chat" and req["model"] == "local:7b" and not req["stream"] and req["format"] == "json", req
+        assert self.path == "/api/chat" and req["model"] == "local:7b" and not req["stream"], req
+        # ratings are held to JSON; drafts ask for cited lines, so the server isn't
+        assert req.get("format") == ("json" if req["messages"][0]["content"].startswith("You review") else None), req
         facts = json.loads(req["messages"][1]["content"])
         open(sys.argv[1] + ".requests", "a").write(".")
         S = lambda text, *cites: {"text": text, "from": list(cites)}
@@ -772,8 +774,9 @@ class H(http.server.BaseHTTPRequestHandler):
                 if facts["existingDocs"] else "not json"
         elif "module" in facts and open(sys.argv[1] + ".modules", "a").write(facts["module"] + "\n") and facts["module"] == "backend/Domain":
             reply = {"summary": [S("Stores things.", "NotInFacts")]}   # nothing usable: cached as such, never asked again
-        elif "module" in facts:  # module overview: one supported sentence, one citing nothing in the facts
-            reply = {"summary": [S(f"Module for {facts['module']}.", facts["members"][0]["name"])], "responsibilities": [S("Owns pricing.", "NotInFacts")]}
+        elif "module" in facts:  # module overview in cited lines: one supported sentence; one citing nothing, one saying nothing
+            reply = f"summary: Module for {facts['module']}. [{facts['members'][0]['name']}]\n\n" \
+                    f"responsibilities: Owns pricing. [NotInFacts]\nusage: None. [{facts['members'][0]['name']}]"
         elif facts["symbol"].startswith("Fixture.Api.MaterialController.Create("):
             reply = {"summary": [S("Creates a material.", "source")],
                      "behaviour": [S("Delegates to the service.", facts["calls"][0]), S("Takes the new material's fields.", "parameters"),
@@ -804,6 +807,7 @@ grep -q "🤖 _Drafted locally._" "$docs/api.md"
 grep -q "| POST | \`/api/materials\` | 🤖 _Creates a material._ |" "$docs/api.md"
 grep -q "^## Overview 🤖" "$docs/modules/backend-Api.md" && grep -q "^Module for backend/Api\.$" "$docs/modules/backend-Api.md"
 if grep -rq "Owns pricing\|Invented failure" "$docs"; then echo "uncited sentence kept"; exit 1; fi
+if grep -rq "None\." "$docs/modules"; then echo "a sentence saying a section is empty was kept"; exit 1; fi
 python3 - "$docs/.docwizz/documentation.json" <<'PY2'
 import json, sys
 i = {i["id"]: i for i in json.load(open(sys.argv[1]))["items"]}["cs:Fixture.Api.MaterialController.Create(string, int, string, string, string, bool)"]

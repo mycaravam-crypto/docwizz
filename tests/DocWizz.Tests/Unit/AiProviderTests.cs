@@ -113,6 +113,23 @@ public class AiProviderTests
     }
 
     [Fact]
+    public async Task Without_json_neither_server_is_held_to_a_json_object()
+    {
+        using (var server = new FakeServer(200, """{"message":{"content":"summary: Does it. [source]"}}"""))
+        using (var ai = new OllamaProvider("local:7b", server.Uri))
+        {
+            Assert.Equal("summary: Does it. [source]", await ai.Complete("i", "f", json: false));
+            Assert.False(System.Text.Json.JsonDocument.Parse(Assert.Single(server.Requests)).RootElement.TryGetProperty("format", out _));
+        }
+        using (var server = new FakeServer(200, Chat("summary: Does it. [source]")))
+        using (var ai = new OpenAiCompatibleProvider("m", server.Uri, null))
+        {
+            Assert.Equal("summary: Does it. [source]", await ai.Complete("i", "f", json: false));
+            Assert.False(System.Text.Json.JsonDocument.Parse(Assert.Single(server.Requests)).RootElement.TryGetProperty("response_format", out _));
+        }
+    }
+
+    [Fact]
     public async Task A_missing_model_or_a_failing_server_is_an_http_error_that_stops_drafting()
     {
         using (var missing = new FakeServer(404, "{}"))
