@@ -92,8 +92,12 @@ docwizz generate . site --refresh-html-on-version-change   # re-render all HTML 
 
 Only pages whose content changed are rewritten, and the summary counts them. Every HTML page names the docwizz version
 in its footer; `--refresh-html-on-version-change` (implies `--html`) rewrites all HTML when
-`<out>/.docwizz/html-version.txt` differs from the running version. Progress bars go to stderr on interactive
-terminals; `--progress` forces them in CI logs. See [Generated vs. your files](#generated-vs-your-files) for what you
+`<out>/.docwizz/html-version.txt` differs from the running version. On an interactive terminal a live progress bar
+on stderr starts at once and shows what each stage is doing (files parsed, AI drafts written) with the elapsed time,
+leaving a ✓ line with timing and a short summary per finished stage; `--progress` forces plain one-line-per-stage
+progress in CI logs (`NO_COLOR` turns colors off). The result on stdout starts with the one-line summary scripts match
+(`N pages → <out> (commit …): N changed`), followed by a report: what was scanned, coverage and doc quality, gaps and
+architecture findings with the page to open, and where the time went. See [Generated vs. your files](#generated-vs-your-files) for what you
 may edit.
 
 **Route screenshots** capture detected static frontend routes from an already running app with Playwright Chromium

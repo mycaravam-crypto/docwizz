@@ -14,11 +14,17 @@ static class CSharpScanner
     // ponytail: set per Scan call, read by Doc(); thread it through the scan methods if scans ever run in parallel.
     static bool commentDocs;
 
-    public static (List<Node>, List<Edge>) Scan(string root, IEnumerable<string> files, bool commentDocs = false)
+    // progress: (files done, of total) — parsing counts the first half, the semantic pass the second.
+    public static (List<Node>, List<Edge>) Scan(string root, IEnumerable<string> files, bool commentDocs = false, Action<int, int>? progress = null)
     {
         CSharpScanner.commentDocs = commentDocs;
         var parse = new CSharpParseOptions(documentationMode: DocumentationMode.Parse);
-        var trees = files.Select(f => CSharpSyntaxTree.ParseText(File.ReadAllText(f), parse, path: f)).ToList();
+        var list = files.ToList();
+        var trees = list.Select((f, i) =>
+        {
+            progress?.Invoke(i, 2 * list.Count);
+            return CSharpSyntaxTree.ParseText(File.ReadAllText(f), parse, path: f);
+        }).ToList();
 
         // ponytail: BCL refs only; ASP.NET/EF/NuGet types stay unresolved, detected by name. Add package refs if resolution matters.
         var refs = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
@@ -32,8 +38,10 @@ static class CSharpScanner
         var nodes = new List<Node>();
         var edges = new List<Edge>();
 
+        var scanned = 0;
         foreach (var tree in trees)
         {
+            progress?.Invoke(trees.Count + scanned++, 2 * trees.Count);
             var sm = comp.GetSemanticModel(tree);
             var rel = Path.GetRelativePath(root, tree.FilePath);
             var syntaxRoot = tree.GetRoot();

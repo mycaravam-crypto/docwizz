@@ -61,9 +61,10 @@ static class AiProse
     // Drafts cached before sections existed have Sections = null.
     public record Draft(string Text, List<string> Sources, Dictionary<string, List<Sentence>>? Sections = null);
 
-    // Returns node id → summary, from cache and (when allowed) fresh API calls.
+    // Returns node id → summary, from cache and (when allowed) fresh API calls. progress: (drafts done, of total).
     public static async Task<Dictionary<string, Draft>> Summaries(
-        string root, CodeModel model, List<DocumentationItem> findings, string cacheFile, bool call, AiConfig? config = null)
+        string root, CodeModel model, List<DocumentationItem> findings, string cacheFile, bool call, AiConfig? config = null,
+        Action<int, int>? progress = null)
     {
         config ??= new();
         var cache = Load(cacheFile);
@@ -92,6 +93,9 @@ static class AiProse
             var facts = new ContextBuilder(root, model);
             using var gate = new SemaphoreSlim(Parallelism);
             var stopped = 0;
+            var finished = 0;
+            var work = misses.Count + moduleMisses.Count;
+            progress?.Invoke(0, work);
             var drafted = await Task.WhenAll(misses.Select(async t =>
             {
                 await gate.WaitAsync();
@@ -113,7 +117,11 @@ static class AiProse
                     Console.Error.WriteLine($"docwizz: AI summary failed for {t.Node.Id}: {e.Message}");
                     return (t.Node, Draft: null);
                 }
-                finally { gate.Release(); }
+                finally
+                {
+                    gate.Release();
+                    progress?.Invoke(Interlocked.Increment(ref finished), work);
+                }
             }));
             foreach (var (node, draft) in drafted.Where(d => d.Draft is not null))
                 result[node.Id] = cache[$"{Key(node)}@{tag}"] = draft!;
@@ -128,6 +136,7 @@ static class AiProse
                 }
                 catch (HttpRequestException e) { Console.Error.WriteLine($"docwizz: AI module overviews skipped — {e.InnerException?.Message ?? e.Message}"); break; }
                 catch (Exception e) { Console.Error.WriteLine($"docwizz: AI overview failed for {folder}: {e.Message}"); }
+                progress?.Invoke(++finished, work);
             }
             Save(cacheFile, cache);
         }
@@ -140,7 +149,8 @@ static class AiProse
     // Rates the written docs of items that have them, from cache and (when allowed) fresh calls, keyed by symbol, doc
     // and body: a doc or code change asks again.
     public static async Task<Dictionary<string, Assessment>> Assessments(
-        string root, CodeModel model, List<DocumentationItem> findings, string cacheFile, bool call, AiConfig? config = null)
+        string root, CodeModel model, List<DocumentationItem> findings, string cacheFile, bool call, AiConfig? config = null,
+        Action<int, int>? progress = null)
     {
         config ??= new();
         var tag = call ? AiProviders.Tag(config) : null;
@@ -157,8 +167,10 @@ static class AiProse
         using var _ = ai;
         Console.Error.WriteLine($"docwizz: assessing {misses.Count} written docs with {ai.Model} at {ai.Endpoint} ({result.Count} cached)");
         var facts = new ContextBuilder(root, model);
+        var assessed = 0;
         foreach (var f in misses)
         {
+            progress?.Invoke(assessed++, misses.Count);
             try
             {
                 if (ParseAssessment(await ai.Complete(AssessInstructions, facts.For(f.Node, f).Json)) is { } a)
