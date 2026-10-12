@@ -21,6 +21,19 @@ public class CliProgressTests
     }
 
     [Fact]
+    public void Redirected_progress_reports_a_long_stage_only_after_the_interval()
+    {
+        var output = new StringWriter();
+        using (var bar = new CliProgress(output, 1) { ReportEvery = TimeSpan.Zero })
+            bar.Report(1, 92, "drafting Foo");
+        using (var bar = new CliProgress(output, 1))
+            bar.Report(2, 92, "drafting Bar");
+        var text = output.ToString();
+        Assert.Contains("1/92 drafting Foo", text);
+        Assert.DoesNotContain("drafting Bar", text);
+    }
+
+    [Fact]
     public void Disabled_progress_keeps_output_empty()
     {
         var output = new StringWriter();

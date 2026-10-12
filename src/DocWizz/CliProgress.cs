@@ -27,6 +27,9 @@ sealed class CliProgress : IDisposable
     readonly Timer? timer;
     readonly (TextWriter Out, TextWriter Error)? previous;
     int current, completed, frame, shownWidth, suspended;
+    TimeSpan lastLine;
+    // In a log, a long stage gets a line this often, so an hour of AI drafting doesn't look hung.
+    public TimeSpan ReportEvery { get; init; } = TimeSpan.FromSeconds(30);
     double fraction;
     string? detail;
     bool shown, atLineStart = true, disposed;
@@ -81,6 +84,7 @@ sealed class CliProgress : IDisposable
             var i = Index(stage);
             if (i > current) { current = i; completed = Math.Max(completed, i); }
             stageClock.Restart();
+            lastLine = clock.Elapsed;
             fraction = 0;
             this.detail = detail;
             // A log gets a line when a long stage starts too, so it doesn't sit silent until the stage is over.
@@ -101,6 +105,12 @@ sealed class CliProgress : IDisposable
         {
             fraction = total > 0 ? Math.Clamp((double)done / total, 0, 1) : 0;
             if (detail is not null) this.detail = detail;
+            if (enabled && !live && clock.Elapsed - lastLine >= ReportEvery)
+            {
+                lastLine = clock.Elapsed;
+                writer.WriteLine($"docwizz   {done}/{total}{(this.detail is null ? "" : $" {this.detail}")} ({Duration(stageClock.Elapsed)})");
+                writer.Flush();
+            }
         }
         Forward();
     }

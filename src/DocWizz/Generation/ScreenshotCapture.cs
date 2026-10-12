@@ -84,6 +84,11 @@ static class ScreenshotCapture
     public static string? LoginFormFailure(string route, bool signedIn, bool passwordFieldVisible) =>
         signedIn && passwordFieldVisible && !PasswordPage.IsMatch(route) ? "shows a login form (session not accepted?)" : null;
 
+    // Signed in, a sign-in page redirecting away is expected, not a session problem.
+    public static string Explain(string route, string failure, bool signedIn) =>
+        signedIn && failure.StartsWith("redirected", StringComparison.Ordinal) && PasswordPage.IsMatch(route)
+            ? "is a sign-in page and redirects once signed in" : failure;
+
     // Each route starts in a new context. The saved file is read, never written; with a session, the next context starts
     // from the previous one's state instead, because apps that rotate refresh tokens invalidate the file's token on first use.
     public static BrowserNewContextOptions ContextOptions(string? storageStateFile, string? carriedState = null) => new()
@@ -155,7 +160,7 @@ static class ScreenshotCapture
                         if (failure is not null)
                         {
                             if (File.Exists(fullPath)) File.Delete(fullPath);
-                            Console.Error.WriteLine($"docwizz: screenshot skipped: {route} {failure}");
+                            Console.Error.WriteLine($"docwizz: screenshot skipped: {route} {Explain(route, failure, storageStateFile is not null)}");
                             continue;
                         }
                         await page.ScreenshotAsync(new() { Path = fullPath, FullPage = true, Timeout = 10000 });
