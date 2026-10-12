@@ -41,13 +41,16 @@ class ContextBuilder(string root, CodeModel model)
         catch (System.Xml.XmlException) { return null; }
     }
 
+    // A member a module overview is about: what a reader looks for, not a property, event or constructor.
+    public static bool Shown(Node m) => m.Kind is not ("property" or "event" or "constructor");
+
     // A module's facts: its members with their docs (written, else drafted), and the modules on either side.
     public (string Json, List<string> Sources, Dictionary<string, string> Names) ForModule(string folder, List<Node> members, Dictionary<string, AiProse.Draft> drafts)
     {
         var ids = members.Select(m => m.Id).ToHashSet();
         string Module(string id) => Naming.Folder(nodes[id].File);
         var deps = model.Edges.Where(e => CodeModel.DependencyKinds.Contains(e.Kind) && nodes.ContainsKey(e.From) && nodes.ContainsKey(e.To)).ToList();
-        var shown = members.Where(m => m.Kind is not ("property" or "event" or "constructor")).Take(40).ToList();
+        var shown = members.Where(Shown).Take(40).ToList();
         var json = JsonSerializer.Serialize(new
         {
             module = folder,
