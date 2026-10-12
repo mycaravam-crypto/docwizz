@@ -7,7 +7,8 @@ using Microsoft.Playwright;
 // Reuses an optional user-provided browser session; no login automation, passwords or AI.
 static class ScreenshotCapture
 {
-    static readonly Regex StaticPath = new(@"^/(?:[a-zA-Z0-9._~-]+/?)*$", RegexOptions.CultureInvariant);
+    // Letters of any script count (/größen-prüfung); percent escapes, parameters and wildcards do not.
+    static readonly Regex StaticPath = new(@"^/(?:[\p{L}\p{M}\p{N}._~-]+/?)*$", RegexOptions.CultureInvariant);
 
     public static bool IsStaticRoute(string? route) =>
         route is not null && StaticPath.IsMatch(route) &&
@@ -34,11 +35,14 @@ static class ScreenshotCapture
         if (status is null) return "no HTTP response";
         if (status >= 400) return $"HTTP {status}";
         if (requested.Scheme != landed.Scheme || requested.Authority != landed.Authority)
-            return $"redirected to another origin ({landed.AbsolutePath}) (needs authentication?)";
-        if (requested.AbsolutePath.TrimEnd('/') != landed.AbsolutePath.TrimEnd('/'))
-            return $"redirected to {landed.AbsolutePath} (needs authentication?)";
+            return $"redirected to another origin ({PathOf(landed)}) (needs authentication?)";
+        if (PathOf(requested).TrimEnd('/') != PathOf(landed).TrimEnd('/'))
+            return $"redirected to {PathOf(landed)} (needs authentication?)";
         return null;
     }
+
+    // The path as written: the browser reports /größen-prüfung percent-encoded, possibly with other hex casing.
+    static string PathOf(Uri uri) => Uri.UnescapeDataString(uri.AbsolutePath).Normalize(NormalizationForm.FormC);
 
     // Each route starts in a new context; Playwright loads (but does not modify) the saved session.
     public static BrowserNewContextOptions ContextOptions(string? storageStateFile) => new()
