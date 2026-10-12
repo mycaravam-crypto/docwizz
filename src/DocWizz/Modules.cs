@@ -25,7 +25,9 @@ partial class Generator
         // Role: facts about what kind of code lives here.
         var role = new List<string>();
         if (Layer(folder) is { } layer) role.Add($"Layer **{layer}**");
-        if (members.FirstOrDefault() is { } any && global::Projects.Of(Projects, any.File) is { } project) role.Add($"project `{project.Name}`");
+        if (hierarchy?.ForModule(folder) is { Count: > 0 } owners)
+            role.Add("project " + string.Join(", ", owners.Select(p => $"[{p.Name}](../{p.Page})")));
+        else role.Add("unassigned source module");
         var blocks = Roles.Select(r => (r.Label, Count: tops.Concat(endpoints).Count(n => n.Kind == r.Match || n.Tags?.Contains(r.Match) == true)))
             .Where(r => r.Count > 0).Select(r => $"{r.Label}: {r.Count}").ToList();
         if (blocks.Count > 0) role.Add(string.Join(", ", blocks));
