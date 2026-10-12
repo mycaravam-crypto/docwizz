@@ -19,7 +19,12 @@ sealed class ProjectHierarchy
     readonly Dictionary<string, Solution> solutionPages = new(StringComparer.Ordinal);
     readonly Dictionary<string, List<Project>> modulePages = new(StringComparer.Ordinal);
     readonly Dictionary<string, List<Node>> nodesByProject = new(StringComparer.Ordinal);
+    readonly ILookup<string, Edge> projectEdgesBySource;
     readonly Func<string, string?> ownerOf;
+
+    // Observable invariant for regression tests: constructing the hierarchy resolves ownership no more
+    // than once per eligible model node, independent of the project/module count.
+    internal int OwnershipLookups { get; private set; }
 
     public static string ProjectPage(string manifest) => FilePage("projects", manifest);
     public static string SolutionPage(string solution) => FilePage("solutions", solution);
@@ -53,6 +58,8 @@ sealed class ProjectHierarchy
             projectsById.Add(p.Id, p);
             projectPages.Add(p.Page, p);
         }
+        projectEdgesBySource = model.Edges.Where(e => e.Kind is "references" or "depends-on")
+            .ToLookup(e => e.From, StringComparer.Ordinal);
         ownerOf = ProjectOwnership.Resolver(model.Nodes
             .Where(n => n.Kind == "project" && n.Tags?.Contains("metadata-only") != true)
             .Select(n => new ProjectOwnership.Candidate(n.Id, n.File, ProjectOwnership.Ecosystem(n))));
@@ -114,10 +121,20 @@ sealed class ProjectHierarchy
     }
 
     // The same ownership rule as the scope filter (ProjectOwnership), cached per file. Metadata-only stubs own nothing.
-    public Project? Owner(string file) => ownerOf(file) is { } id ? projectsById.GetValueOrDefault(id) : null;
+    public Project? Owner(string file)
+    {
+        OwnershipLookups++;
+        return ownerOf(file) is { } id ? projectsById.GetValueOrDefault(id) : null;
+    }
 
     /// <summary>Production nodes assigned to a project, indexed once when the hierarchy is constructed.</summary>
     public IReadOnlyList<Node> NodesFor(string projectId) => nodesByProject.GetValueOrDefault(projectId) ?? [];
+
+    /// <summary>Direct project reference and package edges, indexed by source once for all project pages.</summary>
+    public IEnumerable<Edge> EdgesFrom(string projectId) => projectEdgesBySource[projectId];
+
+    /// <summary>Retrieves a solution navigation entry by stable relative page, without scanning the solution list.</summary>
+    public Solution? SolutionByPage(string page) => solutionPages.GetValueOrDefault(page);
 
     public IReadOnlyList<Project> ForModule(string folder) =>
         modulePages.GetValueOrDefault($"modules/{Generator.Slug(folder)}.md") ?? [];
