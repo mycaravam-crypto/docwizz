@@ -23,7 +23,7 @@ static class ProjectDiscovery
 
     // Do not read a manifest/solution through a symlink (including one of its ancestor folders).
     // This prevents a repository-controlled symlink from redirecting discovery outside the chosen root.
-    static bool SafeFile(string root, string file)
+    internal static bool SafeFile(string root, string file)
     {
         var relative = Rel(root, file);
         if (!InRoot(relative)) return false;
