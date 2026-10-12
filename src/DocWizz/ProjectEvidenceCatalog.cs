@@ -57,7 +57,7 @@ internal sealed record ProjectEvidenceCatalog(IReadOnlyList<ProjectEvidence> Ite
             if (!path.StartsWith("docs/", StringComparison.Ordinal) || !path.EndsWith(".md", StringComparison.Ordinal)
                 || path.Split('/').Any(x => x is "." or ".." or "") || path.Contains('\\'))
                 throw new ArgumentException($"{at}.source must be a repository-relative docs/*.md path");
-            var bytes = Encoding.UTF8.GetBytes(string.Join("\n", id, kind, text, path, version));
+            var bytes = Encoding.UTF8.GetBytes(string.Join("\n", sourceHash is null ? [id, kind, text, path, version] : [id, kind, text, path, version, sourceHash]));
             var hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
             items.Add(new(id, kind, text, path, version, hash, sourceHash));
         }
