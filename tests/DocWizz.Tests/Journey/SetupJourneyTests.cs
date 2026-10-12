@@ -20,7 +20,7 @@ public class SetupJourneyTests
     {
         Assert.True(r.Exit == 0, r.ToString());
         Docwizz.NoStackTrace(r);
-        Assert.Contains("[2/6] config       ok       written", r.Out);
+        Assert.Contains("[3/7] config       ok       written", r.Out);
         Assert.True(File.Exists(Path.Combine(repo.Root, "docwizz.yaml")));
         Assert.True(File.Exists(Path.Combine(repo.Root, "docs", "index.md")));
         foreach (var label in new[] { "Status", "Stack", "Layers", "Configuration", "Documentation", "Coverage", "Check" }) Line(r, label);
@@ -35,8 +35,8 @@ public class SetupJourneyTests
         using var repo = Repos.AspNet();
         var r = Setup(repo);
         FirstRun(r, repo);
-        var at = new[] { "scan", "config", "analyze", "architecture", "generate", "check" }
-            .Select((s, i) => r.Out.IndexOf($"[{i + 1}/6] {s,-13}ok", StringComparison.Ordinal)).ToList();
+        var at = new[] { "discover", "scan", "config", "analyze", "architecture", "generate", "check" }
+            .Select((s, i) => r.Out.IndexOf($"[{i + 1}/7] {s,-13}ok", StringComparison.Ordinal)).ToList();
         Assert.DoesNotContain(-1, at);
         Assert.Equal(at.Order(), at);
     }
@@ -144,7 +144,7 @@ public class SetupJourneyTests
 
         var r = Setup(repo);
         Assert.Equal(0, r.Exit);
-        Assert.Contains("[2/6] config       ok       kept", r.Out);
+        Assert.Contains("[3/7] config       ok       kept", r.Out);
         Assert.Contains("(--force to regenerate)", r.Out);
         Assert.Contains("profile api", Line(r, "Coverage"));   // and it is the config the run used
         Assert.Equal(mine, Yaml(repo));
@@ -157,7 +157,7 @@ public class SetupJourneyTests
         File.WriteAllText(Path.Combine(repo.Root, "docwizz.yaml"), "profile: api\n");
         var r = Setup(repo, "--force");
         Assert.Equal(0, r.Exit);
-        Assert.Contains("[2/6] config       ok       overwritten", r.Out);
+        Assert.Contains("[3/7] config       ok       overwritten", r.Out);
         Assert.StartsWith("# Written by `docwizz setup`", Yaml(repo));
     }
 
@@ -172,12 +172,12 @@ public class SetupJourneyTests
 
         var second = Setup(repo);
         Assert.Equal(0, second.Exit);
-        Assert.Contains("[2/6] config       ok       kept", second.Out);
+        Assert.Contains("[3/7] config       ok       kept", second.Out);
         Assert.Equal(yaml, Yaml(repo));
         Assert.Equal(docs, Docwizz.Snapshot(Path.Combine(repo.Root, "docs")));
 
         var forced = Setup(repo, "--force");
-        Assert.Contains("[2/6] config       ok       unchanged", forced.Out);   // regenerated: the same file
+        Assert.Contains("[3/7] config       ok       unchanged", forced.Out);   // regenerated: the same file
         Assert.Equal(yaml, Yaml(repo));
         Assert.Equal(docs, Docwizz.Snapshot(Path.Combine(repo.Root, "docs")));
     }
@@ -242,9 +242,9 @@ public class SetupJourneyTests
         Assert.Equal(1, r.Exit);
         Docwizz.NoStackTrace(r);
         Assert.Equal("Status:         FAILED", Line(r, "Status"));
-        Assert.Contains("[1/6] scan         failed", r.Out);
-        Assert.Contains("[6/6] check        skipped  needs scan", r.Out);
-        Assert.StartsWith("Error:          scan: ", Line(r, "Error"));
+        Assert.Contains("[1/7] discover     failed", r.Out);
+        Assert.Contains("[7/7] check        skipped  needs discover", r.Out);
+        Assert.StartsWith("Error:          discover: ", Line(r, "Error"));
         Assert.EndsWith(string.Join("\n", ["Next useful actions:", .. global::Setup.NextActions(repo.Root, global::Setup.Status.Failed, configKept: true)]),
             r.Out.TrimEnd());   // re-run, or regenerate the file that broke
         Assert.Equal("check: [oops\n", Yaml(repo));   // a broken file is still the user's file
@@ -259,8 +259,8 @@ public class SetupJourneyTests
         Assert.Equal(1, r.Exit);
         Docwizz.NoStackTrace(r);
         Assert.Equal("Status:         FAILED", Line(r, "Status"));
-        Assert.Contains("[5/6] generate     failed", r.Out);
-        Assert.Contains("[6/6] check        ok", r.Out);       // not required by later stages: they still run
+        Assert.Contains("[6/7] generate     failed", r.Out);
+        Assert.Contains("[7/7] check        ok", r.Out);       // not required by later stages: they still run
         Line(r, "Coverage");                                   // what completed is still summarized
         Line(r, "Architecture");
         Assert.StartsWith("Error:          generate: ", Line(r, "Error"));

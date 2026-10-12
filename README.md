@@ -35,7 +35,7 @@ Then, in your repository:
 docwizz setup .
 ```
 
-That one command detects the stack, writes a `docwizz.yaml` from what it finds, analyzes the code and the
+That one command first inventories projects and solutions, then detects the stack, writes a `docwizz.yaml` from what it finds, analyzes the code and the
 architecture, generates the docs into `docs/` and runs the quality gate. It ends with a summary and the next commands
 to run:
 
@@ -244,6 +244,7 @@ See [AI drafts](#ai-drafts) for the privacy rules.
 
 | Command | Does |
 |---|---|
+| `docwizz discover [dir] [--format json]` | Read-only inventory of project manifests, solutions, references and unassigned code |
 | `docwizz setup [dir] [--force]` | **First run:** detect the stack, write `docwizz.yaml` from evidence, analyze, generate the docs, check |
 | `docwizz analyze <dir>` | Documentation report |
 | `docwizz architecture <dir>` | Layers, layer dependencies, violations, cycles |
@@ -271,6 +272,9 @@ peak memory; [bench/](bench/README.md) has reproducible benchmarks, the baseline
 monorepos.
 
 ## Configuration
+
+For multi-solution repositories, run `docwizz discover . --format json` to inspect the project inventory without a full code scan. Project selection and hierarchical generation are planned in [Epic #124](https://github.com/mycaravam-crypto/docwizz/issues/124), but not yet implemented.
+
 
 `docwizz setup` writes a `docwizz.yaml` from what the repository shows (`docwizz init` writes the plain defaults).
 Edit it in place. docwizz looks for the file in the scanned directory first,

@@ -100,7 +100,7 @@ static class Projects
     }
 
     // Project path (relative to the solution) → its solution folder ("API/Public"; "" at the root).
-    static IEnumerable<(string Path, string Folder)> SolutionFolders(string file)
+    internal static IEnumerable<(string Path, string Folder)> SolutionFolders(string file)
     {
         var text = File.ReadAllText(file);
         if (file.EndsWith(".slnx"))
@@ -109,7 +109,13 @@ static class Projects
             try { xml = XDocument.Parse(text); } catch (System.Xml.XmlException) { yield break; }
             foreach (var p in xml.Descendants("Project"))
                 if (p.Attribute("Path")?.Value is { } path)
-                    yield return (path.Replace('\\', '/'), p.Parent?.Name.LocalName == "Folder" ? p.Parent.Attribute("Name")?.Value.Trim('/') ?? "" : "");
+                {
+                    // .slnx folders can be nested; keep the full logical solution path.
+                    var folder = string.Join("/", p.Ancestors().Where(a => a.Name.LocalName == "Folder")
+                        .Reverse().Select(a => a.Attribute("Name")?.Value.Trim('/') ?? "")
+                        .Where(n => n.Length > 0));
+                    yield return (path.Replace('\\', '/'), folder);
+                }
             yield break;
         }
         // Project("{type}") = "Name", "path", "{guid}"; solution folders have type 2150E333-…; NestedProjects: {child} = {parent}.

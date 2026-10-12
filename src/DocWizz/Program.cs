@@ -57,6 +57,10 @@ static async Task<int> Dispatch(string[] args)
 
     switch (cmd)
     {
+        case "discover":
+            var inventory = ProjectDiscovery.Scan(path, RepoFiles(path, config));
+            Console.WriteLine(json ? JsonSerializer.Serialize(inventory, JsonOptions()) : ProjectDiscovery.ConsoleReport(inventory));
+            return 0;
         case "context":
             return ContextCommand(path, config, opts);
         case "mcp":
@@ -341,6 +345,7 @@ static string Reference() => $"""
         [--force]                       overwrite an existing docwizz.yaml
 
     everyday:
+      docwizz discover [dir]             read-only project and solution inventory [--format json]
       docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
         [--html]                        also write an HTML page next to every Markdown page
         [--refresh-html-on-version-change]  rewrite HTML when the docwizz version changes
@@ -374,7 +379,7 @@ static string Reference() => $"""
 
     options:
       --profile <name|file.yaml>        documentation profile: {string.Join(", ", Profiles.Names)}, or your own file
-      --format console|json             analyze/check/architecture/diff/context/product/trace/remediate output
+      --format console|json             discover/analyze/check/architecture/diff/context/product/trace/remediate output
       --timings                         time per stage and peak memory, on stderr (benchmarks)
       --help, -h                        help for a command: docwizz <command> --help
       --version, -v                     version, commit and runtime (also: docwizz version)
@@ -735,8 +740,8 @@ static (List<string> Failures, List<string> MissingSections) CheckFailures(strin
     return (failures, missingSections);
 }
 
-// First run on a repository, in a fixed order: scan (and detect the stack) → config → analyze → architecture →
-// generate → check. A failed stage is reported and doesn't hide the others; scan and config are required by the rest.
+// First run: lightweight project discovery → full scan → inferred config → analyze → architecture →
+// generate → check. P0 intentionally does not filter the model; that belongs to P1.
 // Exit 1 only when a stage fails: a failing check is the baseline to improve on, reported with what to do next.
 static async Task<int> SetupCommand(string root, string? profile, bool force, bool ai, bool html, bool refreshHtmlOnVersionChange = false, bool progress = false)
 {
@@ -746,19 +751,26 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
     Config config = null!;
     CodeModel model = null!;
     Setup.Detection detection = null!;
+    ProjectDiscovery.Inventory? inventory = null;
     List<DocumentationItem>? findings = null;
     ArchitectureResult? arch = null;
     string configStatus = "";
     bool? passed = null;
 
-    using var bar = CliProgress.ForConsole(6, progress);
+    using var bar = CliProgress.ForConsole(7, progress);
     Console.WriteLine($"docwizz setup {Path.GetFullPath(root)}");
     var results = Setup.Run(
     [
+        new("discover", () =>
+        {
+            // Always before BuildModel. With no interactive selection implemented yet, the inventory cannot
+            // change the scan scope. Existing config and .gitignore/exclude rules still apply.
+            config = existing ? Config.Load(root, profile) : Config.Parse(Config.Default, root, profile);
+            inventory = ProjectDiscovery.Scan(root, RepoFiles(root, config));
+            return Setup.DiscoverySummary(inventory);
+        }, Required: true),
         new("scan", () =>
         {
-            // The repository's own docwizz.yaml when it is kept, else the built-in defaults (never one from the cwd).
-            config = existing ? Config.Load(root, profile) : Config.Parse(Config.Default, root, profile);
             var (m, files) = BuildModel(root, config);
             model = m;
             var all = RepoFiles(root, config, [".github", ".circleci"]).Select(f => Path.GetRelativePath(root, f).Replace('\\', '/')).ToList();
@@ -767,7 +779,7 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
         }, Required: true),
         new("config", () =>
         {
-            configStatus = existing ? "kept" : Setup.WriteConfig(root, Setup.Yaml(detection, AppVersion.Number), force);
+            configStatus = existing ? "kept" : Setup.WriteConfig(root, Setup.Yaml(detection, AppVersion.Number, inventory), force);
             // The generated file only narrows layers and test globs to those files matched, so the model stands.
             if (!existing) config = Config.Load(root, profile);
             return $"{configStatus} {file}" + (existing ? " (--force to regenerate)" : $" ({detection.Layers.Count} layers, {detection.TestGlobs.Count} test globs inferred)");
@@ -809,6 +821,7 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
     });
     Console.WriteLine();
     Console.WriteLine($"Status:         {Setup.Label(outcome)}");
+    if (inventory is not null) Console.WriteLine($"Discovery:      {Setup.DiscoverySummary(inventory)}");
     if (detection is not null)
     {
         Console.WriteLine($"Stack:          {Setup.Stack(detection)}");
@@ -830,6 +843,9 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
         Console.WriteLine();
         Console.WriteLine("Follow-up:");
         foreach (var t in Setup.FollowUp(detection, configStatus, config, passed != false)) Console.WriteLine($"  - {t}");
+        if (inventory is not null && Setup.NeedsProjectSelection(inventory))
+            Console.WriteLine("  - multiple solutions or standalone projects detected: review with docwizz discover " +
+                root + " --format json; project selection is planned for Epic #124 P1/P2 (currently use exclude:)");
     }
     Console.WriteLine();
     Console.WriteLine("Next useful actions:");

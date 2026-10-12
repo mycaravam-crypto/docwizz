@@ -17,6 +17,7 @@ an example and its options.
 
 | Command / option | Primary use | Typical user | Default path? |
 |---|---|---|---|
+| `discover` | project and solution inventory | developers | optional |
 | `setup` | first repository setup | all users | **yes, start here** |
 | `generate` | write or refresh documentation | developers | yes |
 | `check` | quality gate | CI, developers | yes |
@@ -44,24 +45,30 @@ an example and its options.
 
 ## Workflows by goal
 
+### Project discovery (Epic #124 P0)
+
+`docwizz discover .` lists project manifests, solution memberships and unresolved references. `docwizz discover . --format json` returns a deterministic inventory. Discovery does not run language scanners, build tools or AI and does not select projects for generation yet.
+
+
 ### 1. First setup
 
 ```bash
 docwizz setup .
 ```
 
-This runs every stage once, in this order, and prints one summary at the end:
+This runs every stage once, in this order, and prints one summary at the end. The first stage inventories solutions and project files before the full source-code scan; project filtering is planned for P1/P2 of Epic #124:
 
 | # | Stage | Does | If it fails |
 |---|---|---|---|
-| 1 | scan | reads the code and detects the stack: languages, frameworks, project files, tests, deployment files, layers | the rest are skipped |
-| 2 | config | writes `docwizz.yaml`, or keeps the existing one | the rest are skipped |
-| 3 | analyze | documentation coverage and critical gaps | reported; the next stages still run |
-| 4 | architecture | layer violations and cycles (and security findings if they are on) | reported; the next stages still run |
-| 5 | generate | writes the docs to `<dir>/docs` | reported; the next stages still run |
-| 6 | check | the quality gate at the configured thresholds | reported |
+| 1 | discover | reads solutions and project manifests, reports references and unassigned source files without scanning code | the rest are skipped |
+| 2 | scan | reads the code and detects the stack: languages, frameworks, project files, tests, deployment files, layers | the rest are skipped |
+| 3 | config | writes `docwizz.yaml`, or keeps the existing one | the rest are skipped |
+| 4 | analyze | documentation coverage and critical gaps | reported; the next stages still run |
+| 5 | architecture | layer violations and cycles (and security findings if they are on) | reported; the next stages still run |
+| 6 | generate | writes the docs to `<dir>/docs` | reported; the next stages still run |
+| 7 | check | the quality gate at the configured thresholds | reported |
 
-`setup` never prompts, so it works the same way in a terminal and in a script. The summary starts with a status
+`setup` never prompts in P0, so it works the same way in a terminal and in a script. If multiple solutions or standalone projects are found, setup adds an informational project inventory to freshly generated YAML as comments (no active `scope:`). Existing YAML is preserved. The full source-code scan is unchanged until P1 introduces project filtering. The summary starts with a status
 that keeps problems in the repository apart from problems running docwizz:
 
 | Status | Means | Exit |
@@ -84,7 +91,7 @@ only what the repository shows evidence for:
   the defaults stay.
 
 Nothing about intent is inferred. The profile, `check` thresholds, allowed dependencies, `exclude`, `comment_docs` and
-security stay at their defaults. The summary's *Follow-up* list says which of them to decide yourself, and suggests a
+security stay at their defaults. P0 also writes project inventory comments only when discovery finds an ambiguous multi-project layout; it does not infer a project selection. The summary's *Follow-up* list says which of them to decide yourself, and suggests a
 profile when the stack has one (`aspnet` for an ASP.NET Core backend, `vue` for a Vue frontend). The same repository
 and docwizz version always produce the same file, with no timestamps.
 
@@ -323,6 +330,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 
 | Command | Syntax | Purpose | Use |
 |---|---|---|---|
+| `discover` | `docwizz discover [dir] [--format console\|json]` | read-only inventory of solutions, projects and references | everyday |
 | `setup` | `docwizz setup [dir] [--force] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | detect the stack, write `docwizz.yaml`, analyze, architecture, generate, check | start here |
 | `generate` | `docwizz generate <dir> [out] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
 | `check` | `docwizz check <dir> [--since ref] [--format f] [--profile p]` | quality gate; exit 1 when thresholds fail | CI |
@@ -347,7 +355,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 |---|---|---|---|---|
 | `--context <file.yaml>` | off | product | validates sourced project statements against template before writing | product documents |
 | `--profile <name\|file.yaml>` | `profile:` in `docwizz.yaml`, else `default` | setup, generate, check, analyze, architecture, diff | overrides `profile:` and the file's own `patterns:` | normal |
-| `--format console\|json` | `console` | analyze, check, architecture, context, diff, trace, product, remediate | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
+| `--format console\|json` | `console` | discover, analyze, check, architecture, context, diff, trace, product, remediate | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
 | `--for <target>` | — | context | required; a symbol id or qualified name, a file, a folder, or `VERB /route`; ambiguous or unknown exits 1 with candidates | coding agents |
 | `--hops <n>` | 2 | context | how far neighbours are listed, 1 to 4; hops beyond 1 are signature only | coding agents |
 | `--budget <tokens>` | 6000 | context | at least 100; estimated as characters / 4; lower-priority sections are cut first, and the cut is reported | coding agents |
@@ -390,7 +398,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 | `setup` | every stage ran (`SUCCESS` or `SUCCESS_WITH_FINDINGS`) | a stage failed (`FAILED`; the others are still reported), or bad arguments |
 | `check` | thresholds pass | thresholds fail, or bad arguments/config |
 | `architecture` | within `max_violations`/`max_cycles` | above them |
-| `analyze`, `generate`, `scan`, `sbom` | done | bad arguments or config |
+| `discover`, `analyze`, `generate`, `scan`, `sbom` | done | bad arguments or config |
 | `trace` | report on stdout | invalid/missing YAML; no data written |
 | `product` | draft written or unchanged; `check`: no errors (warnings allowed) | invalid template, unsafe overwrite, bad arguments; `check`: an error finding |
 | `remediate` | done (suggestions alone never fail) | a `--validate` run failed, or bad arguments |
