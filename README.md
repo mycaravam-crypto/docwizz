@@ -35,7 +35,7 @@ Then, in your repository:
 docwizz setup .
 ```
 
-That one command detects the stack, writes a `docwizz.yaml` from what it finds, analyzes the code and the
+That one command first inventories projects and solutions, then detects the stack, writes a `docwizz.yaml` from what it finds, analyzes the code and the
 architecture, generates the docs into `docs/` and runs the quality gate. It ends with a summary and the next commands
 to run:
 
