@@ -333,9 +333,10 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     {
         var sb = new StringBuilder("# API endpoints\n\n");
         // A classic non-SDK .csproj may use ASP.NET MVC conventional MapRoute configuration.
-        // Static recognizers cannot reconstruct its runtime route tables.
+        // Static recognizers cannot reconstruct its runtime route tables. Metadata-only stubs carry no
+        // SDK tag and contribute no endpoints, so they must not be mistaken for legacy projects.
         if (model.Nodes.Any(n => n.Kind == "project" && n.File.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
-            && n.Tags?.Contains("dotnet") == true
+            && n.Tags?.Contains("dotnet") == true && !n.Tags.Contains("metadata-only")
             && !n.Tags.Any(t => t.StartsWith("Microsoft.NET.Sdk", StringComparison.Ordinal))))
             sb.AppendLine("> **Legacy .NET project:** Statically detected endpoints only. " +
                 "ASP.NET MVC conventional routes (such as `MapRoute`) may be missing; " +
