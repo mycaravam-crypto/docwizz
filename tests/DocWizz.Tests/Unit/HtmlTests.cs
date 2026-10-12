@@ -20,6 +20,49 @@ public class HtmlTests
     }
 
     [Fact]
+    public void Tables_scroll_inside_a_wrapper()
+    {
+        var html = Html.Page("index.md", "# demo\n\n| A | B |\n|---|---|\n| 1 | 2 |\n", Pages);
+        Assert.Contains("<div class=\"table-wrap\"><table>", html);
+        Assert.Contains("</table></div>", html);
+    }
+
+    [Theory]
+    [InlineData("Größenprüfer")]
+    [InlineData("BestellÜbersicht")]
+    [InlineData("my_func")]
+    [InlineData("Order")]
+    public void Symbol_anchors_match_the_rendered_heading_ids(string name)
+    {
+        var html = Html.Page("modules/src-Core.md", $"# src/Core\n\n### {name}\n", Pages);
+        Assert.Contains($"<h3 id=\"{Naming.Anchor(name)}\">", html);
+    }
+
+    [Theory]
+    [InlineData("Foo<T>")]
+    [InlineData("Grid of rows typed as Array<Row> with a <slot> per cell.")]
+    [InlineData("a <b>bold</b> tag")]
+    public void Angle_brackets_in_names_and_docs_stay_text(string text)
+    {
+        var html = Html.Page("modules/src-Core.md", $"# src/Core\n\n### {Generator.Text(text)}\n\n{Generator.Text(text)}\n", Pages);
+        var encoded = System.Net.WebUtility.HtmlEncode(text).Replace("&#39;", "'");
+        Assert.Contains($"<h3 id=\"{Naming.Anchor(text)}\">{encoded}</h3>", html);
+        Assert.Contains($"<p>{encoded}</p>", html);
+    }
+
+    [Fact]
+    public void Code_spans_keep_their_angle_brackets_unescaped() =>
+        Assert.Equal("returns `List<T>` or Map\\<K>", Generator.Text("returns `List<T>` or Map<K>"));
+
+    [Theory]
+    [InlineData("Prüfung/Übersicht", "Pruefung-Uebersicht")]
+    [InlineData("src/Größe", "src-Groesse")]
+    [InlineData("src/Café", "src-Cafe")]
+    [InlineData("src/Core", "src-Core")]
+    public void Module_page_names_spell_out_umlauts(string folder, string slug) =>
+        Assert.Equal(slug, Naming.Slug(folder));
+
+    [Fact]
     public void Sidebar_reaches_every_page_relative_to_the_current_one()
     {
         var html = Html.Page("modules/src-Core.md", "# src/Core\n", Pages);

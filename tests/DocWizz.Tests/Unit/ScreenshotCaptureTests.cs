@@ -38,6 +38,7 @@ public class ScreenshotCaptureTests
         Assert.NotEqual(ScreenshotCapture.FileName("/a/b"), ScreenshotCapture.FileName("/a-b"));
         Assert.Matches(@"^[a-z0-9-]+\.png$", ScreenshotCapture.FileName("/a/b"));
         Assert.StartsWith("home-", ScreenshotCapture.FileName("/"));
+        Assert.StartsWith("groessen-pruefung-", ScreenshotCapture.FileName("/größen-prüfung"));
     }
 
     [Theory]

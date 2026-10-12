@@ -21,7 +21,7 @@ static class ScreenshotCapture
     // Hash avoids collisions between routes such as /a-b and /a/b.
     public static string FileName(string route)
     {
-        var slug = Regex.Replace(route.Trim('/').ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
+        var slug = Regex.Replace(Naming.Ascii(route.Trim('/')).ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
         if (slug.Length > 50) slug = slug[..50].TrimEnd('-');
         if (slug.Length == 0) slug = "home";
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(route)))[..10].ToLowerInvariant();

@@ -13,6 +13,14 @@ public class AnalyzerTests
         [N(Iface, "src/IOrderService.cs", kind: "interface", doc: Doc("Places orders.")), N(Impl, "src/OrderService.cs"), N(Other, "src/Invoice.cs")],
         [E(Impl, Iface, "implements"), .. edges]), AllMedium);
 
+    [Theory]
+    [InlineData("T:System.Collections.Generic.List`1", "List<T>")]
+    [InlineData("T:System.Collections.Generic.Dictionary`2", "Dictionary<T1, T2>")]
+    [InlineData("List{T}", "List<T>")]
+    [InlineData("T:Shop.Order", "Order")]
+    public void Generic_crefs_read_as_csharp(string cref, string shown) =>
+        Assert.Equal($"Returns a `{shown}`.", Analyzer.Text(System.Xml.Linq.XElement.Parse($"<summary>Returns a <see cref=\"{cref}\"/>.</summary>")));
+
     [Fact]
     public void Missing_summary_is_a_gap_written_summary_is_documented()
     {

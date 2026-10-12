@@ -468,10 +468,15 @@ static partial class Analyzer
     {
         XText t => t.Value,
         XElement { IsEmpty: true } r when (r.Attribute("cref") ?? r.Attribute("name") ?? r.Attribute("langword")) is { } a
-            => $"`{a.Value.Split(':').Last().Split('(')[0].Split('.').Last()}`",
+            => $"`{GenericName(a.Value.Split(':').Last().Split('(')[0].Split('.').Last())}`",
         XElement x => Text(x),
         _ => "",
     })), @"\s+", " ").Trim();
+
+    // A cref's generic type as C# writes it: List{T} → List<T>, the compiled List`1 → List<T>, Dictionary`2 → Dictionary<T1, T2>.
+    static string GenericName(string name) =>
+        System.Text.RegularExpressions.Regex.Replace(name.Replace('{', '<').Replace('}', '>'), @"`(\d+)$", m => int.Parse(m.Groups[1].Value) is var arity && arity == 1
+            ? "<T>" : $"<{string.Join(", ", Enumerable.Range(1, arity).Select(i => $"T{i}"))}>");
 
     static bool Matches(Match m, Node n, string? typeName) =>
         Glob(m.Kind, n.Kind) && Glob(m.Name, n.Name) && Glob(m.Type, typeName) && Glob(m.Visibility, n.Visibility)
