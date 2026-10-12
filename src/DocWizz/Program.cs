@@ -58,7 +58,7 @@ static async Task<int> Dispatch(string[] args)
     switch (cmd)
     {
         case "discover":
-            var inventory = ProjectDiscovery.Scan(path, RepoFiles(path, config));
+            var inventory = ProjectDiscovery.Scan(path, RepoFilesUnscoped(path, config));
             Console.WriteLine(json ? JsonSerializer.Serialize(inventory, JsonOptions()) : ProjectDiscovery.ConsoleReport(inventory));
             return 0;
         case "context":
@@ -370,7 +370,7 @@ static string Reference() => $"""
 
 // Every file docwizz may read. Prefer git's view (honours .gitignore, skips nested worktrees); fall back to a directory walk.
 // Dot-directories are skipped except those named in `dotDirs` (CI descriptors live in .github/.circleci).
-static List<string> RepoFiles(string root, Config config, string[]? dotDirs = null)
+static List<string> RepoFilesUnscoped(string root, Config config, string[]? dotDirs = null)
 {
     string[] skip = ["bin", "obj", "node_modules", "dist"];
     // docwizz's own output (a directory below the root holding .docwizz/): its search.js would otherwise be scanned
@@ -398,10 +398,19 @@ static List<string> RepoFiles(string root, Config config, string[]? dotDirs = nu
         .ToList();
 }
 
+// All consumers of source/deployment/manifest files share the same scope. Discovery alone uses RepoFilesUnscoped.
+static List<string> RepoFiles(string root, Config config, string[]? dotDirs = null)
+{
+    var all = RepoFilesUnscoped(root, config, dotDirs);
+    return ProjectScope.Resolve(root, config.Scope, all).Files;
+}
+
 static (CodeModel Model, List<string> Files) BuildModel(string root, Config config)
 {
     string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java", ".php"];
-    var candidates = Timings.Measure("files", () => RepoFiles(root, config));
+    var raw = Timings.Measure("files", () => RepoFilesUnscoped(root, config));
+    var plan = ProjectScope.Resolve(root, config.Scope, raw);
+    var candidates = plan.Files;
     var scanned = candidates.Where(f => exts.Contains(Path.GetExtension(f)) && !f.EndsWith(".d.ts") && !f.EndsWith(".min.js")
         && !f.Replace('\\', '/').Contains("/wwwroot/lib/")).ToList(); // ponytail: libman/bower vendor dir only; other vendored JS needs exclude:
 
@@ -412,6 +421,7 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     var (phpNodes, phpEdges) = Timings.Measure("scan:php", () => PhpScanner.Scan(root, scanned.Where(f => f.EndsWith(".php"))));
     var (projNodes, projEdges) = Timings.Measure("scan:projects", () => Projects.Scan(root, candidates.Where(f => f.EndsWith(".csproj") || f.EndsWith(".sln") || f.EndsWith(".slnx")
         || Path.GetFileName(f) is "package.json" or "pom.xml" or "build.gradle" or "build.gradle.kts")));
+    if (config.Scope is not null) ProjectScope.CompleteReferences(plan, projNodes, projEdges);
     // Keys defined in configuration files win over the bare key nodes code reads create.
     var settings = Timings.Measure("scan:configuration", () => Configuration.Scan(root, candidates.Where(Configuration.IsConfigFile)));
     var defined = settings.Select(n => n.Id).ToHashSet();
@@ -747,7 +757,7 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
             // Always before BuildModel. With no interactive selection implemented yet, the inventory cannot
             // change the scan scope. Existing config and .gitignore/exclude rules still apply.
             config = existing ? Config.Load(root, profile) : Config.Parse(Config.Default, root, profile);
-            inventory = ProjectDiscovery.Scan(root, RepoFiles(root, config));
+            inventory = ProjectDiscovery.Scan(root, RepoFilesUnscoped(root, config));
             return Setup.DiscoverySummary(inventory);
         }, Required: true),
         new("scan", () =>
