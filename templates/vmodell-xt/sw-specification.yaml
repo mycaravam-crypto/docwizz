@@ -1,0 +1,25 @@
+# Illustrative product structure, not an official V-Modell XT template.
+# Review sections and dependencies against the project's tailored process.
+schema: 1
+product_id: sw-specification
+xt_variant: V-Modell XT
+xt_version: "2.4"
+tailoring: project-specific
+sections:
+  - id: scope
+    title: Geltungsbereich und Anforderungen
+    required: true
+    sources: [project]
+  - id: functions
+    title: Funktionale Anforderungen und Verhalten
+    required: true
+    sources: [project]
+  - id: interfaces
+    title: Externe und interne Schnittstellen
+    required: true
+    sources: [project, code]
+  - id: constraints
+    title: Qualitaetsanforderungen und Randbedingungen
+    required: true
+    sources: [project]
+dependencies: []
