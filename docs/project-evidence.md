@@ -32,7 +32,27 @@ source under `docs/`, and non-empty source version. Unknown keys, duplicate
 IDs, malformed documents and invalid paths are rejected with indexed diagnostics.
 A SHA-256 hash of each record's canonical field values changes with the text,
 source path or version. **It is not a file-content hash**, and P2.1 does not
-check whether referenced files exist. These checks and explicit relationships
-follow in #119–#122.
+check whether referenced files exist. Source-file checks and traceability reports follow in #120–#122.
 
 No inferred links, automated approval or LLM calls are made.
+
+## Explicit relationships (P2.2, #119)
+
+Schema 1 optionally accepts `links` after `evidence`. Each link has only
+`from` and `to`, both existing evidence IDs. The only permitted directions are
+`requirement → architecture` and `architecture → test`:
+
+```yaml
+links:
+  - from: REQ-017
+    to: ARC-004
+  - from: ARC-004
+    to: TEST-032
+```
+
+Duplicate links, unknown endpoints, wrong kind/direction, and unknown keys fail
+with indexed diagnostics. Only explicit links count. Because allowed kinds advance
+strictly from requirement through architecture to test, directed cycles are
+impossible by construction; no separate cycle solver is needed. Existing YAML
+files without `links` remain valid and yield an empty link list. This step
+introduces no CLI command or inferred traceability; the gap report follows in #120.
