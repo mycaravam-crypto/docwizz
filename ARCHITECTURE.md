@@ -83,7 +83,7 @@ The model separates what the code states from what DocWizz concludes:
 
 ## Scanners
 
-**Project discovery (Epic #124 P0):** `ProjectDiscovery.Scan` reuses `Projects.Scan` and `Projects.SolutionFolders`, reads manifests and solutions from the repository file list, and returns stable relative-path IDs, memberships across solutions, references and unassigned source files. No language scanner or build is invoked. Interactive scope selection and project-centric documentation generation are not part of P0.
+**Project discovery (Epic #124 P0):** `ProjectDiscovery.Scan` reuses `Projects.Scan` and `Projects.SolutionFolders`, reads manifests and solutions from the repository file list, and returns stable relative-path IDs, memberships across solutions, references and unassigned source files. No language scanner or build is invoked. `setup` executes this inventory stage before `BuildModel` and reports project counts; on ambiguous layouts it appends **non-binding YAML comments** when writing a new config. The existing scan scope remains unchanged. Interactive scope selection and project-centric documentation generation are not part of P0.
 
 
 - **[CSharpScanner](src/DocWizz/CSharpScanner.cs)** uses Roslyn with BCL references only. ASP.NET, EF Core and other
