@@ -797,7 +797,7 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
     string configStatus = "";
     bool? passed = null;
     string? selectedConfigStatus = null;
-    var selectionStage = selectProjects || allProjects || (SetupProjectSelection.Interactive && !yes);
+    var selectionStage = selectProjects || allProjects || (SetupProjectSelection.Interactive && !yes && !existing);
 
     using var bar = CliProgress.ForConsole(selectionStage ? 8 : 7, progress);
     Console.WriteLine($"docwizz setup {Path.GetFullPath(root)}");
@@ -832,11 +832,13 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
             if (missing.Count > 0)
                 Console.WriteLine("Previously selected projects no longer found: " + string.Join(", ", missing) +
                     " — review and confirm a new selection to update scope:");
-            var choice = SetupProjectSelection.Prompt(inventory, initial, Console.In, Console.Out);
+            // Cache the read-only candidates and validate each proposed choice before accepting it.
+            // Invalid shared-directory selections can be corrected without restarting setup.
+            var candidates = RepoFilesUnscoped(root, config);
+            var choice = SetupProjectSelection.Prompt(inventory, initial, Console.In, Console.Out,
+                selected => { ProjectScope.Resolve(root, SetupProjectSelection.Scope(selected, config.Scope), candidates); });
             if (choice.Cancelled) throw new ScopeException("setup: project selection cancelled; no configuration changed");
             var proposed = SetupProjectSelection.Scope(choice.Projects, config.Scope);
-            // Verify ownership and paths BEFORE changing an existing config or starting a language scanner.
-            ProjectScope.Resolve(root, proposed, RepoFilesUnscoped(root, config));
             if (existing)
             {
                 selectedConfigStatus = SetupProjectSelection.Save(root, proposed, profile);
