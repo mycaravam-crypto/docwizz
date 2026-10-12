@@ -120,7 +120,7 @@ public class CliDocsTests
     [Fact]
     public void Exit_codes_are_documented_for_every_command()
     {
-        var documented = Rows(Section(CliMd, "## Exit codes")).SelectMany(r => Regex.Matches(r[0], "`([a-z]+)`").Select(m => m.Groups[1].Value)).ToHashSet();
+        var documented = Rows(Section(CliMd, "## Exit codes")).SelectMany(r => Regex.Matches(r[0], "`([a-z-]+)`").Select(m => m.Groups[1].Value)).ToHashSet();
         Assert.All(Cli.Commands.Keys, c => Assert.Contains(c, documented));
         Assert.Contains("exits **2**", Section(CliMd, "## Exit codes"));
     }

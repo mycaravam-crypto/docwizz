@@ -46,6 +46,8 @@ static class Cli
             "docwizz mcp .", "--auto-rescan (rescan when the model is stale)", ["auto-rescan"]),
         ["trace"] = new("trace <dir> <evidence.yaml>", "explicit evidence-chain gaps as Markdown or JSON", "product documents",
             "docwizz trace . project-evidence.yaml --format json", "--format json", ["format"]),
+        ["evidence-diff"] = new("evidence-diff <dir> <before.yaml> <after.yaml>", "changed evidence, explicit relations and affected tests", "product documents",
+            "docwizz evidence-diff . before.yaml after.yaml --format json", "--format json", ["format"]),
         ["product"] = new("product [check] <dir> <template.yaml> [out.md]", "render a product draft from code and project evidence (--ai: local model wording, cited); check: references and freshness", "product documents",
             "docwizz product . templates/vmodell-xt/sw-architecture.yaml --context project.yaml", "--context <file.yaml>, --ai (self-hosted model words each section from its evidence), --format json (product check)", ["context", "ai", "format"]),
         ["sbom"] = new("sbom [dir] [out]", "export direct manifest dependencies as CycloneDX 1.6 JSON", "supply-chain inventory",

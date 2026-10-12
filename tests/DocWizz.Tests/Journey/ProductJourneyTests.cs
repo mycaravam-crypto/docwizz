@@ -28,6 +28,21 @@ public class ProductJourneyTests
         Assert.False(File.Exists(Path.Combine(repo.Root, "trace.md")));
     }
 
+    [Fact]
+    public void Evidence_diff_cli_reports_version_changes_and_invalid_inputs()
+    {
+        const string before = "schema: 1\nevidence:\n  - id: REQ-001\n    kind: requirement\n    text: Requirement\n    source: docs/req.md\n    version: v1\n";
+        using var repo = new Sources(("before.yaml", before), ("after.yaml", before.Replace("version: v1", "version: v2")));
+        var text = Docwizz.Run("evidence-diff", repo.Root, "before.yaml", "after.yaml");
+        Assert.Equal(0, text.Exit);
+        Assert.Contains("REQ-001: changed", text.Out);
+        var json = Docwizz.Run("evidence-diff", repo.Root, "before.yaml", "after.yaml", "--format", "json");
+        Assert.Equal(0, json.Exit);
+        Assert.Equal("version", System.Text.Json.JsonDocument.Parse(json.Out).RootElement
+            .GetProperty("evidence")[0].GetProperty("fields")[0].GetString());
+        Assert.Equal(1, Docwizz.Run("evidence-diff", repo.Root, "before.yaml", "missing.yaml").Exit);
+    }
+
     const string Template = """
         schema: 1
         product_id: sw-architecture

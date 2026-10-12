@@ -81,6 +81,8 @@ static async Task<int> Dispatch(string[] args)
             return ContextCommand(path, config, opts);
         case "mcp":
             return await McpCommand(path, config, opts.ContainsKey("auto-rescan"));
+        case "evidence-diff":
+            return EvidenceDiffCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), json);
         case "trace":
             return TraceCommand(path, pos.ElementAtOrDefault(2), json);
         case "product":
@@ -107,6 +109,36 @@ static async Task<int> Dispatch(string[] args)
         default:
             return Usage($"unknown command {cmd}");
     }
+}
+
+// Compare two explicit evidence snapshots without scanning source files.
+static int EvidenceDiffCommand(string root, string? before, string? after, bool json)
+{
+    if (string.IsNullOrWhiteSpace(before) || string.IsNullOrWhiteSpace(after))
+        return Usage("evidence-diff needs two evidence catalog files", "evidence-diff");
+    string Resolve(string file) => File.Exists(file) ? file : Path.Combine(root, file);
+    try
+    {
+        var report = ProjectEvidenceImpact.Compare(
+            ProjectEvidenceImport.Load(Resolve(before)), ProjectEvidenceImport.Load(Resolve(after)));
+        if (json) Console.WriteLine(JsonSerializer.Serialize(report, JsonOptions()));
+        else
+        {
+            Console.WriteLine("Explicit evidence changes (not source-file freshness):");
+            if (report.Evidence.Count == 0 && report.AddedLinks.Count == 0 && report.RemovedLinks.Count == 0)
+                Console.WriteLine("No evidence changes.");
+            foreach (var item in report.Evidence)
+                Console.WriteLine($"{item.Id}: {item.Change}" +
+                    (item.Fields.Length == 0 ? "" : $"; fields: {string.Join(", ", item.Fields)}") +
+                    (item.RelatedIds.Length == 0 ? "" : $"; related: {string.Join(", ", item.RelatedIds)}") +
+                    (item.AffectedTests.Length == 0 ? "" : $"; affected tests: {string.Join(", ", item.AffectedTests)}"));
+            foreach (var link in report.AddedLinks) Console.WriteLine($"+ link {link.From} -> {link.To}");
+            foreach (var link in report.RemovedLinks) Console.WriteLine($"- link {link.From} -> {link.To}");
+        }
+        return 0;
+    }
+    catch (ArgumentException ex) { Console.Error.WriteLine(ex.Message); return 1; }
+    catch (IOException ex) { Console.Error.WriteLine(ex.Message); return 1; }
 }
 
 // P2 traceability uses only explicit YAML links. No scan, inference or network calls.
@@ -392,6 +424,8 @@ static string Reference() => $"""
     manual setup and debugging:
       docwizz init [dir]                write a starter docwizz.yaml with every default
       docwizz scan <dir> [model.json]   write the raw code model
+      docwizz evidence-diff <dir> <before.yaml> <after.yaml>  compare explicit evidence changes
+        [--format json]                  machine-readable change report
       docwizz trace <dir> <evidence.yaml>  explicit requirement-architecture-test gaps
         [--format json]                  machine-readable instead of Markdown
       docwizz product <dir> <template.yaml> [out.md]  product draft from code and project evidence
@@ -401,7 +435,7 @@ static string Reference() => $"""
 
     options:
       --profile <name|file.yaml>        documentation profile: {string.Join(", ", Profiles.Names)}, or your own file
-      --format console|json             discover/analyze/check/architecture/diff/context/product/trace/remediate output
+      --format console|json             discover/analyze/check/architecture/diff/context/product/trace/evidence-diff/remediate output
       --timings                         time per stage and peak memory, on stderr (benchmarks)
       --help, -h                        help for a command: docwizz <command> --help
       --version, -v                     version, commit and runtime (also: docwizz version)
