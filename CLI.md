@@ -34,6 +34,7 @@ an example and its options.
 | `init` | blank config with every default | manual setup | no |
 | `scan` | raw code model | advanced, debugging | no |
 | `--html` | HTML next to the Markdown | documentation readers | optional |
+| `--screenshots` | optional Playwright route PNGs (`generate` only) | documentation readers | opt-in |
 | `--ai` | local AI drafts | opt-in users | optional |
 | `--profile` | what counts as documented | teams with their own rules | optional |
 | `--format json` | machine-readable output | CI, tooling | advanced |
@@ -148,6 +149,7 @@ Then read `docs/index.md` (or `docs/index.html` with `--html`) and the summary's
 ```bash
 docwizz generate .              # Markdown in ./docs
 docwizz generate . site --html  # Markdown and HTML in ./site
+docwizz generate . site --html --screenshots --base-url http://localhost:5173  # capture detected static routes
  docwizz generate . site --refresh-html-on-version-change  # re-render HTML on DocWizz upgrades
 ```
 
@@ -374,7 +376,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 |---|---|---|---|
 | `discover` | `docwizz discover [dir] [--format console\|json]` | read-only inventory of solutions, projects and references | everyday |
 | `setup` | `docwizz setup [dir] [--select-projects] [--all-projects] [--yes] [--force] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | detect the stack, write `docwizz.yaml`, analyze, architecture, generate, check | start here |
-| `generate` | `docwizz generate <dir> [out] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
+| `generate` | `docwizz generate <dir> [out] [--html] [--screenshots --base-url <url>] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
 | `check` | `docwizz check <dir> [--since ref] [--format f] [--profile p]` | quality gate; exit 1 when thresholds fail | CI |
 | `analyze` | `docwizz analyze <dir> [--format f] [--profile p]` | documentation and architecture report, no gate | everyday |
 | `architecture` | `docwizz architecture <dir> [--format f] [--profile p]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
@@ -408,6 +410,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 | `--package <name> --to <version>` | `remediation.targets` and version drift | remediate | given together or not at all | maintenance |
 | `--validate` | off | remediate | runs the configured restore/build/test commands in a temporary copy, never the working tree | maintenance |
 | `--html` | off | generate, setup | adds HTML pages; the Markdown is written either way | normal |
+| `--screenshots --base-url <url>` | off | generate | visits statically discovered routes against a running frontend; saves PNGs and embeds only successful captures (requires installed Playwright Chromium) | opt-in |
 | `--progress` | interactive terminals | generate, setup | Force progress bars on stderr when output is redirected | normal |
 | `--refresh-html-on-version-change` | off | generate, setup | Implies HTML; rebuild on generator version change | normal |
 | `--ai` | off | generate, product, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it, nothing new is sent | opt-in |
