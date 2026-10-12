@@ -141,11 +141,12 @@ static class ProjectDiscovery
             project.Solutions.Sort((a, b) => StringComparer.Ordinal.Compare(a.Id, b.Id));
         }
 
-        // Only filenames are inspected: a source without a manifest ancestor must remain visible in discovery.
-        var folders = projects.Select(p => Path.GetDirectoryName(p.Path)?.Replace('\\', '/') ?? "").ToList();
+        // Use the same ownership rules as scoped scans and generated navigation. A root-level npm
+        // manifest must not claim unrelated C#/Java files merely because its folder is empty.
+        var ownerOf = ProjectOwnership.Resolver(projects.Select(p =>
+            new ProjectOwnership.Candidate(p.Id, p.Path, p.Ecosystem)));
         var unassigned = accepted.Where(f => SourceExtensions.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase))
-            .Select(f => Rel(root, f)).Where(rel => !folders.Any(folder => folder.Length == 0
-                || rel.StartsWith(folder + "/", StringComparison.Ordinal)))
+            .Select(f => Rel(root, f)).Where(rel => ownerOf(rel) is null)
             .Order(StringComparer.Ordinal).ToList();
 
         return new(foundSolutions, projects, unassigned);
