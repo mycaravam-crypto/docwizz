@@ -28,6 +28,19 @@ static class ScreenshotCapture
         return $"{slug}-{hash}.png";
     }
 
+    // Returns a capture failure reason; a client-side SPA guard can redirect after an HTTP 200.
+    public static string? NavigationFailure(Uri requested, Uri landed, int? status)
+    {
+        if (status is null) return "no HTTP response";
+        if (status >= 400) return $"HTTP {status}";
+        if (requested.Scheme != landed.Scheme || requested.Authority != landed.Authority)
+            return $"redirected to another origin ({landed.AbsolutePath}) (needs authentication?)";
+        if (requested.AbsolutePath.TrimEnd('/') != landed.AbsolutePath.TrimEnd('/'))
+            return $"redirected to {landed.AbsolutePath} (needs authentication?)";
+        return null;
+    }
+
+    // Captures detected static routes anonymously and returns only successfully written images.
     public static async Task<Dictionary<string, string>> Run(CodeModel model, string outDir, string baseUrl)
     {
         var images = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -44,41 +57,46 @@ static class ScreenshotCapture
         {
             using var playwright = await Playwright.CreateAsync();
             await using var browser = await playwright.Chromium.LaunchAsync(new() { Headless = true });
-            await using var context = await browser.NewContextAsync(new()
-            {
-                ViewportSize = new() { Width = 1440, Height = 900 }
-            });
 
             foreach (var route in routes)
             {
                 var url = new Uri(target, route.TrimStart('/'));
                 var fileName = FileName(route);
                 var fullPath = Path.Combine(folder, fileName);
-                var page = await context.NewPageAsync();
                 try
                 {
+                    // A fresh context per route prevents cookies and localStorage leaking between captures.
+                    await using var context = await browser.NewContextAsync(new()
+                    {
+                        ViewportSize = new() { Width = 1440, Height = 900 }
+                    });
+                    var page = await context.NewPageAsync();
                     var response = await page.GotoAsync(url.ToString(),
                         new() { WaitUntil = WaitUntilState.Load, Timeout = 10000 });
-                    // Reject HTTP errors and redirects to another page (e.g. login).
-                    var landed = new Uri(page.Url);
-                    if (response is null || response.Status >= 400 ||
-                        landed.Authority != url.Authority || landed.Scheme != url.Scheme ||
-                        landed.AbsolutePath.TrimEnd('/') != url.AbsolutePath.TrimEnd('/'))
+                    // A SPA guard may redirect after the initial (successful) document load.
+                    await page.WaitForTimeoutAsync(400);
+                    var failure = NavigationFailure(url, new Uri(page.Url), response?.Status);
+                    if (failure is not null)
                     {
-                        Console.Error.WriteLine($"docwizz: screenshot skipped for {route}: HTTP error or redirect");
+                        Console.Error.WriteLine($"docwizz: screenshot skipped: {route} {failure}");
                         continue;
                     }
-                    await page.WaitForTimeoutAsync(400);
                     await page.ScreenshotAsync(new() { Path = fullPath, FullPage = true, Timeout = 10000 });
+                    // Also reject redirects triggered while rendering the screenshot.
+                    failure = NavigationFailure(url, new Uri(page.Url), response?.Status);
+                    if (failure is not null)
+                    {
+                        File.Delete(fullPath);
+                        Console.Error.WriteLine($"docwizz: screenshot skipped: {route} {failure}");
+                        continue;
+                    }
                     images[route] = $"screenshots/{fileName}";
                 }
                 catch (Exception e)
                 {
+                    // Never reuse an outdated screenshot from a previous successful run.
+                    if (File.Exists(fullPath)) File.Delete(fullPath);
                     Console.Error.WriteLine($"docwizz: screenshot skipped for {route}: {e.Message}");
-                }
-                finally
-                {
-                    await page.CloseAsync();
                 }
             }
         }
