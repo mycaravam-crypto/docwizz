@@ -9,6 +9,7 @@ class Config
     public Dictionary<string, Pattern> Patterns { get; set; } = [];
     public CheckConfig Check { get; set; } = new();
     public List<string> Exclude { get; set; } = [];
+    public ScopeConfig? Scope { get; set; }
     public bool CommentDocs { get; set; }
     public List<string> Tests { get; set; } = [];
     public ArchitectureConfig Architecture { get; set; } = new();
@@ -103,10 +104,26 @@ class Config
         global::Architecture.Validate(config.Architecture);
         if (config.Check.RequireTests is { } rt && rt.ToLowerInvariant() is not ("high" or "medium"))
             throw new ArgumentException($"check.require_tests: '{rt}' (high or medium; lower levels need no docs and aren't tracked)");
+        ProjectScope.Validate(config.Scope);
         global::Security.Validate(config.Security);
         config.Ai.Validate();
         return config;
     }
+}
+
+// Explicit file-scope selection. Without a scope block, the legacy whole-repository scan remains unchanged.
+class ScopeConfig
+{
+    public ScopeProjectsConfig Projects { get; set; } = new();
+    public string UnassignedSources { get; set; } = "exclude";
+}
+
+class ScopeProjectsConfig
+{
+    public List<string> Include { get; set; } = [];
+    // metadata: dependency-only stubs, include: scan transitively, exclude: omit unselected dependencies.
+    public string References { get; set; } = "metadata";
+    public bool TestLinks { get; set; } = true;
 }
 
 // `ai:`: the self-hosted model --ai uses. Ollama by default (OLLAMA_HOST, DOCWIZZ_MODEL); `openai-compatible` for
