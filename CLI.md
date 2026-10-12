@@ -55,18 +55,19 @@ an example and its options.
 docwizz setup .
 ```
 
-This runs every stage once, in this order, and prints one summary at the end:
+This runs every stage once, in this order, and prints one summary at the end. The first stage inventories solutions and project files before the full source-code scan; project filtering is planned for P1/P2 of Epic #124:
 
 | # | Stage | Does | If it fails |
 |---|---|---|---|
-| 1 | scan | reads the code and detects the stack: languages, frameworks, project files, tests, deployment files, layers | the rest are skipped |
-| 2 | config | writes `docwizz.yaml`, or keeps the existing one | the rest are skipped |
-| 3 | analyze | documentation coverage and critical gaps | reported; the next stages still run |
-| 4 | architecture | layer violations and cycles (and security findings if they are on) | reported; the next stages still run |
-| 5 | generate | writes the docs to `<dir>/docs` | reported; the next stages still run |
-| 6 | check | the quality gate at the configured thresholds | reported |
+| 1 | discover | reads solutions and project manifests, reports references and unassigned source files without scanning code | the rest are skipped |
+| 2 | scan | reads the code and detects the stack: languages, frameworks, project files, tests, deployment files, layers | the rest are skipped |
+| 3 | config | writes `docwizz.yaml`, or keeps the existing one | the rest are skipped |
+| 4 | analyze | documentation coverage and critical gaps | reported; the next stages still run |
+| 5 | architecture | layer violations and cycles (and security findings if they are on) | reported; the next stages still run |
+| 6 | generate | writes the docs to `<dir>/docs` | reported; the next stages still run |
+| 7 | check | the quality gate at the configured thresholds | reported |
 
-`setup` never prompts, so it works the same way in a terminal and in a script. The summary starts with a status
+`setup` never prompts in P0, so it works the same way in a terminal and in a script. If multiple solutions or standalone projects are found, setup adds an informational project inventory to freshly generated YAML as comments (no active `scope:`). Existing YAML is preserved. The full source-code scan is unchanged until P1 introduces project filtering. The summary starts with a status
 that keeps problems in the repository apart from problems running docwizz:
 
 | Status | Means | Exit |
@@ -89,7 +90,7 @@ only what the repository shows evidence for:
   the defaults stay.
 
 Nothing about intent is inferred. The profile, `check` thresholds, allowed dependencies, `exclude`, `comment_docs` and
-security stay at their defaults. The summary's *Follow-up* list says which of them to decide yourself, and suggests a
+security stay at their defaults. P0 also writes project inventory comments only when discovery finds an ambiguous multi-project layout; it does not infer a project selection. The summary's *Follow-up* list says which of them to decide yourself, and suggests a
 profile when the stack has one (`aspnet` for an ASP.NET Core backend, `vue` for a Vue frontend). The same repository
 and docwizz version always produce the same file, with no timestamps.
 
