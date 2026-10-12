@@ -126,6 +126,22 @@ public class ProjectScopeJourneyTests
     }
 
     [Fact]
+    public void Diff_rejects_saved_model_after_selection_changes()
+    {
+        using var repo = Repo();
+        File.WriteAllText(Path.Combine(repo.Root, "docwizz.yaml"), Yaml());
+        Assert.Equal(0, Docwizz.Run("generate", repo.Root).Exit);
+        var modelPath = Path.Combine(repo.Root, "docs", ".docwizz", "model.json");
+        using var before = JsonDocument.Parse(File.ReadAllText(modelPath));
+        Assert.Equal(JsonValueKind.String, before.RootElement.GetProperty("scopeFingerprint").ValueKind);
+
+        File.WriteAllText(Path.Combine(repo.Root, "docwizz.yaml"), Yaml().Replace("A/A.csproj", "C/C.csproj"));
+        var diff = Docwizz.Run("diff", repo.Root);
+        Assert.Equal(1, diff.Exit);
+        Assert.Contains("scope changed since the last generate", diff.Err);
+    }
+
+    [Fact]
     public void Missing_selected_manifest_fails_before_source_scan()
     {
         using var repo = Repo();
