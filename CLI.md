@@ -44,9 +44,27 @@ an example and its options.
 
 ## Workflows by goal
 
+### Explicit project scope (Epic #124 P1)
+
+```yaml
+scope:
+  projects:
+    include: ["Cargo-Core/Cargo-Core.csproj", "FileAPI/FileAPI.csproj"]
+    references: metadata   # metadata | include | exclude
+    test_links: true
+  unassigned_sources: exclude  # include | exclude
+```
+
+The manifest paths are **relative to the scan root**, case-sensitive and separated by `/`. Copy them from `docwizz discover . --format json`; no globs, absolute paths or `..`. Omitting `scope:` retains the old whole-repository behavior. An invalid or undiscovered project path is an actionable configuration error rather than a silent fallback. Multiple project manifests in one directory must be selected together because their source ownership cannot be inferred reliably.
+
+`metadata` (default for explicit scope) leaves referenced, unselected projects as labeled **dependency-only project stubs**, without scanning their code or including their package details. `include` follows project references recursively, scanning each reachable local project. `exclude` omits the unselected projects and their reference edges. Missing/out-of-root references are not followed. `test_links: true` also scans test-project code with a direct reference to a selected project for traceability; test symbols remain excluded from production documentation and coverage. `unassigned_sources: exclude` prevents unrelated folders, deployment descriptors and loose code from being scanned; use `include` only when the entire unassigned source set belongs to the intended scope.
+
+The scope is applied **before** language scanning and is shared by `scan`, `generate`, `setup`, `analyze`, `check`, architecture analysis, context, and SBOM/deployment file enumeration. Discovery itself always inventories all files visible through `.gitignore` and `exclude:`. Existing `exclude:` rules win: an excluded manifest cannot be selected. The generated `docs/index.md` discloses the active scope, dependency mode and metadata-only projects. P1 keeps `setup` inference-compatible (`discover → scan → config → ...`), but an existing `scope:` is resolved in the discovery stage and applied before scan; the interactive selection/config reordering is deferred to P2.
+
+
 ### Project discovery (Epic #124 P0)
 
-`docwizz discover .` lists project manifests, solution memberships and unresolved references. `docwizz discover . --format json` returns a deterministic inventory. Discovery does not run language scanners, build tools or AI and does not select projects for generation yet.
+`docwizz discover .` lists project manifests, solution memberships and unresolved references. `docwizz discover . --format json` returns a deterministic inventory. Discovery does not run language scanners, build tools or AI. In P1, an explicit `scope:` in `docwizz.yaml` selects projects for generation; interactive selection in `setup` is still P2.
 
 
 ### 1. First setup
@@ -67,7 +85,7 @@ This runs every stage once, in this order, and prints one summary at the end. Th
 | 6 | generate | writes the docs to `<dir>/docs` | reported; the next stages still run |
 | 7 | check | the quality gate at the configured thresholds | reported |
 
-`setup` never prompts in P0, so it works the same way in a terminal and in a script. If multiple solutions or standalone projects are found, setup adds an informational project inventory to freshly generated YAML as comments (no active `scope:`). Existing YAML is preserved. The full source-code scan is unchanged until P1 introduces project filtering. The summary starts with a status
+`setup` never prompts in P0, so it works the same way in a terminal and in a script. If multiple solutions or standalone projects are found, setup adds an informational project inventory to freshly generated YAML as comments (no active `scope:`). Existing YAML is preserved. Without a configured scope, the full source-code scan is unchanged. With a saved scope, the selection is applied before source scanners as described above. The summary starts with a status
 that keeps problems in the repository apart from problems running docwizz:
 
 | Status | Means | Exit |
@@ -90,7 +108,7 @@ only what the repository shows evidence for:
   the defaults stay.
 
 Nothing about intent is inferred. The profile, `check` thresholds, allowed dependencies, `exclude`, `comment_docs` and
-security stay at their defaults. P0 also writes project inventory comments only when discovery finds an ambiguous multi-project layout; it does not infer a project selection. The summary's *Follow-up* list says which of them to decide yourself, and suggests a
+security stay at their defaults. P0/P1 write project inventory comments only when discovery finds an ambiguous multi-project layout; it does not infer a project selection. The summary's *Follow-up* list says which of them to decide yourself, and suggests a
 profile when the stack has one (`aspnet` for an ASP.NET Core backend, `vue` for a Vue frontend). The same repository
 and docwizz version always produce the same file, with no timestamps.
 
@@ -375,6 +393,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 
 - **Configuration file:** `<dir>/docwizz.yaml`, else `./docwizz.yaml` in the current directory, else the built-in
   defaults. `setup` never reads the current directory's file. It uses `<dir>/docwizz.yaml` or writes one there.
+- **Project scope:** `scope.projects.include` applies before scanning and only within the files permitted by `.gitignore`/`exclude:`. `discover` ignores the scope to show the full available project inventory; absent `scope:` means all available code. Invalid paths are errors, never interpreted as all-projects.
 - **Profile:** `--profile` beats `profile:` in the file, which beats `default`. A file with its own `patterns:` uses
   them unless `--profile` is given.
 - **Existing configuration:** `init` never overwrites. `setup` keeps the file unless you pass `--force`.
