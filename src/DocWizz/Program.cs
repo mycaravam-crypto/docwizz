@@ -362,6 +362,9 @@ static string Reference() => $"""
     start here:
       docwizz setup [dir]               detect the stack, write docwizz.yaml, analyze, generate docs, check
         [--force]                       overwrite an existing docwizz.yaml
+        [--select-projects]             choose projects interactively (TTY required)
+        [--all-projects]                clear a saved project scope, preserving other config
+        [--yes]                          no prompt for scripts and CI
 
     everyday:
       docwizz discover [dir]             read-only project and solution inventory [--format json]
