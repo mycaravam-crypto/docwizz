@@ -23,7 +23,8 @@ static class Html
         .UseAutoIdentifiers(Markdig.Extensions.AutoIdentifiers.AutoIdentifierOptions.GitHub) // same anchors as the Markdown links
         .UseAdvancedExtensions().Build();
 
-    // `pages`: every generated Markdown page (relative, `/`-separated) and its title.
+    // `pages`: every generated Markdown page (relative, `/`-separated) and its title. `hierarchy`, when the model has
+    // projects, adds the solution → project → module breadcrumb and sidebar group.
     public static string Page(string rel, string markdown, IReadOnlyDictionary<string, string> pages, ProjectHierarchy? hierarchy = null)
     {
         var dir = Path.GetDirectoryName(rel)?.Replace('\\', '/') ?? "";
@@ -134,7 +135,8 @@ static class Html
 
     static string Enc(string s) => System.Net.WebUtility.HtmlEncode(s);
 
-    // Pages, Views and Modules, the group holding this page open; above them this page's `##` sections when there are 3+.
+    // Pages, Solutions & projects (from `hierarchy`), Views and Modules, the group holding this page open; above them
+    // this page's `##` sections when there are 3+.
     static string Sidebar(string rel, string body, IReadOnlyDictionary<string, string> pages, Func<string, string, string> link, ProjectHierarchy? hierarchy)
     {
         string Group(string name, IReadOnlyList<(string Page, string Label)> items, bool open) => items.Count == 0 ? "" :
