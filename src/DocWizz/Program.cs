@@ -824,6 +824,11 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
                 return "not needed (existing configuration preserved or one unambiguous project)";
 
             var initial = SetupProjectSelection.Initial(inventory, config.Scope);
+            var available = inventory.Projects.Select(p => p.Path).ToHashSet(StringComparer.Ordinal);
+            var missing = config.Scope?.Projects.Include.Where(p => !available.Contains(p)).ToList() ?? [];
+            if (missing.Count > 0)
+                Console.WriteLine("Previously selected projects no longer found: " + string.Join(", ", missing) +
+                    " — review and confirm a new selection to update scope:");
             var choice = SetupProjectSelection.Prompt(inventory, initial, Console.In, Console.Out);
             if (choice.Cancelled) throw new ScopeException("setup: project selection cancelled; no configuration changed");
             var proposed = SetupProjectSelection.Scope(choice.Projects, config.Scope);
