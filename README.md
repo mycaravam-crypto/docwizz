@@ -126,6 +126,14 @@ a sidebar to every page and keyboard search. For example, `api.md` traces every 
 - `PUT /api/materials/{id}`: MaterialController → MaterialService → SqlMaterialRepository → AppDbContext → SQL Server (inferred)
 ```
 
+Optional, **AI-free route screenshots** (requires a running frontend and an installed Playwright Chromium browser):
+
+```sh
+docwizz generate . --html --screenshots --base-url http://localhost:5173
+```
+
+DocWizz reuses statically detected Vue/React/Angular routes, saves PNGs to `docs/screenshots/`, and includes successful captures in `frontend.md` and `frontend.html`. Dynamic routes, HTTP errors and redirects to other pages are skipped; the app must already be running. No login, test-data setup or UI crawling is performed. First build DocWizz and install the matching browser once, for example with `pwsh src/DocWizz/bin/Debug/net10.0/playwright.ps1 install chromium` after `dotnet build src/DocWizz`. Use only sanitized test data; captured pages become part of the documentation.
+
 The HTML reader includes a responsive navigation, page filtering, keyboard search (`/`), reading outline, reading progress, and light/dark appearance switch. The report shell is embedded into each generated HTML file, so it works offline with `file://`; Mermaid diagrams still require network access to the pinned CDN. For a visual update after rebuilding DocWizz, run `docwizz generate . --html` in the target repository and open `docs/index.html` (not `docs/index.md`). If the browser shows an old page, use a hard reload and verify the updated `docs/index.html` timestamp.\n\nEvery HTML page names the DocWizz version that generated it in its footer, so an upgrade refreshes all of them. To also rewrite them when nothing else changed, use `docwizz generate . --refresh-html-on-version-change` (implies `--html`). The version stamp is `docs/.docwizz/html-version.txt`. Progress bars appear automatically on interactive stderr; add `--progress` to force them in redirected output. Regenerating otherwise rewrites only the pages that changed. Pages you write yourself, such as anything in `docs/architecture/`,
 are linked and never overwritten.
 
