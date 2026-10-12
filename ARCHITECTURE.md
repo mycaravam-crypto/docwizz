@@ -25,12 +25,12 @@ CSharpScanner  scanner-vue (Node)  Projects  Configuration        ← facts only
    docs/*.md, docs/.docwizz/{model,documentation}.json
 ```
 
-`Program.cs` is the CLI and `BuildModel`, which runs the scanners and link steps in that order. [Setup.cs](src/DocWizz/Setup.cs) backs `docwizz setup`. It detects the stack from the model, narrows the default
+`Program.cs` is the CLI and `BuildModel`, which runs the scanners and link steps in that order. [Setup.cs](src/DocWizz/Setup/Setup.cs) backs `docwizz setup`. It detects the stack from the model, narrows the default
 `docwizz.yaml` to the layers and test globs that files match, and runs the stages in order, isolating failures.
 
 ## The code model
 
-[CodeModel.cs](src/DocWizz/CodeModel.cs) has two records. A `Node` has an id, kind, name, source location and
+[CodeModel.cs](src/DocWizz/Model/CodeModel.cs) has two records. A `Node` has an id, kind, name, source location and
 optional facts: visibility, doc comment XML, complexity, parameters, return type, thrown exceptions, events, state,
 route, tags and a body hash. An `Edge` has from, to, kind and an optional label. Ids keep their scanner prefix so
 they stay stable across runs:
@@ -88,14 +88,14 @@ The model separates what the code states from what DocWizz concludes:
 P4: `ProjectHierarchy` builds one `nodesByProject` index and one module-to-owner map from the model instead of re-scanning all nodes for every project and every folder. `ProjectOwnership.Resolver` remains the shared file-ownership rule with a per-file cache. An 80-project / 12,800-symbol regression test asserts that ownership is resolved once per source node, not once per (module, source node) pair; it verifies indexed node and direct project-edge retrieval without a flaky wall-clock threshold. Project references and package dependencies are indexed once by source project, and solution-page links resolve through an existing dictionary. Rendering reads those indices rather than repeatedly filtering the complete model. For CI triage, `test.sh` group B verifies its Git fixture references (`HEAD` and `HEAD~1`) at commit boundaries and records the Git context for unexpected change-impact failures (tracked in [#133](https://github.com/mycaravam-crypto/docwizz/issues/133)).
 
 
-- **[CSharpScanner](src/DocWizz/CSharpScanner.cs)** uses Roslyn with BCL references only. ASP.NET, EF Core and other
+- **[CSharpScanner](src/DocWizz/Scanning/CSharpScanner.cs)** uses Roslyn with BCL references only. ASP.NET, EF Core and other
   package types stay unresolved and are matched by name. It covers types, members, doc comments (with `comment_docs`, also the `//` block above a member), complexity, calls,
   injection, `accesses`, events, controllers and minimal APIs (`MapGroup` prefixes, group authorization, parameter
   binding inferred as ASP.NET does when there is no `[From*]`), response codes and types (`ProducesResponseType`,
   `.Produces<T>()`, `Results<…>`, `Ok(x)`/`TypedResults.X` in the body), the middleware pipeline in registration order,
   DI registrations, `AddHostedService<T>`, EF `DbSet`, external-system calls and configuration reads.
 - **[scanner-vue](scanner-vue/index.mjs)** uses the TypeScript compiler and `@vue/compiler-sfc`, run by
-  [Frontend.cs](src/DocWizz/Frontend.cs) as a Node child process. It covers SFC props, emits, state, lifecycle hooks,
+  [Frontend.cs](src/DocWizz/Scanning/Frontend.cs) as a Node child process. It covers SFC props, emits, state, lifecycle hooks,
   composables and template renders, exported functions, stores, classes (with their methods), interfaces, types and
   enums, imports and calls, and router routes. HTTP calls are `fetch`/`axios`, and calls through wrappers: an
   `axios.create({ baseURL })` instance, or a helper that passes its parameters on as URL and method (`request('POST',
@@ -103,7 +103,7 @@ P4: `ProjectHierarchy` builds one `nodesByProject` index and one module-to-owner
   functions returning JSX are components (props, hooks, rendered children), routes from `createBrowserRouter` and
   `<Route>`. Angular: `@Component` classes (`@Input`/`@Output`, signal inputs, lifecycle methods, children by template
   selector), `@Injectable` services, `HttpClient` calls, calls through injected services, `Routes` incl. `loadComponent`.
-- **[JavaScanner](src/DocWizz/JavaScanner.cs)** reads Java from a syntax tree: [java.mjs](scanner-vue/java.mjs)
+- **[JavaScanner](src/DocWizz/Scanning/JavaScanner.cs)** reads Java from a syntax tree: [java.mjs](scanner-vue/java.mjs)
   parses each file with tree-sitter-java (WebAssembly, so nothing is compiled or executed, and the same files give the
   same output) and returns its declarations; the C# side turns them into the model. Types (classes, interfaces, enums,
   records, nested types) and members with Javadoc, complexity from the tree's branches, signatures with generics
@@ -116,35 +116,35 @@ P4: `ProjectHierarchy` builds one `nodesByProject` index and one module-to-owner
   overloads resolve by name and argument count, so two overloads with the same count leave the call unlinked (the
   type is still recorded as used); inherited methods aren't looked up in supertypes. A file with syntax errors keeps
   what parsed, with a warning. Needs Node and `npm ci --prefix scanner-vue`, like the Vue/TS scanner.
-- **[PhpScanner](src/DocWizz/PhpScanner.cs)** reads plain PHP without a parser (comments and strings masked, then
+- **[PhpScanner](src/DocWizz/Scanning/PhpScanner.cs)** reads plain PHP without a parser (comments and strings masked, then
   regexes): classes, interfaces, traits and enums with PHPDoc, free functions, complexity and signatures,
   constructor property promotion as both a typed property and `injects` (PHP's equivalent of Lombok/final-field DI),
   calls through `$this->`/`self::`/`static::`/`parent::` and known-typed properties (including the `$this->field->x()`
   chain the promotion idiom produces), traits mixed into a class, and namespace `use` imports. No framework
   awareness yet (Laravel/Symfony routes, DI containers, Eloquent) -- a deliberate follow-up, not this scanner's job.
-- **[Sql](src/DocWizz/Sql.cs)** reads `.sql` files: procedures, functions, views, triggers and tables (doc from the
+- **[Sql](src/DocWizz/Scanning/Sql.cs)** reads `.sql` files: procedures, functions, views, triggers and tables (doc from the
   comment above, `@parameters`), the tables each routine touches and the procedures it EXECs, and migration files
   (a `migrations/` folder or Flyway names). C# literals that EXEC a procedure, or name it next to
   `CommandType.StoredProcedure`, link the calling member to it; EF `Migration` classes are tagged `migration`.
-- **[Projects](src/DocWizz/Projects.cs)** reads `.csproj` (SDK, target frameworks, package and project references,
+- **[Projects](src/DocWizz/Scanning/Projects.cs)** reads `.csproj` (SDK, target frameworks, package and project references,
   role: executable, library or test from `OutputType`, the SDK and test packages), `package.json`, and the solution
   folders of `.sln`/`.slnx`. Files in a test project count as test code, whatever their path.
-- **[Configuration](src/DocWizz/Configuration.cs)** reads `appsettings*.json`, `.env`, Kubernetes ConfigMaps and the env
+- **[Configuration](src/DocWizz/Model/Configuration.cs)** reads `appsettings*.json`, `.env`, Kubernetes ConfigMaps and the env
   blocks of Helm `values*.yaml`: keys per environment, no values (only the host of a URL).
-- **[Externals](src/DocWizz/Externals.cs)** holds the curated list of known systems (packages, calls, container
+- **[Externals](src/DocWizz/Scanning/Externals.cs)** holds the curated list of known systems (packages, calls, container
   images, IaC resource types) and the link step: absolute URLs, package-only evidence, and DbContexts without a known database.
 
 ## Analysis
 
-- **[Analyzer](src/DocWizz/Analyzer.cs)** decides per symbol whether it needs documentation. That decision uses
+- **[Analyzer](src/DocWizz/Analysis/Analyzer.cs)** decides per symbol whether it needs documentation. That decision uses
   visibility, complexity, parameters, fan-in, side effects and the profile's pattern level. It then records which
   sections the profile requires and where each present one comes from: `written` (doc comment), `fact` (derived
   from the model), `inferred` (side effects) or `ai`. AI drafts never close a gap. Written docs also get quality
   flags: facts where they contradict the model (a `<param>` for a parameter that doesn't exist), inferences where a
   heuristic says they add nothing. Doc quality % is the share of items with written docs and no flags.
-- **[Profiles](src/DocWizz/Profiles.cs)** are YAML documentation patterns: match on kind, name, type, tag or
+- **[Profiles](src/DocWizz/Model/Profiles.cs)** are YAML documentation patterns: match on kind, name, type, tag or
   visibility, then list the sections required. Reports say "coverage against profile X", never "compliant with".
-- **[Architecture](src/DocWizz/Architecture.cs)** covers path-glob layers, allowed dependencies, violations
+- **[Architecture](src/DocWizz/Analysis/Architecture.cs)** covers path-glob layers, allowed dependencies, violations
   ARCH-001/002/004 with severities, and folder cycles (ARCH-003). User-defined rules (`architecture.rules`) run over
   the same edges: a selector for the source (layer, path, kind, tag, name; tags and kinds also match through the
   containing type) and what it must not reach (a target selector, a package prefix or edge kinds). They are validated
@@ -152,19 +152,19 @@ P4: `ProjectHierarchy` builds one `nodesByProject` index and one module-to-owner
   nothing extra. `architecture.md` adds coupling per module (fan-in,
   fan-out, instability) and risks that break no rule: entities returned by endpoints, complex members in the API layer,
   and external namespaces used by the domain layer.
-- **[Security](src/DocWizz/Security.cs)** (opt-in) turns facts the model already has into findings for a security
+- **[Security](src/DocWizz/Analysis/Security.cs)** (opt-in) turns facts the model already has into findings for a security
   review: endpoint auth tags, DbContext access from the API layer, framework namespaces in the domain, and flows from
   unprotected endpoints to sensitive external systems (the generator's flow trace). A finding is a `Violation` with a
   basis (fact or inferred detection), a CIA concern and the risk, kept apart from the detected fact. `Architecture.Check`
   appends them when enabled, so `check`, `--since` and the pages treat them like violations but show them separately.
-- **[Diff](src/DocWizz/Diff.cs)** compares two models by symbol id and body hash. It reports changed, added and
+- **[Diff](src/DocWizz/Analysis/Diff.cs)** compares two models by symbol id and body hash. It reports changed, added and
   removed symbols, the affected pages, and the gaps and violations a change introduced. A touched symbol also marks
   every flow passing through it: `api.md` / `frontend.md` and the module pages along that flow. New external systems
   and new layer dependencies are listed as ADR candidates: decisions to record, not decisions DocWizz makes. Every added
-  and changed symbol also gets its linked tests ([TestLinks](src/DocWizz/TestLinks.cs): `tests` edges to it, its
+  and changed symbol also gets its linked tests ([TestLinks](src/DocWizz/Analysis/TestLinks.cs): `tests` edges to it, its
   interface, an implementation or a member — the same rule as the analyzer's "tested"), or is listed as unlinked.
   A project whose package version changed is listed with the update's kind and impact (see Remediation).
-- **[Sbom](src/DocWizz/Sbom.cs)** (`docwizz sbom`) writes CycloneDX 1.6 JSON from the Projects scan: one `application`
+- **[Sbom](src/DocWizz/Packages/Sbom.cs)** (`docwizz sbom`) writes CycloneDX 1.6 JSON from the Projects scan: one `application`
   component per project (with its manifest), one `library` per declared package and version, with a package URL, and a
   dependency graph of project → package and project → project references. Only a plain literal (`1.2.3`) fills `version`
   and the purl's version; ranges, wildcards, properties and git/file specs stay as `docwizz:declaredVersion`, marked
@@ -172,10 +172,10 @@ P4: `ProjectHierarchy` builds one `nodesByProject` index and one module-to-owner
   byte-identical for identical inputs. The same inventory (`Sbom.Collect`) feeds the generated
   `views/packages.md`: every package with its declared versions per project and manifest, the ones declared at more than
   one version first; the page is left out when no manifest declares a package.
-- **[Remediation](src/DocWizz/Remediation.cs)** (`docwizz remediate`) turns package findings into suggestions. Targets
+- **[Remediation](src/DocWizz/Packages/Remediation.cs)** (`docwizz remediate`) turns package findings into suggestions. Targets
   come from `--package/--to`, `remediation.targets`, or NuGet version drift (align on the highest version). Each
   suggestion keeps three kinds of evidence apart. *Detected*: the declared version and the line that declares it
-  ([Projects.NuGet](src/DocWizz/Projects.cs) resolves `Directory.Packages.props` and `VersionOverride`), and from them a
+  ([Projects.NuGet](src/DocWizz/Scanning/Projects.cs) resolves `Directory.Packages.props` and `VersionOverride`), and from them a
   `dotnet add package` command, or a one-line patch where versions are managed centrally. *Inferred*: types that
   import the package's namespaces in the referencing projects (and in projects referencing those), the flows through
   them (`Generator.FlowsThrough`), and their linked tests. *Validated*: only with `--validate`, which copies the
@@ -190,12 +190,12 @@ P4: `ProjectHierarchy` builds one `nodesByProject` index and one module-to-owner
 
 | File | Pages |
 |---|---|
-| [Generator.cs](src/DocWizz/Generator.cs) | `index.md`, `architecture.md`, `api.md`, `frontend.md`, `quality.md`, shared helpers |
-| [Modules.cs](src/DocWizz/Modules.cs) | `modules/<folder>.md`: role, key components, API, data, external systems, configuration, flows, gaps, observations, then the component reference |
-| [Flows.cs](src/DocWizz/Flows.cs) | flow tracing used by api.md, frontend.md and module pages |
-| [Views.cs](src/DocWizz/Views.cs) | `views/context.md`, `containers.md`, `components.md`, `data.md`; the configuration table |
-| [Deployment.cs](src/DocWizz/Deployment.cs) | `views/deployment.md`: compose, Kubernetes, Dockerfiles, IaC, from the scan's file list (`exclude:`, `.gitignore`) |
-| [Description.cs](src/DocWizz/Description.cs) | `architecture-description.md`, structured after ISO/IEC/IEEE 42010 |
+| [Generator.cs](src/DocWizz/Generation/Generator.cs) | `index.md`, `architecture.md`, `api.md`, `frontend.md`, `quality.md`, shared helpers |
+| [Modules.cs](src/DocWizz/Generation/Modules.cs) | `modules/<folder>.md`: role, key components, API, data, external systems, configuration, flows, gaps, observations, then the component reference |
+| [Flows.cs](src/DocWizz/Generation/Flows.cs) | flow tracing used by api.md, frontend.md and module pages |
+| [Views.cs](src/DocWizz/Generation/Views.cs) | `views/context.md`, `containers.md`, `components.md`, `data.md`; the configuration table |
+| [Deployment.cs](src/DocWizz/Generation/Deployment.cs) | `views/deployment.md`: compose, Kubernetes, Dockerfiles, IaC, from the scan's file list (`exclude:`, `.gitignore`) |
+| [Description.cs](src/DocWizz/Generation/Description.cs) | `architecture-description.md`, structured after ISO/IEC/IEEE 42010 |
 
 **Flows.** A flow is a 0-1 breadth-first search from an endpoint or route. It follows `calls`, `accesses`, `http`,
 `renders`, `routes-to`, `connects` and minimal-API `injects`, and dispatches interface members to their
@@ -210,19 +210,19 @@ overwritten. `docs/architecture/*.md` and anything else written by hand is linke
 
 ## AI
 
-With `--html`, [Html](src/DocWizz/Html.cs) renders every page with Markdig next to its Markdown twin, so relative
+With `--html`, [Html](src/DocWizz/Generation/Html/Html.cs) renders every page with Markdig next to its Markdown twin, so relative
 links to sources still work; links between generated pages point at the HTML, and Mermaid (a pinned version) renders
 client-side. Each page carries the whole site in a sidebar (pages, views, modules; the current group open) and lists its
 `##` sections when it has three or more, so every page stands alone and opens from disk. The search box reads the index
 from `search.js`, ranks exact names, then prefixes, then substrings, and works from the keyboard (`/`, arrows, Enter,
 Escape). A print stylesheet drops the navigation and prints light.
 
-[AiProse](src/DocWizz/AiProse.cs) drafts documentation for items that still lack a summary (summary, responsibilities,
+[AiProse](src/DocWizz/Ai/AiProse.cs) drafts documentation for items that still lack a summary (summary, responsibilities,
 behaviour, side effects, errors, usage) and an overview per module. The model answers in JSON, one list of sentences
 per section, each citing the facts it uses; citations are resolved to symbol ids and a sentence without a valid one is
 dropped (per-sentence provenance). Per item it sends the facts JSON from
-[ContextBuilder](src/DocWizz/ContextBuilder.cs) (graph neighbours, signature, derived sections with their origin) and that symbol's own source lines. It never
-sends the repository. The model sits behind [IAiProvider](src/DocWizz/AiProvider.cs) (`OllamaProvider` for `/api/chat`, `OpenAiCompatibleProvider` for `/v1/chat/completions` with
+[ContextBuilder](src/DocWizz/Ai/ContextBuilder.cs) (graph neighbours, signature, derived sections with their origin) and that symbol's own source lines. It never
+sends the repository. The model sits behind [IAiProvider](src/DocWizz/Ai/AiProvider.cs) (`OllamaProvider` for `/api/chat`, `OpenAiCompatibleProvider` for `/v1/chat/completions` with
 `response_format: json_object`, falling back to the prompt alone when a server rejects it), and
 every provider connects through `LocalEndpoint`: each connection's resolved address must be loopback or private and
 proxies are bypassed. Ollama cloud models are refused, so code never reaches a public service. Anything else that
@@ -234,16 +234,16 @@ quality % or `check`.
 
 ## Agent context
 
-[AgentContext](src/DocWizz/AgentContext.cs) answers `docwizz context`: it resolves `--for` to a scope (one symbol and
+[AgentContext](src/DocWizz/Agent/AgentContext.cs) answers `docwizz context`: it resolves `--for` to a scope (one symbol and
 its members, a file, a folder or an endpoint; never a guess), collects lines in priority order (the target, hop-1
 neighbours, further hops, flows/external systems/configuration keys, tests/gaps/findings, files to read) and drops lines
 from the lowest-priority end until the rendering fits the budget (characters / 4). Each line carries its provenance;
-🤖 drafts stay out unless asked for. The neighbours come from [ContextBuilder](src/DocWizz/ContextBuilder.cs), the
+🤖 drafts stay out unless asked for. The neighbours come from [ContextBuilder](src/DocWizz/Ai/ContextBuilder.cs), the
 same graph access `AiProse` builds its facts JSON with, and the flows from the generator's flow tracer, so a package
 and the pages never disagree. It reads `docs/.docwizz/model.json` (and reports it stale when `HEAD` or file times say
 so) or scans; it never calls the network or a model.
 
-[McpServer](src/DocWizz/Mcp.cs) (`docwizz mcp`) puts the same model behind the Model Context Protocol: JSON-RPC 2.0,
+[McpServer](src/DocWizz/Agent/Mcp.cs) (`docwizz mcp`) puts the same model behind the Model Context Protocol: JSON-RPC 2.0,
 one message per line on stdin/stdout, hand-written (initialize, ping, tools/list, tools/call) so there is no SDK
 dependency and no listener. Tools only read: `context` is the package above, `impact` and `check` are the `diff` and
 `check --since` reports as data, the rest query the graph. Each answer is wrapped with the model's commit and
@@ -253,9 +253,9 @@ no I/O of its own besides stdio.
 ## Product templates
 
 [ADR-0001](docs/adr/0001-product-template-contract.md) defines the small V-Modell XT product-template contract
-independently of coverage profiles. [ProductDraft](src/DocWizz/ProductDraft.cs) builds an evidence catalog per section
+independently of coverage profiles. [ProductDraft](src/DocWizz/Product/ProductDraft.cs) builds an evidence catalog per section
 (code facts from the model, sourced project statements) with document-wide ids, and renders it; sections without
-evidence say `OFFEN`. With `--ai`, [ProductSynthesis](src/DocWizz/ProductSynthesis.cs) sends each section's evidence
+evidence say `OFFEN`. With `--ai`, [ProductSynthesis](src/DocWizz/Product/ProductSynthesis.cs) sends each section's evidence
 through `IAiProvider` (the same guard as AI drafts) and keeps only sentences that cite that section's ids and claim no
 status or conformity; results are cached by template, section, evidence and model.
 
