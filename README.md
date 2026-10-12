@@ -261,6 +261,9 @@ See [AI drafts](#ai-drafts) for the privacy rules.
 | `docwizz init [dir]` | Write a starter `docwizz.yaml` with every default, ready to edit |
 | `docwizz scan <dir> [model.json]` | Dump the raw code model (nodes and edges); for debugging |
 
+
+Three illustrative V-Modell XT 2.4 product structures are provided under `templates/vmodell-xt/` (SW architecture, SW specification, system-element test specification). See [project evidence and tailoring limits](docs/project-evidence.md#illustrative-product-templates-p24-121). These are not official V-Modell XT templates or a conformity claim.
+
 `docwizz help <command>` explains one command; `docwizz --version` (or `-v`) prints the version and the commit it was
 built from, for bug reports and CI logs. Every merge to `main` is released automatically, with a `release:minor` or
 `release:major` PR label for bigger bumps ([versioning and releases](CLI.md#versioning)). [CLI.md](CLI.md) is the full reference: every option, defaults,

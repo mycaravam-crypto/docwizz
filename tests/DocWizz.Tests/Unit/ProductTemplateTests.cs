@@ -73,4 +73,31 @@ public class ProductTemplateTests
         var repeated = Valid.Replace("dependencies: []", "  - id: scope\n    title: Other\n    required: true\n    sources: [code]\ndependencies: []");
         Assert.Contains("duplicate section id", Assert.Throws<ArgumentException>(() => Parse(repeated)).Message);
     }
+    [Fact]
+    public void P2_shipped_templates_are_valid_distinct_and_explicitly_tailored()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "templates/vmodell-xt/sw-architecture.yaml")))
+            root = root.Parent;
+        Assert.NotNull(root);
+
+        var specification = ProductTemplate.Load(Path.Combine(root!.FullName, "templates/vmodell-xt/sw-specification.yaml"));
+        var testSpecification = ProductTemplate.Load(Path.Combine(root.FullName, "templates/vmodell-xt/system-element-test-specification.yaml"));
+
+        Assert.Equal("sw-specification", specification.ProductId);
+        Assert.Equal("system-element-test-specification", testSpecification.ProductId);
+        Assert.Equal("V-Modell XT", specification.XtVariant);
+        Assert.Equal("2.4", testSpecification.XtVersion);
+        Assert.Equal("project-specific", specification.Tailoring);
+        Assert.Equal("project-specific", testSpecification.Tailoring);
+        Assert.Empty(specification.Dependencies);
+        Assert.Equal(["sw-specification"], testSpecification.Dependencies);
+        Assert.All(new[] { specification, testSpecification }, p =>
+        {
+            Assert.All(p.Sections, section => Assert.True(section.Required));
+            Assert.Contains(p.Sections, section => section.Sources.Contains("project"));
+        });
+        Assert.Equal(2, new[] { specification.ProductId, testSpecification.ProductId }.Distinct().Count());
+    }
+
 }
