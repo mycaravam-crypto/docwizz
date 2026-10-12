@@ -62,3 +62,20 @@ introduces no CLI command or inferred traceability; the gap report follows in #1
 `docwizz trace <dir> <evidence.yaml> [--format json]` renders explicit links as a stable Markdown matrix or machine-readable JSON on stdout. Each requirement is classified as `linked`, `no-architecture`, or `no-test`. Separate lists identify architecture records without incoming requirement links or outgoing test links. Invalid link IDs are rejected by the schema parser before reporting. Missing source documents and stale versions are **not** verified in this report, so it makes no freshness or conformity claim. Report findings do not affect exit status; invalid YAML does.
 
 The report uses camelCase JSON keys. `partial` marks a requirement linked to multiple architecture records when at least one of those has no test; `orphanedTests` lists tests with no incoming architecture link. `OFFEN` in Markdown means missing explicit evidence, not a failed test. Source file names resolve from the current working directory first, then from `<dir>`, as for product templates.
+
+## Illustrative product templates (P2.4, #121)
+
+Three example structures live in `templates/vmodell-xt/`: `sw-architecture.yaml`,
+`sw-specification.yaml`, and `system-element-test-specification.yaml`.
+They use schema 1, describe V-Modell XT 2.4 as metadata, and deliberately
+require project-specific tailoring. **These are original illustrative outlines,
+not official licensed product templates or a conformity assertion.** Before
+using them for a governed project, review the applicable XT variant/version,
+the process tailoring, contents, and rights to reuse official text.
+
+The test specification demonstrates the existing direct product dependency
+contract with `dependencies: [sw-specification]`. That relationship is an
+illustration, not a statement that the chosen project's tailoring always
+requires it. The existing `docwizz product check` verifies that the dependent
+draft exists, not its professional approval or correctness. Chapters backed
+only by project sources remain **OFFEN** until evidence is explicitly provided.
