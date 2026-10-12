@@ -365,6 +365,8 @@ static string Reference() => $"""
     manual setup and debugging:
       docwizz init [dir]                write a starter docwizz.yaml with every default
       docwizz scan <dir> [model.json]   write the raw code model
+      docwizz trace <dir> <evidence.yaml>  explicit requirement-architecture-test gaps
+        [--format json]                  machine-readable instead of Markdown
       docwizz product <dir> <template.yaml> [out.md]  product draft from code and project evidence
         [--context <file.yaml>]           load sourced project facts
         [--ai]                            a local model words sections, citing evidence ids
@@ -372,7 +374,7 @@ static string Reference() => $"""
 
     options:
       --profile <name|file.yaml>        documentation profile: {string.Join(", ", Profiles.Names)}, or your own file
-      --format console|json             analyze/check/architecture/diff/remediate output
+      --format console|json             analyze/check/architecture/diff/context/product/trace/remediate output
       --timings                         time per stage and peak memory, on stderr (benchmarks)
       --help, -h                        help for a command: docwizz <command> --help
       --version, -v                     version, commit and runtime (also: docwizz version)
