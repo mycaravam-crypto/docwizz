@@ -48,7 +48,8 @@ public class TraceabilityReportTests
         Assert.Equal(["TEST-003"], report.Requirements[1].Tests);
         Assert.Empty(report.UnlinkedArchitectures);
         Assert.Equal(["ARC-002"], report.UntestedArchitectures);
-        Assert.Equal(TraceabilityReport.Json(report), TraceabilityReport.Json(report));
+        Assert.Equal(TraceabilityReport.Json(report), TraceabilityReport.Json(TraceabilityReport.Build(ProjectEvidenceCatalog.Parse(new StringReader(Yaml)))));
+        Assert.Contains("\"requirements\"", TraceabilityReport.Json(report));
         Assert.Contains("OFFEN", TraceabilityReport.Markdown(report));
     }
 
@@ -67,6 +68,6 @@ public class TraceabilityReportTests
     {
         var report = TraceabilityReport.Build(ProjectEvidenceCatalog.Parse(new StringReader("schema: 1\nevidence: []")));
         Assert.Empty(report.Requirements);
-        Assert.Contains("\"Requirements\": []", TraceabilityReport.Json(report));
+        Assert.Contains("\"requirements\": []", TraceabilityReport.Json(report));
     }
 }
