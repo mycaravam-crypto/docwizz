@@ -34,6 +34,8 @@ static class Html
             var target = Path.GetRelativePath(".", Path.Combine(dir, m.Groups[1].Value + ".md")).Replace('\\', '/');
             return pages.ContainsKey(target) ? $"href=\"{m.Groups[1].Value}.html{m.Groups[2].Value}\"" : m.Value;
         });
+        // Wide tables scroll inside a wrapper; a table made display: block to scroll shrinks to its content instead.
+        body = Regex.Replace(body, @"<table\b[^>]*>", "<div class=\"table-wrap\">$0").Replace("</table>", "</table></div>");
         var up = string.Concat(Enumerable.Repeat("../", rel.Count(c => c == '/')));
         string Link(string page, string label) =>
             $"<a href=\"{up}{Path.ChangeExtension(page, ".html")}\"{(page == rel ? " aria-current=\"page\"" : "")}>{Enc(label)}</a>";

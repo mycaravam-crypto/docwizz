@@ -103,8 +103,10 @@ main pre { position: relative; margin: 18px 0; padding: 18px; overflow-x: auto; 
 main pre code { padding: 0; background: none; }
 main pre.mermaid { background: transparent; border-color: var(--line); text-align: center; }
 main img { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; }
-main table { display: block; max-width: 100%; overflow-x: auto; border-spacing: 0; border-collapse: separate; margin: 18px 0 26px; font-size: 13px; border: 1px solid var(--line); border-radius: 10px; }
-main th, main td { padding: 10px 14px; vertical-align: top; text-align: left; border-bottom: 1px solid var(--line); }
+/* Wide tables scroll inside .table-wrap; cells wrap at word boundaries, not inside identifiers (main's overflow-wrap). */
+.table-wrap { max-width: 100%; overflow-x: auto; margin: 18px 0 26px; border: 1px solid var(--line); border-radius: 10px; }
+main table { width: 100%; border-spacing: 0; border-collapse: separate; font-size: 13px; }
+main th, main td { padding: 10px 14px; vertical-align: top; text-align: left; border-bottom: 1px solid var(--line); overflow-wrap: normal; }
 main th { position: sticky; top: 0; color: var(--muted); background: var(--surface-soft); font-size: 11px; letter-spacing: .045em; text-transform: uppercase; white-space: nowrap; }
 main thead:not(:has(th:not(:empty))) { display: none; }
 main tbody tr:nth-child(even) { background: var(--stripe); }
@@ -137,7 +139,7 @@ main tbody tr:last-child td { border-bottom: 0; }
   .search kbd { display: none; }
   .layout { padding: 0 0 36px; }
   main { border: 0; border-radius: 0; box-shadow: none; padding: 28px 18px; }
-  main table { margin-left: -3px; margin-right: -3px; }
+  .table-wrap { margin-left: -3px; margin-right: -3px; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -148,6 +150,7 @@ main tbody tr:last-child td { border-bottom: 0; }
   .layout { display: block; max-width: none; margin: 0; padding: 0; }
   main { padding: 0; border: 0; box-shadow: none; }
   main pre { white-space: pre-wrap; }
+  .table-wrap { overflow: visible; }
   h2, h3 { break-after: avoid; }
   pre, tr { break-inside: avoid; }
 }
