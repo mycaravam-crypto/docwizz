@@ -91,6 +91,35 @@ public class ScreenshotCaptureTests
     }
 
     [Fact]
+    public void Later_routes_start_from_the_previous_routes_session_not_the_file()
+    {
+        // Apps that rotate refresh tokens invalidate the file's token on the first route.
+        var carried = ScreenshotCapture.ContextOptions("/tmp/sample-auth-state.json", "{\"cookies\":[],\"origins\":[]}");
+        Assert.Null(carried.StorageStatePath);
+        Assert.Equal("{\"cookies\":[],\"origins\":[]}", carried.StorageState);
+        Assert.Equal(1440, carried.ViewportSize?.Width);
+    }
+
+    [Theory]
+    [InlineData("/logout", true)]
+    [InlineData("/auth/sign-out", true)]
+    [InlineData("/Abmelden", true)]
+    [InlineData("/", false)]
+    [InlineData("/logout-history", false)]
+    [InlineData("/catalog", false)]
+    public void Routes_that_end_the_session_are_recognized(string route, bool expected) =>
+        Assert.Equal(expected, ScreenshotCapture.EndsSession(route));
+
+    [Theory]
+    [InlineData("/orders", true, true, "shows a login form (session not accepted?)")]
+    [InlineData("/orders", true, false, null)]
+    [InlineData("/orders", false, true, null)]
+    [InlineData("/login", true, true, null)]
+    [InlineData("/settings/password", true, true, null)]
+    public void A_login_form_on_a_signed_in_route_is_not_captured(string route, bool signedIn, bool passwordField, string? reason) =>
+        Assert.Equal(reason, ScreenshotCapture.LoginFormFailure(route, signedIn, passwordField));
+
+    [Fact]
     public void Generated_markdown_and_html_link_only_successfully_captured_images()
     {
         using var repo = new Sources(("src/router.ts", "// routes"));

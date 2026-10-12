@@ -72,12 +72,16 @@ This means DocWizz could not launch the browser revision expected by **its .NET 
 | --- | --- |
 | `screenshots: skipped N dynamic/unsupported route(s)` | DocWizz intentionally excludes parameterized or unsupported routes (for example `/customers/:id`). This is separate from browser installation. |
 | `screenshot skipped: ... redirected to ... (needs authentication?)` | Check the stored login, target origin, authorization and expiry; recreate the state if necessary. |
+| `screenshot skipped: ... shows a login form (session not accepted?)` | The page rendered a password field without redirecting: the session was rejected. Recreate the state file. |
+| `screenshot skipped: ... would end the session` | Logout routes are never opened, so later routes stay signed in. |
+| Only `/` is signed in, later routes are not | Fixed by carrying the session from route to route; if it persists, check whether the app keeps its token in sessionStorage (not saved by Playwright). |
+| Pages captured half-loaded (spinners, empty tables) | Add `--screenshot-delay 1500` (milliseconds, up to 60000). |
 | `screenshot skipped: ... HTTP 4xx/5xx` | The target route returned an HTTP error; verify application and permissions. |
 | `N items lack docs; pass --ai` | A documentation-coverage notice, unrelated to screenshots; AI drafting is optional. |
 | `N pages ... 0 changed` | Previously generated documentation pages did not change; it is **not** confirmation that screenshots were captured. |
 
 ### Known limitations
 
-DocWizz uses a **fresh browser context per route**, seeded with the saved storage state. The current implementation takes a screenshot after page load and a short wait, but does not execute application-specific navigation or data setup. Dynamic routes, HTTP errors and URL redirects are skipped. Login overlays that do not change the URL and delayed client-side guards may not be detected; manually inspect the resulting images. If your app uses sessionStorage-only authentication, use an application/test-environment mechanism compatible with Playwright storage state.
+DocWizz uses a **fresh browser context per route**: the first is seeded with the saved storage state, each later one with the previous route's cookies and storage (in memory only; the state file is never modified), so refresh-token rotation does not sign later routes out. Each screenshot is taken once the network is idle (up to 5 s), after 400 ms plus `--screenshot-delay`, but does not execute application-specific navigation or data setup. Dynamic routes, HTTP errors and URL redirects are skipped. Login forms with a password field are detected; other login overlays that do not change the URL may not be; manually inspect the resulting images. If your app uses sessionStorage-only authentication, use an application/test-environment mechanism compatible with Playwright storage state.
 
 For reproducible documentation in CI, provision test data, use a non-production environment, refresh the login state securely and review screenshots before publishing.

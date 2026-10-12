@@ -44,21 +44,48 @@ static class ScreenshotCapture
     // The path as written: the browser reports /größen-prüfung percent-encoded, possibly with other hex casing.
     static string PathOf(Uri uri) => Uri.UnescapeDataString(uri.AbsolutePath).Normalize(NormalizationForm.FormC);
 
-    // Each route starts in a new context; Playwright loads (but does not modify) the saved session.
-    public static BrowserNewContextOptions ContextOptions(string? storageStateFile) => new()
+    // Visiting these would end the saved session for every route after them.
+    static readonly Regex SessionEnding = new(@"(^|/)(log-?out|sign-?out|log-?off|abmelden)(/|$)",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    // Pages that show a password field on purpose, even when signed in.
+    static readonly Regex PasswordPage = new(@"(^|/)(log-?in|sign-?in|sign-?up|register|anmelden|registrieren|auth|password|passwort|reset)",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    public static bool EndsSession(string route) => SessionEnding.IsMatch(route);
+
+    // A password field on a page that has no reason for one: the app fell back to its login form without redirecting.
+    public static string? LoginFormFailure(string route, bool signedIn, bool passwordFieldVisible) =>
+        signedIn && passwordFieldVisible && !PasswordPage.IsMatch(route) ? "shows a login form (session not accepted?)" : null;
+
+    // Each route starts in a new context. The saved file is read, never written; with a session, the next context starts
+    // from the previous one's state instead, because apps that rotate refresh tokens invalidate the file's token on first use.
+    public static BrowserNewContextOptions ContextOptions(string? storageStateFile, string? carriedState = null) => new()
     {
         ViewportSize = new() { Width = 1440, Height = 900 },
-        StorageStatePath = storageStateFile
+        StorageStatePath = carriedState is null ? storageStateFile : null,
+        StorageState = carriedState
     };
+
+    // Lets the SPA finish auth checks, guards and data loading: network idle (bounded, as polling apps never go idle),
+    // then a short pause plus any extra delay the user asked for.
+    static async Task Settle(IPage page, int delayMs)
+    {
+        try { await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = 5000 }); }
+        catch (PlaywrightException) { }
+        await page.WaitForTimeoutAsync(400 + delayMs);
+    }
 
     // Captures static routes anonymously or with a provided session, returning only successful images.
     public static async Task<Dictionary<string, string>> Run(CodeModel model, string outDir, string baseUrl,
-        string? storageStateFile = null)
+        string? storageStateFile = null, int delayMs = 0)
     {
         var images = new Dictionary<string, string>(StringComparer.Ordinal);
         var routes = Routes(model);
         var skipped = model.Nodes.Count(n => n.Kind == "route" && !IsStaticRoute(n.Route));
         if (skipped > 0) Console.Error.WriteLine($"docwizz: screenshots: skipped {skipped} dynamic/unsupported route(s)");
+        foreach (var route in routes.Where(EndsSession))
+            Console.Error.WriteLine($"docwizz: screenshot skipped: {route} would end the session");
+        routes = routes.Where(r => !EndsSession(r)).ToList();
         if (routes.Count == 0) return images;
 
         var target = new Uri(baseUrl.TrimEnd('/') + "/", UriKind.Absolute);
@@ -69,6 +96,7 @@ static class ScreenshotCapture
         {
             using var playwright = await Playwright.CreateAsync();
             await using var browser = await playwright.Chromium.LaunchAsync(new() { Headless = true });
+            string? session = null; // in memory only
 
             foreach (var route in routes)
             {
@@ -77,30 +105,41 @@ static class ScreenshotCapture
                 var fullPath = Path.Combine(folder, fileName);
                 try
                 {
-                    // Separate contexts prevent routes from altering one another's session.
-                    await using var context = await browser.NewContextAsync(ContextOptions(storageStateFile));
-                    var page = await context.NewPageAsync();
-                    var response = await page.GotoAsync(url.ToString(),
-                        new() { WaitUntil = WaitUntilState.Load, Timeout = 10000 });
-                    // A SPA guard may redirect after the initial (successful) document load.
-                    await page.WaitForTimeoutAsync(400);
-                    var failure = NavigationFailure(url, new Uri(page.Url), response?.Status);
-                    if (failure is not null)
+                    // Separate contexts prevent routes from altering one another's cookies and storage.
+                    await using var context = await browser.NewContextAsync(ContextOptions(storageStateFile, session));
+                    try
                     {
-                        if (File.Exists(fullPath)) File.Delete(fullPath);
-                        Console.Error.WriteLine($"docwizz: screenshot skipped: {route} {failure}");
-                        continue;
+                        var page = await context.NewPageAsync();
+                        var response = await page.GotoAsync(url.ToString(),
+                            new() { WaitUntil = WaitUntilState.Load, Timeout = 15000 });
+                        // A SPA guard may redirect after the initial (successful) document load.
+                        await Settle(page, delayMs);
+                        var failure = NavigationFailure(url, new Uri(page.Url), response?.Status) ??
+                            LoginFormFailure(route, storageStateFile is not null, await page.Locator("input[type=password]:visible").CountAsync() > 0);
+                        if (failure is not null)
+                        {
+                            if (File.Exists(fullPath)) File.Delete(fullPath);
+                            Console.Error.WriteLine($"docwizz: screenshot skipped: {route} {failure}");
+                            continue;
+                        }
+                        await page.ScreenshotAsync(new() { Path = fullPath, FullPage = true, Timeout = 10000 });
+                        // Also reject redirects triggered while rendering the screenshot.
+                        failure = NavigationFailure(url, new Uri(page.Url), response?.Status);
+                        if (failure is not null)
+                        {
+                            File.Delete(fullPath);
+                            Console.Error.WriteLine($"docwizz: screenshot skipped: {route} {failure}");
+                            continue;
+                        }
+                        images[route] = $"screenshots/{fileName}";
                     }
-                    await page.ScreenshotAsync(new() { Path = fullPath, FullPage = true, Timeout = 10000 });
-                    // Also reject redirects triggered while rendering the screenshot.
-                    failure = NavigationFailure(url, new Uri(page.Url), response?.Status);
-                    if (failure is not null)
+                    finally
                     {
-                        File.Delete(fullPath);
-                        Console.Error.WriteLine($"docwizz: screenshot skipped: {route} {failure}");
-                        continue;
+                        // Hand refreshed cookies and tokens to the next route, even when this one was skipped.
+                        if (storageStateFile is not null)
+                            try { session = await context.StorageStateAsync(); }
+                            catch (PlaywrightException) { }
                     }
-                    images[route] = $"screenshots/{fileName}";
                 }
                 catch (Exception e)
                 {
