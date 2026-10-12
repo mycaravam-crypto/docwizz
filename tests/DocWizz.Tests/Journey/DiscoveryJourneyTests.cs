@@ -10,6 +10,8 @@ public class DiscoveryJourneyTests
             EndProject
             Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shared", "Shared/Shared.csproj", "{22222222-2222-2222-2222-222222222222}"
             EndProject
+            Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cargo.Tests", "Tests/Cargo.Tests.csproj", "{33333333-3333-3333-3333-333333333333}"
+            EndProject
             Global
             EndGlobal
             """),
@@ -22,6 +24,7 @@ public class DiscoveryJourneyTests
             """),
         ("Shared/Shared.csproj", """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>"""),
         ("Other/Shared.csproj", """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>"""),
+        ("Tests/Cargo.Tests.csproj", """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><IsTestProject>true</IsTestProject></PropertyGroup></Project>"""),
         ("Loose/NotInProject.cs", "public class Loose { }")
     );
 
@@ -37,13 +40,14 @@ public class DiscoveryJourneyTests
         using var doc = JsonDocument.Parse(a.Out);
         var root = doc.RootElement;
         Assert.Equal(2, root.GetProperty("solutions").GetArrayLength());
-        Assert.Equal(3, root.GetProperty("projects").GetArrayLength());
+        Assert.Equal(4, root.GetProperty("projects").GetArrayLength());
         Assert.Equal("Loose/NotInProject.cs", root.GetProperty("unassignedSources")[0].GetString());
         var projects = root.GetProperty("projects").EnumerateArray().ToList();
         Assert.Equal(2, projects.Count(p => p.GetProperty("name").GetString() == "Shared"));
         var shared = projects.Single(p => p.GetProperty("path").GetString() == "Shared/Shared.csproj");
         Assert.Equal(2, shared.GetProperty("solutions").GetArrayLength());
         Assert.Equal("library", shared.GetProperty("role").GetString());
+        Assert.Equal("test", projects.Single(p => p.GetProperty("name").GetString() == "Cargo.Tests").GetProperty("role").GetString());
         var cargo = projects.Single(p => p.GetProperty("name").GetString() == "Cargo");
         Assert.Equal("executable", cargo.GetProperty("role").GetString());
         Assert.Equal("proj:Shared/Shared.csproj", cargo.GetProperty("references")[0].GetString());
@@ -56,7 +60,7 @@ public class DiscoveryJourneyTests
         var before = Docwizz.Snapshot(repo.Root);
         var result = Docwizz.Run("discover", repo.Root);
         Assert.Equal(0, result.Exit);
-        Assert.Contains("Solutions: 2; projects: 3", result.Out);
+        Assert.Contains("Solutions: 2; projects: 4", result.Out);
         Assert.Equal(before, Docwizz.Snapshot(repo.Root));
     }
 
@@ -78,7 +82,7 @@ public class DiscoveryJourneyTests
         Assert.Equal(0, result.Exit);
         Assert.Contains("[1/7] discover     ok", result.Out);
         Assert.Contains("[2/7] scan         ok", result.Out);
-        Assert.Contains("Discovery:      2 solutions, 3 projects", result.Out);
+        Assert.Contains("Discovery:      2 solutions, 4 projects (1 tests", result.Out);
         Assert.Contains("review with docwizz discover", result.Out);
         var yaml = File.ReadAllText(Path.Combine(repo.Root, "docwizz.yaml"));
         Assert.Contains("# Project inventory inferred by docwizz discover", yaml);
