@@ -1,0 +1,78 @@
+using static DocWizz.Tests.Models;
+
+namespace DocWizz.Tests.Unit;
+
+public class ScreenshotCaptureTests
+{
+    [Theory]
+    [InlineData("/", true)]
+    [InlineData("/materials", true)]
+    [InlineData("/inventory/item-1", true)]
+    [InlineData("/materials/:id", false)]
+    [InlineData("/orders/{id}", false)]
+    [InlineData("/items/*", false)]
+    [InlineData("//external.example", false)]
+    [InlineData("/../admin", false)]
+    [InlineData("/a/%2e%2e", false)]
+    [InlineData("/list?secret=x", false)]
+    [InlineData("https://example.test/page", false)]
+    public void Only_static_relative_paths_can_be_captured(string route, bool expected) =>
+        Assert.Equal(expected, ScreenshotCapture.IsStaticRoute(route));
+
+    [Fact]
+    public void Reuses_and_deduplicates_discovered_routes()
+    {
+        var model = Model([
+            N("route:/materials", "src/router.ts", "route", route: "/materials"),
+            N("route:/orders/:id", "src/router.ts", "route", route: "/orders/:id"),
+            N("route:/home", "src/router.ts", "route", route: "/"),
+            N("route:/materials-2", "src/router2.ts", "route", route: "/materials")
+        ]);
+        Assert.Equal(["/", "/materials"], ScreenshotCapture.Routes(model));
+    }
+
+    [Fact]
+    public void Screenshot_names_are_safe_deterministic_and_collision_resistant()
+    {
+        Assert.Equal(ScreenshotCapture.FileName("/a/b"), ScreenshotCapture.FileName("/a/b"));
+        Assert.NotEqual(ScreenshotCapture.FileName("/a/b"), ScreenshotCapture.FileName("/a-b"));
+        Assert.Matches(@"^[a-z0-9-]+\.png$", ScreenshotCapture.FileName("/a/b"));
+        Assert.StartsWith("home-", ScreenshotCapture.FileName("/"));
+    }
+
+    [Fact]
+    public void Generated_markdown_and_html_link_only_successfully_captured_images()
+    {
+        using var repo = new Sources(("src/router.ts", "// routes"));
+        var outDir = Path.Combine(repo.Root, "docs");
+        var image = "screenshots/materials.png";
+        Directory.CreateDirectory(Path.Combine(outDir, "screenshots"));
+        File.WriteAllBytes(Path.Combine(outDir, image),
+            Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/Ss8AAAAASUVORK5CYII="));
+        var model = Model([
+            N("route:/materials", "src/router.ts", "route", route: "/materials"),
+            N("route:/missing", "src/router.ts", "route", route: "/missing")
+        ]);
+        var config = Config();
+        var arch = Architecture.Check(model, config);
+        Generator Make(IReadOnlyDictionary<string, string> shots) =>
+            new(repo.Root, outDir, model, [], arch, config, new Dictionary<string, string>())
+            { WriteHtml = true, Screenshots = shots };
+
+        Make(new Dictionary<string, string>
+        {
+            ["/materials"] = image,
+            ["/missing"] = "screenshots/not-created.png"
+        }).Run();
+
+        var markdown = File.ReadAllText(Path.Combine(outDir, "frontend.md"));
+        var html = File.ReadAllText(Path.Combine(outDir, "frontend.html"));
+        Assert.Contains("![Screenshot of /materials](screenshots/materials.png)", markdown);
+        Assert.Contains("src=\"screenshots/materials.png\"", html);
+        Assert.DoesNotContain("not-created.png", markdown);
+        Assert.DoesNotContain("not-created.png", html);
+
+        Make(new Dictionary<string, string>()).Run();
+        Assert.DoesNotContain("## Screenshots", File.ReadAllText(Path.Combine(outDir, "frontend.md")));
+    }
+}
