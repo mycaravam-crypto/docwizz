@@ -7,10 +7,16 @@ using System.Text.RegularExpressions;
 static class SetupProjectSelection
 {
     public sealed record Choice(List<string> Projects, bool Cancelled = false);
-    public static bool Interactive => !Console.IsInputRedirected && !Console.IsOutputRedirected && Environment.UserInteractive;
+    public static bool Interactive => CanPrompt(Console.IsInputRedirected, Console.IsOutputRedirected,
+        Environment.UserInteractive, Environment.GetEnvironmentVariable("CI"));
+
+    /// <summary>Never prompt in CI, even when the CI runner allocates a pseudo-terminal.</summary>
+    public static bool CanPrompt(bool inputRedirected, bool outputRedirected, bool userInteractive, string? ci) =>
+        !inputRedirected && !outputRedirected && userInteractive && string.IsNullOrEmpty(ci);
 
     /// <summary>Returns a project selection using numbered projects, whole solutions and select all/none commands.</summary>
-    public static Choice Prompt(ProjectDiscovery.Inventory inventory, IReadOnlyCollection<string> initial, TextReader input, TextWriter output)
+    public static Choice Prompt(ProjectDiscovery.Inventory inventory, IReadOnlyCollection<string> initial, TextReader input, TextWriter output,
+        Action<IReadOnlyCollection<string>>? validate = null)
     {
         var items = inventory.Projects.OrderBy(p => p.Path, StringComparer.Ordinal).ToList();
         if (items.Count == 0) throw new ScopeException("setup: no project manifests discovered; nothing to select");
@@ -27,7 +33,7 @@ static class SetupProjectSelection
             var sln = p.Solutions.Count == 0 ? "standalone" : string.Join(", ", p.Solutions.Select(s => s.Id[4..]));
             output.WriteLine($"  {i + 1,3} [{(selected.Contains(p.Path) ? 'x' : ' ')}] {p.Name} [{p.Role}] ({sln}{dep}) — {p.Path}");
         }
-        output.WriteLine("Commands: 1,3 toggle projects; s1 add a solution; a all; n none; d done; q cancel");
+        output.WriteLine("Commands: 1,3 toggle projects; s1 toggle a solution; a all; n none; d done; q cancel");
         output.WriteLine("Test projects are labelled; test_links also discovers tests referenced by selected production projects.");
         while (true)
         {
@@ -52,7 +58,17 @@ static class SetupProjectSelection
                             invalid = true;
                             break;
                         }
-                        return new(current.Order(StringComparer.Ordinal).ToList());
+                        var confirmed = current.Order(StringComparer.Ordinal).ToList();
+                        try { validate?.Invoke(confirmed); }
+                        catch (ScopeException e)
+                        {
+                            output.WriteLine("Invalid selection: " + e.Message);
+                            output.WriteLine("Change the selection and enter d again, or q to cancel.");
+                            selected = current; // keep the proposed choices for correction
+                            invalid = true;
+                            break;
+                        }
+                        return new(confirmed);
                     case "a" or "all":
                         current = items.Select(p => p.Path).ToHashSet(StringComparer.Ordinal);
                         break;
@@ -62,9 +78,13 @@ static class SetupProjectSelection
                     default:
                         if (token.StartsWith('s') && int.TryParse(token[1..], out var sn) && sn > 0 && sn <= solutions.Count)
                         {
-                            foreach (var member in solutions[sn - 1].Projects)
-                                if (items.FirstOrDefault(p => p.Id == member.ProjectId) is { } project)
-                                    current.Add(project.Path);
+                            var paths = solutions[sn - 1].Projects
+                                .Select(member => items.FirstOrDefault(p => p.Id == member.ProjectId)?.Path)
+                                .OfType<string>().ToList();
+                            if (paths.All(current.Contains))
+                                foreach (var path in paths) current.Remove(path);
+                            else
+                                foreach (var path in paths) current.Add(path);
                         }
                         else if (int.TryParse(token, out var number) && number > 0 && number <= items.Count)
                         {
@@ -171,6 +191,8 @@ static class SetupProjectSelection
             if (text.Length > 0 && text[0] is not (' ' or '\t' or '\r' or '\n')) break;
             last++;
         }
+        // Trailing blank lines separate top-level YAML sections; they are not part of scope.
+        while (last > first + 1 && string.IsNullOrWhiteSpace(lines[last - 1].Text)) last--;
         return yaml[..lines[first].From] + rendered + (last < lines.Count ? yaml[lines[last].From..] : "");
     }
 
@@ -188,9 +210,20 @@ static class SetupProjectSelection
         var temp = Path.Combine(root, ".docwizz-scope-" + Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
-            File.WriteAllText(temp, updated);
-            // Preserve restrictive permissions from the user-authored config after the atomic replacement.
-            if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(temp, File.GetUnixFileMode(file));
+            if (OperatingSystem.IsWindows()) File.WriteAllText(temp, updated);
+            else
+            {
+                // Create the temporary file with the original permissions, not a permissive umask first.
+                var mode = File.GetUnixFileMode(file);
+                using (var stream = new FileStream(temp, new FileStreamOptions
+                {
+                    Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None,
+                    UnixCreateMode = mode
+                }))
+                using (var writer = new StreamWriter(stream))
+                    writer.Write(updated);
+                File.SetUnixFileMode(temp, mode);
+            }
             File.Move(temp, file, overwrite: true);
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
