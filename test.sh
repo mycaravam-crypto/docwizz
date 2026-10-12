@@ -785,7 +785,7 @@ class H(http.server.BaseHTTPRequestHandler):
         self.send_response(200); self.send_header("Content-Length", str(len(body))); self.send_header("Connection", "close")
         self.end_headers(); self.wfile.write(body)
     def log_message(self, *a): pass
-# Like Ollama: concurrent requests served at once (docwizz sends two), and a closed connection is said to be closed,
+# Like Ollama: concurrent requests served at once (docwizz sends four), and a closed connection is said to be closed,
 # so the client never reuses one the server is about to drop ("response ended prematurely" under load).
 s = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
 open(sys.argv[1], "w").write(str(s.server_port)); s.serve_forever()

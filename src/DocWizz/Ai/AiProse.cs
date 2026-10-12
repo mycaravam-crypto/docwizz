@@ -8,7 +8,10 @@ using System.Text.Json;
 // private-network address, and cloud-hosted models are refused, so source code never leaves the network.
 static class AiProse
 {
-    const int Parallelism = 2; // Ollama queues requests beyond OLLAMA_NUM_PARALLEL anyway
+    // Requests at once. Generating the answer is nearly all the time, and a server that runs several at once (Ollama with
+    // OLLAMA_NUM_PARALLEL=4) gets about twice the output per second from the same GPU; more than 4 gained nothing
+    // (qwen2.5-coder:7b on an Intel iGPU). A server that runs one at a time just queues the rest.
+    const int Parallelism = 4;
     // A folder with fewer members than this gets no overview requested: its members' own docs already say it all, and
     // on a typical repo these small folders are most of the overview requests. Overviews already cached are still shown.
     const int MinModuleMembers = 3;
