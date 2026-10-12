@@ -60,8 +60,10 @@ static class ScreenshotCapture
                     var response = await page.GotoAsync(url.ToString(),
                         new() { WaitUntil = WaitUntilState.Load, Timeout = 10000 });
                     // Reject HTTP errors and redirects to another page (e.g. login).
+                    var landed = new Uri(page.Url);
                     if (response is null || response.Status >= 400 ||
-                        new Uri(page.Url).AbsolutePath.TrimEnd('/') != url.AbsolutePath.TrimEnd('/'))
+                        landed.Authority != url.Authority || landed.Scheme != url.Scheme ||
+                        landed.AbsolutePath.TrimEnd('/') != url.AbsolutePath.TrimEnd('/'))
                     {
                         Console.Error.WriteLine($"docwizz: screenshot skipped for {route}: HTTP error or redirect");
                         continue;
