@@ -332,6 +332,14 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     string Api()
     {
         var sb = new StringBuilder("# API endpoints\n\n");
+        // A classic non-SDK .csproj may use ASP.NET MVC conventional MapRoute configuration.
+        // Static recognizers cannot reconstruct its runtime route tables.
+        if (model.Nodes.Any(n => n.Kind == "project" && n.File.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
+            && n.Tags?.Contains("dotnet") == true
+            && !n.Tags.Any(t => t.StartsWith("Microsoft.NET.Sdk", StringComparison.Ordinal))))
+            sb.AppendLine("> **Legacy .NET project:** Statically detected endpoints only. " +
+                "ASP.NET MVC conventional routes (such as `MapRoute`) may be missing; " +
+                "this is not a complete runtime routing inventory.\n");
         var callers = model.Edges.Where(e => e.Kind == "http").ToLookup(e => e.To, e => e.From);
         var endpoints = model.Nodes.Where(n => n.Tags?.Contains("endpoint") == true)
             .OrderBy(n => n.Route?.TrimStart('/')).ThenBy(n => n.Tags![1]).ToList();

@@ -1,0 +1,14 @@
+solutions:
+Backend.slnx: backend/Api/Api.csproj, backend/Core/Core.csproj, backend/LegacyMvc/LegacyMvc.csproj, backend/Tests/Tests.csproj
+Ops.slnx: apps/Mailer/Mailer.csproj, backend/Core/Core.csproj
+projects:
+apps/Mailer/Mailer.csproj: library
+apps/Other/Other.csproj: library
+backend/Api/Api.csproj: executable
+backend/Core/Core.csproj: library
+backend/LegacyMvc/LegacyMvc.csproj: library
+backend/Tests/Tests.csproj: test
+java/pom.xml: library
+web/package.json: unknown
+unassigned:
+Loose/Free.cs
