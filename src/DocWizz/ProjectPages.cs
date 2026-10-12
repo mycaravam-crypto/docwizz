@@ -54,6 +54,10 @@ partial class Generator
         if (sdk is not null) sb.AppendLine($"SDK: \x60{sdk}\x60.");
         if (project.Role == "test")
             sb.AppendLine("**Test evidence only.** Test symbols do not contribute to production coverage or API documentation.");
+        var sourceFiles = model.Nodes.Where(n => n.Kind is not ("project" or "package" or "external" or "config")
+                && hierarchy!.Owner(n.File)?.Id == project.Id)
+            .Select(n => n.File).Distinct(StringComparer.Ordinal).Count();
+        sb.AppendLine($"Source files represented in the code model: {sourceFiles}.");
         sb.AppendLine();
 
         if (project.Solutions.Count == 0) sb.AppendLine("This project is not assigned to an inventoried solution.\n");
@@ -88,6 +92,19 @@ partial class Generator
                 sb.AppendLine($"| [{Esc(component.Name)}](../modules/{Slug(folder)}.md#{Anchor(component.Id)}) | " +
                     $"{component.Kind} | [{folder}](../modules/{Slug(folder)}.md) |");
             }
+            sb.AppendLine();
+        }
+
+        var linked = tops.Select(n => (Symbol: n, Tests: testLinks.Of(n.Id)))
+            .Where(x => x.Tests.Count > 0).ToList();
+        if (linked.Count > 0)
+        {
+            sb.AppendLine($"## Test traceability ({linked.Count} components)\n");
+            sb.AppendLine("Structural links to test code, not measured code coverage.\n");
+            sb.AppendLine("| Component | Linked tests |\n|---|---|");
+            foreach (var item in linked)
+                sb.AppendLine($"| [{Esc(item.Symbol.Name)}](../modules/{Slug(Folder(item.Symbol.File))}.md#{Anchor(item.Symbol.Id)}) | " +
+                    $"{Esc(string.Join(", ", item.Tests.Select(t => TestLinks.Short(t.Test))))} |");
             sb.AppendLine();
         }
 
