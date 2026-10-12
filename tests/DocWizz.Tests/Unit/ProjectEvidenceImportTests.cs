@@ -51,6 +51,40 @@ public class ProjectEvidenceImportTests
             ProjectEvidenceImport.ParseMarkdown(new StringReader("# free text"))).Message);
     }
 
+
+    [Fact]
+    public void All_formats_produce_the_same_canonical_evidence_hash()
+    {
+        const string value = "Prüfung: \"quoted\" \\ path";
+        const string csv = "id,kind,text,source,version\nREQ-017,requirement,\"Prüfung: \"\"quoted\"\" \\ path\",docs/req.md,v1";
+        const string markdown = "| id | kind | text | source | version |\n|---|---|---|---|---|\n  | REQ-017 | requirement | Prüfung: \"quoted\" \\ path | docs/req.md | v1 |  ";
+        const string yaml = "schema: 1\nevidence:\n  - id: REQ-017\n    kind: requirement\n    text: 'Prüfung: \"quoted\" \\ path'\n    source: docs/req.md\n    version: v1";
+        var fromCsv = ProjectEvidenceImport.ParseCsv(new StringReader(csv));
+        var fromMd = ProjectEvidenceImport.ParseMarkdown(new StringReader(markdown));
+        var fromYaml = ProjectEvidenceCatalog.Parse(new StringReader(yaml));
+        Assert.Equal(value, fromCsv.Items[0].Text);
+        Assert.Equal(fromCsv.Items[0].Hash, fromMd.Items[0].Hash);
+        Assert.Equal(fromCsv.Items[0].Hash, fromYaml.Items[0].Hash);
+    }
+
+    [Fact]
+    public void Imported_errors_point_to_the_original_line()
+    {
+        var csv = "id,kind,text,source,version\nREQ-017,unknown,x,docs/req.md,v1";
+        Assert.Contains("line 2.kind", Assert.Throws<ArgumentException>(() =>
+            ProjectEvidenceImport.ParseCsv(new StringReader(csv))).Message);
+        var markdown = "| id | kind | text | source | version |\n|---|---|---|---|---|\n\n| REQ-017 | unknown | x | docs/req.md | v1 |";
+        Assert.Contains("line 4.kind", Assert.Throws<ArgumentException>(() =>
+            ProjectEvidenceImport.ParseMarkdown(new StringReader(markdown))).Message);
+    }
+
+    [Fact]
+    public void Semicolon_csv_gets_actionable_header_diagnostic()
+    {
+        Assert.Contains("semicolon-separated", Assert.Throws<ArgumentException>(() =>
+            ProjectEvidenceImport.ParseCsv(new StringReader("id;kind;text;source;version"))).Message);
+    }
+
     [Fact]
     public void Empty_csv_is_a_valid_empty_catalog()
     {
