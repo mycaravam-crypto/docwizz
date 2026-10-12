@@ -35,7 +35,7 @@ partial class Generator
         sb.Append("[System overview](../index.md)");
         foreach (var link in project.Solutions)
         {
-            var solution = hierarchy!.Solutions.FirstOrDefault(s => s.Page == link.SolutionPage);
+            var solution = hierarchy!.SolutionByPage(link.SolutionPage);
             if (solution is not null) sb.Append($" / [Solution: {solution.Path}](../{solution.Page})");
         }
         sb.AppendLine(" / Project\n");
@@ -54,9 +54,8 @@ partial class Generator
         if (sdk is not null) sb.AppendLine($"SDK: \x60{sdk}\x60.");
         if (project.Role == "test")
             sb.AppendLine("**Test evidence only.** Test symbols do not contribute to production coverage or API documentation.");
-        var sourceFiles = model.Nodes.Where(n => n.Kind is not ("project" or "package" or "external" or "config")
-                && hierarchy!.Owner(n.File)?.Id == project.Id)
-            .Select(n => n.File).Distinct(StringComparer.Ordinal).Count();
+        var owned = hierarchy!.NodesFor(project.Id);
+        var sourceFiles = owned.Select(n => n.File).Distinct(StringComparer.Ordinal).Count();
         sb.AppendLine($"Source files represented in the code model: {sourceFiles}.");
         sb.AppendLine();
 
@@ -66,7 +65,7 @@ partial class Generator
             sb.AppendLine("## Solution membership\n");
             foreach (var member in project.Solutions)
             {
-                var solution = hierarchy!.Solutions.FirstOrDefault(s => s.Page == member.SolutionPage);
+                var solution = hierarchy!.SolutionByPage(member.SolutionPage);
                 if (solution is not null)
                     sb.AppendLine($"- [{solution.Path}](../{solution.Page})" +
                         (member.Folder.Length > 0 ? $" / {member.Folder}" : ""));
@@ -80,8 +79,8 @@ partial class Generator
             sb.AppendLine($"- [{folder}](../modules/{Slug(folder)}.md) — {Layer(folder) ?? "no layer"}");
         sb.AppendLine();
 
-        var tops = model.Nodes.Where(n => TopKinds.Contains(n.Kind) && n.Kind != "module"
-                && Top(n.Id) == n.Id && hierarchy!.Owner(n.File)?.Id == project.Id)
+        var tops = owned.Where(n => TopKinds.Contains(n.Kind) && n.Kind != "module"
+                && Top(n.Id) == n.Id)
             .OrderBy(n => n.Name, StringComparer.Ordinal).ToList();
         if (tops.Count > 0)
         {
@@ -109,7 +108,7 @@ partial class Generator
         }
 
         sb.AppendLine("## Project references\n");
-        var references = model.Edges.Where(e => e.Kind == "references" && e.From == project.Id)
+        var references = hierarchy!.EdgesFrom(project.Id).Where(e => e.Kind == "references")
             .Select(e => e.To).Distinct().Order(StringComparer.Ordinal).ToList();
         if (references.Count == 0) sb.AppendLine("No resolved project references in the selected scope.\n");
         foreach (var target in references)
@@ -121,7 +120,7 @@ partial class Generator
                 sb.AppendLine($"- Unresolved reference: \x60{target}\x60");
         }
         sb.AppendLine();
-        var packages = model.Edges.Where(e => e.Kind == "depends-on" && e.From == project.Id)
+        var packages = hierarchy!.EdgesFrom(project.Id).Where(e => e.Kind == "depends-on")
             .Select(e => nodes.TryGetValue(e.To, out var pkg) ? pkg.Name : e.To)
             .Distinct().Order(StringComparer.Ordinal).ToList();
         if (packages.Count > 0)
