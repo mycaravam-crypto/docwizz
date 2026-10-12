@@ -404,17 +404,18 @@ static string Reference() => $"""
         [--force]                       overwrite an existing docwizz.yaml
         [--select-projects]             choose projects interactively (TTY required)
         [--all-projects]                clear a saved project scope, preserving other config
-        [--yes]                          no prompt for scripts and CI
+        [--yes]                         no prompt for scripts and CI
+        [--html] [--progress] [--refresh-html-on-version-change] [--ai]  as for generate
 
     everyday:
-      docwizz discover [dir]             read-only project and solution inventory [--format json]
+      docwizz discover [dir]            read-only project and solution inventory [--format json]
       docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
         [--html]                        also write an HTML page next to every Markdown page
         [--screenshots --base-url <url>]  capture static routes from a running frontend (Playwright)
         [--storage-state <file>]        reuse a saved Playwright login session (generate screenshots only)
         [--refresh-html-on-version-change]  rewrite HTML when the docwizz version changes
         [--progress]                    print progress to stderr (including redirected output)
-        [--ai]                          draft missing summaries with a local Ollama (cached per code hash)
+        [--ai]                          draft missing summaries with a self-hosted model (Ollama or OpenAI-compatible)
       docwizz analyze <dir>             documentation report
       docwizz check <dir>               report + exit 1 if thresholds fail (CI)
       docwizz check <dir> --since <ref> exit 1 only on gaps/violations introduced since <ref>
@@ -435,16 +436,17 @@ static string Reference() => $"""
       docwizz init [dir]                write a starter docwizz.yaml with every default
       docwizz scan <dir> [model.json]   write the raw code model
       docwizz evidence-diff <dir> <before.yaml> <after.yaml>  compare explicit evidence changes
-        [--format json]                  machine-readable change report
+        [--format json]                 machine-readable change report
       docwizz trace <dir> <evidence.yaml>  explicit requirement-architecture-test gaps
-        [--format json]                  machine-readable instead of Markdown
+        [--format json]                 machine-readable instead of Markdown
       docwizz product <dir> <template.yaml> [out.md]  product draft from code and project evidence
-        [--context <file.yaml>]           load sourced project facts
-        [--ai]                            a local model words sections, citing evidence ids
+        [--context <file.yaml>]         load sourced project facts
+        [--ai]                          a self-hosted model words sections, citing evidence ids
       docwizz product check <dir> <template.yaml> [draft.md]  references and freshness of a draft; exit 1 on errors
 
     options:
-      --profile <name|file.yaml>        documentation profile: {string.Join(", ", Profiles.Names)}, or your own file
+      --profile <name|file.yaml>        setup/generate/check/analyze/architecture/diff: documentation profile,
+                                        one of {string.Join(", ", Profiles.Names)}, or your own file
       --format console|json             discover/analyze/check/architecture/diff/context/product/trace/evidence-diff/remediate output
       --timings                         time per stage and peak memory, on stderr (benchmarks)
       --help, -h                        help for a command: docwizz <command> --help
