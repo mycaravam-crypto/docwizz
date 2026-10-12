@@ -17,21 +17,21 @@ static class ProjectScope
         if (scope.Projects?.Include is not { Count: > 0 })
             throw new ScopeException("scope.projects.include: select at least one project, or remove scope: to scan the full repository");
         if (scope.Projects.References is not ("metadata" or "include" or "exclude"))
-            throw new ArgumentException("scope.projects.references: expected metadata, include or exclude");
+            throw new ScopeException("scope.projects.references: expected metadata, include or exclude");
         if (scope.RepositoryFiles is not ("include" or "exclude"))
             throw new ScopeException("scope.repository_files: expected include or exclude");
         if (scope.UnassignedSources is not ("include" or "exclude"))
-            throw new ArgumentException("scope.unassigned_sources: expected include or exclude");
+            throw new ScopeException("scope.unassigned_sources: expected include or exclude");
         foreach (var path in scope.Projects.Include)
         {
             if (string.IsNullOrWhiteSpace(path) || path.Contains('\\') || path.StartsWith('/')
                 || path.EndsWith('/') || path.Split('/').Any(p => p is "" or "." or "..")
                 || path.Contains(':') || path.Contains('*') || path.Contains('?')
                 || path.Any(char.IsControl) || path.Contains('`'))
-                throw new ArgumentException($"scope.projects.include: invalid relative project manifest path '{path}' (use '/' separators, no globbing or '..')");
+                throw new ScopeException($"scope.projects.include: invalid relative project manifest path '{path}' (use '/' separators, no globbing or '..')");
         }
         if (scope.Projects.Include.Count != scope.Projects.Include.Distinct(StringComparer.Ordinal).Count())
-            throw new ArgumentException("scope.projects.include: duplicate project manifest path");
+            throw new ScopeException("scope.projects.include: duplicate project manifest path");
     }
 
     /// <summary>Stable identifier for the scope configuration, used to invalidate a model generated under a different selection.</summary>
@@ -58,7 +58,7 @@ static class ProjectScope
         {
             var id = $"proj:{manifest}";
             if (!projects.ContainsKey(id))
-                throw new ArgumentException($"scope.projects.include: '{manifest}' was not discovered below the scan root (check .gitignore, exclude: and paths)");
+                throw new ScopeException($"scope.projects.include: '{manifest}' was not discovered below the scan root (check .gitignore, exclude: and paths)");
             selected.Add(id);
         }
 
@@ -89,7 +89,7 @@ static class ProjectScope
         foreach (var group in inventory.Projects.GroupBy(p => Path.GetDirectoryName(p.Path)?.Replace('\\', '/') ?? ""))
         {
             if (group.Count() > 1 && group.Any(p => selected.Contains(p.Id)) && group.Any(p => !selected.Contains(p.Id)))
-                throw new ArgumentException("scope.projects.include: manifests share directory '" + group.Key
+                throw new ScopeException("scope.projects.include: manifests share directory '" + group.Key
                     + "'; select all projects in that directory or move them to separate directories");
         }
 
