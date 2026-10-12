@@ -91,7 +91,11 @@ static class SetupProjectSelection
     /// <summary>Suggests initial production project selection, prioritizing solutions at the selected repository root.</summary>
     public static List<string> Initial(ProjectDiscovery.Inventory inventory, ScopeConfig? existing)
     {
-        if (existing?.Projects.Include is { Count: > 0 } saved) return saved.ToList();
+        if (existing?.Projects.Include is { Count: > 0 } saved)
+        {
+            var present = inventory.Projects.Select(p => p.Path).ToHashSet(StringComparer.Ordinal);
+            return saved.Where(present.Contains).Order(StringComparer.Ordinal).ToList();
+        }
         var rootSolutions = inventory.Solutions.Where(s => !s.Path.Contains('/')).ToList();
         var ids = rootSolutions.SelectMany(s => s.Projects).Select(p => p.ProjectId).ToHashSet(StringComparer.Ordinal);
         var initial = inventory.Projects.Where(p => p.Role != "test" && ids.Contains(p.Id)).Select(p => p.Path).ToList();
@@ -185,6 +189,8 @@ static class SetupProjectSelection
         try
         {
             File.WriteAllText(temp, updated);
+            // Preserve restrictive permissions from the user-authored config after the atomic replacement.
+            if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(temp, File.GetUnixFileMode(file));
             File.Move(temp, file, overwrite: true);
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
