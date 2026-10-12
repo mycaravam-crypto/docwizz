@@ -11,7 +11,7 @@ public class CliDocsTests
     static readonly string Readme = File.ReadAllText(Path.Combine(Root, "README.md"));
 
     // Setup's stages as setup prints them (Journey/SetupJourneyTests checks the order on a real run).
-    public static readonly string[] SetupStages = ["scan", "config", "analyze", "architecture", "generate", "check"];
+    public static readonly string[] SetupStages = ["discover", "scan", "config", "analyze", "architecture", "generate", "check"];
 
     // Commands a new user never needs: they must be marked as such wherever commands are listed.
     static readonly string[] Advanced = [.. Cli.Commands.Where(c => c.Value.Use is "manual setup" or "advanced, debugging").Select(c => c.Key)];
