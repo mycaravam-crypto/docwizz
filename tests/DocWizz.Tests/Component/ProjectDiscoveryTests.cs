@@ -21,8 +21,8 @@ public class ProjectDiscoveryTests
         Assert.Equal(2, inventory.Projects.Count);
         Assert.NotEqual(inventory.Projects[0].Id, inventory.Projects[1].Id);
         var shared = inventory.Projects.Single(p => p.Path == "Shared/Shared.csproj");
-        Assert.Equal(["Backend.slnx", "Web.slnx"], shared.Solutions.Select(x => x.Id[4..]));
-        Assert.Equal(["Backend", "Frontend/Common"], shared.Solutions.Select(x => x.Folder));
+        Assert.Equal(new[] { "Backend.slnx", "Web.slnx" }, shared.Solutions.Select(x => x.Id[4..]));
+        Assert.Equal(new[] { "Backend", "Frontend/Common" }, shared.Solutions.Select(x => x.Folder));
         Assert.Contains("Loose/Free.cs", inventory.UnassignedSources);
     }
 
