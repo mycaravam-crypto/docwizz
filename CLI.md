@@ -26,6 +26,7 @@ an example and its options.
 | `diff` | change impact | developers, CI | optional |
 | `context` | token-budgeted facts about one target, for coding agents | coding agents | optional |
 | `mcp` | read-only MCP server over the code model | coding agents | optional |
+| `evidence-diff` | compare two evidence snapshots and explicit test impact | product documents | optional |
 | `trace` | explicit traceability gaps from a YAML catalog | product documents | optional |
 | `product` | product draft from a YAML template, from code and project evidence | architects | optional |
 | `sbom` | CycloneDX manifest SBOM | supply-chain inventory | optional |
@@ -380,6 +381,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 | `diff` | `docwizz diff [dir] [base] [head] [--format f] [--profile p]` | change impact vs the last `generate` or git refs | reviews, CI |
 | `context` | `docwizz context <dir> --for target [--hops n] [--budget tokens] [--format md\|json] [--include-ai]` | token-budgeted context package for one symbol, file, folder or endpoint | coding agents |
 | `mcp` | `docwizz mcp <dir> [--auto-rescan]` | read-only MCP server on stdio: find_symbol, context, callers, impact, check, … | coding agents |
+| `evidence-diff` | `docwizz evidence-diff <dir> <before.yaml> <after.yaml> [--format json]` | deterministic explicit evidence changes and affected tests | product documents |
 | `trace` | `docwizz trace <dir> <evidence.yaml> [--format json]` | report explicit traceability and missing links; stdout, no inference or network | product documents |
 | `product` | `docwizz product [check] <dir> <template.yaml> [out.md] [--context file.yaml] [--ai] [--format f]` | versioned product draft from evidence; `--ai`: a local model words sections, citing evidence ids; `check`: references and freshness of the draft | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
@@ -396,7 +398,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 |---|---|---|---|---|
 | `--context <file.yaml>` | off | product | validates sourced project statements against template before writing | product documents |
 | `--profile <name\|file.yaml>` | `profile:` in `docwizz.yaml`, else `default` | setup, generate, check, analyze, architecture, diff | overrides `profile:` and the file's own `patterns:` | normal |
-| `--format console\|json` | `console` | discover, analyze, check, architecture, context, diff, trace, product, remediate | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
+| `--format console\|json` | `console` | discover, analyze, check, architecture, context, diff, trace, evidence-diff, product, remediate | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
 | `--for <target>` | — | context | required; a symbol id or qualified name, a file, a folder, or `VERB /route`; ambiguous or unknown exits 1 with candidates | coding agents |
 | `--hops <n>` | 2 | context | how far neighbours are listed, 1 to 4; hops beyond 1 are signature only | coding agents |
 | `--budget <tokens>` | 6000 | context | at least 100; estimated as characters / 4; lower-priority sections are cut first, and the cut is reported | coding agents |
@@ -444,6 +446,7 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .
 | `check` | thresholds pass | thresholds fail, or bad arguments/config |
 | `architecture` | within `max_violations`/`max_cycles` | above them |
 | `discover`, `analyze`, `generate`, `scan`, `sbom` | done | bad arguments or config |
+| `evidence-diff` | report on stdout | invalid/missing evidence catalogs; no data written |
 | `trace` | report on stdout | invalid/missing YAML; no data written |
 | `product` | draft written or unchanged; `check`: no errors (warnings allowed) | invalid template, unsafe overwrite, bad arguments; `check`: an error finding |
 | `remediate` | done (suggestions alone never fail) | a `--validate` run failed, or bad arguments |
@@ -555,3 +558,7 @@ human decision, and the check says so.
 ## Traceability report (P2.3)
 
 `docwizz trace . project-evidence.yaml` (also `.csv` or `.md` evidence tables) writes a read-only Markdown report to stdout; `--format json` writes the same relationships and gap classifications as JSON. The file path resolves from the working directory, then from `<dir>`. Input must obey `docs/project-evidence.md`; CSV/Markdown files contain records only, without explicit links. Exit 1 for missing/invalid catalogs; missing links are reported as gaps and do not fail. The report checks declared links only; it does not establish test success, document freshness or V-Modell conformity. No file is overwritten and no AI or network request is made.
+
+## Evidence snapshot comparison
+
+`docwizz evidence-diff . before.yaml after.yaml [--format json]` compares two explicitly approved evidence snapshots (YAML, CSV or Markdown). It reports changed declaration fields, direct links, reachable tests along declared relations and link additions/removals. Output is deterministically ordered. It does not inspect file contents or decide whether evidence is current. Files resolve from CWD first, then `<dir>`; neither source nor output files are modified.
