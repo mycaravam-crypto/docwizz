@@ -67,6 +67,10 @@ The manifest paths are **relative to the scan root**, case-sensitive and separat
 The scope is applied **before** language scanning and is shared by `scan`, `generate`, `setup`, `analyze`, `check`, architecture analysis, context, and SBOM/deployment file enumeration. Discovery itself always inventories all files visible through `.gitignore` and `exclude:`. Existing `exclude:` rules win: an excluded manifest cannot be selected. The generated `docs/index.md` discloses the requested and effective project selections (including test evidence), metadata-only dependencies, omitted `exclude` references, missing references and repository file policy. The persisted code model includes a deterministic **scope-configuration** fingerprint; `context`/MCP will rescan instead of reusing a model generated under another scope, while `diff` without an explicit baseline requires `generate` again after a scope change. The fingerprint does **not** include the discovered inventory or the contents of project manifests; regenerate after new project references or project moves to refresh those facts. P1 keeps `setup` inference-compatible (`discover → scan → config → ...`), but an existing `scope:` is resolved in the discovery stage and applied before scan; the interactive selection/config reordering is deferred to P2.
 
 
+### Generated project and solution hierarchy (Epic #124 P3)
+
+`docwizz generate . --html` produces `docs/index.md` → `docs/solutions/*.md` → `docs/projects/*.md` → existing `docs/modules/*.md` and per-component anchors. A shared project is analyzed once but linked from all containing solutions. A project without any solution appears in a separate branch; source modules that cannot be attributed remain under **Unassigned modules**. Each project page shows its path identity, role/SDK/TFMs, solution folders, represented source-file count, local modules, component links, structural test traceability (not measured coverage), project references and direct package dependencies. Scoped references marked `metadata-only` lead to disclosure-only project pages without source details or packages. The container architecture view uses manifest paths to distinguish same-named projects. Markdown/HTML links retain the existing folder-module URLs. HTML adds a nested sidebar, breadcrumbs and solution/project search hits. Generated pages under `docs/projects/` and `docs/solutions/` carry the generator marker and are removed on scope change; manually maintained pages are never overwritten. Filenames use a readable manifest slug plus a stable path-derived suffix; do not hardcode these filenames externally. Container views add the manifest path to a project name only when two projects share that name (e.g. two `Shared.csproj`). A project in several solutions lists all of them on its page; the HTML breadcrumb shows the first solution in path order. The `projects/` and `solutions/` folders are created only when the model contains projects or solutions.
+
 ### Interactive project selection (Epic #124 P2)
 
 ```bash
@@ -264,7 +268,7 @@ code file by file, which is where local models with small context windows drift 
 exploration; the agent reads the result. [templates/AGENTS.md](templates/AGENTS.md) is a section to copy into
 `AGENTS.md`, `CLAUDE.md`, `.clinerules` or `CONVENTIONS.md`. It tells the agent:
 
-- **what to read first:** `docs/index.md`, `docs/architecture.md`, `docs/api.md`, then `docs/modules/<module>.md`
+- **what to read first:** `docs/index.md`, `docs/solutions/<solution>.md`, `docs/projects/<project>.md`, then `docs/modules/<module>.md` and `docs/architecture.md`
   for the folders it will touch (the folder path with `/` replaced by `-`);
 - **how much to trust it:** detected facts over `(inferred)` ones; 🤖 marks a draft, never a fact;
 - **that the docs are navigation:** read the real code before changing it, starting at the `file:line` links;
@@ -503,7 +507,7 @@ and creates a GitHub release with generated notes. Nothing is committed to `main
 | Path | Who owns it |
 |---|---|
 | `docwizz.yaml` | **you**. `setup`/`init` create it once and then leave it alone (`setup --force` replaces it). |
-| `docs/*.md`, `docs/modules/`, `docs/views/`, `*.html` | docwizz. Regenerated, so don't edit them. |
+| `docs/*.md`, `docs/solutions/`, `docs/projects/`, `docs/modules/`, `docs/views/`, `*.html` | docwizz. Regenerated, so don't edit them. |
 | `docs/products/*.md`, `*.evidence.json` | docwizz product: the draft and its evidence and gap report; separate marker, preserved by ordinary generate. |
 | `docs/architecture/*.md` | **you**. Linked from the generated pages and never overwritten. |
 | `docs/.docwizz/model.json`, `documentation.json` | docwizz: the baseline `diff` compares against, and the documentation model as data. |

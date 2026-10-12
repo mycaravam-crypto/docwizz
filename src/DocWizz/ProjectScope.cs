@@ -102,36 +102,15 @@ static class ProjectScope
             scope.Projects.References == "exclude"
                 ? inventory.Projects.Where(p => production.Contains(p.Id))
                     .SelectMany(p => p.References.Where(id => !selected.Contains(id))
-                        .Select(id => p.Path + " → " + projects[id].Path))
+                        .Select(id => ReferenceEdge(p.Path, projects[id].Path)))
                     .Distinct().Order(StringComparer.Ordinal).ToList()
                 : [],
             inventory.Projects.Where(p => production.Contains(p.Id))
-                .SelectMany(p => p.UnresolvedReferences.Select(r => p.Path + " → " + r.Path + " (" + r.Reason + ")"))
+                .SelectMany(p => p.UnresolvedReferences.Select(r => ReferenceEdge(p.Path, r.Path) + " (" + r.Reason + ")"))
                 .Distinct().Order(StringComparer.Ordinal).ToList());
 
         // Keep project identities separate even when a nested project shares its parent's directory tree.
-        var owners = inventory.Projects
-            .Select(p => (p.Id, p.Path, Folder: Path.GetDirectoryName(p.Path)?.Replace('\\', '/') ?? ""))
-            .OrderByDescending(p => p.Folder.Length).ThenBy(p => p.Path, StringComparer.Ordinal).ToList();
-        string? Owner(string relative)
-        {
-            // A root manifest never owns arbitrary siblings such as Dockerfiles or files from another
-            // ecosystem. It owns its own manifest and unclaimed source files for its language only.
-            foreach (var project in owners)
-            {
-                if (relative == project.Path) return project.Id;
-                if (project.Folder.Length > 0 && relative.StartsWith(project.Folder + "/", StringComparison.Ordinal))
-                    return project.Id;
-                if (project.Folder.Length != 0) continue;
-                var ext = Path.GetExtension(relative).ToLowerInvariant();
-                var ecosystem = projects[project.Id].Ecosystem;
-                if (ecosystem == "dotnet" && ext == ".cs"
-                    || ecosystem == "npm" && ext is ".ts" or ".tsx" or ".js" or ".jsx" or ".mjs" or ".vue"
-                    || ecosystem is "maven" or "gradle" && ext == ".java")
-                    return project.Id;
-            }
-            return null;
-        }
+        var ownerOf = ProjectOwnership.Resolver(inventory.Projects.Select(p => new ProjectOwnership.Candidate(p.Id, p.Path, p.Ecosystem)));
 
         var solutions = inventory.Solutions.Where(s => s.Projects.Any(p => selected.Contains(p.ProjectId)))
             .Select(s => s.Path).ToHashSet(StringComparer.Ordinal);
@@ -142,7 +121,7 @@ static class ProjectScope
             if (rel.EndsWith(".sln", StringComparison.OrdinalIgnoreCase)
                 || rel.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase))
                 return solutions.Contains(rel);
-            var owner = Owner(rel);
+            var owner = ownerOf(rel);
             if (owner is not null) return selected.Contains(owner);
             // A repository-level descriptor is not unassigned application source. Preserve it separately
             // so scoped generation still reports CI, Kubernetes, compose, IaC and shared configuration.
@@ -159,6 +138,12 @@ static class ProjectScope
 
         return new(filtered, metadata, selected.Count, scoped);
     }
+
+    // ScopeInventory keeps reference edges as display strings (they are part of the persisted model.json);
+    // they are built and matched only here, so the renderers never depend on the separator.
+    const string Arrow = " → ";
+    public static string ReferenceEdge(string from, string to) => from + Arrow + to;
+    public static bool IsReferenceFrom(string edge, string from) => edge.StartsWith(from + Arrow, StringComparison.Ordinal);
 
     /// <summary>Adds dependency-only stubs for excluded referenced manifests, then drops unresolved project edges.</summary>
     public static void CompleteReferences(Plan plan, List<Node> projects, List<Edge> edges)

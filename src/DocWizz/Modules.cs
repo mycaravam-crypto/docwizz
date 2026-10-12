@@ -30,6 +30,8 @@ partial class Generator
             .Where(r => r.Count > 0).Select(r => $"{r.Label}: {r.Count}").ToList();
         if (blocks.Count > 0) role.Add(string.Join(", ", blocks));
         if (role.Count > 0) sb.AppendLine(string.Join(" · ", role) + "\n");
+        if (hierarchy?.ForModule(folder) is { Count: > 0 } owners)
+            sb.AppendLine("Project navigation: " + string.Join(", ", owners.Select(p => $"[{p.Name}](../{p.Page})")) + "\n");
 
         // AI-drafted overview: what the module is for and how it is used, each sentence from the facts it cites.
         if (overviews?.GetValueOrDefault(folder)?.Sections is { } overview)

@@ -79,13 +79,22 @@ partial class Generator
     static string ExternalLabel(Node ext) => Externals.Certainty(ext) == "detected" ? ext.Name : $"{ext.Name} ({Externals.Certainty(ext)})";
 
     // The container (project) a symbol lives in; code outside any project is grouped by language.
+    // Projects are named by their manifest name; the manifest path is added only when two projects share a name.
+    HashSet<string>? sharedProjectNames;
+    string ContainerLabel(Node p)
+    {
+        sharedProjectNames ??= Projects.GroupBy(x => x.Name, StringComparer.Ordinal).Where(g => g.Count() > 1)
+            .Select(g => g.Key).ToHashSet(StringComparer.Ordinal);
+        return sharedProjectNames.Contains(p.Name) ? $"{p.Name} [{p.File}]" : p.Name;
+    }
     Dictionary<string, string>? containerOf;
     string Container(Node n)
     {
         containerOf ??= [];
         if (containerOf.TryGetValue(n.File, out var c)) return c;
-        return containerOf[n.File] = n.Kind == "project" ? n.Name
-            : global::Projects.Of(Projects, n.File)?.Name ?? Path.GetExtension(n.File) switch { ".cs" => "C# code", ".sql" => "SQL scripts", _ => "frontend code" };
+        return containerOf[n.File] = n.Kind == "project" ? ContainerLabel(n)
+            : global::Projects.Of(Projects, n.File) is { } project ? ContainerLabel(project)
+            : Path.GetExtension(n.File) switch { ".cs" => "C# code", ".sql" => "SQL scripts", _ => "frontend code" };
     }
 
     // A connection string read by code that connects to this system (GetConnectionString inside UseNpgsql(...)).
@@ -137,7 +146,8 @@ partial class Generator
         var edges = new List<(string From, string To, string Label)>();
         foreach (var e in model.Edges)
         {
-            if (e.Kind == "references") edges.Add((nodes[e.From].Name, nodes.TryGetValue(e.To, out var p) ? p.Name : e.To, "references"));
+            if (e.Kind == "references" && nodes.TryGetValue(e.From, out var projectFrom))
+                edges.Add((ContainerLabel(projectFrom), nodes.TryGetValue(e.To, out var p) ? ContainerLabel(p) : e.To, "references"));
             if (!CodeModel.DependencyKinds.Contains(e.Kind) || !nodes.TryGetValue(e.From, out var from)) continue;
             if (nodes.TryGetValue(e.To, out var to) && Container(from) != Container(to))
                 edges.Add((Container(from), Container(to), e.Kind == "http" ? "HTTP" : "uses"));
@@ -162,9 +172,9 @@ partial class Generator
         var depends = model.Edges.Where(e => e.Kind == "depends-on").ToLookup(e => e.From);
         foreach (var g in code.GroupBy(Container).OrderBy(g => g.Key))
         {
-            var project = Projects.FirstOrDefault(p => p.Name == g.Key);
+            var project = Projects.FirstOrDefault(p => ContainerLabel(p) == g.Key);
             var packages = project is null ? [] : depends[project.Id].Select(e => nodes.GetValueOrDefault(e.To)?.Name ?? e.To).Order().ToList();
-            sb.AppendLine($"| {(project is null ? g.Key : SourceLink(project.File, 0, g.Key, sub: "views"))} | {string.Join(", ", project?.Tags ?? [])} | " +
+            sb.AppendLine($"| {(project is null ? g.Key : $"[{g.Key}](../{ProjectHierarchy.ProjectPage(project.File)})")} | {string.Join(", ", project?.Tags ?? [])} | " +
                 $"{g.Select(n => n.File).Distinct().Count()} | {(packages.Count > 0 ? string.Join(", ", packages) : "—")} |");
         }
         return sb.ToString();

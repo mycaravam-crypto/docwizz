@@ -276,6 +276,9 @@ monorepos.
 
 ## Configuration
 
+**Hierarchical project navigation (P3):** In multi-project repositories, generation now writes root-relative, path-unique `docs/solutions/*.md` and `docs/projects/*.md` pages. Start at `docs/index.md` → Solutions → Projects → existing folder Modules → Components; or use `--html` for nested sidebar navigation, breadcrumbs and search entries. Project overviews show manifest metadata, linked solutions, analyzed source-file counts, modules, components, structural test links (not code coverage) and dependencies; a referenced but excluded project is clearly marked **metadata-only** without code or package details. Shared projects have one stable page even if several solutions use them. Legacy `docs/modules/*.md` paths remain valid. Generated project/solution pages are regenerated; hand-authored pages without the generator marker are preserved.
+
+
 **Multi-project documentation:** Run `docwizz setup . --select-projects` on an interactive console, or add `scope.projects.include` using root-relative manifest paths. `references: metadata` retains dependency-only stubs; `include` scans reachable dependencies; `exclude` omits them. `test_links: true` includes referencing test projects only for traceability. By default, `repository_files: include` preserves system-wide deployment, CI and configuration descriptors; `unassigned_sources` controls loose code, not those descriptors. Excluded reference edges are explicitly listed in the generated scope report. With no `scope:` all previous scans remain unchanged. Changing a scope invalidates the saved context model; regenerate docs before using the saved-model `diff` baseline. The full schema, precedence and CI behavior are in [CLI.md](CLI.md#explicit-project-scope-epic-124-p1).
 
 
