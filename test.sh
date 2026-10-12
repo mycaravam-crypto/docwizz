@@ -970,7 +970,7 @@ section "setup"
 app=$(mktemp -d); cp -r "$root/fixture/." "$app"
 first=$(dw setup "$app" 2>/dev/null)
 grep -q "^Status:         SUCCESS_WITH_FINDINGS" <<<"$first" || { echo "$first"; exit 1; }   # findings, not a failed run
-grep -q "\[2/6\] config       ok       written" <<<"$first"
+grep -q "\[3/7\] config       ok       written" <<<"$first"
 grep -q "^Stack: .*ASP.NET Core.*Spring Boot.*backend + frontend" <<<"$first"
 grep -q "^Check:          FAIL — coverage" <<<"$first"   # a failing check is the baseline, not a failed setup
 grep -q "^  docwizz check $app " <<<"$first"
@@ -983,7 +983,7 @@ cmp -s "$app/docwizz.yaml" "$app/first.yaml"
 grep -q "config       ok       unchanged" <<<"$(dw setup "$app" --force 2>/dev/null)"
 printf 'check: [oops\n' > "$app/docwizz.yaml"
 set +e; broken=$(dw setup "$app" 2>/dev/null); code=$?; set -e
-[ "$code" = 1 ] && grep -q "^Status:         FAILED" <<<"$broken" && grep -q "\[1/6\] scan         failed" <<<"$broken" && grep -q "\[6/6\] check        skipped  needs scan" <<<"$broken" \
+[ "$code" = 1 ] && grep -q "^Status:         FAILED" <<<"$broken" && grep -q "\[1/7\] discover     failed" <<<"$broken" && grep -q "\[7/7\] check        skipped  needs discover" <<<"$broken" \
   && grep -q "docwizz setup $app --force" <<<"$broken" || { echo "$broken"; exit 1; }
 rm -rf "$app"
 set +e; none=$(dw 2>&1); code=$?; set -e
