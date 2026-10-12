@@ -50,3 +50,21 @@ jobs:
       - run: npm ci --prefix scanner-vue --silent
       - name: End-to-end tests
         run: ./test.sh
+
+  # Reproducible measurement; not a fragile wall-clock gate. Publish medians on every PR.
+  performance-baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with: { dotnet-version: 10.0.x }
+      - name: Mixed-project scoped vs full scan baseline
+        run: |
+          PROJECTS=24 SOURCES_PER_PROJECT=8 RUNS=2 bash scripts/benchmark-multi-project.sh | tee benchmark.txt
+          {
+            echo "### Multi-project scan baseline"
+            echo "Build and first warm-up run excluded. Reported values are wall-clock samples, not a CI threshold."
+            echo '~~~text'
+            cat benchmark.txt
+            echo '~~~'
+          } >> "$GITHUB_STEP_SUMMARY"
