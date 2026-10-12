@@ -116,6 +116,8 @@ class ScopeConfig
 {
     public ScopeProjectsConfig Projects { get; set; } = new();
     public string UnassignedSources { get; set; } = "exclude";
+    // Repository-level deployment, CI and configuration descriptors are not unassigned source code.
+    public string RepositoryFiles { get; set; } = "include";
 }
 
 class ScopeProjectsConfig
