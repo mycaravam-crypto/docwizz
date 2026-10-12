@@ -113,6 +113,9 @@ docwizz generate . --html --screenshots --base-url http://localhost:5173 --stora
 - Captures go to `docs/screenshots/`, linked from `frontend.md`. **The storage-state file holds session tokens:** keep
   it out of Git, restrict access, and use a low-privilege test account with sanitized data.
 
+For Windows Chromium installation, missing headless-shell executables, authenticated login steps and troubleshooting,
+see [Playwright screenshot troubleshooting](docs/PLAYWRIGHT_SCREENSHOTS.md).
+
 ### 3. Architecture analysis
 
 ```bash
