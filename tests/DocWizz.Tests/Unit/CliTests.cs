@@ -53,7 +53,7 @@ public class CliTests
     [InlineData("generate . --force", "--force doesn't apply to generate; it applies to setup")]
     [InlineData("check . --validate", "--validate doesn't apply to check; it applies to remediate")]
     [InlineData("analyze . --since main", "--since doesn't apply to analyze; it applies to check, remediate")]
-    [InlineData("setup . --format json", "--format doesn't apply to setup; it applies to check, analyze, architecture, diff, context, product, remediate")]
+    [InlineData("setup . --format json", "--format doesn't apply to setup; it applies to discover, check, analyze, architecture, diff, context, product, remediate")]
     [InlineData("init . --profile api", "--profile doesn't apply to init; it applies to setup, generate, check, analyze, architecture, diff")]
     // conflicts and bad values
     [InlineData("remediate . --package Newtonsoft.Json", "--package and --to go together: --package <name> --to <version>")]
