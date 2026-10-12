@@ -457,7 +457,7 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
 
     var files = scanned.Where(f => !testFiles.Contains(Path.GetRelativePath(root, f).Replace('\\', '/'))).ToList();
     return (new CodeModel(Git(root, "rev-parse --short HEAD")?.Trim(), nodes, edges,
-        ProjectScope.Fingerprint(config.Scope)), files);
+        ProjectScope.Fingerprint(config.Scope), plan.Inventory), files);
 }
 
 static string? Language(string file) => Path.GetExtension(file) switch
