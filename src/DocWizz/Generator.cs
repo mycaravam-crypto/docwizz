@@ -412,12 +412,13 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             foreach (var r in routes)
                 sb.AppendLine($"| `{r.Route}` | {string.Join(", ", routesTo[r.Id].Where(nodes.ContainsKey).Select(c => ModuleLink(nodes[c])))} |");
             sb.AppendLine();
-            var captured = routes.Where(r => r.Route is not null && Screenshots.ContainsKey(r.Route)).ToList();
+            var captured = routes.Where(r => r.Route is not null &&
+                Screenshots.TryGetValue(r.Route, out var image) && File.Exists(Path.Combine(outDir, image))).ToList();
             if (captured.Count > 0)
             {
-                sb.AppendLine("## Screenshots\\n");
+                sb.AppendLine("## Screenshots\n");
                 foreach (var r in captured)
-                    sb.AppendLine($"### \`{r.Route}\`\\n\\n![Screenshot of {r.Route}]({Screenshots[r.Route!]})\\n");
+                    sb.AppendLine($"### `{r.Route}`\n\n![Screenshot of {r.Route}]({Screenshots[r.Route!]})\n");
             }
         }
         var components = model.Nodes.Where(n => n.Kind == "component").OrderBy(n => n.File).ToList();
