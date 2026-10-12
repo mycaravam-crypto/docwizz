@@ -11,7 +11,7 @@ public class ProjectScopeJourneyTests
             <Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
             <ItemGroup><ProjectReference Include="../B/B.csproj" /></ItemGroup></Project>
             """),
-        ("B/B.csproj", """<Project Sdk="Microsoft.NET.Sdk" />"""),
+        ("B/B.csproj", """<Project Sdk="Microsoft.NET.Sdk"><ItemGroup><PackageReference Include="Excluded.Dependency" Version="1.0.0" /></ItemGroup></Project>"""),
         ("C/C.csproj", """<Project Sdk="Microsoft.NET.Sdk" />"""),
         ("Tests/Tests.csproj", """
             <Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><IsTestProject>true</IsTestProject></PropertyGroup>
@@ -105,6 +105,24 @@ public class ProjectScopeJourneyTests
         var second = Docwizz.Run("setup", repo.Root);
         Assert.Equal(0, second.Exit);
         Assert.Equal(yaml, File.ReadAllText(Path.Combine(repo.Root, "docwizz.yaml")));
+    }
+
+    [Fact]
+    public void Generated_docs_and_sbom_share_the_selected_scope()
+    {
+        using var repo = Repo();
+        File.WriteAllText(Path.Combine(repo.Root, "docwizz.yaml"), Yaml());
+        var generated = Docwizz.Run("generate", repo.Root);
+        Assert.Equal(0, generated.Exit);
+        var index = File.ReadAllText(Path.Combine(repo.Root, "docs", "index.md"));
+        Assert.Contains("## Documentation scope", index);
+        Assert.Contains("A/A.csproj", index);
+        Assert.Contains("metadata-only", index);
+        Assert.DoesNotContain("CThing", index);
+        var sbomFile = Path.Combine(repo.Root, "sbom.json");
+        var sbom = Docwizz.Run("sbom", repo.Root, sbomFile);
+        Assert.Equal(0, sbom.Exit);
+        Assert.DoesNotContain("Excluded.Dependency", File.ReadAllText(sbomFile));
     }
 
     [Fact]
