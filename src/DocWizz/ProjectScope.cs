@@ -1,17 +1,25 @@
 // The single source of truth for explicit project scope. Resolve a manifest-level inventory before any
 // language scanner; downstream commands must use Files, not filter a finished CodeModel.
+sealed class ScopeException(string message) : ArgumentException(message);
+
+// A scoped repository still has shared deployment/CI metadata, even when application sources are selective.
 static class ProjectScope
 {
-    public sealed record Plan(List<string> Files, List<ProjectDiscovery.ProjectItem> MetadataOnly, int SelectedProjects);
+    public sealed record Plan(List<string> Files, List<ProjectDiscovery.ProjectItem> MetadataOnly, int SelectedProjects,
+        ScopeInventory? Inventory = null);
+
+    static readonly string[] SourceExtensions = [".cs", ".java", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".php"];
 
     /// <summary>Validates an explicit scope; omitting scope entirely preserves the legacy full-repository scan.</summary>
     public static void Validate(ScopeConfig? scope)
     {
         if (scope is null) return;
         if (scope.Projects?.Include is not { Count: > 0 })
-            throw new ArgumentException("scope.projects.include: select at least one project, or remove scope: to scan the full repository");
+            throw new ScopeException("scope.projects.include: select at least one project, or remove scope: to scan the full repository");
         if (scope.Projects.References is not ("metadata" or "include" or "exclude"))
             throw new ArgumentException("scope.projects.references: expected metadata, include or exclude");
+        if (scope.RepositoryFiles is not ("include" or "exclude"))
+            throw new ScopeException("scope.repository_files: expected include or exclude");
         if (scope.UnassignedSources is not ("include" or "exclude"))
             throw new ArgumentException("scope.unassigned_sources: expected include or exclude");
         foreach (var path in scope.Projects.Include)
@@ -32,7 +40,7 @@ static class ProjectScope
         if (scope is null) return null;
         Validate(scope);
         var text = string.Join("\n", scope.Projects.Include.Order(StringComparer.Ordinal)) +
-            $"\nreferences={scope.Projects.References}\ntest_links={scope.Projects.TestLinks}\nunassigned={scope.UnassignedSources}";
+            $"\nreferences={scope.Projects.References}\ntest_links={scope.Projects.TestLinks}\nunassigned={scope.UnassignedSources}\nrepository_files={scope.RepositoryFiles}";
         return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(text)))[..16].ToLowerInvariant();
     }
@@ -62,6 +70,14 @@ static class ProjectScope
                     if (projects.ContainsKey(reference) && selected.Add(reference)) remaining.Enqueue(reference);
         }
 
+        // Metadata-only stubs reflect production scope, never incidental references from test projects.
+        var production = selected.Where(id => projects[id].Role != "test").ToHashSet(StringComparer.Ordinal);
+        var metadata = scope.Projects.References == "metadata"
+            ? inventory.Projects.Where(p => !selected.Contains(p.Id) &&
+                  inventory.Projects.Where(q => production.Contains(q.Id)).Any(q => q.References.Contains(p.Id, StringComparer.Ordinal)))
+                .OrderBy(p => p.Path, StringComparer.Ordinal).ToList()
+            : new List<ProjectDiscovery.ProjectItem>();
+
         // Reverse ProjectReference from a test project to selected production code: include its test code for
         // traceability. The normal BuildModel test filtering removes test symbols from production documentation.
         if (scope.Projects.TestLinks)
@@ -77,16 +93,43 @@ static class ProjectScope
                     + "'; select all projects in that directory or move them to separate directories");
         }
 
+        var testProjects = selected.Where(id => projects[id].Role == "test")
+            .Select(id => projects[id].Path).Order(StringComparer.Ordinal).ToList();
+        var scoped = new ScopeInventory(
+            selected.Select(id => projects[id].Path).Order(StringComparer.Ordinal).ToList(),
+            testProjects,
+            metadata.Select(p => p.Path).ToList(),
+            scope.Projects.References == "exclude"
+                ? inventory.Projects.Where(p => production.Contains(p.Id))
+                    .SelectMany(p => p.References.Where(id => !selected.Contains(id))
+                        .Select(id => p.Path + " → " + projects[id].Path))
+                    .Distinct().Order(StringComparer.Ordinal).ToList()
+                : [],
+            inventory.Projects.Where(p => production.Contains(p.Id))
+                .SelectMany(p => p.UnresolvedReferences.Select(r => p.Path + " → " + r.Path + " (" + r.Reason + ")"))
+                .Distinct().Order(StringComparer.Ordinal).ToList());
+
         // Keep project identities separate even when a nested project shares its parent's directory tree.
         var owners = inventory.Projects
             .Select(p => (p.Id, p.Path, Folder: Path.GetDirectoryName(p.Path)?.Replace('\\', '/') ?? ""))
             .OrderByDescending(p => p.Folder.Length).ThenBy(p => p.Path, StringComparer.Ordinal).ToList();
         string? Owner(string relative)
         {
+            // A root manifest never owns arbitrary siblings such as Dockerfiles or files from another
+            // ecosystem. It owns its own manifest and unclaimed source files for its language only.
             foreach (var project in owners)
-                if (relative == project.Path || project.Folder.Length == 0
-                    || relative.StartsWith(project.Folder + "/", StringComparison.Ordinal))
+            {
+                if (relative == project.Path) return project.Id;
+                if (project.Folder.Length > 0 && relative.StartsWith(project.Folder + "/", StringComparison.Ordinal))
                     return project.Id;
+                if (project.Folder.Length != 0) continue;
+                var ext = Path.GetExtension(relative).ToLowerInvariant();
+                var ecosystem = projects[project.Id].Ecosystem;
+                if (ecosystem == "dotnet" && ext == ".cs"
+                    || ecosystem == "npm" && ext is ".ts" or ".tsx" or ".js" or ".jsx" or ".mjs" or ".vue"
+                    || ecosystem is "maven" or "gradle" && ext == ".java")
+                    return project.Id;
+            }
             return null;
         }
 
@@ -100,15 +143,21 @@ static class ProjectScope
                 || rel.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase))
                 return solutions.Contains(rel);
             var owner = Owner(rel);
-            return owner is null ? scope.UnassignedSources == "include" : selected.Contains(owner);
+            if (owner is not null) return selected.Contains(owner);
+            // A repository-level descriptor is not unassigned application source. Preserve it separately
+            // so scoped generation still reports CI, Kubernetes, compose, IaC and shared configuration.
+            if (scope.RepositoryFiles == "include" &&
+                (Generator.IsDeploymentFile(root, rel) || Configuration.IsConfigFile(path)))
+                return true;
+            // A solution or project manifest is never pulled in as an incidental repository file.
+            if (rel.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(rel) is "package.json" or "pom.xml" or "build.gradle" or "build.gradle.kts")
+                return false;
+            return SourceExtensions.Contains(Path.GetExtension(rel), StringComparer.OrdinalIgnoreCase)
+                && scope.UnassignedSources == "include";
         }).ToList();
 
-        var metadata = scope.Projects.References == "metadata"
-            ? inventory.Projects.Where(p => !selected.Contains(p.Id) &&
-                  inventory.Projects.Where(q => selected.Contains(q.Id)).Any(q => q.References.Contains(p.Id, StringComparer.Ordinal)))
-                .OrderBy(p => p.Path, StringComparer.Ordinal).ToList()
-            : [];
-        return new(filtered, metadata, selected.Count);
+        return new(filtered, metadata, selected.Count, scoped);
     }
 
     /// <summary>Adds dependency-only stubs for excluded referenced manifests, then drops unresolved project edges.</summary>
