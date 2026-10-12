@@ -39,7 +39,7 @@ public class GitRefRegressionJourneyTests
         );
         Git(repo.Root, "init", "-q");
         Git(repo.Root, "add", "-A");
-        Git(repo.Root, "-c", "user.name=DocWizz", "-c", "user.email=docwizz@example.invalid", "commit", "-qm", "base");
+        Git(repo.Root, "-c", "user.name=DocWizz", "-c", "user.email=docwizz@example.invalid", "-c", "commit.gpgsign=false", "commit", "-qm", "base");
 
         var first = RunFrom(repo.Root, "check", ".", "--since", "HEAD");
         Assert.True(first.Exit == 0, first.ToString());
@@ -50,7 +50,7 @@ public class GitRefRegressionJourneyTests
             public class NewType { public string Name() => "ok"; }
             """);
         Git(repo.Root, "add", "-A");
-        Git(repo.Root, "-c", "user.name=DocWizz", "-c", "user.email=docwizz@example.invalid", "commit", "-qm", "change");
+        Git(repo.Root, "-c", "user.name=DocWizz", "-c", "user.email=docwizz@example.invalid", "-c", "commit.gpgsign=false", "commit", "-qm", "change");
         Git(repo.Root, "rev-parse", "--verify", "HEAD");
         Git(repo.Root, "rev-parse", "--verify", "HEAD~1");
 
