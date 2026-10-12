@@ -135,6 +135,34 @@ public class ProjectNavigationJourneyTests
     }
 
     [Fact]
+    public void Project_overview_lists_structurally_linked_test_evidence()
+    {
+        using var repo = new Sources(
+            ("App/App.csproj", """<Project Sdk="Microsoft.NET.Sdk" />"""),
+            ("App/Logic/Thing.cs", """
+                namespace App.Logic;
+                public class Thing { public int Plus(int value) => value + 1; }
+                """),
+            ("Tests/App.Tests.csproj", """
+                <Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><IsTestProject>true</IsTestProject></PropertyGroup>
+                <ItemGroup><ProjectReference Include="../App/App.csproj" /></ItemGroup></Project>
+                """),
+            ("Tests/ThingTests.cs", """
+                using App.Logic;
+                namespace App.Tests;
+                public class ThingTests { public void Verifies() { var subject = new Thing(); subject.Plus(1); } }
+                """)
+        );
+        var result = Docwizz.Run("generate", repo.Root);
+        Assert.True(result.Exit == 0, result.ToString());
+        var project = File.ReadAllText(FileAt(repo, ProjectHierarchy.ProjectPage("App/App.csproj")));
+        Assert.Contains("Source files represented in the code model:", project);
+        Assert.Contains("## Test traceability", project);
+        Assert.Contains("ThingTests.Verifies", project);
+        Assert.DoesNotContain("Tests/ThingTests.cs", File.ReadAllText(FileAt(repo, "index.md")));
+    }
+
+    [Fact]
     public void Rerunning_the_same_generation_is_deterministic()
     {
         using var repo = Repo();
