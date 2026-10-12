@@ -7,6 +7,11 @@ using System.Text.Json.Serialization;
 // An exception that escapes a command is a bug or an environment problem (disk, permissions), never a finding: one
 // line and exit 2, so CI can tell "docwizz broke" from "the gate failed" (1). DOCWIZZ_DEBUG=1 lets it through with the trace.
 try { return await Dispatch(args); }
+catch (ArgumentException e) when (e.Message.StartsWith("scope.", StringComparison.Ordinal))
+{
+    Console.Error.WriteLine(e.Message);
+    return 1;
+}
 catch (Exception e) when (Environment.GetEnvironmentVariable("DOCWIZZ_DEBUG") is not { Length: > 0 })
 {
     Console.Error.WriteLine($"docwizz: error: {e.Message}");
@@ -731,8 +736,8 @@ static (List<string> Failures, List<string> MissingSections) CheckFailures(strin
     return (failures, missingSections);
 }
 
-// First run: lightweight project discovery → full scan → inferred config → analyze → architecture →
-// generate → check. P0 intentionally does not filter the model; that belongs to P1.
+// First run: discovery → scope resolution before language scanning → inferred config → analysis → generation → check.
+// Keep the config stage after scan until inferred layer/test defaults can be computed without the full model.
 // Exit 1 only when a stage fails: a failing check is the baseline to improve on, reported with what to do next.
 static async Task<int> SetupCommand(string root, string? profile, bool force, bool ai, bool html, bool refreshHtmlOnVersionChange = false, bool progress = false)
 {
@@ -754,8 +759,8 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
     [
         new("discover", () =>
         {
-            // Always before BuildModel. With no interactive selection implemented yet, the inventory cannot
-            // change the scan scope. Existing config and .gitignore/exclude rules still apply.
+            // Always before BuildModel. An existing explicit scope is loaded and validated before language scanning.
+            // New configurations remain unfiltered by default; project selection is not inferred.
             config = existing ? Config.Load(root, profile) : Config.Parse(Config.Default, root, profile);
             inventory = ProjectDiscovery.Scan(root, RepoFilesUnscoped(root, config));
             return Setup.DiscoverySummary(inventory);
@@ -813,6 +818,7 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
     Console.WriteLine();
     Console.WriteLine($"Status:         {Setup.Label(outcome)}");
     if (inventory is not null) Console.WriteLine($"Discovery:      {Setup.DiscoverySummary(inventory)}");
+    if (config?.Scope is not null) Console.WriteLine($"Scope:          {string.Join(", ", config.Scope.Projects.Include)} (references: {config.Scope.Projects.References})");
     if (detection is not null)
     {
         Console.WriteLine($"Stack:          {Setup.Stack(detection)}");
@@ -836,7 +842,7 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
         foreach (var t in Setup.FollowUp(detection, configStatus, config, passed != false)) Console.WriteLine($"  - {t}");
         if (inventory is not null && Setup.NeedsProjectSelection(inventory))
             Console.WriteLine("  - multiple solutions or standalone projects detected: review with docwizz discover " +
-                root + " --format json; project selection is planned for Epic #124 P1/P2 (currently use exclude:)");
+                root + " --format json; configure scope.projects.include in docwizz.yaml (interactive setup wizard: Epic #124 P2)");
     }
     Console.WriteLine();
     Console.WriteLine("Next useful actions:");
