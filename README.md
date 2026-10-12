@@ -181,14 +181,14 @@ docwizz generate . --ai
 ```
 
 A self-hosted model ([Ollama](https://ollama.com) or any OpenAI-compatible server) drafts summaries, behaviour, side
-effects, errors and usage for undocumented items, plus a module overview.
+effects, errors and usage for undocumented items, plus an overview for each module (folder) of three or more members.
 
 - **Local only.** The server must resolve to a loopback or private address; proxies are bypassed and Ollama `…-cloud`
   models are refused.
 - **Grounded.** Every sentence cites the facts it rests on; sentences that cite nothing are dropped.
 - **Never authoritative.** Drafts are marked 🤖, fill only empty sections and never close a gap.
-- **Sent once.** Drafts are cached in `docs/.docwizz/ai-cache.json` by code hash. Without `--ai`, cached drafts are
-  reused and nothing is sent.
+- **Sent once.** Drafts are cached in `docs/.docwizz/ai-cache.json` by code hash, answers the model got wrong too,
+  so a later `--ai` run sends only changed code. Without `--ai`, cached drafts are reused and nothing is sent.
 - **Rates written docs.** Each written doc gets an advisory 1–5 usefulness score in `quality.md`; `check` ignores it.
 
 Configure the server under [AI](#ai).

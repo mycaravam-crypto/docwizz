@@ -190,4 +190,11 @@ public class ScreenshotCaptureTests
         Make(new Dictionary<string, string>()).Run();
         Assert.DoesNotContain("## Screenshots", File.ReadAllText(Path.Combine(outDir, "frontend.md")));
     }
+
+    [Theory]
+    [InlineData("/login", true, "is a sign-in page and redirects once signed in")]
+    [InlineData("/login", false, "redirected to / (needs authentication?)")]
+    [InlineData("/orders", true, "redirected to / (needs authentication?)")]
+    public void Signed_in_sign_in_page_redirect_is_explained(string route, bool signedIn, string expected) =>
+        Assert.Equal(expected, ScreenshotCapture.Explain(route, "redirected to / (needs authentication?)", signedIn));
 }
