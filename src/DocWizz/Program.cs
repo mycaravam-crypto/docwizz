@@ -104,7 +104,15 @@ static async Task<int> Dispatch(string[] args)
         case "remediate":
             return Remediate(path, config, opts.GetValueOrDefault("package"), opts.GetValueOrDefault("to"), opts.ContainsKey("validate"), opts.GetValueOrDefault("since"), json);
         case "generate":
-            Console.WriteLine(await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"), refreshHtmlOnVersionChange: opts.ContainsKey("refresh-html-on-version-change"), progress: opts.ContainsKey("progress"), screenshotBaseUrl: opts.GetValueOrDefault("base-url")));
+            var storageState = opts.GetValueOrDefault("storage-state");
+            var stateFile = storageState is null ? null : Path.GetFullPath(Path.IsPathRooted(storageState)
+                ? storageState : Path.Combine(path, storageState));
+            if (stateFile is not null && !File.Exists(stateFile))
+            {
+                Console.Error.WriteLine("docwizz: --storage-state file not found");
+                return 1;
+            }
+            Console.WriteLine(await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"), refreshHtmlOnVersionChange: opts.ContainsKey("refresh-html-on-version-change"), progress: opts.ContainsKey("progress"), screenshotBaseUrl: opts.GetValueOrDefault("base-url"), screenshotStorageState: stateFile));
             return 0;
         default:
             return Usage($"unknown command {cmd}");
@@ -402,7 +410,8 @@ static string Reference() => $"""
       docwizz discover [dir]             read-only project and solution inventory [--format json]
       docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
         [--html]                        also write an HTML page next to every Markdown page
-        [--screenshots --base-url <url>]  capture anonymous static routes from a running frontend (Playwright)
+        [--screenshots --base-url <url>]  capture static routes from a running frontend (Playwright)
+        [--storage-state <file>]       reuse a saved Playwright login session (generate screenshots only)
         [--refresh-html-on-version-change]  rewrite HTML when the docwizz version changes
         [--progress]                    print progress to stderr (including redirected output)
         [--ai]                          draft missing summaries with a local Ollama (cached per code hash)
@@ -586,7 +595,7 @@ static object DocumentationJson(CodeModel model, Config config, List<Documentati
 }
 
 // Writes the docs; returns the one-line result.
-static async Task<string> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null, bool refreshHtmlOnVersionChange = false, bool progress = false, string? screenshotBaseUrl = null)
+static async Task<string> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null, bool refreshHtmlOnVersionChange = false, bool progress = false, string? screenshotBaseUrl = null, string? screenshotStorageState = null)
 {
     using var bar = CliProgress.ForConsole(7, progress);
     model ??= BuildModel(root, config).Model;
@@ -614,7 +623,7 @@ static async Task<string> Generate(string root, string outDir, Config config, bo
     var assessments = await AiProse.Assessments(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-assessments.json"), ai, config.Ai);
     bar.Advance("AI assessments");
     var screenshots = screenshotBaseUrl is null ? new Dictionary<string, string>()
-        : await ScreenshotCapture.Run(model, outDir, screenshotBaseUrl);
+        : await ScreenshotCapture.Run(model, outDir, screenshotBaseUrl, screenshotStorageState);
     var rebuildHtml = html && refreshHtmlOnVersionChange && HtmlVersion.NeedsRefresh(outDir, AppVersion.Number);
     var (pages, changed) = Timings.Measure("generate", () => new Generator(root, outDir, model, findings, arch, config, summaries, overviews, assessments)
     {
