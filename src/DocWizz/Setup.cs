@@ -81,9 +81,38 @@ static class Setup
             [.. files.Where(f => Generator.IsDeploymentFile(root, f)).Order(StringComparer.Ordinal)]);
     }
 
+    // P0: a non-binding inventory before BuildModel. The interactive selection and scope filter are P1/P2.
+    // Ambiguity means a user should review the scan root, not that discovery may silently narrow it.
+    public static bool NeedsProjectSelection(ProjectDiscovery.Inventory inventory) =>
+        inventory.Solutions.Count > 1
+        || inventory.Solutions.Any(s => s.Path.Contains('/'))
+        || inventory.Projects.Any(p => p.Path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) && p.Solutions.Count == 0);
+
+    public static string DiscoverySummary(ProjectDiscovery.Inventory inventory) =>
+        $"{inventory.Solutions.Count} solutions, {inventory.Projects.Count} projects " +
+        $"({inventory.Projects.Count(p => p.Role == "test")} tests, " +
+        $"{inventory.Projects.Count(p => p.Solutions.Count == 0)} without solution), " +
+        $"{inventory.UnassignedSources.Count} unassigned files";
+
+    // Comments only, never an executable scope or a replacement for a user's selection.
+    // Escape line breaks so repository-controlled file names cannot inject YAML entries.
+    public static string DiscoveryProposal(ProjectDiscovery.Inventory inventory)
+    {
+        if (!NeedsProjectSelection(inventory)) return "";
+        var lines = new List<string>
+        {
+            "# Project inventory inferred by docwizz discover (information only; NOT a scope filter):",
+            "# The documentation still includes all non-excluded supported files.",
+            "# Review with: docwizz discover . --format json",
+        };
+        foreach (var project in inventory.Projects)
+            lines.Add("#   - " + project.Path.Replace('\\r', ' ').Replace('\\n', ' '));
+        return string.Join("\\n", lines) + "\\n";
+    }
+
     // The default docwizz.yaml with `architecture.layers`/`allow` and `tests` narrowed to what the repository shows.
     // Without evidence a section keeps its defaults (they match nothing, so they change nothing) and says so.
-    public static string Yaml(Detection d, string version)
+    public static string Yaml(Detection d, string version, ProjectDiscovery.Inventory? inventory = null)
     {
         var lines = Config.Default.Split('\n').ToList();
         var output = new List<string>
@@ -130,7 +159,7 @@ static class Setup
             }
             output.Add(line);
         }
-        return string.Join("\n", output).TrimEnd() + "\n";
+        return string.Join("\n", output).TrimEnd() + "\n" + (inventory is null ? "" : DiscoveryProposal(inventory));
     }
 
     // Writes docwizz.yaml unless one exists (and `force` is off). Returns what happened, for the report.
