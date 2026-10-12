@@ -8,7 +8,7 @@ static class Cli
 
     public record Request(string? Command, Dictionary<string, string> Options, List<string> Positional, string? Error);
 
-    public static readonly string[] Flags = ["ai", "html", "progress", "refresh-html-on-version-change", "timings", "validate", "force", "include-ai", "auto-rescan", "help", "version"];
+    public static readonly string[] Flags = ["ai", "html", "progress", "refresh-html-on-version-change", "timings", "validate", "force", "include-ai", "auto-rescan", "select-projects", "all-projects", "yes", "help", "version"];
 
     // Valued option → what its value is, for the error when it is missing.
     public static readonly Dictionary<string, string> Valued = new()
@@ -28,7 +28,7 @@ static class Cli
         ["discover"] = new("discover [dir]", "read-only inventory of solutions, projects and references", "everyday",
             "docwizz discover . --format json", "--format console|json", ["format"]),
         ["setup"] = new("setup [dir]", "first run: detect the stack, write docwizz.yaml, analyze, generate docs, check", "start here",
-            "docwizz setup .", "--force (overwrite docwizz.yaml), --html, --progress, --refresh-html-on-version-change, --ai, --profile <name|file>", ["force", "html", "progress", "refresh-html-on-version-change", "ai", "profile"]),
+            "docwizz setup . --select-projects", "--select-projects (TTY wizard), --all-projects (clear scope), --yes (no prompts), --force (overwrite docwizz.yaml), --html, --progress, --refresh-html-on-version-change, --ai, --profile <name|file>", ["select-projects", "all-projects", "yes", "force", "html", "progress", "refresh-html-on-version-change", "ai", "profile"]),
         ["generate"] = new("generate <dir> [out]", "write Markdown docs (default <dir>/docs)", "everyday",
             "docwizz generate . --html", "--html (HTML next to every page), --progress, --refresh-html-on-version-change, --ai (local Ollama drafts), --profile", ["html", "progress", "refresh-html-on-version-change", "ai", "profile"]),
         ["check"] = new("check <dir> [--since <ref>]", "quality gate: exit 1 when thresholds fail (only new problems with --since)", "CI",
@@ -88,6 +88,8 @@ static class Cli
         {
             foreach (var o in opts.Keys.Where(o => !Global.Contains(o) && !c.Accepts.Contains(o)))
                 error ??= $"--{o} doesn't apply to {cmd}; it applies to {string.Join(", ", Commands.Where(kv => kv.Value.Accepts.Contains(o)).Select(kv => kv.Key))}";
+            if (opts.ContainsKey("select-projects") && (opts.ContainsKey("all-projects") || opts.ContainsKey("yes")))
+                error ??= "--select-projects cannot be combined with --all-projects or --yes";
             if (opts.ContainsKey("package") != opts.ContainsKey("to"))
                 error ??= "--package and --to go together: --package <name> --to <version>";
         }
