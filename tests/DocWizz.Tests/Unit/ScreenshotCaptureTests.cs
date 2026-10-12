@@ -66,6 +66,19 @@ public class ScreenshotCaptureTests
     }
 
     [Fact]
+    public void Saved_login_state_is_applied_to_each_isolated_context()
+    {
+        var anonymous = ScreenshotCapture.ContextOptions(null);
+        Assert.Null(anonymous.StorageStatePath);
+        Assert.Equal(1440, anonymous.ViewportSize?.Width);
+        Assert.Equal(900, anonymous.ViewportSize?.Height);
+
+        var authenticated = ScreenshotCapture.ContextOptions("/tmp/sample-auth-state.json");
+        Assert.Equal("/tmp/sample-auth-state.json", authenticated.StorageStatePath);
+        Assert.Equal(1440, authenticated.ViewportSize?.Width);
+    }
+
+    [Fact]
     public void Generated_markdown_and_html_link_only_successfully_captured_images()
     {
         using var repo = new Sources(("src/router.ts", "// routes"));
