@@ -21,6 +21,7 @@ public class CliTests
     [Theory]
     // allowed
     [InlineData("setup .", null)]
+    [InlineData("discover . --format json", null)]
     [InlineData("setup . --force --html --ai --profile api", null)]
     [InlineData("generate . --html", null)]
     [InlineData("generate . --progress", null)]
@@ -48,7 +49,7 @@ public class CliTests
     // options a command doesn't use
     [InlineData("analyze . --html", "--html doesn't apply to analyze; it applies to setup, generate")]
     [InlineData("scan . --ai", "--ai doesn't apply to scan; it applies to setup, generate, product")]
-    [InlineData("generate . --format json", "--format doesn't apply to generate; it applies to check, analyze, architecture, diff, context, product, remediate")]
+    [InlineData("generate . --format json", "--format doesn't apply to generate; it applies to discover, check, analyze, architecture, diff, context, product, remediate")]
     [InlineData("generate . --force", "--force doesn't apply to generate; it applies to setup")]
     [InlineData("check . --validate", "--validate doesn't apply to check; it applies to remediate")]
     [InlineData("analyze . --since main", "--since doesn't apply to analyze; it applies to check, remediate")]
