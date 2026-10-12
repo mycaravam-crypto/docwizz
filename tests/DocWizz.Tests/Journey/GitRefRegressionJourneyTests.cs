@@ -6,6 +6,9 @@ namespace DocWizz.Tests.Journey;
 // Exercise the actual CLI process from the fixture's cwd with real commits and preserve failure details.
 public class GitRefRegressionJourneyTests
 {
+    static Docwizz.Result RunFrom(string cwd, params string[] args) =>
+        Docwizz.Run(cwd: cwd, env: null, args: args);
+
     static void Git(string root, params string[] arguments)
     {
         var info = new ProcessStartInfo("git")
@@ -38,7 +41,7 @@ public class GitRefRegressionJourneyTests
         Git(repo.Root, "add", "-A");
         Git(repo.Root, "-c", "user.name=DocWizz", "-c", "user.email=docwizz@example.invalid", "commit", "-qm", "base");
 
-        var first = Docwizz.Run(repo.Root, null, "check", ".", "--since", "HEAD");
+        var first = RunFrom(repo.Root, "check", ".", "--since", "HEAD");
         Assert.True(first.Exit == 0, first.ToString());
         Assert.Contains("check: PASS", first.Out);
 
@@ -52,14 +55,14 @@ public class GitRefRegressionJourneyTests
         Git(repo.Root, "rev-parse", "--verify", "HEAD~1");
 
         // "diff HEAD~1 HEAD" deliberately omits [dir]. The CLI must resolve "." against cwd.
-        var diff = Docwizz.Run(repo.Root, null, "diff", "HEAD~1", "HEAD");
+        var diff = RunFrom(repo.Root, "diff", "HEAD~1", "HEAD");
         Assert.True(diff.Exit == 0, diff.ToString());
         Assert.Contains("vs HEAD~1, at HEAD", diff.Out);
         Assert.Contains("NewType", diff.Out);
         Docwizz.NoStackTrace(diff);
 
         // Ensure a subsequent check still sees a valid HEAD and doesn't confuse a generated model with a git ref.
-        var since = Docwizz.Run(repo.Root, null, "check", ".", "--since", "HEAD");
+        var since = RunFrom(repo.Root, "check", ".", "--since", "HEAD");
         Assert.True(since.Exit == 0, since.ToString());
         Assert.Contains("check: PASS", since.Out);
     }
@@ -68,7 +71,7 @@ public class GitRefRegressionJourneyTests
     public void Missing_git_repository_reports_a_clean_reference_error()
     {
         using var repo = new Sources(("README.md", "# not a git repository"));
-        var diff = Docwizz.Run(repo.Root, null, "diff", "HEAD~1", "HEAD");
+        var diff = RunFrom(repo.Root, "diff", "HEAD~1", "HEAD");
         Assert.Equal(1, diff.Exit);
         Assert.Contains("not a git repo or unknown ref", diff.Err);
         Docwizz.NoStackTrace(diff);
