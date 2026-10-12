@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.Versioning;
 
 namespace DocWizz.Tests.Journey;
 
@@ -317,7 +318,7 @@ public class SetupJourneyTests
                 }
             }
             catch (Exception e) when (e is SocketException or ObjectDisposedException) { }
-        });
+        }, TestContext.Current.CancellationToken);
         var env = new Dictionary<string, string?> { ["OLLAMA_HOST"] = $"127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}" };
 
         using var repo = Repos.AspNet();
@@ -355,6 +356,7 @@ public class SetupJourneyTests
     // Build, test, install and container tools are replaced by stubs that log their use, and the repository has hooks
     // that would leave a marker if anything ran them. setup and a plain remediate must touch neither.
     [Fact]
+    [UnsupportedOSPlatform("windows")]
     public void Repository_code_and_package_tools_are_never_run_implicitly()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "the tool stubs are shell scripts");

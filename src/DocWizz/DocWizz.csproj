@@ -4,6 +4,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Warnings fail the build; NuGet audit advisories stay warnings (cve-scan covers them), so a new advisory
+         doesn't break unrelated builds. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>docwizz</ToolCommandName>
     <!-- Official release builds supply -p:Version from the immutable Git tag; any other build derives it from the

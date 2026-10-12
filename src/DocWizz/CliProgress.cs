@@ -1,11 +1,11 @@
 // Progress goes to stderr only; stdout stays usable for scripts and machine-readable output.
 // Each stage ends with a newline so warnings from scanners never interleave with a half-rendered bar.
-sealed class CliProgress(TextWriter writer, int total, bool interactive, bool enabled = true) : IDisposable
+sealed class CliProgress(TextWriter writer, int total, bool enabled = true) : IDisposable
 {
     int completed;
 
     public static CliProgress ForConsole(int total, bool force) =>
-        new(Console.Error, total, !Console.IsErrorRedirected,
+        new(Console.Error, total,
             force || (!Console.IsErrorRedirected && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI"))));
 
     public void Advance(string stage)

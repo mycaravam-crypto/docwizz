@@ -6,7 +6,7 @@ public class CliProgressTests
     public void Redirected_progress_has_stable_lines_without_terminal_control_codes()
     {
         var output = new StringWriter();
-        using (var bar = new CliProgress(output, 3, interactive: false))
+        using (var bar = new CliProgress(output, 3))
         {
             bar.Advance("scan");
             bar.Advance("analyze");
@@ -24,7 +24,7 @@ public class CliProgressTests
     public void Disabled_progress_keeps_output_empty()
     {
         var output = new StringWriter();
-        using (var bar = new CliProgress(output, 2, interactive: false, enabled: false))
+        using (var bar = new CliProgress(output, 2, enabled: false))
             bar.Advance("scan");
         Assert.Equal("", output.ToString());
     }
@@ -33,7 +33,7 @@ public class CliProgressTests
     public void Terminal_progress_finishes_each_stage_with_newline()
     {
         var output = new StringWriter();
-        using (var bar = new CliProgress(output, 2, interactive: true))
+        using (var bar = new CliProgress(output, 2))
         {
             bar.Advance("scan");
             bar.Advance("write");

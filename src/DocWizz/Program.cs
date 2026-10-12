@@ -967,13 +967,13 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
     }
     if (configStatus.Length > 0) Console.WriteLine($"Configuration:  {rel(file)} ({configStatus})");
     if (results.Single(r => r.Name == "generate").Ok) Console.WriteLine($"Documentation:  {rel(outDir)}");
-    if (findings is not null) Console.WriteLine($"Coverage:       {Analyzer.Coverage(findings):0}% (profile {config.Profile})");
+    if (findings is not null && config is not null) Console.WriteLine($"Coverage:       {Analyzer.Coverage(findings):0}% (profile {config.Profile})");
     if (arch is not null) Console.WriteLine($"Architecture:   {arch.Violations.Count(v => !v.Rule.StartsWith("SEC-"))} findings, {arch.Cycles.Count} cycles");
-    if (arch is not null) Console.WriteLine($"Security:       {(config.Security.Enabled ? $"{arch.Violations.Count(v => v.Rule.StartsWith("SEC-"))} findings" : "off")}");
+    if (arch is not null && config is not null) Console.WriteLine($"Security:       {(config.Security.Enabled ? $"{arch.Violations.Count(v => v.Rule.StartsWith("SEC-"))} findings" : "off")}");
     if (passed is not null) Console.WriteLine($"Check:          {results.Single(r => r.Name == "check").Detail}");
     foreach (var r in failed.Where(r => r.Status == "failed")) Console.WriteLine($"Error:          {r.Name}: {r.Detail}");
 
-    if (detection is not null && configStatus.Length > 0)
+    if (detection is not null && config is not null && configStatus.Length > 0)
     {
         Console.WriteLine();
         Console.WriteLine("Follow-up:");
