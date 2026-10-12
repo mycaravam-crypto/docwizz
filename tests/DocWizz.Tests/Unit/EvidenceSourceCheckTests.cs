@@ -30,6 +30,17 @@ public class EvidenceSourceCheckTests
     }
 
     [Fact]
+    public void Changing_pinned_digest_is_visible_to_snapshot_diff()
+    {
+        var first = Catalog(new string('a', 64));
+        var second = Catalog(new string('b', 64));
+        var impact = ProjectEvidenceImpact.Compare(first, second);
+        Assert.Equal("changed", Assert.Single(impact.Evidence).Change);
+        Assert.Equal(["source_hash"], impact.Evidence[0].Fields);
+        Assert.NotEqual(first.Items[0].Hash, second.Items[0].Hash);
+    }
+
+    [Fact]
     public void Bad_explicit_hash_is_rejected()
     {
         Assert.Contains("source_hash", Assert.Throws<ArgumentException>(() => Catalog("bad")).Message);
