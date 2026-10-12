@@ -19,7 +19,7 @@ sections:
     required: true
     sources: [project, code]
   - id: constraints
-    title: Qualitaetsanforderungen und Randbedingungen
+    title: Qualitätsanforderungen und Randbedingungen
     required: true
     sources: [project]
 dependencies: []
