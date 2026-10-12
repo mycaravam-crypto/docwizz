@@ -15,7 +15,7 @@ public class ProjectScopeJourneyTests
         ("C/C.csproj", """<Project Sdk="Microsoft.NET.Sdk" />"""),
         ("Tests/Tests.csproj", """
             <Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><IsTestProject>true</IsTestProject></PropertyGroup>
-            <ItemGroup><ProjectReference Include="../A/A.csproj" /></ItemGroup></Project>
+            <ItemGroup><ProjectReference Include="../A/A.csproj" /><ProjectReference Include="../C/C.csproj" /></ItemGroup></Project>
             """),
         ("A/AThing.cs", "public class AThing { public int Value() => 42; }"),
         ("B/BThing.cs", "public class BThing { public int Value() => 1; }"),
@@ -60,6 +60,11 @@ public class ProjectScopeJourneyTests
             && e.GetProperty("from").GetString() == "proj:A/A.csproj"
             && e.GetProperty("to").GetString() == "proj:B/B.csproj");
         Assert.DoesNotContain(nodes, n => n.GetProperty("id").GetString() == "proj:C/C.csproj");
+        var inventory = model.GetProperty("scopeInventory");
+        Assert.Contains(inventory.GetProperty("scannedProjects").EnumerateArray(),
+            p => p.GetString() == "Tests/Tests.csproj");
+        Assert.DoesNotContain(inventory.GetProperty("metadataOnlyProjects").EnumerateArray(),
+            p => p.GetString() == "C/C.csproj");
     }
 
     [Fact]
@@ -85,6 +90,14 @@ public class ProjectScopeJourneyTests
         var ids = nodes.Select(n => n.GetProperty("id").GetString()).ToHashSet();
         Assert.All(model.GetProperty("edges").EnumerateArray().Where(e => e.GetProperty("kind").GetString() == "references"),
             e => Assert.Contains(e.GetProperty("to").GetString(), ids));
+        var info = model.GetProperty("scopeInventory");
+        Assert.Contains(info.GetProperty("excludedReferences").EnumerateArray(),
+            reference => reference.GetString() == "A/A.csproj → B/B.csproj");
+        File.WriteAllText(Path.Combine(repo.Root, "docwizz.yaml"), Yaml("exclude", false));
+        Assert.Equal(0, Docwizz.Run("generate", repo.Root).Exit);
+        var index = File.ReadAllText(Path.Combine(repo.Root, "docs", "index.md"));
+        Assert.Contains("Excluded project references (1)", index);
+        Assert.Contains("A/A.csproj → B/B.csproj", index);
     }
 
     [Fact]
@@ -123,6 +136,26 @@ public class ProjectScopeJourneyTests
         var sbom = Docwizz.Run("sbom", repo.Root, sbomFile);
         Assert.Equal(0, sbom.Exit);
         Assert.DoesNotContain("Excluded.Dependency", File.ReadAllText(sbomFile));
+    }
+
+    [Fact]
+    public void Repository_level_deployment_and_ci_remain_visible_under_scope()
+    {
+        using var repo = Repo();
+        File.WriteAllText(Path.Combine(repo.Root, "docker-compose.yml"),
+            "services:\n  cache:\n    image: redis\n");
+        Directory.CreateDirectory(Path.Combine(repo.Root, ".github", "workflows"));
+        File.WriteAllText(Path.Combine(repo.Root, ".github", "workflows", "ci.yml"),
+            "name: ci\non: push\njobs: {}\n");
+        File.WriteAllText(Path.Combine(repo.Root, "docwizz.yaml"), Yaml());
+        var generation = Docwizz.Run("generate", repo.Root);
+        Assert.Equal(0, generation.Exit);
+        var deployment = File.ReadAllText(Path.Combine(repo.Root, "docs", "views", "deployment.md"));
+        Assert.Contains("docker-compose.yml", deployment);
+        Assert.Contains(".github/workflows/ci.yml", deployment);
+        Assert.DoesNotContain("No deployment descriptors found", deployment);
+        var index = File.ReadAllText(Path.Combine(repo.Root, "docs", "index.md"));
+        Assert.Contains("repository", index, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
