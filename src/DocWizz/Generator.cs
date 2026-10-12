@@ -100,6 +100,17 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         var kinds = model.Nodes.GroupBy(n => n.Kind).ToDictionary(g => g.Key, g => g.Count());
         sb.AppendLine($"# {Path.GetFileName(Path.GetFullPath(root))}\n");
         sb.AppendLine($"Generated from commit `{model.Commit ?? "unknown"}`.\n");
+        if (config.Scope is { } active)
+        {
+            sb.AppendLine("## Documentation scope\n");
+            sb.AppendLine("Explicit project selection (other projects are not source-scanned):");
+            foreach (var project in active.Projects.Include)
+                sb.AppendLine("- `" + project + "`");
+            sb.AppendLine($"\nProject references: `{active.Projects.References}`; " +
+                $"test links: `{active.Projects.TestLinks.ToString().ToLowerInvariant()}`; " +
+                $"unassigned sources: `{active.UnassignedSources}`.\n");
+            sb.AppendLine("Referenced projects marked `metadata-only` are dependency stubs, not analyzed source code.\n");
+        }
         sb.AppendLine("| | |\n|---|---|");
         foreach (var (label, kind) in new[] { ("Classes & records", "class"), ("Methods", "method"), ("Frontend functions", "function") })
         {
@@ -162,9 +173,10 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             };
             var tfms = p.Tags!.Where(t => t.StartsWith("net")).ToList();
             var role = p.Tags!.FirstOrDefault(t => t is "executable" or "library" or "test");
+            var metadata = p.Tags!.Contains("metadata-only") ? " (metadata-only)" : "";
             var folder = p.Tags!.FirstOrDefault(t => t.StartsWith("sln:"))?[4..];
             yield return $"`{p.Name}`: {kind}{(tfms.Count > 0 ? $" on {string.Join(", ", tfms)}" : "")}" +
-                (role is null ? "" : $" — {role}") + (folder is null ? "" : $", solution folder `{folder}`");
+                (role is null ? "" : $" — {role}") + metadata + (folder is null ? "" : $", solution folder `{folder}`");
         }
         foreach (var p in model.Nodes.Where(n => n.Kind == "project" && n.Tags?.Any(t => t is "maven" or "gradle") == true))
         {
