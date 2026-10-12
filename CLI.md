@@ -222,7 +222,7 @@ pass it, including in `setup`. The model must be **self-hosted** on a loopback o
 configured under `ai:` in `docwizz.yaml`. Cloud models and public hosts are refused and proxies are bypassed. Drafts are marked 🤖 and cite the facts they rest on.
 They fill only empty sections and **never** close a documentation gap, raise coverage or pass a check. AI ratings of
 written docs are advisory and not part of any gate. Drafts are cached by code hash, so unchanged code is not sent
-again. Without `--ai`, nothing is sent. See [README: AI drafts](README.md#ai-drafts).
+again. Without `--ai`, nothing is sent. See [README: AI drafts](README.md#draft-missing-docs-with-a-local-ai).
 
 An OpenAI-compatible server, for example vLLM on an internal GPU host:
 
