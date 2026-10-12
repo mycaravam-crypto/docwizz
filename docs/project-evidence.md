@@ -76,6 +76,10 @@ the process tailoring, contents, and rights to reuse official text.
 The test specification demonstrates the existing direct product dependency
 contract with `dependencies: [sw-specification]`. That relationship is an
 illustration, not a statement that the chosen project's tailoring always
-requires it. The existing `docwizz product check` verifies that the dependent
+requires it. The existing SW-architecture example deliberately keeps no dependency
+so its P0/P1 demonstration remains independently runnable; adapt dependencies
+to the project's actual tailored product chain. For requirement-to-test links,
+use the explicit evidence relationships and `docwizz trace` report, not an
+assumed relationship inferred from a chapter title. The existing `docwizz product check` verifies that the dependent
 draft exists, not its professional approval or correctness. Chapters backed
 only by project sources remain **OFFEN** until evidence is explicitly provided.
