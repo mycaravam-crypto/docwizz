@@ -71,8 +71,8 @@ public class ProjectScopeJourneyTests
         Assert.Contains(nodes, n => n.GetProperty("file").GetString() == "A/AThing.cs");
         Assert.Contains(nodes, n => n.GetProperty("file").GetString() == "B/BThing.cs");
         Assert.DoesNotContain(nodes, n => n.GetProperty("file").GetString() is "C/CThing.cs" or "Loose/Orphan.cs" or "Tests/ATest.cs");
-        Assert.DoesNotContain(nodes, n => n.GetProperty("tags").ValueKind == JsonValueKind.Array
-            && n.GetProperty("tags").EnumerateArray().Any(t => t.GetString() == "metadata-only"));
+        Assert.DoesNotContain(nodes, n => n.TryGetProperty("tags", out var tags) && tags.ValueKind == JsonValueKind.Array
+            && tags.EnumerateArray().Any(t => t.GetString() == "metadata-only"));
     }
 
     [Fact]
@@ -114,7 +114,7 @@ public class ProjectScopeJourneyTests
         var yaml = Yaml().Replace("A/A.csproj", "Missing/Missing.csproj");
         File.WriteAllText(Path.Combine(repo.Root, "docwizz.yaml"), yaml);
         var result = Docwizz.Run("scan", repo.Root, Path.Combine(repo.Root, "out.json"));
-        Assert.Equal(2, result.Exit); // bad on-disk scope is an operational failure until config is repaired
+        Assert.Equal(1, result.Exit); // invalid user scope is a configuration error, not an internal crash
         Assert.Contains("scope.projects.include", result.Err);
         Assert.False(File.Exists(Path.Combine(repo.Root, "out.json")));
     }
