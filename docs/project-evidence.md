@@ -127,10 +127,10 @@ changed kind, which makes the record's old links questionable.
 **explicit** links in either snapshot (requirement → architecture → test). This
 follows declared, typed links only; no semantic or inferred dependency is added.
 
-This is an internal foundation and not yet a CLI surface. Importantly it
+The `evidence-diff` CLI exposes this snapshot comparison. Importantly it
 **does not read the source Markdown files**: identical catalog entries with
 modified referenced files are invisible to this comparison. File-content
-hashing / freshness checks and a user-facing impact command remain open in #122.
+hashing / freshness checks remain open in #122.
 
 ## Evidence-diff command (P2.5)
 
