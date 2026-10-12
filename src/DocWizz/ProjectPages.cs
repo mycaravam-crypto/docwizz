@@ -54,9 +54,8 @@ partial class Generator
         if (sdk is not null) sb.AppendLine($"SDK: \x60{sdk}\x60.");
         if (project.Role == "test")
             sb.AppendLine("**Test evidence only.** Test symbols do not contribute to production coverage or API documentation.");
-        var sourceFiles = model.Nodes.Where(n => n.Kind is not ("project" or "package" or "external" or "config")
-                && hierarchy!.Owner(n.File)?.Id == project.Id)
-            .Select(n => n.File).Distinct(StringComparer.Ordinal).Count();
+        var owned = hierarchy!.NodesFor(project.Id);
+        var sourceFiles = owned.Select(n => n.File).Distinct(StringComparer.Ordinal).Count();
         sb.AppendLine($"Source files represented in the code model: {sourceFiles}.");
         sb.AppendLine();
 
@@ -80,8 +79,8 @@ partial class Generator
             sb.AppendLine($"- [{folder}](../modules/{Slug(folder)}.md) — {Layer(folder) ?? "no layer"}");
         sb.AppendLine();
 
-        var tops = model.Nodes.Where(n => TopKinds.Contains(n.Kind) && n.Kind != "module"
-                && Top(n.Id) == n.Id && hierarchy!.Owner(n.File)?.Id == project.Id)
+        var tops = owned.Where(n => TopKinds.Contains(n.Kind) && n.Kind != "module"
+                && Top(n.Id) == n.Id)
             .OrderBy(n => n.Name, StringComparer.Ordinal).ToList();
         if (tops.Count > 0)
         {
