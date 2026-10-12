@@ -36,14 +36,14 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     {
         Directory.CreateDirectory(Path.Combine(outDir, "modules"));
         Directory.CreateDirectory(Path.Combine(outDir, "views"));
-        Directory.CreateDirectory(Path.Combine(outDir, "solutions"));
-        Directory.CreateDirectory(Path.Combine(outDir, "projects"));
         var pages = new Dictionary<string, string>();
         void Write(string rel, string body) => pages[rel] = $"{Marker}\n{body}";
 
         var modules = model.Nodes.Where(n => n.Kind is not ("route" or "project" or "package" or "external" or "config") || parent.ContainsKey(n.Id))
             .GroupBy(n => Folder(n.File)).OrderBy(g => g.Key).ToList();
         hierarchy = new ProjectHierarchy(root, model, Files, modules.Select(m => m.Key).ToList());
+        if (hierarchy.Projects.Count > 0) Directory.CreateDirectory(Path.Combine(outDir, "projects"));
+        if (hierarchy.Solutions.Count > 0) Directory.CreateDirectory(Path.Combine(outDir, "solutions"));
         foreach (var project in hierarchy.Projects) Write(project.Page, RenderProject(project));
         foreach (var solution in hierarchy.Solutions) Write(solution.Page, RenderSolution(solution));
         foreach (var m in modules) Write($"modules/{Slug(m.Key)}.md", Module(m.Key, m.ToList()));

@@ -374,8 +374,8 @@ grep -q '`Attach(Fixture.Application.MaterialService)`.* | Starts listening to `
 grep -q "_Evidence:_ \[backend/Api/MaterialController.cs:[0-9]*-[0-9]*\](" "$docs/modules/backend-Api.md"
 python3 -c "import json,sys; assert json.load(open(sys.argv[1]))['profile'] == 'default'" "$docs/.docwizz/documentation.json"
 [ -f "$docs/notes.md" ] || { echo "deleted a hand-written file"; exit 1; }
-fe=$(grep -o 'c[0-9]*\["fixture-frontend \[frontend/package.json\]"\]' "$docs/views/containers.md" | cut -d'[' -f1)
-be=$(grep -o 'c[0-9]*\["Fixture \[backend/Fixture.csproj\]"\]' "$docs/views/containers.md" | cut -d'[' -f1)
+fe=$(grep -o 'c[0-9]*\["fixture-frontend"\]' "$docs/views/containers.md" | cut -d'[' -f1)
+be=$(grep -o 'c[0-9]*\["Fixture"\]' "$docs/views/containers.md" | cut -d'[' -f1)
 grep -q "$fe -->|HTTP| $be" "$docs/views/containers.md"                          # frontend → backend container
 grep -q '| Material | AppDbContext | SQL Server (inferred) | POST /orders, SqlMaterialRepository |' "$docs/views/data.md"
 grep -q '| erp.example.com | http-api | detected | ErpClient |' "$docs/views/context.md"

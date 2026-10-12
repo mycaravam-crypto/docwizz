@@ -129,8 +129,8 @@ partial class Generator
                 string.Join("\n", packages.Select(p => "- \x60" + p + "\x60")) + "\n");
 
         var scope = model.ScopeInventory;
-        var exclusions = scope?.ExcludedReferences.Where(e => e.StartsWith(project.Path + " → ", StringComparison.Ordinal)).ToList() ?? [];
-        var unresolved = scope?.UnresolvedReferences.Where(e => e.StartsWith(project.Path + " → ", StringComparison.Ordinal)).ToList() ?? [];
+        var exclusions = scope?.ExcludedReferences.Where(e => ProjectScope.IsReferenceFrom(e, project.Path)).ToList() ?? [];
+        var unresolved = scope?.UnresolvedReferences.Where(e => ProjectScope.IsReferenceFrom(e, project.Path)).ToList() ?? [];
         if (exclusions.Count > 0)
             sb.AppendLine($"## Excluded references ({exclusions.Count})\n\nThese edges were removed by the explicit project scope:\n\n" +
                 string.Join("\n", exclusions.Select(e => "- \x60" + e.Replace("\x60", "'") + "\x60")) + "\n");

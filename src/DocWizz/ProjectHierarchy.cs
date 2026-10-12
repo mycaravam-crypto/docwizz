@@ -18,6 +18,7 @@ sealed class ProjectHierarchy
     readonly Dictionary<string, Project> projectPages = new(StringComparer.Ordinal);
     readonly Dictionary<string, Solution> solutionPages = new(StringComparer.Ordinal);
     readonly Dictionary<string, List<Project>> modulePages = new(StringComparer.Ordinal);
+    readonly Func<string, string?> ownerOf;
 
     public static string ProjectPage(string manifest) => FilePage("projects", manifest);
     public static string SolutionPage(string solution) => FilePage("solutions", solution);
@@ -51,6 +52,9 @@ sealed class ProjectHierarchy
             projectsById.Add(p.Id, p);
             projectPages.Add(p.Page, p);
         }
+        ownerOf = ProjectOwnership.Resolver(model.Nodes
+            .Where(n => n.Kind == "project" && n.Tags?.Contains("metadata-only") != true)
+            .Select(n => new ProjectOwnership.Candidate(n.Id, n.File, ProjectOwnership.Ecosystem(n))));
         foreach (var item in inventory.Solutions.OrderBy(s => s.Path, StringComparer.Ordinal))
         {
             var members = item.Projects.Where(m => projectsById.ContainsKey(m.ProjectId))
@@ -95,21 +99,8 @@ sealed class ProjectHierarchy
         }
     }
 
-    // Prefer the nearest manifest, and let a root manifest own only files of its language.
-    public Project? Owner(string file)
-    {
-        return Projects.Where(p => !p.MetadataOnly && p.Path != file).Where(p =>
-        {
-            var folder = Path.GetDirectoryName(p.Path)?.Replace('\\', '/') ?? "";
-            if (folder.Length > 0) return file.StartsWith(folder + "/", StringComparison.Ordinal);
-            var ext = Path.GetExtension(file).ToLowerInvariant();
-            var manifest = Path.GetFileName(p.Path);
-            return (manifest.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) && ext == ".cs")
-                || (manifest == "package.json" && ext is ".js" or ".mjs" or ".jsx" or ".ts" or ".tsx" or ".vue")
-                || (manifest is "pom.xml" or "build.gradle" or "build.gradle.kts" && ext == ".java");
-        }).OrderByDescending(p => Path.GetDirectoryName(p.Path)?.Length ?? 0)
-            .ThenBy(p => p.Path, StringComparer.Ordinal).FirstOrDefault();
-    }
+    // The same ownership rule as the scope filter (ProjectOwnership), cached per file. Metadata-only stubs own nothing.
+    public Project? Owner(string file) => ownerOf(file) is { } id ? projectsById.GetValueOrDefault(id) : null;
 
     public IReadOnlyList<Project> ForModule(string folder) =>
         modulePages.GetValueOrDefault($"modules/{Generator.Slug(folder)}.md") ?? [];

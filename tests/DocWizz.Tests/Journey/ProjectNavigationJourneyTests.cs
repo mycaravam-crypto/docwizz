@@ -70,6 +70,7 @@ public class ProjectNavigationJourneyTests
         var container = File.ReadAllText(FileAt(repo, "views/containers.md"));
         Assert.Contains("Core/Shared.csproj", container);
         Assert.Contains("Other/Shared.csproj", container);
+        Assert.DoesNotContain("[Api/Api.csproj]", container);   // a unique name keeps its plain label
     }
 
     [Fact]

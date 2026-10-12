@@ -79,7 +79,14 @@ partial class Generator
     static string ExternalLabel(Node ext) => Externals.Certainty(ext) == "detected" ? ext.Name : $"{ext.Name} ({Externals.Certainty(ext)})";
 
     // The container (project) a symbol lives in; code outside any project is grouped by language.
-    static string ContainerLabel(Node p) => $"{p.Name} [{p.File}]";
+    // Projects are named by their manifest name; the manifest path is added only when two projects share a name.
+    HashSet<string>? sharedProjectNames;
+    string ContainerLabel(Node p)
+    {
+        sharedProjectNames ??= Projects.GroupBy(x => x.Name, StringComparer.Ordinal).Where(g => g.Count() > 1)
+            .Select(g => g.Key).ToHashSet(StringComparer.Ordinal);
+        return sharedProjectNames.Contains(p.Name) ? $"{p.Name} [{p.File}]" : p.Name;
+    }
     Dictionary<string, string>? containerOf;
     string Container(Node n)
     {
