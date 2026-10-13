@@ -13,7 +13,8 @@ static class DomainCrawler
     const int MaxRequirementsPerSymbol = 10;
 
     // Keep traversal directed. Reverse lookup is used only for interface dispatch (implements); following all
-    // callers or all consumers of a repository/service quickly swallows an unrelated application.
+    // callers or all consumers of a repository/service quickly swallows an unrelated application. `contains` is
+    // followed from seed symbols only.
     static readonly HashSet<string> Relations =
     [
         "calls", "injects", "accesses", "creates", "implements", "registers", "inherits",
@@ -133,7 +134,10 @@ static class DomainCrawler
             if (visited.Count >= maxNodes) { truncated = true; break; }
             visited.Add(current, at.Depth);
             if (at.Depth >= maxDepth) continue;
-            var following = outgoing[current].Select(e => (e.To, Deferred: Deferred(e, nodes[e.To])))
+            // Type -> member only from a seed: a class reached through a field would otherwise pull in its whole API
+            // (every sibling method of the one actually called) and their requirements.
+            var following = outgoing[current].Where(e => e.Kind != "contains" || at.Depth == 0)
+                .Select(e => (e.To, Deferred: Deferred(e, nodes[e.To])))
                 .Concat(implementations[current].Select(e => (To: e.From, Deferred: false)));
             foreach (var (next, deferred) in following)
                 if (!visited.ContainsKey(next))

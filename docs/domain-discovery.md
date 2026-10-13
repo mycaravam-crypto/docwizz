@@ -48,7 +48,8 @@ The crawler only writes to stdout. Use shell redirection to save a report.
   path within the depth bound is left. `depth` is the hop count along the path that admitted the node.
 - Traverses code-model calls, injections, accesses, creation, interface implementations,
   registrations, inheritance, persistence, events, HTTP, rendering, routes and external
-  systems. Type-to-member `contains` edges are traversed **only** from container types.
+  systems. Type-to-member `contains` edges are traversed **only** from a seed that is a container type:
+  a class reached through a field or constructor is listed, but its other members are not.
 - For interface implementations, can follow an `implements` edge backwards to reach a
   concrete implementation; **the exported edge still preserves its original direction**.
 - File locations and evidence come from the existing scanner, never guessed by the model.

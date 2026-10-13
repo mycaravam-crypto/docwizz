@@ -130,6 +130,22 @@ public class DomainCrawlerTests
     }
 
     [Fact]
+    public void A_class_reached_through_a_field_does_not_pull_in_its_other_members()
+    {
+        const string Repo = "cs:Shop.Data.Repo", Save = "cs:Shop.Data.Repo.Save()", Purge = "cs:Shop.Data.Repo.Purge()";
+        var model = Model(
+            [N(Service, "src/Application/OrderService.cs", kind: "method"), N(Repo, "src/Data/Repo.cs"),
+             N(Save, "src/Data/Repo.cs", kind: "method"), N(Purge, "src/Data/Repo.cs", kind: "method")],
+            [E(Service, Repo, "accesses"), E(Service, Save), E(Repo, Save, "contains"), E(Repo, Purge, "contains")]);
+
+        var walked = DomainCrawler.Discover(model, Service, null, 3, 100).Symbols.Select(s => s.Id).ToArray();
+        Assert.Equal([Service, Repo, Save], walked);
+
+        var seeded = DomainCrawler.Discover(model, Repo, null, 1, 100).Symbols.Select(s => s.Id);
+        Assert.Contains(Purge, seeded);
+    }
+
+    [Fact]
     public void Markdown_keeps_confirmed_and_candidate_apart_and_escapes_untrusted_titles()
     {
         var index = Index();
