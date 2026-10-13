@@ -16,7 +16,9 @@ static class Cli
         ["format"] = "console or json", ["profile"] = $"a profile ({string.Join(", ", Profiles.Names)}) or a .yaml file",
         ["context"] = "a project context YAML file", ["since"] = "a git ref, e.g. origin/main", ["package"] = "a package name", ["to"] = "a version",
         ["for"] = "a symbol, file, folder or endpoint (\"POST /api/orders\")", ["hops"] = $"a number of hops, 1 to {AgentContext.MaxHops}",
-        ["budget"] = "a number of tokens", ["work-item"] = "a work item id, e.g. 1234", ["base-url"] = "a running application URL (http or https)",
+        ["budget"] = "a number of tokens", ["work-item"] = "a work item id, e.g. 1234",
+        ["seed"] = "a symbol id, qualified method name or endpoint (POST /api/orders)", ["depth"] = "the traversal depth (0 to 8)",
+        ["limit"] = "the maximum number of technical symbols (1 to 500)", ["base-url"] = "a running application URL (http or https)",
         ["storage-state"] = "a Playwright storageState JSON file", ["screenshot-delay"] = "a number of milliseconds, 0 to 60000",
     };
 
@@ -43,6 +45,11 @@ static class Cli
         ["context"] = new("context <dir> --for <target>", "token-budgeted context package for a coding agent: one symbol, file, folder or endpoint", "coding agents",
             "docwizz context . --for \"POST /api/materials\"", "--for <symbol|file|folder|VERB /route>, --hops <1-4>, --budget <tokens>, --format md|json, --include-ai, --requirements (linked work items from docwizz requirements import)",
             ["for", "hops", "budget", "format", "include-ai", "requirements"]),
+        ["domain"] = new("domain discover <dir> (--seed <symbol|endpoint> | --work-item <id>)",
+            "bounded, read-only technical graph walk with separately labelled historical requirement evidence", "architects",
+            "docwizz domain discover . --seed \"POST /api/orders\" --depth 3 --limit 100 --format json",
+            "--seed <symbol|endpoint> or --work-item <id>, --depth <0-8>, --limit <1-500>, --format console|json",
+            ["seed", "work-item", "depth", "limit", "format"]),
         ["mcp"] = new("mcp <dir>", "read-only MCP server on stdio: coding agents query the code model (find_symbol, context, impact, check, ...)", "coding agents",
             "docwizz mcp .", "--auto-rescan (rescan when the model is stale)", ["auto-rescan"]),
         ["trace"] = new("trace <dir> <evidence.yaml>", "explicit evidence-chain gaps as Markdown or JSON", "product documents",
