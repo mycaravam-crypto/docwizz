@@ -11,4 +11,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0 }   # check --since needs the base commit
       - uses: ./
-        with: { path: src, fail: 'true' }   # fails on problems the PR introduces
+        # The repository root, so tests/ is in scope for test traceability (docwizz.yaml: `tests:` links them, `exclude:`
+        # keeps the fixtures out); scanning src alone reported every changed symbol as untested.
+        with: { path: ., fail: 'true' }   # fails on problems the PR introduces
