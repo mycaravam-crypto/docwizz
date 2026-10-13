@@ -372,7 +372,8 @@ Work-item seeding requires `docwizz requirements import` first. Without an index
 still runs, but marks requirement evidence as unavailable. The crawler uses a deterministic directed
 BFS and never sends code or work items to AI or a network service. The JSON schema is
 `docwizz.domain-discovery/v1`; `candidateTerms` are Work Item titles, not verified domain names. `--format md` renders the same report
-as reviewable Markdown: a Mermaid graph (up to 80 symbols), a symbol table and confirmed vs candidate requirements.
+as reviewable Markdown in three parts: As-is (Mermaid graph and symbol table), As-intended (confirmed links on unchanged
+code, with criteria) and Unclear (every other link with its reason, and methods without one).
 See [domain-discovery.md](docs/domain-discovery.md) for provenance, limitations and the full
 GitWizz/ADO/DocWizz workflow.
 

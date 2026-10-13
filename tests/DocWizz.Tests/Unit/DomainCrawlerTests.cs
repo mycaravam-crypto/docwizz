@@ -146,7 +146,7 @@ public class DomainCrawlerTests
     }
 
     [Fact]
-    public void Markdown_keeps_confirmed_and_candidate_apart_and_escapes_untrusted_titles()
+    public void Markdown_separates_as_is_as_intended_and_unclear_and_escapes_untrusted_titles()
     {
         var index = Index();
         index = index with { WorkItems = [index.WorkItems[0] with { Title = "Limit | <script>\"x\"" }, index.WorkItems[1]] };
@@ -156,17 +156,28 @@ public class DomainCrawlerTests
         Assert.Contains("-->|implements|", md);
         Assert.Contains("[\"OrderService.Place\"]", md);
         Assert.Contains("| 1 | `cs:Shop.Application.OrderService.Place(int)` | method |", md);
-        var confirmed = md.IndexOf("### Confirmed", StringComparison.Ordinal);
-        var candidates = md.IndexOf("### Candidates", StringComparison.Ordinal);
-        Assert.InRange(md.IndexOf("WI-101 rev 3", StringComparison.Ordinal), confirmed, candidates);
-        Assert.True(md.IndexOf("WI-102", candidates, StringComparison.Ordinal) > candidates);
+        var (asIs, intended, unclear) = (At(md, "## As-is"), At(md, "## As-intended"), At(md, "## Unclear"));
+        Assert.True(asIs < intended && intended < unclear);
+        // WI-101: direct commit link, code unchanged -> intent, with its criteria. WI-102: PR only -> unclear, with the reason.
+        Assert.InRange(At(md, "| WI-101 rev 3 |"), intended, unclear);
+        Assert.Contains("Orders above the threshold are rejected", md[intended..unclear]);
+        Assert.Contains("| WI-102 rev 2 | Improve approval flow | `cs:Shop.Application.OrderService.Place(int)` | linked only through a pull request", md[unclear..]);
+        Assert.Contains("Methods without a linked work item (2): `OrderController.Place`, `Order.Save`", md);
         Assert.Contains("Limit \\| \\<script>", md);
         Assert.DoesNotContain("<script>", md.Replace("\\<script>", ""));
+
+        // The code changed after the linked commit: the same confirmed link is no longer plain intent.
+        var changed = Model([.. Graph().Nodes.Select(n => n.Id == Service ? n with { Hash = "h999" } : n)], Graph().Edges);
+        var drifted = DomainCrawler.Markdown(DomainCrawler.Discover(changed, Endpoint, null, 2, 100, index, "abc123"));
+        Assert.Contains("None.", drifted[At(drifted, "## As-intended")..At(drifted, "## Unclear")]);
+        Assert.Contains("the code changed after the linked commit", drifted[At(drifted, "## Unclear")..]);
 
         var bare = DomainCrawler.Markdown(DomainCrawler.Discover(Graph(), Endpoint, null, 0, 10));
         Assert.Contains("No relations within the bounds.", bare);
         Assert.Contains("Unavailable: run `docwizz requirements import`", bare);
     }
+
+    static int At(string text, string value) => text.IndexOf(value, StringComparison.Ordinal);
 
     [Fact]
     public void Work_item_seed_starts_from_linked_current_symbols_only()
