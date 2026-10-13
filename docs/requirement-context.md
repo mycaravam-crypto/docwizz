@@ -121,3 +121,22 @@ enumeration value (with its path), a short SHA or a duplicate commit;
 `requirements_for_symbol`, `symbols_for_requirement` and `context(requirements: true)` read this index; none of them
 fetches anything. The rules (bounded selection, untrusted data, `intent`/`deviation` sections, labels, cache keys) are
 in [CLI.md](../CLI.md#requirements-in-drafts). Without `--requirements` nothing changes.
+
+## Answering gitwizz
+
+`docwizz requirements query <dir> <query.json>` is the resolver gitwizz calls when `.gitwizz.yml` sets
+`context.requirements.command: docwizz requirements query` (gitwizz `src/Gitwizz/RequirementContext.cs`). It reads
+`gitwizz.requirement-query/v1` (the PR's changed symbols) and prints `gitwizz.requirement-input/v1`:
+
+| Field | From the index |
+|---|---|
+| `links[].type` | `verified` for `confirmed` (a provider-verified commit link), `candidate` for everything else |
+| `links[].source` | `commit-link`, `pr-link` or `commit-message`: the strongest evidence behind the link |
+| `links[].freshness` | `stale` when the code changed since the newest linked commit, `unknown` when the symbol isn't in the current code |
+| `links[].evidence` | at most 5 lines: relation, commit, file and lines (repository-relative) |
+| `unavailable` | no index, truncated or shallow history, commits with unknown links, linked work items not exported (at most 20) |
+| `analyzedCommit` | the last exported commit: gitwizz calls the answer stale when it isn't the target |
+
+Only requested symbol ids are answered (at most 10 links each). A symbol whose id isn't in the history is looked up by
+its `previousId` (a changed signature). The PR's own commits are usually not in the export yet: an answer never says
+they were indexed. A query that isn't valid JSON or `gitwizz.requirement-query/v1` exits 1 with the reason on stderr.

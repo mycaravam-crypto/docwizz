@@ -36,11 +36,11 @@ static async Task<int> Dispatch(string[] args)
     // `docwizz product check <dir> <template.yaml>`: the subcommand comes before the directory (a folder named check: ./check).
     var productCheck = cmd == "product" && pos.ElementAtOrDefault(1) == "check";
     if (productCheck) pos.RemoveAt(1);
-    // `docwizz requirements import|show <dir> ...`: the same, the subcommand first.
+    // `docwizz requirements import|show|query <dir> ...`: the same, the subcommand first.
     string? requirementsAction = null;
     if (cmd == "requirements")
     {
-        if (pos.ElementAtOrDefault(1) is not ("import" or "show")) return Usage("requirements needs import or show: docwizz requirements import <dir> <history.json> [<work-items>]", "requirements");
+        if (pos.ElementAtOrDefault(1) is not ("import" or "show" or "query")) return Usage("requirements needs import, show or query: docwizz requirements import <dir> <history.json> [<work-items>]", "requirements");
         requirementsAction = pos[1];
         pos.RemoveAt(1);
     }
@@ -101,9 +101,12 @@ static async Task<int> Dispatch(string[] args)
         case "evidence-diff":
             return EvidenceDiffCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), json);
         case "requirements":
-            return requirementsAction == "import"
-                ? RequirementsImport(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), config, opts)
-                : RequirementsShow(path, config, opts, json);
+            return requirementsAction switch
+            {
+                "import" => RequirementsImport(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), config, opts),
+                "query" => RequirementsQuery(path, pos.ElementAtOrDefault(2), config),
+                _ => RequirementsShow(path, config, opts, json),
+            };
         case "trace":
             return TraceCommand(path, pos.ElementAtOrDefault(2), json);
         case "product":
@@ -321,6 +324,30 @@ static int RequirementsShow(string root, Config config, Dictionary<string, strin
     }
     var context = RequirementResolver.For(index, symbolId, node, head);
     Console.Write(json ? RequirementResolver.Json(context) : RequirementResolver.Text(context));
+    return 0;
+}
+
+// `requirements query`: gitwizz's resolver protocol (RequirementQuery). Only the JSON answer goes to stdout; a query
+// that can't be read exits 1 with the reason on stderr. A missing index is an answer (unavailable), not an error.
+static int RequirementsQuery(string root, string? queryFile, Config config)
+{
+    if (string.IsNullOrWhiteSpace(queryFile)) return Usage("requirements query needs a query file (gitwizz.requirement-query/v1): docwizz requirements query <dir> <query.json>", "requirements");
+    string text;
+    try { text = File.ReadAllText(queryFile); }
+    catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Console.Error.WriteLine($"the query file can't be read: {e.Message}"); return 1; }
+    var (symbols, error) = RequirementQuery.Read(text);
+    if (error is not null) { Console.Error.WriteLine(error); return 1; }
+    var file = Path.Combine(root, RequirementIndex.DefaultFile);
+    RequirementIndex.Index? index = null;
+    if (File.Exists(file))
+    {
+        try { index = RequirementIndex.Load(file); }
+        catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
+    }
+    var nodes = index is null ? [] : LoadModel(root, config).Model.Nodes.GroupBy(n => n.Id).ToDictionary(g => g.Key, g => g.First());
+    var answer = RequirementQuery.Answer(index, symbols, id => nodes.GetValueOrDefault(id), Git(root, "rev-parse HEAD")?.Trim(),
+        index is not null && index.Inputs.Scope != ProjectScope.Fingerprint(config.Scope));
+    Console.Write(answer.ToJsonString() + "\n");
     return 0;
 }
 
@@ -634,6 +661,7 @@ static string Reference() => $"""
         [--format json]                 machine-readable instead of Markdown
       docwizz requirements import <dir> <history.json> [<work-items>]  index exported commit/PR/work-item history
       docwizz requirements show <dir> --for <symbol>  work items a symbol was changed for (confirmed/candidate)
+      docwizz requirements query <dir> <query.json>   answer gitwizz's requirement query (gitwizz.requirement-input/v1)
         [--work-item <id>] [--format json]  the symbols of one work item instead; machine-readable
       docwizz product <dir> <template.yaml> [out.md]  product draft from code and project evidence
         [--context <file.yaml>]         load sourced project facts
