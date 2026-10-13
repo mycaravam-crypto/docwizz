@@ -27,6 +27,9 @@ docwizz domain discover . --seed "POST /api/orders" --depth 4 --limit 150 --form
 # Top-down from one historic requirement:
 docwizz domain discover . --work-item 4711 --depth 3 --limit 100 --format json
 
+# Reviewable Markdown with a Mermaid graph:
+docwizz domain discover . --seed "POST /api/orders" --format md > orders-domain.md
+
 # Readable console output, still no AI or network:
 docwizz domain discover . --seed "Shop.OrderService.Place" --depth 3
 ```
@@ -60,8 +63,9 @@ The crawler only writes to stdout. Use shell redirection to save a report.
 - `candidateTerms[]` contains only **historical Work Item titles** and their associated
   current code symbols. The classification is explicitly `historical-requirement-title`:
   titles are *not* automatically validated capabilities or bounded contexts.
-- The output is stably ordered JSON (`docwizz.domain-discovery/v1`), or a human-readable
-  console summary. The same code model, history index, seed, commit and bounds produce the same output.
+- The output is stably ordered JSON (`docwizz.domain-discovery/v1`), Markdown (`--format md`: Mermaid
+  graph up to 80 symbols, symbol table, confirmed and candidate requirements in separate tables), or a
+  human-readable console summary. The same code model, history index, seed, commit and bounds produce the same output.
 
 ## What it does not claim
 
