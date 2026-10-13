@@ -503,6 +503,7 @@ them (`UseNpgsql`, `fetch('https://…')`), *inferred* when only a package point
 | `docwizz diff <dir> [ref]`, `docwizz diff [dir] <base> <head>` | changed symbols, affected pages, linked tests |
 | `docwizz check <dir> [--since <ref>]` | quality gate; exit 1 on failure |
 | `docwizz context <dir> --for <target>` | token-budgeted facts for coding agents |
+| `docwizz domain discover <dir> --seed <symbol>` | bounded, read-only code and requirement graph traversal |
 | `docwizz mcp <dir>` | read-only MCP server for coding agents |
 | `docwizz sbom [dir] [out]` | CycloneDX 1.6 from direct manifest dependencies |
 | `docwizz remediate <dir>` | package update suggestions, optionally validated |
