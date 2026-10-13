@@ -6,9 +6,9 @@
     python3 bench/requirements.py --model qwen2.5-coder:7b --endpoint http://127.0.0.1:11434 --modes A,B,C
     python3 bench/run.py requirements ...                           # the same, through the benchmark entry point
 
-A repository with a scripted history is built from bench/requirements_fixture.py (22 C# methods, 15 commits, direct
+A repository with a scripted history is built from bench/requirements_fixture.py (24 C# methods, 20 commits, direct
 and PR-only links, a squash merge, a rename, an ambiguous PR, a denied lookup, an unrelated co-change, two methods that
-contradict their requirement, a prompt-injection work item), with the exports DocWizz reads. Ground truth is
+contradict their requirement, a prompt-injection work item, two methods over the default context bound), with the exports DocWizz reads. Ground truth is
 bench/requirements/gold.json, written by hand; nothing a model wrote ever goes there.
 
 Layer 1, links (deterministic): `docwizz requirements import` and `show` per method against gold. Link precision and
@@ -246,6 +246,15 @@ def drafts(dll, repo, gold, mode, model, endpoint, seed, given):
             f.write(original)
 
     cache = json.load(open(os.path.join(out, ".docwizz", "ai-cache.json")))
+    bound = {}   # method → what the bound took away from its business context, as the facts said
+    for r in first:
+        try:
+            facts = json.loads(r["facts"])
+        except ValueError:
+            continue
+        bc = facts.get("businessContext") if isinstance(facts, dict) else None
+        if bc and (bc.get("leftOut") or bc.get("criteriaCut")):
+            bound[facts["symbol"].removeprefix("cs:").split("(")[0]] = {"leftOut": bc.get("leftOut") or 0, "criteriaCut": bool(bc.get("criteriaCut"))}
     per = {}
     for name, g in gold["methods"].items():
         prefix = "cs:" + name + "("
@@ -264,6 +273,9 @@ def drafts(dll, repo, gold, mode, model, endpoint, seed, given):
             "wiSentences": len(cited), "unsupported": len(unsupported), "invalidCitations": len(invalid),
             "contradiction": bool(g.get("contradicts")), "deviation": any(sec == "deviation" for sec, _, _ in sentences),
             "injection": sum(p in text for p in gold["injection"]["phrases"]),
+            "stress": bool(g.get("budgetStress")), "bound": bound.get(name),
+            # Kept intent/deviation sentences, so unsupported claims and false deviations can be read, not only counted.
+            "requirementSentences": [f"{sec}: {t}" for sec, t, _ in sentences if sec in ("intent", "deviation")],
         }
     rng = random.Random(seed)
     names = sorted(per)
@@ -288,13 +300,30 @@ def drafts(dll, repo, gold, mode, model, endpoint, seed, given):
         "requestSeconds": round(sum(r["seconds"] for r in first), 2), "wallSeconds": round(seconds, 2),
         "businessContextRequests": sum('"businessContext"' in r["facts"] for r in first),
         "constraintRecall": recall(list(per.values())), "constraintRecallCI": ci(recall),
+        "stressRecall": recall([m for m in per.values() if m["stress"]]),
+        "boundHit": sorted(bound),
         "unsupportedRate": unsupported(list(per.values())), "unsupportedRateCI": ci(unsupported),
         "contradictionsFlagged": f"{sum(m['deviation'] for m in contradictions)}/{len(contradictions)}",
+        "falseDeviations": sorted(n for n, m in per.items() if m["deviation"] and not m["contradiction"]),
         "injectionPhrasesKept": sum(m["injection"] for m in per.values()),
         "invalidCitations": sum(m["invalidCitations"] for m in per.values()),
         "sentences": sum(m["sentences"] for m in per.values()),
         "methods": per,
     }
+
+
+def model_digest(endpoint, model):
+    """The model build as the server names it (Ollama /api/tags), so a report says exactly which weights answered."""
+    try:
+        u = urllib.parse.urlparse(endpoint)
+        conn = http.client.HTTPConnection(u.hostname, u.port or 80, timeout=10)
+        conn.request("GET", "/api/tags")
+        for m in json.loads(conn.getresponse().read()).get("models", []):
+            if m.get("name") == model:
+                return {"digest": m.get("digest"), **{k: m.get("details", {}).get(k) for k in ("parameter_size", "quantization_level", "format")}}
+    except (OSError, ValueError):
+        pass
+    return None
 
 
 # ---- report ----
@@ -318,6 +347,9 @@ def recommend(result):
                      f"unsupported {b['unsupportedRate']}, prompt tokens ×{cost:.2f}.")
     elif better and safe:
         lines.append(f"Keep opt-in: better grounding ({a['constraintRecall']} → {b['constraintRecall']}) but prompt tokens ×{cost:.2f} or link precision {l['precision']}.")
+    elif safe:
+        lines.append(f"Keep opt-in: no significant gain (recall {a['constraintRecall']} → {b['constraintRecall']}, B's 95% CI {b['constraintRecallCI']} "
+                     f"does not clear A), though safe (unsupported {b['unsupportedRate']}, injection phrases kept 0).")
     else:
         lines.append(f"Revise before wider use: recall {a['constraintRecall']} → {b['constraintRecall']}, unsupported {b['unsupportedRate']}, "
                      f"injection phrases kept {b['injectionPhrasesKept']}.")
@@ -327,7 +359,8 @@ def recommend(result):
 def markdown(result):
     l = result["links"]
     out = [f"# Requirement context benchmark", "",
-           f"{result['docwizz']} · model {result['model']['name'] or '(none)'} ({result['model']['provider']}) · seed {result['seed']} · "
+           f"{result['docwizz']} · model {result['model']['name'] or '(none)'} ({result['model']['provider']}"
+           f"{', ' + result['model']['digest']['digest'][:12] + ' ' + str(result['model']['digest']['quantization_level']) if result['model'].get('digest') else ''}) · seed {result['seed']} · "
            f"fixture {result['inputs']['history']} / work items {result['inputs']['workItems']} · index {l['indexFingerprint']}", "",
            "## Links (deterministic)", "",
            "| Methods | Precision | Recall | Recall (visible evidence) | Confirmed P/R | Candidate P/R | Outcomes | Reproducible |",
@@ -343,12 +376,22 @@ def markdown(result):
     out.append(f"- Work items asserted on a method from a file-level change: {l['fileLevelAsserted'] or 'none'}")
     if result.get("drafts"):
         out += ["", "## Drafts", "",
-                "| Mode | Requests | Rerun requests | Prompt tokens | Completion tokens | Seconds | Constraint recall (95% CI) | Unsupported WI (95% CI) | Invalid citations | Contradictions flagged | Injection kept | Hosts |",
-                "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+                "| Mode | Requests | Rerun requests | Prompt tokens | Completion tokens | Seconds | Constraint recall (95% CI) | Stress recall | Bound hit | Unsupported WI (95% CI) | Invalid citations | Contradictions flagged | False deviations | Injection kept | Hosts |",
+                "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
         for m in result["drafts"]:
             out.append(f"| {m['mode']} | {m['requests']} | {m['requestsOnUnchangedRerun']} | {m['promptTokens']} | {m['completionTokens']} | {m['requestSeconds']} | "
-                       f"{m['constraintRecall']} {m['constraintRecallCI']} | {m['unsupportedRate']} {m['unsupportedRateCI']} | {m['invalidCitations']} | {m['contradictionsFlagged']} | "
+                       f"{m['constraintRecall']} {m['constraintRecallCI']} | {m['stressRecall']} | {len(m['boundHit'])} | {m['unsupportedRate']} {m['unsupportedRateCI']} | {m['invalidCitations']} | {m['contradictionsFlagged']} | {len(m['falseDeviations'])} | "
                        f"{m['injectionPhrasesKept']} | {', '.join(m['hosts'])} |")
+        modes = result["drafts"]
+        out += ["", "### Per method", "", "Constraints found / gold groups; `u` unsupported WI sentences, `d` a deviation sentence, `✂` the bound cut its context.", "",
+                "| Method | " + " | ".join(m["mode"] for m in modes) + " |", "|---|" + "---|" * len(modes)]
+        for name in sorted(modes[0]["methods"]):
+            cells = []
+            for m in modes:
+                r = m["methods"][name]
+                cells.append(f"{r['constraintsFound']}/{r['constraints']}" + (f" u{r['unsupported']}" if r["unsupported"] else "")
+                             + (" d" if r["deviation"] else "") + (" ✂" if r["bound"] else ""))
+            out.append(f"| {name.split('.', 1)[1]} | " + " | ".join(cells) + " |")
     out += ["", "## Recommendation", "", *[f"- {r}" for r in result["recommendation"]], ""]
     return "\n".join(out)
 
@@ -379,6 +422,8 @@ def main(argv=None):
             "inputs": {"history": digest(history), "workItems": digest(items), "gold": digest(GOLD), "budget": {"B": "3 items / 1200 chars", "C": "10 items / 20000 chars"}},
             "links": links(dll, repo, history, items, gold),
         }
+        if args.model and args.model != "fake":
+            result["model"]["digest"] = model_digest(args.endpoint, args.model)
         if args.model:
             given = {r["method"]: {i for i, _ in r["got"]} for r in result["links"]["rows"]}
             result["drafts"] = [drafts(dll, repo, gold, m.strip(), args.model, args.endpoint, args.seed, given) for m in args.modes.split(",")]
