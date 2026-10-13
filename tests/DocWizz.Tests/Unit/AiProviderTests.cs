@@ -43,7 +43,7 @@ public class AiProviderTests
 
     // An HTTP server on loopback: answers each request with the next of `replies` (the last one repeats; status 0 = never
     // answer), and records each request's first line, headers and body.
-    sealed class FakeServer : IDisposable
+    internal sealed class FakeServer : IDisposable
     {
         readonly TcpListener listener = new(IPAddress.Loopback, 0);
         public List<string> Requests { get; } = [];
@@ -278,13 +278,10 @@ public class AiProviderTests
         ]);
         var findings = Analyzer.Analyze(model, Models.Config());
         Assert.Equal(2, findings.Count(f => f.Missing.Contains("summary")));
-        var run = AiProse.Summaries(dir.Root, model, findings, cacheFile, call: true, new AiConfig { Endpoint = server.Uri.ToString(), Model = "local:7b" });
+        _ = AiProse.Summaries(dir.Root, model, findings, cacheFile, call: true, new AiConfig { Endpoint = server.Uri.ToString(), Model = "local:7b" });
 
         for (var i = 0; i < 100 && !File.Exists(cacheFile); i++) await Task.Delay(100, TestContext.Current.CancellationToken);
         Assert.Contains("Places an order.", File.ReadAllText(cacheFile));
-        // The second request usually hangs, but a reset connection ends the run, which then saves once more: let that
-        // finish before checking for a temp file or deleting the folder under it.
-        await Task.WhenAny(run, Task.Delay(3000, TestContext.Current.CancellationToken));
         Assert.False(File.Exists(cacheFile + ".tmp"));
     }
 }

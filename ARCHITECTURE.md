@@ -312,6 +312,12 @@ items without a summary, plus an overview for each module (folder) of three or m
 - **[RequirementResolver](src/DocWizz/Requirements/RequirementResolver.cs)** decides at query time, against the current
   model: `confirmed` needs a direct commit link, a PR link alone stays `candidate`, and `changedSince` compares the
   symbol's hash then and now. Outcomes keep "verified none" apart from "couldn't tell". No network anywhere.
+- **[BusinessContext](src/DocWizz/Requirements/BusinessContext.cs)** selects what a model or agent sees with
+  `--requirements`: available items only, ranked deterministically, bounded by `ai.requirements`. `ContextBuilder` adds
+  it as `businessContext` (data, never instructions); `AiProse` adds its rules to the prompt only then, keys the draft
+  by the selection's hash, and grounds the answer: code sections lose work-item citations, `intent`/`deviation` need
+  one and get its status, fulfilment claims are dropped. Without the flag every prompt and key is unchanged.
+  `context --requirements` and the MCP tools `requirements_for_symbol`/`symbols_for_requirement` read the same index.
 
 ## Tests
 

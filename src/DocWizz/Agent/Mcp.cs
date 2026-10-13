@@ -62,7 +62,8 @@ sealed class McpServer(McpServer.Host host)
             Schema(("query", "string", "a name, qualified name, `VERB /route` or folder", true), ("kind", "string", "only this kind: class, method, endpoint, module, component, ...", false), Offset, Limit, Budget), FindSymbol),
         new("context", "Token-budgeted facts about one symbol, file, folder or endpoint: signature, neighbours, flows, tests, gaps, files to read.",
             Schema(("target", "string", "symbol id or qualified name, file, folder, or `VERB /route`", true), ("hops", "integer", "neighbour depth 1-4, default 2", false),
-                Budget, ("include_ai", "boolean", "include cached AI drafts (marked ai-drafted); default false", false)), Context),
+                Budget, ("include_ai", "boolean", "include cached AI drafts (marked ai-drafted); default false", false),
+                ("requirements", "boolean", "add the symbol's linked work items from the requirement index (history, not proof); default false", false)), Context),
         new("callers", "Who calls, injects or calls over HTTP the given symbol (and its members).",
             Schema(("id", "string", "symbol id or qualified name", true), Offset, Limit, Budget), a => Edges(a, incoming: true)),
         new("callees", "What the given symbol (and its members) calls, injects or calls over HTTP.",
@@ -79,6 +80,10 @@ sealed class McpServer(McpServer.Host host)
             Schema(("path", "string", "file or folder prefix", false), Offset, Limit, Budget), Violations),
         new("check", "The quality gate as JSON: pass/fail and why. With since, only problems introduced since that ref (definition of done).",
             Schema(("since", "string", "git ref, e.g. origin/main", false), Budget), a => host.Check(Str(a, "since")) ?? throw new ToolError($"not a git repository or unknown ref: {Str(a, "since")}")),
+        new("requirements_for_symbol", "Work items a symbol was changed for, from the imported history: confirmed (direct commit link) or candidate (PR link only), with commit, lines and whether the code changed since.",
+            Schema(("id", "string", "symbol id or qualified name (an id from history works for renamed or deleted code)", true), Budget), RequirementsForSymbol),
+        new("symbols_for_requirement", "The symbols one work item is linked to through the commits that changed them, current code first.",
+            Schema(("work_item", "integer", "work item id, e.g. 1234", true), Budget), SymbolsForRequirement),
         new("rescan", "Scan the code again (in memory; nothing is written). Use when an answer says stale: true.",
             Schema(), _ => { Reload(scan: true); return new { nodes = model.Nodes.Count, edges = model.Edges.Count }; }),
     ];
@@ -293,14 +298,47 @@ sealed class McpServer(McpServer.Host host)
         if (resolved.Target is not { } t)
             throw new ToolError(resolved.Error + (resolved.Candidates.Count > 0 ? $"; candidates: {string.Join(", ", resolved.Candidates)}" : ""));
         var includeAi = a["include_ai"] is JsonValue v && v.TryGetValue<bool>(out var b) && b;
-        var blocks = AgentContext.Blocks(graph, host.Config, t, Int(a, "hops", AgentContext.DefaultHops, 1, AgentContext.MaxHops), includeAi, findings, arch, drafts);
+        var withRequirements = a["requirements"] is JsonValue rv && rv.TryGetValue<bool>(out var r) && r;
+        List<AgentContext.Line>? requirements = null;
+        if (withRequirements)
+        {
+            if (t.Primary is not { } n) requirements = [new("requirements are per symbol: use a symbol as target", "history")];
+            else
+            {
+                var context = RequirementResolver.For(Requirements(), n.Id, n, host.Head());
+                requirements = AgentContext.RequirementLines(context, BusinessContext.Select(context, host.Config.Ai.Requirements));
+            }
+        }
+        var blocks = AgentContext.Blocks(graph, host.Config, t, Int(a, "hops", AgentContext.DefaultHops, 1, AgentContext.MaxHops), includeAi, findings, arch, drafts, requirements);
         var package = new AgentContext.Package(Path.GetFileName(Path.GetFullPath(host.Root).TrimEnd('/', '\\')), model.Commit, new(source, null, 0), t,
-            Int(a, "budget", AgentContext.DefaultBudget, 100, 1_000_000), includeAi, includeAi ? 0 : t.Scope.Count(n => drafts.ContainsKey(n.Id)), blocks, []);
+            Int(a, "budget", AgentContext.DefaultBudget, 100, 1_000_000), includeAi, includeAi ? 0 : t.Scope.Count(n => drafts.ContainsKey(n.Id)), blocks, [], withRequirements);
         // Freshness is in the envelope; the package's own header fields would repeat it.
         var json = JsonNode.Parse(AgentContext.Render(package, json: true))!.AsObject();
         foreach (var k in new[] { "commit", "head", "model", "stale", "warnings" }) json.Remove(k);
         return json;
     }
+
+    // The requirement index `docwizz requirements import` wrote; read on every call (it is small), never fetched.
+    RequirementIndex.Index Requirements()
+    {
+        var file = Path.Combine(host.Root, RequirementIndex.DefaultFile);
+        if (!File.Exists(file)) throw new ToolError($"no requirement index at {RequirementIndex.DefaultFile}; run docwizz requirements import <dir> <history.json> [<work-items>] first");
+        try { return RequirementIndex.Load(file); }
+        catch (ArgumentException e) { throw new ToolError(e.Message); }
+    }
+
+    object RequirementsForSymbol(JsonObject a)
+    {
+        var query = Required(a, "id");
+        var index = Requirements();
+        if (AgentContext.Resolve(model, query) is { Target.Primary: { } n }) return RequirementResolver.For(index, n.Id, n, host.Head());
+        if (index.Commits.SelectMany(c => c.Touches).Any(t => t.Symbol == query)) return RequirementResolver.For(index, query, null, host.Head());
+        return Symbol(query);   // throws the resolver's error, with candidates
+    }
+
+    object SymbolsForRequirement(JsonObject a) =>
+        RequirementResolver.Symbols(Requirements(), a["work_item"] is null ? throw new ToolError("missing argument: work_item")
+            : Int(a, "work_item", 0, 1, int.MaxValue), model, host.Head());
 
     static readonly string[] CallKinds = ["calls", "injects", "http"];
 

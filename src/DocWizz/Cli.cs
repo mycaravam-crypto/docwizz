@@ -8,7 +8,7 @@ static class Cli
 
     public record Request(string? Command, Dictionary<string, string> Options, List<string> Positional, string? Error);
 
-    public static readonly string[] Flags = ["ai", "html", "screenshots", "progress", "refresh-html-on-version-change", "timings", "validate", "force", "include-ai", "auto-rescan", "select-projects", "all-projects", "yes", "help", "version"];
+    public static readonly string[] Flags = ["ai", "html", "screenshots", "progress", "refresh-html-on-version-change", "timings", "validate", "force", "include-ai", "auto-rescan", "select-projects", "all-projects", "yes", "requirements", "help", "version"];
 
     // Valued option → what its value is, for the error when it is missing.
     public static readonly Dictionary<string, string> Valued = new()
@@ -31,7 +31,7 @@ static class Cli
         ["setup"] = new("setup [dir]", "first run: detect the stack, write docwizz.yaml, analyze, generate docs, check", "start here",
             "docwizz setup . --select-projects", "--select-projects (TTY wizard), --all-projects (clear scope), --yes (no prompts), --force (overwrite docwizz.yaml), --html, --progress, --refresh-html-on-version-change, --ai, --profile <name|file>", ["select-projects", "all-projects", "yes", "force", "html", "progress", "refresh-html-on-version-change", "ai", "profile"]),
         ["generate"] = new("generate <dir> [out]", "write Markdown docs (default <dir>/docs)", "everyday",
-            "docwizz generate . --html", "--html (HTML next to every page), --screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>] (Playwright captures detected routes), --progress, --refresh-html-on-version-change, --ai (local Ollama drafts), --profile", ["html", "screenshots", "base-url", "storage-state", "screenshot-delay", "progress", "refresh-html-on-version-change", "ai", "profile"]),
+            "docwizz generate . --html", "--html (HTML next to every page), --screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>] (Playwright captures detected routes), --progress, --refresh-html-on-version-change, --ai (local Ollama drafts), --requirements (drafts also get each symbol's linked work items), --profile", ["html", "screenshots", "base-url", "storage-state", "screenshot-delay", "progress", "refresh-html-on-version-change", "ai", "requirements", "profile"]),
         ["check"] = new("check <dir> [--since <ref>]", "quality gate: exit 1 when thresholds fail (only new problems with --since)", "CI",
             "docwizz check . --since origin/main", "--since <ref>, --format json, --profile", ["since", "format", "profile"]),
         ["analyze"] = new("analyze <dir>", "documentation report: gaps, coverage, quality, architecture", "everyday",
@@ -41,8 +41,8 @@ static class Cli
         ["diff"] = new("diff [dir] [base] [head]", "changed symbols, affected pages and linked tests vs the last generate or git refs", "reviews, CI",
             "docwizz diff HEAD~1 HEAD", "--format json, --profile", ["format", "profile"]),
         ["context"] = new("context <dir> --for <target>", "token-budgeted context package for a coding agent: one symbol, file, folder or endpoint", "coding agents",
-            "docwizz context . --for \"POST /api/materials\"", "--for <symbol|file|folder|VERB /route>, --hops <1-4>, --budget <tokens>, --format md|json, --include-ai",
-            ["for", "hops", "budget", "format", "include-ai"]),
+            "docwizz context . --for \"POST /api/materials\"", "--for <symbol|file|folder|VERB /route>, --hops <1-4>, --budget <tokens>, --format md|json, --include-ai, --requirements (linked work items from docwizz requirements import)",
+            ["for", "hops", "budget", "format", "include-ai", "requirements"]),
         ["mcp"] = new("mcp <dir>", "read-only MCP server on stdio: coding agents query the code model (find_symbol, context, impact, check, ...)", "coding agents",
             "docwizz mcp .", "--auto-rescan (rescan when the model is stale)", ["auto-rescan"]),
         ["trace"] = new("trace <dir> <evidence.yaml>", "explicit evidence-chain gaps as Markdown or JSON", "product documents",

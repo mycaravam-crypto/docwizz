@@ -40,8 +40,9 @@ static class AgentContext
     // Where the model came from and whether it still matches the code.
     public record Freshness(string ModelSource, string? Head, int ChangedFiles);
 
+    // Requirements: the package carries a requirements block (--requirements), and says what its origin means.
     public record Package(string Repository, string? Commit, Freshness Freshness, Target Target, int Budget, bool IncludeAi,
-        int AiLeftOut, List<Block> Blocks, List<Truncation> Truncated)
+        int AiLeftOut, List<Block> Blocks, List<Truncation> Truncated, bool Requirements = false)
     {
         public bool Stale => Freshness.ChangedFiles > 0 || (Commit is { } c && Freshness.Head is { } h && !h.StartsWith(c) && !c.StartsWith(h));
     }
@@ -101,8 +102,9 @@ static class AgentContext
 
     // The facts about a target, by priority: what it is, its neighbours, hop-2 neighbours, flows and configuration,
     // tests and findings, and the files to read first. Budgeting (Fit) cuts from the end.
+    // `requirements` (--requirements) adds the target's linked work items right after the target itself.
     public static List<Block> Blocks(ContextBuilder graph, Config config, Target target, int hops, bool includeAi,
-        List<DocumentationItem> findings, ArchitectureResult arch, Dictionary<string, AiProse.Draft> drafts)
+        List<DocumentationItem> findings, ArchitectureResult arch, Dictionary<string, AiProse.Draft> drafts, List<Line>? requirements = null)
     {
         var nodes = graph.Nodes;
         var scope = target.Scope.Select(n => n.Id).ToHashSet();
@@ -219,7 +221,7 @@ static class AgentContext
             .Concat(edges.Select(x => nodes.GetValueOrDefault(x.Other)).OfType<Node>().Where(x => x.Kind is not ("external" or "config")))
             .DistinctBy(x => x.Id).Select(x => new Line($"`{x.Name}`", "detected", Loc(x))).ToList();
 
-        return
+        List<Block> blocks =
         [
             new("target", "Target", self),
             new("neighbours", "Neighbours", hop1),
@@ -228,6 +230,26 @@ static class AgentContext
             new("quality", $"Tests, documentation gaps, architecture findings ({TestLinks.Note})", quality),
             new("read", "Read before you change it", read),
         ];
+        if (requirements is not null) blocks.Insert(1, new("requirements", "Requirements (history: what was asked for, not proof of what the code does)", requirements));
+        return blocks;
+    }
+
+    // The target's requirements as context lines, origin `history`: the same bounded selection a model gets, then what
+    // was left out, the outcome when there is nothing to show, and the index's warnings.
+    public static List<Line> RequirementLines(RequirementResolver.Context context, BusinessContext.Selection? selection)
+    {
+        static string Flat(string s) => Regex.Replace(s, @"\s+", " ").Trim();
+        var lines = new List<Line>();
+        foreach (var e in selection?.Entries ?? [])
+            lines.Add(new($"{e.Ref} {e.Status}{(e.ChangedSince ? ", code changed since" : "")}: {Flat(e.Title ?? "(no title)")} ({e.Type}, {e.State}, revision {e.Revision}{(e.IsCurrent == false ? ", not current" : "")})" +
+                (e.Criteria.Count > 0 ? $"; criteria: {string.Join("; ", e.Criteria.Select(Flat))}" : "") + $"; {e.Evidence}", "history"));
+        var shown = selection?.Entries.Select(e => e.Id).ToHashSet() ?? [];
+        var rest = context.Requirements.Where(r => !shown.Contains(r.Id)).ToList();
+        if (rest.Count > 0)
+            lines.Add(new($"not shown: {string.Join(", ", rest.Select(r => $"WI-{r.Id} {r.Status}{(r.Availability == "unavailable" ? " (not exported)" : "")}"))}", "history"));
+        if (context.Requirements.Count == 0) lines.Add(new($"no linked requirement: {context.Outcome}{(context.Complete ? "" : ", linkage incomplete")}", "history"));
+        foreach (var w in context.Warnings) lines.Add(new($"⚠ {w}", "history"));
+        return lines;
     }
 
     // The layer a file falls in (first matching glob), as the architecture check assigns it.
@@ -259,6 +281,7 @@ static class AgentContext
     }
 
     static readonly string Provenance = "detected = read from the code; inferred = heuristic, confirm in the code; human = written docs, may be outdated; ai-drafted = 🤖 draft, not a fact";
+    static readonly string RequirementsProvenance = "history = work items linked through commits that changed this code (confirmed: direct commit link; candidate: only a PR link); what was asked for then, not what the code does now";
 
     static string Markdown(Package p)
     {
@@ -269,6 +292,7 @@ static class AgentContext
         foreach (var w in Warnings(p)) sb.Append($"- ⚠ {w}\n");
         sb.Append($"- budget: {p.Budget} tokens, estimated as characters / {CharsPerToken}\n");
         sb.Append($"- provenance: {Provenance}\n");
+        if (p.Requirements) sb.Append($"- requirements: {RequirementsProvenance}\n");
         sb.Append(p.IncludeAi ? "- AI drafts: included, marked ai-drafted\n" : p.AiLeftOut > 0 ? $"- AI drafts: {p.AiLeftOut} left out (--include-ai to see them)\n" : "");
         if (p.Truncated.Count > 0)
             sb.Append($"- truncated to fit the budget: {string.Join(", ", p.Truncated.Select(t => $"{t.Dropped} line{(t.Dropped == 1 ? "" : "s")} of {t.Section.Split(" (")[0]}"))}\n");
@@ -308,6 +332,7 @@ static class AgentContext
         warnings = Warnings(p).ToList(),
         budget = new { tokens = p.Budget, estimate = $"characters / {CharsPerToken}" },
         provenance = Provenance,
+        requirements = p.Requirements ? RequirementsProvenance : null,
         aiDrafts = p.IncludeAi ? "included" : p.AiLeftOut > 0 ? $"{p.AiLeftOut} left out" : "none",
         truncated = p.Truncated.Select(t => new { section = t.Section.Split(" (")[0], dropped = t.Dropped }),
         sections = p.Blocks.Where(b => b.Lines.Count > 0).Select(b => new { name = b.Name, title = b.Title, lines = b.Lines }),

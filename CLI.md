@@ -206,6 +206,34 @@ The key is read only from the variable `api_key_env` names; `docwizz.yaml` refus
 never printed. If the variable is named but empty, `--ai` is skipped with a message. `DOCWIZZ_MODEL` overrides
 `model`; for Ollama, `OLLAMA_HOST` overrides `endpoint`. Drafts are cached per provider and model.
 
+#### Requirements in drafts
+
+```bash
+docwizz requirements import . history.json work-items/   # once (see Requirement history)
+docwizz generate . --ai --requirements
+```
+
+`--requirements` gives each symbol's prompt its linked work items from the requirement index, as `businessContext`:
+at most `ai.requirements.max` items (default 3) and `ai.requirements.budget` characters (default 1200), confirmed before
+candidate, unchanged since before changed since, newest commit first. Criteria are cut first, then whole items; the
+facts say what was left out. Work items that were linked but not exported are never sent.
+
+- The text is marked as untrusted data, not instructions, and stays in the facts; the instructions never contain it.
+- Two more sections come back: **intent** (what a requirement asked for) and **deviation** (where the source differs).
+  Each sentence must cite a `WI-<id>`, and gets its status appended: `[WI-12 confirmed]`, `[WI-7 candidate, code
+  changed since]`.
+- The code sections (summary, behaviour, …) rest on code: work-item citations are removed from them, and a sentence
+  that cites only a work item is dropped. A sentence claiming the code satisfies or implements a requirement is
+  dropped wherever it is.
+- A requirements draft is cached under its own key (symbol, body hash and a hash of the selected context), so a new
+  revision or link re-drafts that symbol only. Without `--requirements`, prompts, cache keys and pages are exactly as
+  before, and requirements drafts are never shown.
+
+```yaml
+ai:
+  requirements: { max: 3, budget: 1200 }   # work items per symbol, characters of their text
+```
+
 ### 6. Diff and impact analysis
 
 ```bash
@@ -277,6 +305,9 @@ characters / 4). Sections in priority order, cut from the end when the budget ru
   folder, then `VERB /route`. Ambiguous or unknown targets exit 1 with the candidates on stderr: it never guesses.
 - It reads `docs/.docwizz/model.json` when present, else scans. A model from another commit, or older than the source
   files, is reported as stale. No network, no build, no AI. `--format json` is compact, since whitespace costs tokens.
+- `--requirements` adds a *Requirements* section right after the target: the same bounded selection a model gets
+  (`docwizz requirements import` first), each line `[history]`: what was asked for then, not proof of what the code
+  does. Per symbol only; without the flag the package is unchanged.
 
 #### A read-only MCP server
 
@@ -290,13 +321,15 @@ docwizz mcp . --auto-rescan    # rescan when the model is stale instead of only 
 | Tool | Answers |
 |---|---|
 | `find_symbol(query, kind?)` | symbols, endpoints and modules by name: exact, then prefix, then substring |
-| `context(target, hops?, budget?, include_ai?)` | the same package as `docwizz context`, as JSON |
+| `context(target, hops?, budget?, include_ai?, requirements?)` | the same package as `docwizz context`, as JSON |
 | `callers(id)` / `callees(id)` | incoming / outgoing `calls`, `injects` and `http` edges of a symbol and its members |
 | `trace_endpoint(verb, route)` | the request flow down to databases and external systems, and the frontend callers |
 | `module_summary(path)` | a folder's symbols, layer, endpoints, dependencies both ways, gap and finding counts |
 | `impact(ref?)` | `docwizz diff` against a ref (default `HEAD`: the uncommitted change) |
 | `gaps(path?)` / `violations(path?)` | documentation gaps (critical first) / architecture violations and cycles |
 | `check(since?)` | the quality gate as JSON; with `since`, only what the change introduces |
+| `requirements_for_symbol(id)` | `docwizz requirements show --for` as JSON: confirmed and candidate work items, with commits and lines |
+| `symbols_for_requirement(work_item)` | the symbols one work item is linked to, current code first |
 | `rescan()` | scan the code again, in memory |
 
 It is **read-only**: stdio only, no network listener, nothing written. Every answer carries a `model` object with the
@@ -496,12 +529,12 @@ bytes. Input shapes and rules: [docs/requirement-context.md](docs/requirement-co
 |---|---|---|---|
 | `discover` | `docwizz discover [dir] [--format console\|json]` | read-only inventory of solutions, projects and references | everyday |
 | `setup` | `docwizz setup [dir] [--select-projects] [--all-projects] [--yes] [--force] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | detect the stack, write `docwizz.yaml`, analyze, architecture, generate, check | start here |
-| `generate` | `docwizz generate <dir> [out] [--html] [--screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>]] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
+| `generate` | `docwizz generate <dir> [out] [--html] [--screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>]] [--progress] [--refresh-html-on-version-change] [--ai] [--requirements] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
 | `check` | `docwizz check <dir> [--since ref] [--format f] [--profile p]` | quality gate; exit 1 when thresholds fail | CI |
 | `analyze` | `docwizz analyze <dir> [--format f] [--profile p]` | documentation and architecture report, no gate | everyday |
 | `architecture` | `docwizz architecture <dir> [--format f] [--profile p]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
 | `diff` | `docwizz diff [dir] [base] [head] [--format f] [--profile p]` | change impact vs the last `generate` or git refs | reviews, CI |
-| `context` | `docwizz context <dir> --for target [--hops n] [--budget tokens] [--format md\|json] [--include-ai]` | token-budgeted context package for one symbol, file, folder or endpoint | coding agents |
+| `context` | `docwizz context <dir> --for target [--hops n] [--budget tokens] [--format md\|json] [--include-ai] [--requirements]` | token-budgeted context package for one symbol, file, folder or endpoint | coding agents |
 | `mcp` | `docwizz mcp <dir> [--auto-rescan]` | read-only MCP server on stdio: find_symbol, context, callers, impact, check, … | coding agents |
 | `evidence-diff` | `docwizz evidence-diff <dir> <before.yaml> <after.yaml> [--format json]` | explicit evidence changes and affected tests | product documents |
 | `trace` | `docwizz trace <dir> <evidence.yaml> [--format json]` | explicit traceability and missing links | product documents |
@@ -533,6 +566,7 @@ bytes. Input shapes and rules: [docs/requirement-context.md](docs/requirement-co
 | `--work-item <id>` | — | requirements | `requirements show`: the symbols linked to this work item (`101`, `#101` or `WI-101`), instead of `--for` | coding agents, reviews |
 | `--hops <n>` | 2 | context | how far neighbours are listed, 1 to 4; hops beyond 1 are signature only | coding agents |
 | `--budget <tokens>` | 6000 | context | at least 100; estimated as characters / 4; lower-priority sections are cut first, and the cut is reported | coding agents |
+| `--requirements` | off | generate, context | generate: prompts also get each symbol's linked work items (intent/deviation sections, cited and labeled); context: adds a Requirements section. Needs `docwizz requirements import`; exits 1 without an index | opt-in |
 | `--include-ai` | off | context | includes cached 🤖 drafts, marked `ai-drafted`; never calls a model | coding agents |
 | `--auto-rescan` | off | mcp | rescans when the model is stale instead of only reporting `stale: true` | coding agents |
 | `--package <name> --to <version>` | `remediation.targets` and version drift | remediate | given together or not at all | maintenance |

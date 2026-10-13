@@ -108,3 +108,10 @@ every work item's digest, the scan scope and the index schema.
 
 Exit codes: `import` exits 1 for a missing file, invalid JSON, an unknown schema, a short SHA or a duplicate commit;
 `show` exits 1 without an index or for an unknown target. Neither writes outside `docs/.docwizz/`.
+
+## Using it in drafts and agent context
+
+`docwizz generate . --ai --requirements`, `docwizz context . --for <symbol> --requirements` and the MCP tools
+`requirements_for_symbol`, `symbols_for_requirement` and `context(requirements: true)` read this index; none of them
+fetches anything. The rules (bounded selection, untrusted data, `intent`/`deviation` sections, labels, cache keys) are
+in [CLI.md](../CLI.md#requirements-in-drafts). Without `--requirements` nothing changes.
