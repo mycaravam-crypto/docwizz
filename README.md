@@ -292,6 +292,22 @@ test there; this executes repository code. Status is `unvalidated`, `validated`,
 `not-actionable`. Without `--package`, it proposes `remediation.targets` and aligns NuGet versions that differ across
 projects.
 
+### Recursive domain discovery (MVP)
+
+The new read-only `docwizz domain discover` command explores code dependencies from one method,
+type, endpoint or previously imported work item. Its versioned JSON contains traversed symbols,
+technical relations, historical Work Item links and their provenance. It **does not** claim that
+Work Item titles define confirmed domain boundaries.
+
+```bash
+docwizz domain discover . --seed "POST /api/orders" --depth 3 --limit 100 --format json
+docwizz domain discover . --work-item 4711 --depth 3 --limit 100 --format json
+```
+
+The second form requires `docwizz requirements import`. Without an index, the first form still
+works with technical evidence only. Both are offline; no LLM and no repository changes.
+See [domain discovery](docs/domain-discovery.md) for the evidence contract and limitations.
+
 ### Requirements and traceability
 
 For projects that keep requirements as YAML evidence:
