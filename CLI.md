@@ -23,6 +23,7 @@ an example and its options.
 | `diff` | change impact | developers, CI | optional |
 | `check` | quality gate | CI, developers | yes |
 | `context` | token-budgeted facts about one target, for coding agents | coding agents | optional |
+| `domain` | bounded, recursive code/requirements discovery | architects | optional |
 | `mcp` | read-only MCP server over the code model | coding agents | optional |
 | `sbom` | CycloneDX manifest SBOM | supply-chain inventory | optional |
 | `remediate` | package update suggestions | maintainers | optional |
@@ -351,6 +352,24 @@ claude mcp add docwizz -- dotnet /opt/docwizz/DocWizz.dll mcp .     # Claude Cod
 { "mcpServers": { "docwizz": { "command": "dotnet", "args": ["/opt/docwizz/DocWizz.dll", "mcp", "/path/to/repo"] } } }
 ```
 
+## Domain discovery: first implementation
+
+The read-only crawler explores technical code relationships from one symbol or endpoint, or from an
+Azure DevOps Work Item already imported into DocWizz. It keeps historical requirement intent separate
+from the observed code graph and does not declare business capabilities or bounded contexts as facts.
+
+```bash
+docwizz domain discover . --seed "POST /api/orders" --depth 3 --limit 100 --format json
+docwizz domain discover . --work-item 4711 --depth 4 --limit 150 --format json
+```
+
+Work-item seeding requires `docwizz requirements import` first. Without an index, code-seeded discovery
+still runs, but marks requirement evidence as unavailable. The crawler uses a deterministic directed
+BFS and never sends code or work items to AI or a network service. The JSON schema is
+`docwizz.domain-discovery/v1`; `candidateTerms` are Work Item titles, not verified domain names.
+See [domain-discovery.md](docs/domain-discovery.md) for provenance, limitations and the full
+GitWizz/ADO/DocWizz workflow.
+
 ## Multi-project repositories
 
 ### Discover
@@ -536,6 +555,7 @@ bytes. Input shapes and rules: [docs/requirement-context.md](docs/requirement-co
 | `architecture` | `docwizz architecture <dir> [--format f] [--profile p]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
 | `diff` | `docwizz diff [dir] [base] [head] [--format f] [--profile p]` | change impact vs the last `generate` or git refs | reviews, CI |
 | `context` | `docwizz context <dir> --for target [--hops n] [--budget tokens] [--format md\|json] [--include-ai] [--requirements]` | token-budgeted context package for one symbol, file, folder or endpoint | coding agents |
+| `domain` | `docwizz domain discover <dir> (--seed <symbol\|endpoint> \| --work-item <id>) [--depth n] [--limit n] [--format json]` | recursively explore code with separately sourced historical requirements | architects |
 | `mcp` | `docwizz mcp <dir> [--auto-rescan]` | read-only MCP server on stdio: find_symbol, context, callers, impact, check, … | coding agents |
 | `evidence-diff` | `docwizz evidence-diff <dir> <before.yaml> <after.yaml> [--format json]` | explicit evidence changes and affected tests | product documents |
 | `trace` | `docwizz trace <dir> <evidence.yaml> [--format json]` | explicit traceability and missing links | product documents |
@@ -554,7 +574,7 @@ bytes. Input shapes and rules: [docs/requirement-context.md](docs/requirement-co
 | Option | Default | Applies to | Interaction | Use |
 |---|---|---|---|---|
 | `--profile <name\|file.yaml>` | `profile:` in `docwizz.yaml`, else `default` | setup, generate, check, analyze, architecture, diff | overrides `profile:` and the file's own `patterns:` | normal |
-| `--format console\|json` | `console` | discover, analyze, check, architecture, context, diff, trace, evidence-diff, product, remediate, requirements | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
+| `--format console\|json` | `console` | discover, analyze, check, architecture, context, domain, diff, trace, evidence-diff, product, remediate, requirements | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
 | `--html` | off | generate, setup | adds HTML pages; the Markdown is written either way | normal |
 | `--progress` | interactive terminals | generate, setup | forces progress bars on stderr when output is redirected | normal |
 | `--refresh-html-on-version-change` | off | generate, setup | implies `--html`; rewrites all HTML when the docwizz version changed | normal |
@@ -564,7 +584,10 @@ bytes. Input shapes and rules: [docs/requirement-context.md](docs/requirement-co
 | `--ai` | off | generate, product, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it, nothing new is sent | opt-in |
 | `--since <ref>` | — | check, remediate | check: only problems introduced since `<ref>` fail; remediate: says whether each update touches only what changed since `<ref>` | CI |
 | `--for <target>` | — | context, requirements | required for context; a symbol id or qualified name, a file, a folder, or `VERB /route`; ambiguous or unknown exits 1 with candidates. `requirements show` takes a symbol, or an id the index knows from history | coding agents |
-| `--work-item <id>` | — | requirements | `requirements show`: the symbols linked to this work item (`101`, `#101` or `WI-101`), instead of `--for` | coding agents, reviews |
+| `--work-item <id>` | — | requirements, domain | `requirements show`: reverse lookup; `domain discover`: traverse the current linked code symbols instead of `--seed` | architects, reviews |
+| `--seed <symbol\|endpoint>` | — | domain | a single exact/qualified symbol or `VERB /route`; incompatible with `--work-item` | architects |
+| `--depth <n>` | 3 | domain | traversal hops, 0–8; 0 means only the start symbols | architects |
+| `--limit <n>` | 100 | domain | maximum reached symbols, 1–500; truncation is explicit | architects |
 | `--hops <n>` | 2 | context | how far neighbours are listed, 1 to 4; hops beyond 1 are signature only | coding agents |
 | `--budget <tokens>` | 6000 | context | at least 100; estimated as characters / 4; lower-priority sections are cut first, and the cut is reported | coding agents |
 | `--requirements` | off | generate, context | generate: prompts also get each symbol's linked work items (intent/deviation sections, cited and labeled); context: adds a Requirements section. Needs `docwizz requirements import`; exits 1 without an index | opt-in |
@@ -611,6 +634,7 @@ bytes. Input shapes and rules: [docs/requirement-context.md](docs/requirement-co
 | `diff` | done | no baseline (`generate` first or pass a ref), unknown ref |
 | `context` | package written | no `--for`, an ambiguous or unknown target (candidates on stderr), or bad arguments |
 | `mcp` | stdin closed | bad arguments or config |
+| `domain` | JSON or text summary written, even with missing optional requirements index | missing/ambiguous seed, invalid options or missing index for Work Item seed |
 | `remediate` | done (suggestions alone never fail) | a `--validate` run failed, or bad arguments |
 | `trace` | report on stdout | invalid/missing YAML; no data written |
 | `evidence-diff` | report on stdout | invalid/missing evidence catalogs; no data written |
