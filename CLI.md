@@ -205,7 +205,8 @@ DOCWIZZ_AI_KEY=... docwizz generate . --ai
 
 The key is read only from the variable `api_key_env` names; `docwizz.yaml` refuses an `api_key` setting and the key is
 never printed. If the variable is named but empty, `--ai` is skipped with a message. `DOCWIZZ_MODEL` overrides
-`model`; for Ollama, `OLLAMA_HOST` overrides `endpoint`. Drafts are cached per provider and model.
+`model`; for Ollama, `OLLAMA_HOST` overrides `endpoint`. Drafts are cached per provider and model. Ollama requests ask
+for a 16,384-token context (`num_ctx`): Ollama's default (often 4,096) would silently cut longer prompts.
 
 #### Requirements in drafts
 
