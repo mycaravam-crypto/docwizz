@@ -39,7 +39,7 @@ static class BusinessContext
         {
             var w = r.WorkItem!;
             var newest = r.Evidence.MaxBy(e => order.GetValueOrDefault(e.Commit, -1))!;
-            var evidence = $"{(newest.Relation == "commit-workitem" ? "linked commit" : $"commit of linked PR {newest.PullRequest}")} {newest.Commit[..7]} changed lines {newest.Lines}";
+            var evidence = $"{newest.Relation switch { "commit-workitem" => "linked commit", "commit-message" => "commit naming it", _ => $"commit of linked PR {newest.PullRequest}" }} {newest.Commit[..7]} changed lines {newest.Lines}";
             var entry = new Entry($"WI-{r.Id}", r.Id, r.Status, r.ChangedSince, w.Type, w.State, w.Title, w.Revision, w.IsCurrent, [.. w.Criteria], evidence);
             // Criteria go from the end until the entry fits what is left of the budget; an entry without room is left out.
             var room = config.Budget - entries.Sum(Size);

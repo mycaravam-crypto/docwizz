@@ -70,14 +70,14 @@ public class RequirementsJourneyTests
         repo.Write("OrderService.cs", V2);
         repo.Commit("credit limit", FakeHistory.Verified(101));
         repo.Write("OrderService.cs", V3);
-        repo.Commit("log cancels", FakeHistory.Verified(), new { id = 5, confidence = "exact" });
+        repo.Commit("log cancels", FakeHistory.Verified(), FakeHistory.Pr(5));
         repo.Write("README.md", "# Shop\n");
-        repo.Commit("readme", new { status = "unavailable" });
+        repo.Commit("readme", FakeHistory.Status("unavailable"));
 
         var exports = Path.Combine(Path.GetTempPath(), $"docwizz-exports-{Guid.NewGuid():N}");
         Directory.CreateDirectory(Path.Combine(exports, "work-items"));
         history = Path.Combine(exports, "history.json");
-        File.WriteAllText(history, repo.History([new { id = 5, status = "completed", mergeStrategy = "squash", workItems = FakeHistory.Verified(102) }]));
+        File.WriteAllText(history, repo.History([FakeHistory.PullRequest(5, workItems: 102)]));
         File.WriteAllText(Path.Combine(exports, "work-items", "100.json"), FakeHistory.WorkItem(100, "Place and cancel orders"));
         File.WriteAllText(Path.Combine(exports, "work-items", "101.json"), FakeHistory.WorkItem(101, "Credit limit", 4, "Orders above 1000 are rejected"));
         workItems = Path.Combine(exports, "work-items");
@@ -152,11 +152,11 @@ public class RequirementsJourneyTests
         Assert.Equal(1, none.Exit);
         Assert.Contains("no requirement index", none.Err);
 
-        var v2 = Path.Combine(Path.GetDirectoryName(history)!, "v2.json");
-        File.WriteAllText(v2, repo.History(schema: "gitwizz.history/v2"));
-        var bad = Run(repo.Root, "requirements", "import", ".", v2);
+        var v1 = Path.Combine(Path.GetDirectoryName(history)!, "v1.json");
+        File.WriteAllText(v1, repo.History(schema: "gitwizz.history/v1"));
+        var bad = Run(repo.Root, "requirements", "import", ".", v1);
         Assert.Equal(1, bad.Exit);
-        Assert.Contains("unknown schema gitwizz.history/v2", bad.Err);
+        Assert.Contains("gitwizz.history/v1 is no longer read", bad.Err);
         Docwizz.NoStackTrace(bad);
 
         Assert.Equal(0, Run(repo.Root, "requirements", "import", ".", history, workItems).Exit);

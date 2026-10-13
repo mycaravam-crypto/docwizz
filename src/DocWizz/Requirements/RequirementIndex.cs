@@ -5,22 +5,32 @@ using System.Text.RegularExpressions;
 
 // `docwizz requirements import`: a local, versioned index of which historical commits changed which code symbols, and
 // which work items those commits and their pull requests were linked to. Inputs are files other tools exported:
-// `gitwizz.history/v1` (commits, hunks, PR associations, links) and `ado.requirement-context/v1` (normalized work items).
+// `gitwizz.history/v2` (gitwizz history export: commits, line ranges, PR attribution, links with their source; the
+// producer's contract is gitwizz docs/history/README.md) and `ado.requirement-context/v1` (normalized work items).
 // The index holds facts only (what each commit touched, what each link source said); whether a requirement is
 // `confirmed` or a `candidate` for a symbol is decided at query time (RequirementResolver). It is separate from the
 // CodeModel (no external text mixed into static facts) and from ProjectEvidenceCatalog (explicit, human-maintained links:
 // nothing here is ever written there). No network: every input is a file.
 static class RequirementIndex
 {
-    public const string Schema = "docwizz.requirement-index/v1";
-    public const string HistorySchema = "gitwizz.history/v1";
+    public const string Schema = "docwizz.requirement-index/v2";
+    public const string HistorySchema = "gitwizz.history/v2";
     public const string WorkItemSchema = "ado.requirement-context/v1";
     public const string DefaultFile = "docs/.docwizz/requirements.json";
 
     // Linkage as the exporter reports it: `verified` (looked up; an empty list really means none), `unavailable` (the
     // provider couldn't answer), `denied` (no permission), `unknown` (never looked up). Only verified counts as an answer.
     public static readonly string[] Linkages = ["verified", "unavailable", "denied", "unknown"];
-    static readonly string[] Confidences = ["exact", "ambiguous"];
+
+    // The contract's enumerations. A value outside them is a newer contract, never guessed at (it could read as verified).
+    static readonly string[] Providers = ["local", "github", "azure-devops"];
+    static readonly string[] CommitKinds = ["commit", "merge"];
+    static readonly string[] FileStatuses = ["added", "modified", "deleted", "renamed", "copied"];
+    static readonly string[] Granularities = ["lines", "file"];
+    static readonly string[] Resolutions = ["exact", "inferred", "ambiguous", "unknown"];
+    static readonly string[] PrStatuses = ["confirmed", "unconfirmed", "local"];
+    static readonly string[] Strategies = ["merge", "squash", "unknown"];
+    static readonly string[] MessageKinds = ["ab", "closes", "mention"];
 
     // Bounds on work-item text kept in the index: it is untrusted, and only a bounded slice is ever handed to a model.
     const int MaxTitle = 300, MaxDescription = 2000, MaxCriterion = 500, MaxCriteria = 50;
@@ -28,23 +38,31 @@ static class RequirementIndex
     public record Index(string Schema, string Fingerprint, Inputs Inputs, List<Commit> Commits, List<PullRequest> PullRequests,
         List<WorkItem> WorkItems, List<string> Warnings);
 
-    // What the index was built from: digests, never paths, so the same inputs give the same bytes anywhere.
-    public record Inputs(string HistorySchema, string HistoryDigest, string? Repository, string? Base, string? BaseSha,
-        string? HeadSha, bool Truncated, string? Scope, List<WorkItemInput> WorkItems);
+    // What the index was built from: digests, never paths, so the same inputs give the same bytes anywhere. Provider and
+    // range as the export states them; Shallow: the clone had a boundary, so older commits may be missing.
+    public record Inputs(string HistorySchema, string HistoryDigest, string? Provider, string? Repository, string? Base, string? BaseSha,
+        string? HeadSha, bool Truncated, bool Shallow, string? Scope, List<WorkItemInput> WorkItems);
     public record WorkItemInput(int Id, int? Revision, string Digest);
 
-    // One exported commit: its linkage, its PR associations and what it touched. Mapping: `mapped` (scanned as of the
-    // commit), `missing` (not in the local repository: its touches are unknown), `no-source` (changed no scanned file).
-    public record Commit(string Sha, string Linkage, List<int> WorkItems, List<PullRequestRef> PullRequests, string Mapping,
-        List<Touch> Touches, List<FileTouch> FileOnly);
+    // One exported commit: its linkage, its PR associations and what it touched. Linkage and WorkItems: what the provider
+    // links to the commit itself (only `verified` is an answer). Mentions: work items its message names, which nobody
+    // verified (candidates at most). Mapping: `mapped` (scanned as of the commit), `missing` (not in the local
+    // repository: its touches are unknown), `no-source` (changed no scanned file, or a merge, whose changes are its parents').
+    public record Commit(string Sha, string Linkage, List<int> WorkItems, List<int> Mentions, List<PullRequestRef> PullRequests,
+        string Mapping, List<Touch> Touches, List<FileTouch> FileOnly);
+    // Confidence: the export's resolution of the commit's PR: exact (the provider confirms it), inferred (only messages
+    // say so), ambiguous (one of several candidates).
     public record PullRequestRef(int Id, string Confidence);
 
     // A symbol a hunk overlapped, as of the commit: its id and body hash then, the hunk's lines and the symbol's lines.
     public record Touch(string Symbol, string Kind, string? Hash, string File, string Lines, string SymbolLines);
-    // A hunk that overlapped no symbol (usings, a deleted file): evidence about the file, never about a symbol.
+    // A hunk that overlapped no symbol (usings, a deleted file), or a file-granularity change (binary, rename without
+    // content change): evidence about the file, never about a symbol.
     public record FileTouch(string File, string Lines);
 
-    public record PullRequest(int Id, string? Title, string? MergeStrategy, string Linkage, List<int> WorkItems);
+    // Status: confirmed (the provider says it completed with this merge commit), unconfirmed or local. Only a confirmed
+    // PR's work items are used; Linkage is the export's workItemsStatus.
+    public record PullRequest(int Id, string? Title, string? MergeStrategy, string Status, string Linkage, List<int> WorkItems);
 
     // A work item as ado-devops normalized it, cleaned and bounded. Revision is the one exported; IsCurrent false means
     // a historical revision. Digest is over the exported file, so a changed revision changes the index fingerprint.
@@ -54,20 +72,14 @@ static class RequirementIndex
 
     // ---- inputs ----
 
-    record HistoryFile(string? Schema, HistoryRepository? Repository, HistoryRange? Range, List<HistoryCommit>? Commits,
-        List<HistoryPullRequest>? PullRequests, List<string>? Warnings, bool Truncated);
-    record HistoryRepository(string? Provider, string? Id, string? Name, string? Url);
-    record HistoryRange(string? Base, string? BaseSha, string? Head, string? HeadSha);
-    record HistoryCommit(string? Sha, List<HistoryChange>? Changes, HistoryLinks? WorkItems, List<HistoryPullRequestRef>? PullRequests);
-    record HistoryChange(string? Path, string? OldPath, string? Status, List<Hunk>? Hunks);
+    // A change as the index builder needs it: path relative to the scanned directory, and its line ranges (none for a
+    // file-granularity change, which is never mapped to a symbol).
     public record Hunk(int OldStart, int OldLines, int NewStart, int NewLines);
-    record HistoryLinks(string? Status, List<HistoryWorkItemRef>? Items);
-    record HistoryWorkItemRef(int Id);
-    record HistoryPullRequestRef(int Id, string? Confidence);
-    record HistoryPullRequest(int Id, string? Title, string? Status, string? MergeStrategy, HistoryLinks? WorkItems);
+    record Change(string Path, bool Deleted, bool FileLevel, List<Hunk> Hunks);
 
-    // A commit as the index builder needs it: its source changes (paths relative to the scanned directory) and links.
-    record Change(string Path, bool Deleted, List<Hunk> Hunks);
+    // A commit of the export, read and checked: what Build needs from it.
+    record HistoryCommit(string Sha, string Kind, List<(string Path, string Status, string Granularity, List<Hunk> Ranges)> Files,
+        string Linkage, List<int> WorkItems, List<int> Mentions, List<PullRequestRef> PullRequests);
 
     static readonly JsonSerializerOptions Read = new(JsonSerializerDefaults.Web) { AllowTrailingCommas = false };
 
@@ -107,6 +119,149 @@ static class RequirementIndex
         return items;
     }
 
+    // ---- reading gitwizz.history/v2 ----
+    // Every property the contract lists is required; enumerations are closed. Anything else fails with the path of the
+    // offending value, so a newer or hand-edited export never imports as a plausible but wrong index.
+
+    static JsonElement Prop(JsonElement o, string name, string where) =>
+        o.ValueKind == JsonValueKind.Object && o.TryGetProperty(name, out var v) ? v : throw new ArgumentException($"history: {where}: missing '{name}'");
+
+    static string Text(JsonElement o, string name, string where) =>
+        Prop(o, name, where) is { ValueKind: JsonValueKind.String } v ? v.GetString()! : throw new ArgumentException($"history: {where}.{name}: expected a string");
+
+    static string? TextOrNull(JsonElement o, string name, string where) => Prop(o, name, where) switch
+    {
+        { ValueKind: JsonValueKind.String } v => v.GetString(),
+        { ValueKind: JsonValueKind.Null } => null,
+        _ => throw new ArgumentException($"history: {where}.{name}: expected a string or null"),
+    };
+
+    static bool Flag(JsonElement o, string name, string where) =>
+        Prop(o, name, where) is { ValueKind: JsonValueKind.True or JsonValueKind.False } v ? v.GetBoolean() : throw new ArgumentException($"history: {where}.{name}: expected true or false");
+
+    static List<JsonElement> List(JsonElement o, string name, string where) =>
+        Prop(o, name, where) is { ValueKind: JsonValueKind.Array } v ? [.. v.EnumerateArray()] : throw new ArgumentException($"history: {where}.{name}: expected a list");
+
+    static string OneOf(string value, string[] allowed, string where) =>
+        allowed.Contains(value) ? value : throw new ArgumentException($"history: {where}: '{value}' is not one of {string.Join(", ", allowed)} (a newer gitwizz.history contract?)");
+
+    static int Number(JsonElement o, string name, string where) =>
+        Prop(o, name, where) is { ValueKind: JsonValueKind.Number } v && v.TryGetInt32(out var i) && i >= 0 ? i : throw new ArgumentException($"history: {where}.{name}: expected a non-negative whole number");
+
+    static readonly Regex PrId = new(@"^#([1-9][0-9]{0,9})$");
+    static readonly Regex AzureBoards = new(@"^AB#([1-9][0-9]{0,9})$");
+
+    static int PullRequestId(string id, string where) =>
+        PrId.Match(id) is { Success: true } m && int.TryParse(m.Groups[1].Value, out var n) ? n : throw new ArgumentException($"history: {where}: pull request id '{id}' is not #<number>");
+
+    // Links of one kind: their work items as Azure Boards ids. `#123` names a GitHub issue (or, from a GitHub or local
+    // history, possibly a PR): not a work item DocWizz can hold, so it is skipped with a warning, never renumbered.
+    static List<int> Links(List<JsonElement> links, string source, string[] kinds, string where, List<string> warnings)
+    {
+        var ids = new List<int>();
+        foreach (var (l, i) in links.Select((l, i) => (l, i)))
+        {
+            var at = $"{where}[{i}]";
+            var item = Text(l, "workItem", at);
+            if (Text(l, "source", at) != source)
+                throw new ArgumentException($"history: {at}.source: '{Text(l, "source", at)}' where only '{source}' links belong (a message mention is never a provider link)");
+            OneOf(Text(l, "kind", at), kinds, $"{at}.kind");
+            Text(l, "evidence", at);
+            if (AzureBoards.Match(item) is { Success: true } m && int.TryParse(m.Groups[1].Value, out var id)) ids.Add(id);
+            else if (PrId.IsMatch(item)) warnings.Add($"{item} ({where}): a GitHub issue, not an Azure Boards work item; not indexed");
+            else throw new ArgumentException($"history: {at}.workItem: '{item}' is neither AB#<number> nor #<number>");
+        }
+        return [.. ids.Distinct().Order()];
+    }
+
+    static List<HistoryCommit> Commits(JsonElement root, List<string> warnings)
+    {
+        var commits = new List<HistoryCommit>();
+        var seen = new HashSet<string>();
+        foreach (var (c, i) in List(root, "commits", "history").Select((c, i) => (c, i)))
+        {
+            var where = $"commits[{i}]";
+            var sha = Text(c, "sha", where);
+            if (!Regex.IsMatch(sha, "^[0-9a-f]{40}$")) throw new ArgumentException($"history: {where}: commit {sha} is not a full 40-character SHA");
+            if (!seen.Add(sha)) throw new ArgumentException($"history: commit {sha} is listed twice");
+            where = $"commit {sha[..7]}";
+            var kind = OneOf(Text(c, "kind", where), CommitKinds, $"{where}.kind");
+
+            var files = new List<(string, string, string, List<Hunk>)>();
+            foreach (var (f, j) in List(c, "files", where).Select((f, j) => (f, j)))
+            {
+                var at = $"{where}.files[{j}]";
+                var path = Text(f, "path", at);
+                var status = OneOf(Text(f, "status", at), FileStatuses, $"{at}.status");
+                var granularity = OneOf(Text(f, "granularity", at), Granularities, $"{at}.granularity");
+                var ranges = List(f, "ranges", at).Select((r, k) => new Hunk(Number(r, "oldStart", $"{at}.ranges[{k}]"), Number(r, "oldCount", $"{at}.ranges[{k}]"),
+                    Number(r, "newStart", $"{at}.ranges[{k}]"), Number(r, "newCount", $"{at}.ranges[{k}]"))).ToList();
+                if (granularity == "file" && ranges.Count > 0) throw new ArgumentException($"history: {at}: file granularity with line ranges");
+                files.Add((path, status, granularity, ranges));
+            }
+
+            var mentions = Links(List(c, "workItems", where), "commit-message", MessageKinds, $"{where}.workItems", warnings);
+
+            var provider = Prop(c, "providerLinks", where);
+            var linkage = OneOf(Text(provider, "status", $"{where}.providerLinks"), Linkages, $"{where}.providerLinks.status");
+            var items = Prop(provider, "items", $"{where}.providerLinks");
+            List<int> linked = [];
+            if (linkage == "verified")
+            {
+                if (items.ValueKind != JsonValueKind.Array) throw new ArgumentException($"history: {where}.providerLinks: verified without a list of items");
+                linked = Links([.. items.EnumerateArray()], "provider", ["commit-link"], $"{where}.providerLinks.items", warnings);
+            }
+            else if (items.ValueKind != JsonValueKind.Null)
+                throw new ArgumentException($"history: {where}.providerLinks: items must be null when the status is {linkage} (only verified is an answer)");
+
+            var pr = Prop(c, "pullRequest", where);
+            var resolution = OneOf(Text(pr, "resolution", $"{where}.pullRequest"), Resolutions, $"{where}.pullRequest.resolution");
+            var prId = TextOrNull(pr, "id", $"{where}.pullRequest");
+            var candidates = List(pr, "candidates", $"{where}.pullRequest").Select(x => x.ValueKind == JsonValueKind.String ? x.GetString()! : throw new ArgumentException($"history: {where}.pullRequest.candidates: expected strings")).ToList();
+            List<PullRequestRef> refs = resolution switch
+            {
+                "exact" or "inferred" when prId is not null => [new(PullRequestId(prId, $"{where}.pullRequest"), resolution)],
+                "ambiguous" when candidates.Count > 1 => [.. candidates.Select(x => new PullRequestRef(PullRequestId(x, $"{where}.pullRequest.candidates"), "ambiguous"))],
+                "unknown" => [],
+                _ => throw new ArgumentException($"history: {where}.pullRequest: resolution {resolution} with id {prId ?? "null"} and {candidates.Count} candidate(s)"),
+            };
+            commits.Add(new(sha, kind, files, linkage, linked, mentions, [.. refs.DistinctBy(r => r.Id).OrderBy(r => r.Id)]));
+        }
+        return commits;
+    }
+
+    static List<PullRequest> PullRequests(JsonElement root, List<string> warnings)
+    {
+        var prs = new List<PullRequest>();
+        foreach (var (p, i) in List(root, "pullRequests", "history").Select((p, i) => (p, i)))
+        {
+            var where = $"pullRequests[{i}]";
+            var id = PullRequestId(Text(p, "id", where), where);
+            where = $"PR #{id}";
+            var status = OneOf(Text(p, "status", where), PrStatuses, $"{where}.status");
+            var strategy = OneOf(Text(p, "strategy", where), Strategies, $"{where}.strategy");
+            var linkage = OneOf(Text(p, "workItemsStatus", where), Linkages, $"{where}.workItemsStatus");
+            var items = Links(List(p, "workItems", where), "provider", ["pr-link"], $"{where}.workItems", warnings);
+            if (linkage != "verified" && items.Count > 0) throw new ArgumentException($"history: {where}: work items listed although workItemsStatus is {linkage}");
+            if (status != "confirmed") warnings.Add($"PR #{id} is {status}{(TextOrNull(p, "problem", where) is { } why ? $" ({why})" : "")}: its work items are not used");
+            prs.Add(new(id, Clean(TextOrNull(p, "title", where), MaxTitle, null), strategy, status, linkage, items));
+        }
+        if (prs.GroupBy(p => p.Id).FirstOrDefault(g => g.Count() > 1) is { } twice) throw new ArgumentException($"history: PR #{twice.Key} is listed twice");
+        return [.. prs.OrderBy(p => p.Id)];
+    }
+
+    static JsonElement Parse(byte[] history)
+    {
+        JsonElement raw;
+        try { raw = JsonDocument.Parse(history).RootElement.Clone(); }
+        catch (JsonException e) { throw new ArgumentException($"history: not JSON ({e.Message})"); }
+        var schema = SchemaOf(raw);
+        if (schema == "gitwizz.history/v1")
+            throw new ArgumentException($"history: gitwizz.history/v1 is no longer read (it was never a stable contract); export it again with gitwizz history export, which writes {HistorySchema}");
+        if (schema != HistorySchema) throw new ArgumentException($"history: unknown schema {schema}; expected {HistorySchema}");
+        return raw;
+    }
+
     // ---- build ----
 
     // Builds the index. `modelAt` scans the code as of a commit (null when the commit isn't in the local repository);
@@ -115,13 +270,15 @@ static class RequirementIndex
     public static Index Build(byte[] history, List<(JsonElement Item, string Digest, string Name)> workItems, string? scope,
         string prefix, Func<string, CodeModel?> modelAt, Func<string, bool> scanned, Index? previous = null, Action<string>? log = null)
     {
-        JsonElement raw;
-        try { raw = JsonDocument.Parse(history).RootElement.Clone(); }
-        catch (JsonException e) { throw new ArgumentException($"history: not JSON ({e.Message})"); }
-        if (SchemaOf(raw) != HistorySchema) throw new ArgumentException($"history: unknown schema {SchemaOf(raw)}; expected {HistorySchema}");
-        var file = raw.Deserialize<HistoryFile>(Read)!;
-        var warnings = new List<string>(file.Warnings ?? []);
-        if (file.Truncated) warnings.Add("the history export was truncated: older commits are not covered");
+        var raw = Parse(history);
+        var provider = OneOf(Text(raw, "provider", "history"), Providers, "history.provider");
+        var repository = TextOrNull(raw, "repository", "history");
+        var range = Prop(raw, "range", "history");
+        var (since, sinceSha, untilSha) = (TextOrNull(range, "since", "range"), TextOrNull(range, "sinceSha", "range"), Text(range, "untilSha", "range"));
+        var (truncated, shallow) = (Flag(range, "truncated", "range"), Flag(range, "shallow", "range"));
+        var warnings = new List<string>(List(raw, "warnings", "history").Select(w => Clean(w.ValueKind == JsonValueKind.String ? w.GetString() : null, 300, null)).OfType<string>());
+        if (truncated) warnings.Add("the history export was truncated: older commits are not covered");
+        if (shallow) warnings.Add("the history was exported from a shallow clone: commits beyond its boundary are not covered");
 
         var items = workItems.Select(w => Normalize(w.Item, w.Digest, w.Name)).ToList();
         foreach (var dup in items.GroupBy(w => w.Id).Where(g => g.Count() > 1))
@@ -129,57 +286,43 @@ static class RequirementIndex
         // Several exports of one item: the highest revision wins, then the digest, so the choice is stable.
         items = [.. items.GroupBy(w => w.Id).Select(g => g.OrderByDescending(w => w.Revision ?? -1).ThenBy(w => w.Digest, StringComparer.Ordinal).First()).OrderBy(w => w.Id)];
 
-        var pullRequests = new List<PullRequest>();
-        foreach (var pr in file.PullRequests ?? [])
-        {
-            if (pr.Status is { } s && s != "completed")
-            {
-                warnings.Add($"PR {pr.Id} is {s}, not completed: its links are not used");
-                continue;
-            }
-            var (linkage, ids) = Links(pr.WorkItems, $"PR {pr.Id}");
-            pullRequests.Add(new(pr.Id, Clean(pr.Title, MaxTitle, null), pr.MergeStrategy, linkage, ids));
-        }
-        if (pullRequests.GroupBy(p => p.Id).FirstOrDefault(g => g.Count() > 1) is { } twice) throw new ArgumentException($"history: PR {twice.Key} is listed twice");
-        pullRequests = [.. pullRequests.OrderBy(p => p.Id)];
+        var pullRequests = PullRequests(raw, warnings);
+        // The export lists commits newest first; the index keeps them oldest first, so later evidence is newer.
+        var exported = Commits(raw, warnings);
+        exported.Reverse();
 
         var reuse = previous is not null && previous.Inputs.Scope == scope
             ? previous.Commits.Where(c => c.Mapping != "missing").ToDictionary(c => c.Sha) : [];
         var commits = new List<Commit>();
-        var seen = new HashSet<string>();
-        foreach (var c in file.Commits ?? [])
+        foreach (var c in exported)
         {
-            if (c.Sha is null || !Regex.IsMatch(c.Sha, "^[0-9a-f]{40}$"))
-                throw new ArgumentException($"history: commit {c.Sha ?? "(none)"} is not a full 40-character SHA");
-            if (!seen.Add(c.Sha)) throw new ArgumentException($"history: commit {c.Sha} is listed twice");
-            var (linkage, ids) = Links(c.WorkItems, $"commit {c.Sha[..7]}");
-            var prs = (c.PullRequests ?? []).Select(p => new PullRequestRef(p.Id, p.Confidence ?? "exact")).DistinctBy(p => p.Id).OrderBy(p => p.Id).ToList();
-            if (prs.FirstOrDefault(p => !Confidences.Contains(p.Confidence)) is { } bad)
-                throw new ArgumentException($"history: commit {c.Sha[..7]}: PR confidence '{bad.Confidence}' ({string.Join(" or ", Confidences)})");
             var changes = Changes(c, prefix).Where(x => scanned(x.Path)).ToList();
-            if (changes.Count == 0)
+            if (c.Kind == "merge" || changes.Count == 0)
             {
-                commits.Add(new(c.Sha, linkage, ids, prs, "no-source", [], []));
+                commits.Add(new(c.Sha, c.Linkage, c.WorkItems, c.Mentions, c.PullRequests, "no-source", [], []));
                 continue;
             }
             if (reuse.TryGetValue(c.Sha, out var known))
             {
-                commits.Add(known with { Linkage = linkage, WorkItems = ids, PullRequests = prs });
+                commits.Add(known with { Linkage = c.Linkage, WorkItems = c.WorkItems, Mentions = c.Mentions, PullRequests = c.PullRequests });
                 continue;
             }
             log?.Invoke($"mapping {c.Sha[..7]} ({changes.Count} source file{(changes.Count == 1 ? "" : "s")})");
             if (modelAt(c.Sha) is not { } model)
             {
                 warnings.Add($"commit {c.Sha[..7]} is not in the local repository: what it changed is unknown");
-                commits.Add(new(c.Sha, linkage, ids, prs, "missing", [], []));
+                commits.Add(new(c.Sha, c.Linkage, c.WorkItems, c.Mentions, c.PullRequests, "missing", [], []));
                 continue;
             }
             var (touches, fileOnly) = Map(model, changes);
-            commits.Add(new(c.Sha, linkage, ids, prs, "mapped", touches, fileOnly));
+            commits.Add(new(c.Sha, c.Linkage, c.WorkItems, c.Mentions, c.PullRequests, "mapped", touches, fileOnly));
         }
 
-        var inputs = new Inputs(HistorySchema, Digest(history), file.Repository?.Url ?? file.Repository?.Name ?? file.Repository?.Id,
-            file.Range?.Base, file.Range?.BaseSha, file.Range?.HeadSha, file.Truncated, scope,
+        // Nothing verified anywhere: an empty answer would read as "no requirements" when nobody could say.
+        if (commits.Count > 0 && commits.All(c => c.Linkage != "verified") && pullRequests.All(p => p.Linkage != "verified" || p.Status != "confirmed"))
+            warnings.Add($"no provider link was verified ({provider} history): a symbol without requirements is unknown, not unlinked");
+
+        var inputs = new Inputs(HistorySchema, Digest(history), provider, repository, since, sinceSha, untilSha, truncated, shallow, scope,
             [.. items.Select(w => new WorkItemInput(w.Id, w.Revision, w.Digest))]);
         var fingerprint = Fingerprint(inputs);
         return new(Schema, fingerprint, inputs, commits, pullRequests, items, [.. warnings.Distinct()]);
@@ -194,36 +337,23 @@ static class RequirementIndex
     {
         var items = workItems.Select(w => Normalize(w.Item, w.Digest, w.Name))
             .GroupBy(w => w.Id).Select(g => g.OrderByDescending(w => w.Revision ?? -1).ThenBy(w => w.Digest, StringComparer.Ordinal).First()).OrderBy(w => w.Id);
-        return Fingerprint(new Inputs(HistorySchema, Digest(history), null, null, null, null, false, scope,
+        return Fingerprint(new Inputs(HistorySchema, Digest(history), null, null, null, null, null, false, false, scope,
             [.. items.Select(w => new WorkItemInput(w.Id, w.Revision, w.Digest))]));
-    }
-
-    static (string Linkage, List<int> Ids) Links(HistoryLinks? links, string what)
-    {
-        var status = links?.Status ?? "unknown";
-        if (!Linkages.Contains(status)) throw new ArgumentException($"history: {what}: work-item status '{status}' ({string.Join(", ", Linkages)})");
-        var ids = (links?.Items ?? []).Select(i => i.Id).Distinct().Order().ToList();
-        // Ids from a lookup that didn't complete are kept: they are real links, the list just may be incomplete.
-        return (status, ids);
     }
 
     // The commit's changes under the scanned directory, paths relative to it. A rename keeps only the new path: the
     // symbols are mapped as of the commit, where the file lives at the new path.
     static IEnumerable<Change> Changes(HistoryCommit c, string prefix)
     {
-        foreach (var ch in c.Changes ?? [])
+        foreach (var (raw, status, granularity, ranges) in c.Files)
         {
-            if (ch.Path is null) continue;
-            var path = ch.Path.Replace('\\', '/');
+            var path = raw.Replace('\\', '/');
             if (prefix.Length > 0)
             {
                 if (!path.StartsWith(prefix, StringComparison.Ordinal)) continue;
                 path = path[prefix.Length..];
             }
-            var hunks = ch.Hunks ?? [];
-            if (hunks.Any(h => h.NewStart < 0 || h.NewLines < 0 || h.OldStart < 0 || h.OldLines < 0))
-                throw new ArgumentException($"history: commit {c.Sha![..7]}: negative hunk position in {ch.Path}");
-            yield return new(path, ch.Status == "deleted", [.. hunks]);
+            yield return new(path, status == "deleted", granularity == "file", ranges);
         }
     }
 
@@ -239,6 +369,12 @@ static class RequirementIndex
         var fileOnly = new List<FileTouch>();
         foreach (var ch in changes)
         {
+            // Only the file is known to have changed (binary, a rename or mode change): never a statement about a symbol.
+            if (ch.FileLevel)
+            {
+                fileOnly.Add(new(ch.Path, ch.Deleted ? "deleted" : "file"));
+                continue;
+            }
             foreach (var h in ch.Hunks)
             {
                 var lines = h.NewLines == 0 ? $"{h.NewStart}" : h.NewLines == 1 ? $"{h.NewStart}" : $"{h.NewStart}-{h.NewStart + h.NewLines - 1}";

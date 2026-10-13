@@ -186,7 +186,7 @@ static int TraceCommand(string root, string? name, bool json)
 // commits not mapped before are scanned (as of the commit); identical inputs write nothing.
 static int RequirementsImport(string root, string? history, string? workItems, Config config, Dictionary<string, string> opts)
 {
-    if (string.IsNullOrWhiteSpace(history)) return Usage("requirements import needs a history file (gitwizz.history/v1)", "requirements");
+    if (string.IsNullOrWhiteSpace(history)) return Usage("requirements import needs a history file (gitwizz.history/v2, from gitwizz history export)", "requirements");
     if (opts.Keys.FirstOrDefault(o => o is "for" or "work-item" or "format") is { } o) return Usage($"--{o} applies to requirements show, not import", "requirements");
     string Resolve(string f) => File.Exists(f) || Directory.Exists(f) ? f : Path.Combine(root, f);
     var historyFile = Resolve(history);

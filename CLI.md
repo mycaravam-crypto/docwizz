@@ -510,16 +510,17 @@ It never judges content: whether a statement is true or a product can be approve
 ## Requirement history
 
 ```bash
-docwizz requirements import . history.json work-items/                    # gitwizz.history/v1 + ado.requirement-context/v1
+docwizz requirements import . history.json work-items/                    # gitwizz.history/v2 + ado.requirement-context/v1
 docwizz requirements show . --for Shop.OrderService.Place [--format json] # one symbol's requirements
 docwizz requirements show . --work-item 101                               # one work item's symbols
 ```
 
-`import` maps every exported commit's hunks onto the symbols as they were at that commit and writes
-`docs/.docwizz/requirements.json`; identical inputs write nothing, and known commits aren't scanned again. `show`
-answers from that index and the current model (`docwizz.requirement-context/v1`): each work item is `confirmed` (a
-directly linked commit changed the symbol) or `candidate` (only a pull request's link), with the commit, PR, file and
-lines, and `changedSince` when the symbol changed after that commit. The `outcome` tells `linked`, `no-link` (verified
+`import` reads what `gitwizz history export` writes (`gitwizz.history/v2`, no adapter), maps every exported commit's
+changed lines onto the symbols as they were at that commit and writes `docs/.docwizz/requirements.json`; identical
+inputs write nothing, and known commits aren't scanned again. `show` answers from that index and the current model
+(`docwizz.requirement-context/v1`): each work item is `confirmed` (a commit the provider links to it changed the
+symbol) or `candidate` (only a confirmed pull request's link, or a mention in a commit message), with the commit, PR,
+file and lines, and `changedSince` when the symbol changed after that commit. The `outcome` tells `linked`, `no-link` (verified
 none), `unavailable`, `not-in-history` and `not-current` apart. Files only, no network; the same inputs give the same
 bytes. Input shapes and rules: [docs/requirement-context.md](docs/requirement-context.md).
 

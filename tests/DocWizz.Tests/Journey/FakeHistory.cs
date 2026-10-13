@@ -4,13 +4,14 @@ using System.Text.RegularExpressions;
 
 namespace DocWizz.Tests.Journey;
 
-// Stands in for the exporters DocWizz reads (#166): a git repository built commit by commit, then `gitwizz.history/v1`
-// written from its real diffs (git diff -U0, as GitWizz would) and `ado.requirement-context/v1` work items. Links are
-// whatever the test says they are: this is a fake, it never asks a server.
+// Stands in for the exporters DocWizz reads (#166, #172): a git repository built commit by commit, then
+// `gitwizz.history/v2` written from its real diffs (git diff -U0 -M, as gitwizz history export does) and
+// `ado.requirement-context/v1` work items. Links are whatever the test says they are: this is a fake, it never asks a
+// server. GitwizzExampleJourneyTests checks the import against gitwizz's own export instead.
 sealed class FakeHistory : IDisposable
 {
     public string Root { get; } = Directory.CreateTempSubdirectory("docwizz-history-").FullName;
-    readonly List<(string Sha, object WorkItems, object[] PullRequests)> commits = [];
+    readonly List<(string Sha, string Subject, object ProviderLinks, object PullRequest)> commits = [];
 
     public FakeHistory() { Git("init", "-q"); }
 
@@ -34,21 +35,42 @@ sealed class FakeHistory : IDisposable
         File.WriteAllText(full, text.Replace("\r\n", "\n"));
     }
 
-    public static object Verified(params int[] ids) => new { status = "verified", items = ids.Select(id => new { id, source = "commit-workitem" }) };
+    // What the provider links to a commit: verified with these work items, or a status without an answer.
+    public static object Verified(params int[] ids) => new
+    {
+        status = "verified", items = ids.Select(id => new { workItem = $"AB#{id}", source = "provider", kind = "commit-link", evidence = "ado commit context: commit-workitem" }),
+        problem = (string?)null,
+    };
+    public static object Status(string status) => new { status, items = (object?)null, problem = $"ado commit context: {status}" };
+
+    // The pull request a commit came in with.
+    public static object Pr(int id, string resolution = "exact") => new { id = $"#{id}", resolution, basis = new[] { "merged-branch", "provider" }, candidates = Array.Empty<string>() };
+    static readonly object NoPr = new { id = (string?)null, resolution = "unknown", basis = Array.Empty<string>(), candidates = Array.Empty<string>() };
+
+    // A completed pull request and the work items the provider links to it.
+    public static object PullRequest(int id, string status = "confirmed", params int[] workItems) => new
+    {
+        id = $"#{id}", title = $"PR {id}", url = (string?)null, target = "main", status, strategy = "squash", mergeCommit = (string?)null,
+        commits = Array.Empty<string>(),
+        workItems = workItems.Select(w => new { workItem = $"AB#{w}", source = "provider", kind = "pr-link", evidence = "ado pr context" }),
+        workItemsStatus = "verified", problem = (string?)null,
+    };
 
     // Commits everything with the given links; returns the full SHA.
-    public string Commit(string message, object? workItems = null, params object[] pullRequests)
+    public string Commit(string message, object? providerLinks = null, object? pullRequest = null)
     {
         Git("add", "-A");
         Git("commit", "-qm", message);
         var sha = Git("rev-parse", "HEAD").Trim();
-        commits.Add((sha, workItems ?? Verified(), pullRequests));
+        commits.Add((sha, message, providerLinks ?? Verified(), pullRequest ?? NoPr));
         return sha;
     }
 
+    static readonly Regex AbMention = new(@"AB#(\d+)");
+
     static readonly Regex HunkHeader = new(@"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@");
 
-    // The commit's changes as GitWizz exports them: path, old path on a rename, status and zero-context hunks.
+    // The commit's files as gitwizz exports them: path, old path on a rename, status, granularity and zero-context ranges.
     List<object> Changes(string sha)
     {
         var diff = Git("show", "--format=", "-U0", "-M", "--no-color", sha);
@@ -57,7 +79,8 @@ sealed class FakeHistory : IDisposable
         var hunks = new List<object>();
         void Flush()
         {
-            if (path is not null) changes.Add(new { path, oldPath, status, hunks = hunks.ToList() });
+            if (path is not null)
+                changes.Add(new { path, oldPath, status, similarity = oldPath is null ? (int?)null : 100, granularity = hunks.Count == 0 ? "file" : "lines", ranges = hunks.ToList() });
             hunks.Clear();
         }
         foreach (var line in diff.Split('\n'))
@@ -74,24 +97,29 @@ sealed class FakeHistory : IDisposable
             else if (HunkHeader.Match(line) is { Success: true } h)
                 hunks.Add(new
                 {
-                    oldStart = int.Parse(h.Groups[1].Value), oldLines = h.Groups[2].Success ? int.Parse(h.Groups[2].Value) : 1,
-                    newStart = int.Parse(h.Groups[3].Value), newLines = h.Groups[4].Success ? int.Parse(h.Groups[4].Value) : 1,
+                    oldStart = int.Parse(h.Groups[1].Value), oldCount = h.Groups[2].Success ? int.Parse(h.Groups[2].Value) : 1,
+                    newStart = int.Parse(h.Groups[3].Value), newCount = h.Groups[4].Success ? int.Parse(h.Groups[4].Value) : 1,
                 });
         }
         Flush();
         return changes;
     }
 
-    // gitwizz.history/v1 over every commit so far, oldest first.
-    public string History(object[]? pullRequests = null, string schema = "gitwizz.history/v1") => JsonSerializer.Serialize(new
+    // gitwizz.history/v2 over every commit so far, newest first. Message mentions (AB#n) come from the subject.
+    public string History(object[]? pullRequests = null, string schema = "gitwizz.history/v2") => JsonSerializer.Serialize(new
     {
-        schema,
-        repository = new { provider = "azure-devops", name = "shop" },
-        range = new { @base = (string?)null, head = "main", headSha = commits[^1].Sha },
-        commits = commits.Select(c => new { sha = c.Sha, changes = Changes(c.Sha), workItems = c.WorkItems, pullRequests = c.PullRequests }),
+        schema, provider = "azure-devops", repository = "https://ado.example.invalid/shop",
+        range = new { since = (string?)null, sinceSha = (string?)null, until = "main", untilSha = commits[^1].Sha, limit = 200, commits = commits.Count, truncated = false, shallow = false },
+        sources = new { commitMessages = "complete", providerCommitLinks = "fake", pullRequests = "fake", pullRequestWorkItems = "fake" },
+        commits = Enumerable.Reverse(commits).Select(c => new
+        {
+            sha = c.Sha, parents = Array.Empty<string>(), subject = c.Subject, committedAt = "2026-01-01T00:00:00+00:00", kind = "commit",
+            files = Changes(c.Sha),
+            workItems = AbMention.Matches(c.Subject).Select(m => new { workItem = m.Value, source = "commit-message", kind = "ab", evidence = m.Value }),
+            providerLinks = c.ProviderLinks, pullRequest = c.PullRequest,
+        }),
         pullRequests = pullRequests ?? [],
         warnings = Array.Empty<string>(),
-        truncated = false,
     }, new JsonSerializerOptions { WriteIndented = true });
 
     public static string WorkItem(int id, string title, int revision = 1, params string[] criteria) => JsonSerializer.Serialize(new
