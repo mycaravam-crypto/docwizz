@@ -87,6 +87,7 @@ public class BusinessContextTests
         intent: The code satisfies WI-101. [WI-101]
         intent: This line cites only code. [source]
         intent: Orders may need approval first. [WI-7]
+        intent: This requirement is approved and the code is certified. [WI-101]
         deviation: The source accepts any amount, with no limit. [WI-101; source]
         summary: Approved by the business. [WI-999]
         """;

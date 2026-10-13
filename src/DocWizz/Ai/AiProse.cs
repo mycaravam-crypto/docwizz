@@ -331,8 +331,10 @@ static class AiProse
         return new Draft(summary, [.. sections.Values.SelectMany(l => l).SelectMany(x => x.From).Distinct()], sections);
     }
 
-    // A sentence that claims the code fulfils a requirement: the model can't verify that, so it is never kept.
-    static readonly Regex Fulfils = new(@"\b(satisf(y|ies|ied)|fulfil+s?|fulfil+ed|meets|met|compl(y|ies|ied) with|implements|implemented)\b.*\b(requirement|WI-\d+|acceptance criteri)", RegexOptions.IgnoreCase);
+    // A sentence that claims the code fulfils a requirement, or that something is approved or certified: the model can't
+    // verify either (and work-item text that asks for such a claim is an injection), so it is never kept.
+    static readonly Regex Fulfils = new(@"\b(satisf(y|ies|ied)|fulfil+s?|fulfil+ed|meets|met|compl(y|ies|ied) with|implements|implemented)\b.*\b(requirement|WI-\d+|acceptance criteri)" +
+        @"|\b(approved|certified|compliant|conformant|signed off|freigegeben|zertifiziert|genehmigt)\b", RegexOptions.IgnoreCase);
 
     // A draft with business context, held to its rules: code sections rest on code (work-item citations are removed
     // from them, and a sentence left with none is dropped); intent and deviation sentences rest on a work item and say

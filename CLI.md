@@ -223,8 +223,8 @@ facts say what was left out. Work items that were linked but not exported are ne
   Each sentence must cite a `WI-<id>`, and gets its status appended: `[WI-12 confirmed]`, `[WI-7 candidate, code
   changed since]`.
 - The code sections (summary, behaviour, …) rest on code: work-item citations are removed from them, and a sentence
-  that cites only a work item is dropped. A sentence claiming the code satisfies or implements a requirement is
-  dropped wherever it is.
+  that cites only a work item is dropped. A sentence claiming the code satisfies or implements a requirement, or
+  that anything is approved or certified, is dropped wherever it is.
 - A requirements draft is cached under its own key (symbol, body hash and a hash of the selected context), so a new
   revision or link re-drafts that symbol only. Without `--requirements`, prompts, cache keys and pages are exactly as
   before, and requirements drafts are never shown.
