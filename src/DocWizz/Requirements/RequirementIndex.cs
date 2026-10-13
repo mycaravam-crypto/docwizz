@@ -305,6 +305,7 @@ static class RequirementIndex
 
     public static string Serialize(Index index) => JsonSerializer.Serialize(index, Write).Replace("\r\n", "\n") + "\n";
 
+    // A saved index; another schema (an older docwizz, or not an index) is an error that says to import again.
     public static Index Load(string file)
     {
         JsonElement raw;
