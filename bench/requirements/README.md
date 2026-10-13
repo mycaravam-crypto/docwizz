@@ -179,7 +179,30 @@ the source.
   it: A dipped (0.50, 0.50, now 0.45, same prompt), B's prompt changed in this run, and it is one run. The rule needs
   repeated runs before it can decide a default.
 
-Limits: one synthetic fixture, one 7B model, three runs, phrase matching for recall (a paraphrase that misses every
+#### Run 4: deviations by absence (not adopted)
+
+Same model and settings, one prompt change on top of run 3: "a requirement this code doesn't cover at all is no
+deviation" became "a check the requirement asks for that this code never makes is a deviation too: quote the statement
+that goes ahead without it; a requirement about work other code does is no deviation", with a second example
+(`` `return token;` ``). Report: [`results/…run4-absence-deviations.md`](results/2026-10-13-qwen2.5-coder-7b-run4-absence-deviations.md).
+
+| Mode | Constraint recall (95% CI) | Unsupported WI | Injection kept | Contradictions flagged | False deviations |
+|---|---|---|---|---|---|
+| A | 0.50 [0.26, 0.81] | n/a | 0 | 0/2 | 0 |
+| B | 0.70 [0.50, 0.87] | 0.0 | 0 | 0/2 | 0 |
+| C | 0.65 [0.44, 0.88] | 0.0 | 0 | 0/2 | 2 |
+
+- **`Refund` was still not flagged**, in B or C. The model wrote its intent ("may not exceed the order total") and
+  no deviation, even though `return amount;` was there to quote.
+- **The absence pattern landed on the wrong method.** C: `Issue` "does not check if the order has shipped before
+  issuing an invoice (`` `return number;` ``)". Issuing is the shipping flow's job, which is exactly the scope case the rule excludes.
+- **One plain misreading.** C: `Place` checks `amount > CreditLimit` "which is the opposite of what WI-101 requires".
+  It isn't.
+- **Decision: reverted.** The prompt stays as in run 3. A 7B model doesn't separate "this code should check X" from
+  "someone should check X". Retrying needs either a stronger model, or a deterministic hint in the facts (e.g. the
+  criterion's terms, such as "order total", that the source never mentions) instead of a prompt rule.
+
+Limits: one synthetic fixture, one 7B model, four runs, phrase matching for recall (a paraphrase that misses every
 listed phrase counts as missed). Link errors (layer 1) and model errors (layer 2) are reported separately: the
 `Available` false link is a layer-1 error, and the false deviations are model errors on correct links.
 
@@ -191,9 +214,10 @@ consistent but not significant on this fixture.
 
 Before considering a default:
 
-- **Let deviations by absence back in.** Quoted deviations (#183, run 3) removed the false ones but also the true
-  `Refund` catch. Next try: allow a deviation that quotes the statement where the asked-for check is missing (e.g.
-  `return amount;`), then rerun.
+- **Deviations by absence: not with a prompt rule.** Quoted deviations (#183, run 3) removed the false ones but also
+  the true `Refund` catch. Run 4 allowed absence deviations in the prompt: `Refund` was still missed, and the pattern
+  produced a scope false positive (`Issue`). Next try, if any: a deterministic hint in the facts (criterion terms the
+  source never mentions), or a stronger local model.
 - **Grow the gold set.** More contradiction cases and more constraint groups, so that a +0.15–0.2 gain can be
   told apart from noise. Also mark work items that span several methods (WI-112) as scope, not contradiction.
 - **Revisit the default bound.** It binds rarely, but when it does it drops the oldest work item first. Keep the
