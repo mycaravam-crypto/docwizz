@@ -189,7 +189,9 @@ Without `scope:`, everything is scanned as before. Limits and the acceptance cri
   symbols, affected pages (including every page along a flow through a touched symbol), introduced gaps and violations,
   and changed package versions. New external systems and layer dependencies are listed as ADR candidates. Each added or
   changed symbol gets its linked tests from [TestLinks](src/DocWizz/Model/TestLinks.cs): `tests` edges to it, its
-  interface, an implementation or a member, the same rule the analyzer uses for "tested".
+  interface, an implementation or a member, the same rule the analyzer uses for "tested". A `tests` edge is what a call,
+  import, render, injection, HTTP call or instantiation (`new T(..)`) from test code becomes; test code must be inside
+  the scanned directory (`tests:` globs) for any link to exist.
 
 ## Packages
 

@@ -212,7 +212,8 @@ Test traceability (2 of 14 changed symbols linked) — a link means test code us
 ```
 
 `diff` lists changed symbols, affected pages, updated package versions and the test code linked to each symbol
-(directly or through an interface or implementation). Without refs it compares against the last `generate`.
+(directly or through an interface or implementation; calling it or constructing it with `new` both count). Only test code
+inside the scanned directory is seen: scan the repository root when the tests live next to `src/`. Without refs it compares against the last `generate`.
 
 ### Gate pull requests
 

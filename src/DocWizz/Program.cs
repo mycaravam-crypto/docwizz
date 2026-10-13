@@ -703,7 +703,7 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     // Test code leaves only `tests` edges (test symbol → code it uses) behind.
     var testIds = nodes.Where(n => testFiles.Contains(n.File)).Select(n => n.Id).ToHashSet();
     nodes.RemoveAll(n => testIds.Contains(n.Id));
-    edges = edges.Where(e => !testIds.Contains(e.To) && (!testIds.Contains(e.From) || e.Kind is "calls" or "imports" or "renders" or "injects" or "http"))
+    edges = edges.Where(e => !testIds.Contains(e.To) && (!testIds.Contains(e.From) || e.Kind is "calls" or "creates" or "imports" or "renders" or "injects" or "http"))
         .Select(e => testIds.Contains(e.From) ? new Edge(e.From, e.To, "tests") : e).Distinct().ToList();
 
     nodes = nodes.Select(n => n.Kind is "external" or "config" ? n : n with { Language = Language(n.File) }).ToList();
