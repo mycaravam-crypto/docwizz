@@ -172,6 +172,11 @@ public class DomainCrawlerTests
         Assert.Contains("None.", drifted[At(drifted, "## As-intended")..At(drifted, "## Unclear")]);
         Assert.Contains("the code changed after the linked commit", drifted[At(drifted, "## Unclear")..]);
 
+        // Saved next to docs/: locations link back into the repository with line anchors; on stdout they stay code.
+        var linked = DomainCrawler.Markdown(DomainCrawler.Discover(Graph(), Endpoint, null, 1, 100), "..");
+        Assert.Contains("[`src/Api/OrderController.cs:1`](../src/Api/OrderController.cs#L1)", linked);
+        Assert.DoesNotContain("](", md);
+
         var bare = DomainCrawler.Markdown(DomainCrawler.Discover(Graph(), Endpoint, null, 0, 10));
         Assert.Contains("No relations within the bounds.", bare);
         Assert.Contains("Unavailable: run `docwizz requirements import`", bare);

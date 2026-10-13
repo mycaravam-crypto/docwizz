@@ -28,7 +28,7 @@ docwizz domain discover . --seed "POST /api/orders" --depth 4 --limit 150 --form
 docwizz domain discover . --work-item 4711 --depth 3 --limit 100 --format json
 
 # Reviewable Markdown with a Mermaid graph:
-docwizz domain discover . --seed "POST /api/orders" --format md > orders-domain.md
+docwizz domain discover . docs/orders-domain.md --seed "POST /api/orders" --format md
 
 # Readable console output, still no AI or network:
 docwizz domain discover . --seed "Shop.OrderService.Place" --depth 3
@@ -37,7 +37,9 @@ docwizz domain discover . --seed "Shop.OrderService.Place" --depth 3
 When no requirements index exists, **code-seeded discovery works** but returns
 `requirementsIndex.status = unavailable`; work-item seeding requires an imported index.
 All queries are offline; only the separate GitWizz/ADO export commands contact Azure DevOps.
-The crawler only writes to stdout. Use shell redirection to save a report.
+The crawler writes to stdout, or to the file named after `<dir>` (`domain discover . orders.md --format md`).
+In a file, the Markdown links every location relative to the file, with GitHub line anchors (`#L12-L20`).
+An existing file that is not a DocWizz domain report is never overwritten.
 
 ## Discovery semantics
 
