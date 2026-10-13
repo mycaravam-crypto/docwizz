@@ -37,6 +37,19 @@ static class DomainCrawler
         int MaxDepth, int MaxNodes, bool Truncated, List<Symbol> Symbols, List<Relation> Relations,
         List<Requirement> Requirements, List<CandidateTerm> CandidateTerms, List<string> Warnings);
 
+    /// <summary>
+    /// Discovers a bounded, deterministic subgraph around a code symbol or imported work item,
+    /// retaining source-backed technical relations and explicitly qualified historical requirements.
+    /// Does not infer business capabilities or contact external services.
+    /// </summary>
+    /// <param name="model">The scanned, language-neutral code model.</param>
+    /// <param name="codeSeed">A single symbol or endpoint; null when starting from a work item.</param>
+    /// <param name="workItem">An imported Azure DevOps ID; null when starting from code.</param>
+    /// <param name="maxDepth">Maximum graph distance from the seed.</param>
+    /// <param name="maxNodes">Maximum number of visited symbols.</param>
+    /// <param name="index">Optional previously imported requirements index.</param>
+    /// <param name="head">Current HEAD for freshness assessment, if known.</param>
+    /// <returns>Read-only, versioned code and requirement evidence, including warnings and truncation.</returns>
     public static Report Discover(CodeModel model, string? codeSeed, int? workItem, int maxDepth, int maxNodes,
         RequirementIndex.Index? index = null, string? head = null)
     {
