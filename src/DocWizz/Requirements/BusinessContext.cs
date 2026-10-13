@@ -7,7 +7,7 @@ using System.Text.Json;
 static class BusinessContext
 {
     // Part of every requirements draft's cache key: a change to how the context is selected or prompted re-drafts.
-    public const string Version = "req-v1";
+    public const string Version = "req-v2";   // v2: deviations quote the source (#183)
 
     public record Entry(string Ref, int Id, string Status, bool ChangedSince, string? Type, string? State, string? Title,
         int? Revision, bool? IsCurrent, List<string> Criteria, string Evidence);

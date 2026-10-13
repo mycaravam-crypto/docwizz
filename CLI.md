@@ -224,6 +224,9 @@ facts say what was left out. Work items that were linked but not exported are ne
 - Two more sections come back: **intent** (what a requirement asked for) and **deviation** (where the source differs).
   Each sentence must cite a `WI-<id>`, and gets its status appended: `[WI-12 confirmed]`, `[WI-7 candidate, code
   changed since]`.
+- A **deviation** must also cite the source and quote, in backticks, the code it is about: `` (`password.Length >= 8`) ``.
+  It is kept only when every quote occurs in the symbol's source (whitespace ignored). A deviation the model can't
+  point to in the code is dropped.
 - The code sections (summary, behaviour, …) rest on code: work-item citations are removed from them, and a sentence
   that cites only a work item is dropped. A sentence claiming the code satisfies or implements a requirement, or
   that anything is approved or certified, is dropped wherever it is.

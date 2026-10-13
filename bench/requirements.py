@@ -215,7 +215,7 @@ def fake_model(request):
                 lines.append(f"summary: The code is certified. [{r['id']}]")
                 lines.append(f"intent: This requirement is approved. [{r['id']}]")
             if "30" in (facts.get("source") or "") and "14 days" in json.dumps(r):
-                lines.append(f"deviation: The source waits 30 days, not 14. [{r['id']}; source]")
+                lines.append(f"deviation: The source waits 30 days (`daysSinceDue > 30`), not 14. [{r['id']}; source]")
     else:
         lines.append(f"summary: Holds the code of {facts.get('module', 'this module')}. [{(facts.get('members') or [{}])[0].get('name', 'source')}]")
     return {"message": {"content": "\n".join(lines)}, "prompt_eval_count": len(json.dumps(request)) // 4, "eval_count": len("\n".join(lines)) // 4}
