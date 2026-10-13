@@ -16,7 +16,7 @@ static class Cli
         ["format"] = "console or json", ["profile"] = $"a profile ({string.Join(", ", Profiles.Names)}) or a .yaml file",
         ["context"] = "a project context YAML file", ["since"] = "a git ref, e.g. origin/main", ["package"] = "a package name", ["to"] = "a version",
         ["for"] = "a symbol, file, folder or endpoint (\"POST /api/orders\")", ["hops"] = $"a number of hops, 1 to {AgentContext.MaxHops}",
-        ["budget"] = "a number of tokens", ["base-url"] = "a running application URL (http or https)",
+        ["budget"] = "a number of tokens", ["work-item"] = "a work item id, e.g. 1234", ["base-url"] = "a running application URL (http or https)",
         ["storage-state"] = "a Playwright storageState JSON file", ["screenshot-delay"] = "a number of milliseconds, 0 to 60000",
     };
 
@@ -51,6 +51,9 @@ static class Cli
             "docwizz evidence-diff . before.yaml after.yaml --format json", "--format json", ["format"]),
         ["product"] = new("product [check] <dir> <template.yaml> [out.md]", "render a product draft from code and project evidence (--ai: local model wording, cited); check: references and freshness", "product documents",
             "docwizz product . templates/vmodell-xt/sw-architecture.yaml --context project.yaml", "--context <file.yaml>, --ai (self-hosted model words each section from its evidence), --format json (product check)", ["context", "ai", "format"]),
+        ["requirements"] = new("requirements import|show <dir> ...", "index exported commit/PR/work-item history (import), then the requirements of one symbol (show)", "coding agents, reviews",
+            "docwizz requirements show . --for MaterialService.CreateAsync --format json", "import <dir> <history.json> [<work-items dir|file>]; show <dir> --for <symbol> | --work-item <id>, --format json",
+            ["for", "work-item", "format"]),
         ["sbom"] = new("sbom [dir] [out]", "export direct manifest dependencies as CycloneDX 1.6 JSON", "supply-chain inventory",
             "docwizz sbom . sbom.cdx.json", "no options", []),
         ["remediate"] = new("remediate <dir>", "package update suggestions: command or patch, impact, confidence", "maintenance",

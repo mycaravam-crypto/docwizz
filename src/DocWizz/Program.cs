@@ -36,6 +36,14 @@ static async Task<int> Dispatch(string[] args)
     // `docwizz product check <dir> <template.yaml>`: the subcommand comes before the directory (a folder named check: ./check).
     var productCheck = cmd == "product" && pos.ElementAtOrDefault(1) == "check";
     if (productCheck) pos.RemoveAt(1);
+    // `docwizz requirements import|show <dir> ...`: the same, the subcommand first.
+    string? requirementsAction = null;
+    if (cmd == "requirements")
+    {
+        if (pos.ElementAtOrDefault(1) is not ("import" or "show")) return Usage("requirements needs import or show: docwizz requirements import <dir> <history.json> [<work-items>]", "requirements");
+        requirementsAction = pos[1];
+        pos.RemoveAt(1);
+    }
     var path = pos.ElementAtOrDefault(1) ?? ".";
     var json = opts.GetValueOrDefault("format") == "json";
 
@@ -83,6 +91,10 @@ static async Task<int> Dispatch(string[] args)
             return await McpCommand(path, config, opts.ContainsKey("auto-rescan"));
         case "evidence-diff":
             return EvidenceDiffCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), json);
+        case "requirements":
+            return requirementsAction == "import"
+                ? RequirementsImport(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), config, opts)
+                : RequirementsShow(path, config, opts, json);
         case "trace":
             return TraceCommand(path, pos.ElementAtOrDefault(2), json);
         case "product":
@@ -166,6 +178,100 @@ static int TraceCommand(string root, string? name, bool json)
     }
     catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
     catch (IOException e) { Console.Error.WriteLine($"{file}: {e.Message}"); return 1; }
+}
+
+// `requirements import`: the requirement index from exported history and work items (files only, no network). Only
+// commits not mapped before are scanned (as of the commit); identical inputs write nothing.
+static int RequirementsImport(string root, string? history, string? workItems, Config config, Dictionary<string, string> opts)
+{
+    if (string.IsNullOrWhiteSpace(history)) return Usage("requirements import needs a history file (gitwizz.history/v1)", "requirements");
+    if (opts.Keys.FirstOrDefault(o => o is "for" or "work-item" or "format") is { } o) return Usage($"--{o} applies to requirements show, not import", "requirements");
+    string Resolve(string f) => File.Exists(f) || Directory.Exists(f) ? f : Path.Combine(root, f);
+    var historyFile = Resolve(history);
+    var target = Path.Combine(root, RequirementIndex.DefaultFile);
+    try
+    {
+        if (!File.Exists(historyFile)) throw new ArgumentException($"{history}: no such file");
+        var bytes = File.ReadAllBytes(historyFile);
+        var items = RequirementIndex.ReadWorkItems(workItems is null ? null : Resolve(workItems));
+        var scope = ProjectScope.Fingerprint(config.Scope);
+        RequirementIndex.Index? previous = null;
+        if (File.Exists(target))
+        {
+            try { previous = RequirementIndex.Load(target); }
+            catch (ArgumentException) { }   // an older or broken index is rebuilt from scratch
+        }
+        if (previous?.Fingerprint == RequirementIndex.Fingerprint(bytes, items, scope))
+        {
+            Console.WriteLine($"unchanged: {RequirementIndex.DefaultFile} ({previous.Commits.Count} commits, {previous.WorkItems.Count} work items)");
+            return 0;
+        }
+        var prefix = Git(root, "rev-parse --show-prefix")?.Trim() ?? "";
+        string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java", ".php"];
+        var index = RequirementIndex.Build(bytes, items, scope, prefix, sha => ModelAt(root, sha, config),
+            p => exts.Contains(Path.GetExtension(p)), previous, m => Console.Error.WriteLine($"docwizz: {m}"));
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.WriteAllText(target + ".tmp", RequirementIndex.Serialize(index));
+        File.Move(target + ".tmp", target, overwrite: true);
+        var touched = index.Commits.SelectMany(c => c.Touches).Select(t => t.Symbol).Distinct().Count();
+        Console.WriteLine($"→ {RequirementIndex.DefaultFile}: {index.Commits.Count} commits, {touched} symbols touched, {index.PullRequests.Count} PRs, {index.WorkItems.Count} work items");
+        foreach (var w in index.Warnings) Console.Error.WriteLine($"docwizz: ⚠ {w}");
+        return 0;
+    }
+    catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
+    catch (IOException e) { Console.Error.WriteLine(e.Message); return 1; }
+}
+
+// `requirements show`: one symbol's requirements (or one work item's symbols) from the index and the current model.
+// Read-only: no scan of history, no network.
+static int RequirementsShow(string root, Config config, Dictionary<string, string> opts, bool json)
+{
+    var target = opts.GetValueOrDefault("for");
+    var workItem = opts.GetValueOrDefault("work-item");
+    if ((target is null) == (workItem is null)) return Usage("requirements show needs --for <symbol> or --work-item <id>", "requirements");
+    var file = Path.Combine(root, RequirementIndex.DefaultFile);
+    if (!File.Exists(file))
+    {
+        Console.Error.WriteLine($"no requirement index at {RequirementIndex.DefaultFile}; run docwizz requirements import {root} <history.json> [<work-items>] first");
+        return 1;
+    }
+    RequirementIndex.Index index;
+    try { index = RequirementIndex.Load(file); }
+    catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
+    if (index.Inputs.Scope != ProjectScope.Fingerprint(config.Scope))
+        Console.Error.WriteLine("docwizz: the project scope changed since the index was imported; symbol ids may differ (run requirements import again)");
+    var (model, _, _) = LoadModel(root, config);
+    var head = Git(root, "rev-parse HEAD")?.Trim();
+    if (workItem is not null)
+    {
+        if (!int.TryParse(workItem.TrimStart('#').Replace("WI-", "", StringComparison.OrdinalIgnoreCase), out var id) || id <= 0)
+            return Usage("--work-item must be a work item id, e.g. 1234", "requirements");
+        var reverse = RequirementResolver.Symbols(index, id, model, head);
+        if (json) Console.Write(RequirementResolver.Json(reverse));
+        else
+        {
+            Console.WriteLine($"WI-{id}{(reverse.Item is { } w ? $" {w.Type}: {w.Title}" : " (content unavailable)")}");
+            foreach (var s in reverse.Symbols)
+                Console.WriteLine($"  {s.Id} [{s.Status}{(s.Current ? "" : ", not in the current code")}{(s.ChangedSince ? ", code changed since" : "")}]{(s.Location is { } l ? $" — {l}" : "")}");
+            if (reverse.Symbols.Count == 0) Console.WriteLine("  no symbol in the index is linked to it");
+            foreach (var warning in reverse.Warnings) Console.WriteLine($"⚠ {warning}");
+        }
+        return 0;
+    }
+    string symbolId;
+    Node? node;
+    if (AgentContext.Resolve(model, target!) is { Target.Primary: { } n }) (symbolId, node) = (n.Id, n);
+    else if (index.Commits.SelectMany(c => c.Touches).FirstOrDefault(t => t.Symbol == target) is { } historical) (symbolId, node) = (historical.Symbol, null);
+    else
+    {
+        var r = AgentContext.Resolve(model, target!);
+        Console.Error.WriteLine(r.Target is { } t ? $"{target} is a {t.Kind}; requirements are per symbol (a method, a type)" : r.Error);
+        if (r.Candidates.Count > 0) Console.Error.WriteLine("candidates:" + string.Concat(r.Candidates.Select(c => $"\n  {c}")));
+        return 1;
+    }
+    var context = RequirementResolver.For(index, symbolId, node, head);
+    Console.Write(json ? RequirementResolver.Json(context) : RequirementResolver.Text(context));
+    return 0;
 }
 
 // A context package for a coding agent, from the model the docs were generated from (docs/.docwizz/model.json), or from a
@@ -444,6 +550,9 @@ static string Reference() => $"""
         [--format json]                 machine-readable change report
       docwizz trace <dir> <evidence.yaml>  explicit requirement-architecture-test gaps
         [--format json]                 machine-readable instead of Markdown
+      docwizz requirements import <dir> <history.json> [<work-items>]  index exported commit/PR/work-item history
+      docwizz requirements show <dir> --for <symbol>  work items a symbol was changed for (confirmed/candidate)
+        [--work-item <id>] [--format json]  the symbols of one work item instead; machine-readable
       docwizz product <dir> <template.yaml> [out.md]  product draft from code and project evidence
         [--context <file.yaml>]         load sourced project facts
         [--ai]                          a self-hosted model words sections, citing evidence ids

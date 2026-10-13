@@ -28,6 +28,7 @@ an example and its options.
 | `remediate` | package update suggestions | maintainers | optional |
 | `trace` | explicit traceability gaps from a YAML catalog | product documents | optional |
 | `evidence-diff` | compare two evidence snapshots and explicit test impact | product documents | optional |
+| `requirements` | historical work items behind a code symbol, from exported history | coding agents, reviews | optional |
 | `product` | product draft from a YAML template, from code and project evidence | architects | optional |
 | `init` | blank config with every default | manual setup | no |
 | `scan` | raw code model | advanced, debugging | no |
@@ -473,6 +474,22 @@ official templates or a conformity claim.
 
 It never judges content: whether a statement is true or a product can be approved stays a human decision.
 
+## Requirement history
+
+```bash
+docwizz requirements import . history.json work-items/                    # gitwizz.history/v1 + ado.requirement-context/v1
+docwizz requirements show . --for Shop.OrderService.Place [--format json] # one symbol's requirements
+docwizz requirements show . --work-item 101                               # one work item's symbols
+```
+
+`import` maps every exported commit's hunks onto the symbols as they were at that commit and writes
+`docs/.docwizz/requirements.json`; identical inputs write nothing, and known commits aren't scanned again. `show`
+answers from that index and the current model (`docwizz.requirement-context/v1`): each work item is `confirmed` (a
+directly linked commit changed the symbol) or `candidate` (only a pull request's link), with the commit, PR, file and
+lines, and `changedSince` when the symbol changed after that commit. The `outcome` tells `linked`, `no-link` (verified
+none), `unavailable`, `not-in-history` and `not-current` apart. Files only, no network; the same inputs give the same
+bytes. Input shapes and rules: [docs/requirement-context.md](docs/requirement-context.md).
+
 ## Commands
 
 | Command | Syntax | Purpose | Use |
@@ -488,6 +505,7 @@ It never judges content: whether a statement is true or a product can be approve
 | `mcp` | `docwizz mcp <dir> [--auto-rescan]` | read-only MCP server on stdio: find_symbol, context, callers, impact, check, … | coding agents |
 | `evidence-diff` | `docwizz evidence-diff <dir> <before.yaml> <after.yaml> [--format json]` | explicit evidence changes and affected tests | product documents |
 | `trace` | `docwizz trace <dir> <evidence.yaml> [--format json]` | explicit traceability and missing links | product documents |
+| `requirements` | `docwizz requirements import <dir> <history.json> [<work-items>]`, `docwizz requirements show <dir> (--for <symbol> \| --work-item <id>) [--format json]` | index exported history; one symbol's requirements, or one work item's symbols | coding agents, reviews |
 | `product` | `docwizz product [check] <dir> <template.yaml> [out.md] [--context file.yaml] [--ai] [--format f]` | product draft from evidence; `check`: references and freshness | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
@@ -502,7 +520,7 @@ It never judges content: whether a statement is true or a product can be approve
 | Option | Default | Applies to | Interaction | Use |
 |---|---|---|---|---|
 | `--profile <name\|file.yaml>` | `profile:` in `docwizz.yaml`, else `default` | setup, generate, check, analyze, architecture, diff | overrides `profile:` and the file's own `patterns:` | normal |
-| `--format console\|json` | `console` | discover, analyze, check, architecture, context, diff, trace, evidence-diff, product, remediate | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
+| `--format console\|json` | `console` | discover, analyze, check, architecture, context, diff, trace, evidence-diff, product, remediate, requirements | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
 | `--html` | off | generate, setup | adds HTML pages; the Markdown is written either way | normal |
 | `--progress` | interactive terminals | generate, setup | forces progress bars on stderr when output is redirected | normal |
 | `--refresh-html-on-version-change` | off | generate, setup | implies `--html`; rewrites all HTML when the docwizz version changed | normal |
@@ -511,7 +529,8 @@ It never judges content: whether a statement is true or a product can be approve
 | `--screenshot-delay <ms>` | 0 | generate | with `--screenshots`, extra wait (0 to 60000 ms) after the page settles, for slow pages | opt-in |
 | `--ai` | off | generate, product, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it, nothing new is sent | opt-in |
 | `--since <ref>` | — | check, remediate | check: only problems introduced since `<ref>` fail; remediate: says whether each update touches only what changed since `<ref>` | CI |
-| `--for <target>` | — | context | required; a symbol id or qualified name, a file, a folder, or `VERB /route`; ambiguous or unknown exits 1 with candidates | coding agents |
+| `--for <target>` | — | context, requirements | required for context; a symbol id or qualified name, a file, a folder, or `VERB /route`; ambiguous or unknown exits 1 with candidates. `requirements show` takes a symbol, or an id the index knows from history | coding agents |
+| `--work-item <id>` | — | requirements | `requirements show`: the symbols linked to this work item (`101`, `#101` or `WI-101`), instead of `--for` | coding agents, reviews |
 | `--hops <n>` | 2 | context | how far neighbours are listed, 1 to 4; hops beyond 1 are signature only | coding agents |
 | `--budget <tokens>` | 6000 | context | at least 100; estimated as characters / 4; lower-priority sections are cut first, and the cut is reported | coding agents |
 | `--include-ai` | off | context | includes cached 🤖 drafts, marked `ai-drafted`; never calls a model | coding agents |
@@ -560,6 +579,7 @@ It never judges content: whether a statement is true or a product can be approve
 | `remediate` | done (suggestions alone never fail) | a `--validate` run failed, or bad arguments |
 | `trace` | report on stdout | invalid/missing YAML; no data written |
 | `evidence-diff` | report on stdout | invalid/missing evidence catalogs; no data written |
+| `requirements` | `import`: index written or unchanged; `show`: answer on stdout (any outcome, `no-link` included) | missing or invalid input, unknown schema, no index, unknown target, bad arguments |
 | `product` | draft written or unchanged; `check`: no errors (warnings allowed) | invalid template, unsafe overwrite, bad arguments; `check`: an error finding |
 | `init` | written | `docwizz.yaml` exists |
 | no command | — | prints how to start |
@@ -578,6 +598,7 @@ full trace.
 | `docs/products/*.md`, `*.evidence.json` | docwizz `product`: the draft and its evidence report; untouched by `generate`. |
 | `docs/architecture/*.md` | **you**. Linked from the generated pages and never overwritten. |
 | `docs/.docwizz/model.json`, `documentation.json` | docwizz: the baseline `diff` compares against, and the documentation model as data. |
+| `docs/.docwizz/requirements.json` | docwizz `requirements import`: the requirement index. Contains work-item titles and criteria. |
 | `docs/.docwizz/ai-cache.json`, `ai-assessments.json` | docwizz: AI drafts and ratings, cached by code hash. Commit them to avoid re-sending code. |
 
 ## Versioning

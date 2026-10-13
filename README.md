@@ -297,6 +297,9 @@ For projects that keep requirements as YAML evidence:
 
 - `docwizz trace` reports requirement → architecture → test gaps.
 - `docwizz evidence-diff` compares two evidence snapshots and the tests they affect.
+- `docwizz requirements` shows which Azure DevOps work items a symbol was changed for, from exported commit/PR history:
+  `confirmed` (a directly linked commit changed it) or `candidate` (only a PR link), with commit, file and lines.
+  See [requirement context](docs/requirement-context.md).
 - `docwizz product` drafts a work product from a template, code and evidence; `product check` verifies references and
   freshness. Illustrative V-Modell XT 2.4 templates are in [templates/vmodell-xt/](templates/vmodell-xt/) (not
   official templates or a conformity claim).
@@ -486,6 +489,7 @@ them (`UseNpgsql`, `fetch('https://…')`), *inferred* when only a package point
 | `docwizz remediate <dir>` | package update suggestions, optionally validated |
 | `docwizz trace <dir> <evidence.yaml>` | requirement → architecture → test gaps |
 | `docwizz evidence-diff <dir> <before.yaml> <after.yaml>` | changed evidence and affected tests |
+| `docwizz requirements import\|show <dir> ...` | work items behind a symbol, from exported history |
 | `docwizz product [check] <dir> <template.yaml> [out.md]` | work-product draft from code and evidence |
 | `docwizz init [dir]` | manual setup: starter `docwizz.yaml` with every default |
 | `docwizz scan <dir> [model.json]` | advanced: dump the raw code model, for debugging |

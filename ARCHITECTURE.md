@@ -301,6 +301,18 @@ items without a summary, plus an overview for each module (folder) of three or m
   keeps only sentences that cite that section's ids and claim no status or conformity.
   [ProductCheck](src/DocWizz/Product/ProductCheck.cs) checks references and freshness, never content.
 
+## Requirement history
+
+- **[RequirementIndex](src/DocWizz/Requirements/RequirementIndex.cs)** reads exported `gitwizz.history/v1` and
+  `ado.requirement-context/v1` files and records facts only: per commit its linkage and what its hunks touched, mapped
+  onto the symbols of a scan **as of that commit** (`ModelAt`, the `diff` baseline scan), innermost symbol first. It is
+  kept apart from the code model (no work-item text among static facts) and from evidence catalogs (no inferred link
+  ever becomes a declared one). Work-item text is cleaned and bounded at import. Its fingerprint covers every input
+  digest and the scan scope; known commits are reused, so a refresh scans only new ones.
+- **[RequirementResolver](src/DocWizz/Requirements/RequirementResolver.cs)** decides at query time, against the current
+  model: `confirmed` needs a direct commit link, a PR link alone stays `candidate`, and `changedSince` compares the
+  symbol's hash then and now. Outcomes keep "verified none" apart from "couldn't tell". No network anywhere.
+
 ## Tests
 
 Four layers, so a failure points at the part that broke. CI ([test.yml](.github/workflows/test.yml)) runs each as its
