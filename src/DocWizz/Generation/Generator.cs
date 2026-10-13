@@ -569,16 +569,16 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     }
 
     // Prose for a table cell or list item: pipes escaped, one line, and `<` escaped as in Text.
-    static string Esc(string s) => Text(s.Replace("|", "\\|").Replace("\n", " "));
+    internal static string Esc(string s) => Text(s.Replace("|", "\\|").Replace("\n", " "));
     // Names and doc text in Markdown: `<` outside code spans escaped, else Markdown passes Array<Row>, Foo<T> or <slot>
     // through as an HTML tag the browser hides. Code spans stay as written.
     internal static string Text(string s) => Regex.Replace(s, @"(`+)[^`].*?\1(?!`)|<", m => m.Value == "<" ? "\\<" : m.Value);
     // A code span for a table cell: pipes escaped, one line; a value with a backtick is fenced with two.
-    static string Code(string s)
+    internal static string Code(string s)
     {
         var value = s.Replace("|", "\\|").Replace("\n", " ");
         return value.Contains('`') ? $"`` {value} ``" : $"`{value}`";
     }
     // A Mermaid node label: Mermaid renders labels as HTML and ends them at a double quote.
-    static string MermaidText(string s) => s.Replace("\"", "'").Replace("<", "#lt;").Replace(">", "#gt;");
+    internal static string MermaidText(string s) => s.Replace("\"", "'").Replace("<", "#lt;").Replace(">", "#gt;");
 }

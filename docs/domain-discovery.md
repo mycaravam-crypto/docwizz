@@ -27,6 +27,9 @@ docwizz domain discover . --seed "POST /api/orders" --depth 4 --limit 150 --form
 # Top-down from one historic requirement:
 docwizz domain discover . --work-item 4711 --depth 3 --limit 100 --format json
 
+# Reviewable Markdown with a Mermaid graph:
+docwizz domain discover . --seed "POST /api/orders" --format md > orders-domain.md
+
 # Readable console output, still no AI or network:
 docwizz domain discover . --seed "Shop.OrderService.Place" --depth 3
 ```
@@ -45,7 +48,8 @@ The crawler only writes to stdout. Use shell redirection to save a report.
   path within the depth bound is left. `depth` is the hop count along the path that admitted the node.
 - Traverses code-model calls, injections, accesses, creation, interface implementations,
   registrations, inheritance, persistence, events, HTTP, rendering, routes and external
-  systems. Type-to-member `contains` edges are traversed **only** from container types.
+  systems. Type-to-member `contains` edges are traversed **only** from a seed that is a container type:
+  a class reached through a field or constructor is listed, but its other members are not.
 - For interface implementations, can follow an `implements` edge backwards to reach a
   concrete implementation; **the exported edge still preserves its original direction**.
 - File locations and evidence come from the existing scanner, never guessed by the model.
@@ -60,8 +64,9 @@ The crawler only writes to stdout. Use shell redirection to save a report.
 - `candidateTerms[]` contains only **historical Work Item titles** and their associated
   current code symbols. The classification is explicitly `historical-requirement-title`:
   titles are *not* automatically validated capabilities or bounded contexts.
-- The output is stably ordered JSON (`docwizz.domain-discovery/v1`), or a human-readable
-  console summary. The same code model, history index, seed, commit and bounds produce the same output.
+- The output is stably ordered JSON (`docwizz.domain-discovery/v1`), Markdown (`--format md`: Mermaid
+  graph up to 80 symbols, symbol table, confirmed and candidate requirements in separate tables), or a
+  human-readable console summary. The same code model, history index, seed, commit and bounds produce the same output.
 
 ## What it does not claim
 

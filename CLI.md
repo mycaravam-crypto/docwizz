@@ -365,12 +365,14 @@ from the observed code graph and does not declare business capabilities or bound
 ```bash
 docwizz domain discover . --seed "POST /api/orders" --depth 3 --limit 100 --format json
 docwizz domain discover . --work-item 4711 --depth 4 --limit 150 --format json
+docwizz domain discover . --seed "POST /api/orders" --format md > orders-domain.md
 ```
 
 Work-item seeding requires `docwizz requirements import` first. Without an index, code-seeded discovery
 still runs, but marks requirement evidence as unavailable. The crawler uses a deterministic directed
 BFS and never sends code or work items to AI or a network service. The JSON schema is
-`docwizz.domain-discovery/v1`; `candidateTerms` are Work Item titles, not verified domain names.
+`docwizz.domain-discovery/v1`; `candidateTerms` are Work Item titles, not verified domain names. `--format md` renders the same report
+as reviewable Markdown: a Mermaid graph (up to 80 symbols), a symbol table and confirmed vs candidate requirements.
 See [domain-discovery.md](docs/domain-discovery.md) for provenance, limitations and the full
 GitWizz/ADO/DocWizz workflow.
 
@@ -576,7 +578,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `architecture` | `docwizz architecture <dir> [--format f] [--profile p]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
 | `diff` | `docwizz diff [dir] [base] [head] [--format f] [--profile p]` | change impact vs the last `generate` or git refs | reviews, CI |
 | `context` | `docwizz context <dir> --for target [--hops n] [--budget tokens] [--format md\|json] [--include-ai] [--requirements]` | token-budgeted context package for one symbol, file, folder or endpoint | coding agents |
-| `domain` | `docwizz domain discover <dir> (--seed <symbol\|endpoint> \| --work-item <id>) [--depth n] [--limit n] [--format json]` | recursively explore code with separately sourced historical requirements | architects |
+| `domain` | `docwizz domain discover <dir> (--seed <symbol\|endpoint> \| --work-item <id>) [--depth n] [--limit n] [--format md\|json]` | recursively explore code with separately sourced historical requirements | architects |
 | `mcp` | `docwizz mcp <dir> [--auto-rescan]` | read-only MCP server on stdio: find_symbol, context, callers, impact, check, … | coding agents |
 | `evidence-diff` | `docwizz evidence-diff <dir> <before.yaml> <after.yaml> [--format json]` | explicit evidence changes and affected tests | product documents |
 | `trace` | `docwizz trace <dir> <evidence.yaml> [--format json]` | explicit traceability and missing links | product documents |

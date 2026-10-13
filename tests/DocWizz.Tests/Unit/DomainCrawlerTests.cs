@@ -130,6 +130,45 @@ public class DomainCrawlerTests
     }
 
     [Fact]
+    public void A_class_reached_through_a_field_does_not_pull_in_its_other_members()
+    {
+        const string Repo = "cs:Shop.Data.Repo", Save = "cs:Shop.Data.Repo.Save()", Purge = "cs:Shop.Data.Repo.Purge()";
+        var model = Model(
+            [N(Service, "src/Application/OrderService.cs", kind: "method"), N(Repo, "src/Data/Repo.cs"),
+             N(Save, "src/Data/Repo.cs", kind: "method"), N(Purge, "src/Data/Repo.cs", kind: "method")],
+            [E(Service, Repo, "accesses"), E(Service, Save), E(Repo, Save, "contains"), E(Repo, Purge, "contains")]);
+
+        var walked = DomainCrawler.Discover(model, Service, null, 3, 100).Symbols.Select(s => s.Id).ToArray();
+        Assert.Equal([Service, Repo, Save], walked);
+
+        var seeded = DomainCrawler.Discover(model, Repo, null, 1, 100).Symbols.Select(s => s.Id);
+        Assert.Contains(Purge, seeded);
+    }
+
+    [Fact]
+    public void Markdown_keeps_confirmed_and_candidate_apart_and_escapes_untrusted_titles()
+    {
+        var index = Index();
+        index = index with { WorkItems = [index.WorkItems[0] with { Title = "Limit | <script>\"x\"" }, index.WorkItems[1]] };
+        var md = DomainCrawler.Markdown(DomainCrawler.Discover(Graph(), Endpoint, null, 2, 100, index, "abc123"));
+
+        Assert.Contains("```mermaid\ngraph LR", md);
+        Assert.Contains("-->|implements|", md);
+        Assert.Contains("[\"OrderService.Place\"]", md);
+        Assert.Contains("| 1 | `cs:Shop.Application.OrderService.Place(int)` | method |", md);
+        var confirmed = md.IndexOf("### Confirmed", StringComparison.Ordinal);
+        var candidates = md.IndexOf("### Candidates", StringComparison.Ordinal);
+        Assert.InRange(md.IndexOf("WI-101 rev 3", StringComparison.Ordinal), confirmed, candidates);
+        Assert.True(md.IndexOf("WI-102", candidates, StringComparison.Ordinal) > candidates);
+        Assert.Contains("Limit \\| \\<script>", md);
+        Assert.DoesNotContain("<script>", md.Replace("\\<script>", ""));
+
+        var bare = DomainCrawler.Markdown(DomainCrawler.Discover(Graph(), Endpoint, null, 0, 10));
+        Assert.Contains("No relations within the bounds.", bare);
+        Assert.Contains("Unavailable: run `docwizz requirements import`", bare);
+    }
+
+    [Fact]
     public void Work_item_seed_starts_from_linked_current_symbols_only()
     {
         var report = DomainCrawler.Discover(Graph(), null, 101, 1, 100, Index(), "abc123");
