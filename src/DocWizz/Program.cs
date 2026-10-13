@@ -561,7 +561,7 @@ static string Reference() => $"""
     options:
       --profile <name|file.yaml>        setup/generate/check/analyze/architecture/diff: documentation profile,
                                         one of {string.Join(", ", Profiles.Names)}, or your own file
-      --format console|json             discover/analyze/check/architecture/diff/context/product/trace/evidence-diff/remediate output
+      --format console|json             discover/analyze/check/architecture/diff/context/product/trace/evidence-diff/requirements/remediate output
       --timings                         time per stage and peak memory, on stderr (benchmarks)
       --help, -h                        help for a command: docwizz <command> --help
       --version, -v                     version, commit and runtime (also: docwizz version)
