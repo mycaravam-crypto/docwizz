@@ -26,6 +26,12 @@ public class DomainJourneyTests
         Assert.Equal(0, second.Exit);
         Assert.Equal(first.Out, second.Out);
         Assert.False(File.Exists(Path.Combine(repo.Root, "docs", ".docwizz", "requirements.json")));
+
+        var md = Run(repo.Root, "domain", "discover", ".", "--seed", "Shop.Application.OrderService",
+            "--depth", "2", "--limit", "20", "--format", "md");
+        Assert.Equal(0, md.Exit);
+        Assert.StartsWith("# Domain discovery: symbol `Shop.Application.OrderService`", md.Out);
+        Assert.Contains("## Symbols", md.Out);
     }
 
     [Fact]

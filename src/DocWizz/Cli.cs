@@ -48,7 +48,7 @@ static class Cli
         ["domain"] = new("domain discover <dir> (--seed <symbol|endpoint> | --work-item <id>)",
             "bounded, read-only technical graph walk with separately labelled historical requirement evidence", "architects",
             "docwizz domain discover . --seed \"POST /api/orders\" --depth 3 --limit 100 --format json",
-            "--seed <symbol|endpoint> or --work-item <id>, --depth <0-8>, --limit <1-500>, --format console|json",
+            "--seed <symbol|endpoint> or --work-item <id>, --depth <0-8>, --limit <1-500>, --format console|md|json",
             ["seed", "work-item", "depth", "limit", "format"]),
         ["mcp"] = new("mcp <dir>", "read-only MCP server on stdio: coding agents query the code model (find_symbol, context, impact, check, ...)", "coding agents",
             "docwizz mcp .", "--auto-rescan (rescan when the model is stale)", ["auto-rescan"]),
@@ -95,8 +95,8 @@ static class Cli
         var cmd = pos.ElementAtOrDefault(0);
         if (cmd is not null && cmd is not ("help" or "version") && !Commands.ContainsKey(cmd))
             error ??= $"unknown command {cmd}" + Suggest(cmd, Commands.Keys, "");
-        if (opts.GetValueOrDefault("format") is { } format && format is not ("console" or "json") && !(format == "md" && cmd == "context"))
-            error ??= $"unknown format {format}: use console or json" + (cmd == "context" ? " (md is the same as console)" : "");
+        if (opts.GetValueOrDefault("format") is { } format && format is not ("console" or "json") && !(format == "md" && cmd is "context" or "domain"))
+            error ??= $"unknown format {format}: use console" + (cmd == "domain" ? ", md" : "") + " or json" + (cmd == "context" ? " (md is the same as console)" : "");
         if (cmd is not null && Commands.TryGetValue(cmd, out var c))
         {
             foreach (var o in opts.Keys.Where(o => !Global.Contains(o) && !c.Accepts.Contains(o)))

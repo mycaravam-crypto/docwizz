@@ -211,7 +211,8 @@ static int DomainCommand(string root, Config config, Dictionary<string, string> 
             Git(root, "rev-parse HEAD")?.Trim());
         if (index is not null && index.Inputs.Scope != ProjectScope.Fingerprint(config.Scope))
             report = report with { Warnings = [.. report.Warnings, "the imported requirement scope differs from the current project scope; reimport requirements"] };
-        Console.Write(json ? DomainCrawler.Json(report) : DomainCrawler.Text(report));
+        Console.Write(json ? DomainCrawler.Json(report)
+            : opts.GetValueOrDefault("format") == "md" ? DomainCrawler.Markdown(report) : DomainCrawler.Text(report));
         return 0;
     }
     catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }

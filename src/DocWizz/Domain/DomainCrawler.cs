@@ -206,6 +206,78 @@ static class DomainCrawler
 
     public static string Json(Report report) => JsonSerializer.Serialize(report, JsonOptions) + "\n";
 
+    // ponytail: Mermaid gets unreadable beyond ~80 nodes; the tables below stay complete, a clustered view is #188.
+    const int MaxGraphNodes = 80;
+
+    /// <summary>Reviewable Markdown: Mermaid graph, symbol table, and confirmed vs candidate requirements kept apart.</summary>
+    public static string Markdown(Report report)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"# Domain discovery: {report.Seed.Kind} {Generator.Code(report.Seed.Value)}\n");
+        sb.AppendLine($"> Offline walk of the code model{(report.Model.Commit is { } c ? $" at `{c[..Math.Min(12, c.Length)]}`" : "")}, " +
+            $"depth ≤ {report.MaxDepth}, ≤ {report.MaxNodes} symbols; requirements index: {report.RequirementsIndex.Status}. " +
+            "Technical facts and historical intent are listed separately; nothing here is a verified business capability.\n");
+        if (report.Warnings.Count > 0)
+        {
+            sb.AppendLine("## Warnings\n");
+            foreach (var w in report.Warnings) sb.AppendLine($"- {Generator.Esc(w)}");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("## Graph\n");
+        if (report.Relations.Count == 0) sb.AppendLine("No relations within the bounds.\n");
+        else if (report.Symbols.Count > MaxGraphNodes)
+            sb.AppendLine($"{report.Symbols.Count} symbols: too many for a readable graph; see the tables below or lower `--limit`.\n");
+        else
+        {
+            var ids = report.Symbols.Select((s, i) => (s.Id, i)).ToDictionary(x => x.Id, x => $"n{x.i}", StringComparer.Ordinal);
+            sb.AppendLine("```mermaid\ngraph LR");
+            foreach (var s in report.Symbols) sb.AppendLine($"    {ids[s.Id]}[\"{Generator.MermaidText(Label(s.Id))}\"]");
+            foreach (var r in report.Relations)
+                sb.AppendLine($"    {ids[r.From]} {(r.Certainty == "inferred" ? "-.->" : "-->")}|{r.Kind}| {ids[r.To]}");
+            sb.AppendLine("```\n");
+        }
+
+        sb.AppendLine("## Symbols\n\n| Depth | Symbol | Kind | Location |\n|---|---|---|---|");
+        foreach (var s in report.Symbols)
+            sb.AppendLine($"| {s.Depth} | {Generator.Code(s.Id)} | {s.Kind} | {Generator.Code(s.Location)} |");
+        sb.AppendLine();
+
+        sb.AppendLine("## Historical requirements\n");
+        if (report.RequirementsIndex.Status != "available")
+            sb.AppendLine("Unavailable: run `docwizz requirements import` to add business evidence.\n");
+        else
+        {
+            sb.AppendLine("A link means the code changed under the work item, not that it implements it.\n");
+            foreach (var (status, heading) in new[] { ("confirmed", "Confirmed (direct commit link)"), ("candidate", "Candidates (pull request or mention only)") })
+            {
+                var rows = report.Requirements.Where(r => r.Status == status).ToList();
+                sb.AppendLine($"### {heading}\n");
+                if (rows.Count == 0) { sb.AppendLine("None.\n"); continue; }
+                sb.AppendLine("| Work item | Title | Symbol | Commits |\n|---|---|---|---|");
+                foreach (var r in rows)
+                    sb.AppendLine($"| WI-{r.Id}{(r.Revision is { } rev ? $" rev {rev}" : "")} | {Generator.Esc(r.Title ?? "(not exported)")} | " +
+                        $"{Generator.Code(r.Symbol)}{(r.ChangedSince ? " (code changed since)" : "")} | " +
+                        string.Join(", ", r.Evidence.Select(e => $"`{e.Commit[..Math.Min(8, e.Commit.Length)]}`" +
+                            (e.PullRequest is { } pr ? $" PR {pr}" : "")).Distinct()) + " |");
+                sb.AppendLine();
+            }
+        }
+
+        if (report.CandidateTerms.Count > 0)
+        {
+            sb.AppendLine("## Candidate terms\n\nWork item titles, not verified domain concepts or bounded contexts.\n");
+            foreach (var t in report.CandidateTerms)
+                sb.AppendLine($"- WI-{t.WorkItem}: {Generator.Esc(t.Label)} ({string.Join(", ", t.Symbols.Select(Generator.Code))})");
+            sb.AppendLine();
+        }
+        return sb.ToString();
+    }
+
+    // `cs:Shop.Api.OrderController.Place(int)` -> `OrderController.Place`: bare member names collide in a graph.
+    static string Label(string id) =>
+        string.Join('.', id[(id.IndexOf(':') + 1)..].Split('(')[0].Split('.').TakeLast(2));
+
     public static string Text(Report report)
     {
         var sb = new StringBuilder();
