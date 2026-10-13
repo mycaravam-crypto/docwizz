@@ -124,7 +124,9 @@ static async Task<int> Dispatch(string[] args)
                 Console.Error.WriteLine("docwizz: --storage-state file not found");
                 return 1;
             }
-            var report = await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"), refreshHtmlOnVersionChange: opts.ContainsKey("refresh-html-on-version-change"), progress: opts.ContainsKey("progress"), screenshotBaseUrl: opts.GetValueOrDefault("base-url"), screenshotStorageState: stateFile, screenshotDelayMs: int.Parse(opts.GetValueOrDefault("screenshot-delay") ?? "0"));
+            var requirements = opts.ContainsKey("requirements") ? LoadRequirements(path) : null;
+            if (opts.ContainsKey("requirements") && requirements is null) return 1;
+            var report = await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"), refreshHtmlOnVersionChange: opts.ContainsKey("refresh-html-on-version-change"), progress: opts.ContainsKey("progress"), screenshotBaseUrl: opts.GetValueOrDefault("base-url"), screenshotStorageState: stateFile, screenshotDelayMs: int.Parse(opts.GetValueOrDefault("screenshot-delay") ?? "0"), requirements: requirements);
             // The first line stays the stable one-line result scripts match; the report follows it.
             Console.WriteLine(report.Line);
             Console.WriteLine();
@@ -274,6 +276,28 @@ static int RequirementsShow(string root, Config config, Dictionary<string, strin
     return 0;
 }
 
+// A context target's requirement lines: per symbol only (a file or folder has no single history to show).
+static List<AgentContext.Line> RequirementLinesFor(RequirementIndex.Index index, AgentContext.Target t, string? head, Config config)
+{
+    if (t.Primary is not { } n) return [new("requirements are per symbol: use --for <symbol>", "history")];
+    var context = RequirementResolver.For(index, n.Id, n, head);
+    return AgentContext.RequirementLines(context, BusinessContext.Select(context, config.Ai.Requirements));
+}
+
+// The requirement index for --requirements, or null after saying why there is none (the caller exits 1): an opt-in that
+// silently did nothing would look like "no requirements".
+static RequirementIndex.Index? LoadRequirements(string root)
+{
+    var file = Path.Combine(root, RequirementIndex.DefaultFile);
+    if (!File.Exists(file))
+    {
+        Console.Error.WriteLine($"--requirements: no requirement index at {RequirementIndex.DefaultFile}; run docwizz requirements import {root} <history.json> [<work-items>] first");
+        return null;
+    }
+    try { return RequirementIndex.Load(file); }
+    catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return null; }
+}
+
 // A context package for a coding agent, from the model the docs were generated from (docs/.docwizz/model.json), or from a
 // fresh scan when there is none. No network, no build, no AI: only what is in the model and the AI cache.
 static int ContextCommand(string root, Config config, Dictionary<string, string> opts)
@@ -301,10 +325,16 @@ static int ContextCommand(string root, Config config, Dictionary<string, string>
     var arch = Architecture.Check(model, config);
     var drafts = AiProse.Cached(model, Path.Combine(root, "docs", ".docwizz", "ai-cache.json"));
     var graph = new ContextBuilder(root, model);
-    var blocks = AgentContext.Blocks(graph, config, t, hops, includeAi, findings, arch, drafts);
+    List<AgentContext.Line>? requirements = null;
+    if (opts.ContainsKey("requirements"))
+    {
+        if (LoadRequirements(root) is not { } index) return 1;
+        requirements = RequirementLinesFor(index, t, Git(root, "rev-parse HEAD")?.Trim(), config);
+    }
+    var blocks = AgentContext.Blocks(graph, config, t, hops, includeAi, findings, arch, drafts, requirements);
     var aiLeftOut = includeAi ? 0 : t.Scope.Count(n => drafts.ContainsKey(n.Id));
     var package = new AgentContext.Package(Path.GetFileName(Path.GetFullPath(root).TrimEnd('/', '\\')), model.Commit,
-        new(source, Git(root, "rev-parse --short HEAD")?.Trim(), changed), t, budget, includeAi, aiLeftOut, blocks, []);
+        new(source, Git(root, "rev-parse --short HEAD")?.Trim(), changed), t, budget, includeAi, aiLeftOut, blocks, [], requirements is not null);
     if (package.Stale) Console.Error.WriteLine("docwizz: the model is stale; run docwizz generate . to refresh it (the package says why)");
     Console.Write(AgentContext.Render(package, opts.GetValueOrDefault("format") == "json"));
     return 0;
@@ -527,6 +557,7 @@ static string Reference() => $"""
         [--refresh-html-on-version-change]  rewrite HTML when the docwizz version changes
         [--progress]                    print progress to stderr (including redirected output)
         [--ai]                          draft missing summaries with a self-hosted model (Ollama or OpenAI-compatible)
+        [--requirements]                drafts also get each symbol's linked work items (requirements import first)
       docwizz analyze <dir>             documentation report
       docwizz check <dir>               report + exit 1 if thresholds fail (CI)
       docwizz check <dir> --since <ref> exit 1 only on gaps/violations introduced since <ref>
@@ -534,7 +565,7 @@ static string Reference() => $"""
       docwizz diff <dir> [ref]          what changed vs <ref> (default: docs/.docwizz/model.json)
       docwizz diff [dir] <base> <head>  what changed between two git refs
       docwizz context <dir> --for <target>  token-budgeted facts about one symbol, file, folder or endpoint, for agents
-        [--hops <1-4>] [--budget <tokens>] [--format md|json] [--include-ai]
+        [--hops <1-4>] [--budget <tokens>] [--format md|json] [--include-ai] [--requirements]
       docwizz mcp <dir>                 read-only MCP server on stdio for coding agents (find_symbol, context, impact, ...)
         [--auto-rescan]                 rescan when the model is stale instead of only saying so
       docwizz sbom [dir] [out]          export direct manifest dependencies as CycloneDX JSON
@@ -742,7 +773,7 @@ static object DocumentationJson(CodeModel model, Config config, List<Documentati
 
 // Writes the docs; returns the one-line result (setup shows it as the stage detail) and the full report `generate`
 // prints below it.
-static async Task<GenerateReport> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null, bool refreshHtmlOnVersionChange = false, bool progress = false, string? screenshotBaseUrl = null, string? screenshotStorageState = null, int screenshotDelayMs = 0)
+static async Task<GenerateReport> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null, bool refreshHtmlOnVersionChange = false, bool progress = false, string? screenshotBaseUrl = null, string? screenshotStorageState = null, int screenshotDelayMs = 0, RequirementIndex.Index? requirements = null)
 {
     // Weights: each stage's usual share of the wall time (bench/baseline.json); the scan dominates, AI calls when on.
     List<CliProgress.Stage> stages =
@@ -778,15 +809,19 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
 
     // Cached drafts are always used; new ones are only requested with --ai.
     bar.Begin("AI summaries", ai ? "drafting" : "from cache");
+    // --requirements: each symbol's bounded requirement selection goes into its prompt (and its cache key).
+    var head = requirements is null ? null : Git(root, "rev-parse HEAD")?.Trim();
+    Func<Node, BusinessContext.Selection?>? business = requirements is null ? null
+        : n => BusinessContext.Select(RequirementResolver.For(requirements, n.Id, n, head), config.Ai.Requirements);
     var drafts = await AiProse.Summaries(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-cache.json"), ai, config.Ai,
-        AiProgress(bar, "drafts"));
+        AiProgress(bar, "drafts"), business);
     // A draft fills what is missing, never what is written or derived: the summary, and sections the item doesn't have.
     foreach (var f in findings)
     {
         if (!drafts.TryGetValue(f.Node.Id, out var draft)) continue;
         if (draft.Text.Length > 0) f.Sections["summary"] = new(Origin.Ai, draft.Text, draft.Sources, draft.Sections?.GetValueOrDefault("summary"));
         foreach (var (name, sentences) in draft.Sections ?? [])
-            if (name != "summary" && AiProse.SectionNames.Contains(name))
+            if (name != "summary" && (AiProse.SectionNames.Contains(name) || (requirements is not null && AiProse.BusinessSectionNames.Contains(name))))
                 f.Sections.TryAdd(name == "errors" ? "exception" : name,
                     new(Origin.Ai, string.Join(" ", sentences.Select(x => x.Text)), [.. sentences.SelectMany(x => x.From).Distinct()], sentences));
     }

@@ -139,6 +139,8 @@ class AiConfig
     public string? Endpoint { get; set; }
     public string? Model { get; set; }
     public string? ApiKeyEnv { get; set; }
+    // `requirements:`: how much historical business context a symbol prompt gets with --requirements.
+    public RequirementsAiConfig Requirements { get; set; } = new();
 
     // Fails at load, not at the first draft: an unknown provider, or an OpenAI-compatible one without endpoint or model.
     public void Validate()
@@ -151,7 +153,16 @@ class AiConfig
             throw new ArgumentException("ai: provider openai-compatible needs endpoint (e.g. http://10.0.0.5:8000/v1) and model");
         if (ApiKeyEnv is not null && !System.Text.RegularExpressions.Regex.IsMatch(ApiKeyEnv, "^[A-Za-z_][A-Za-z0-9_]*$"))
             throw new ArgumentException($"ai.api_key_env: '{ApiKeyEnv}' is not an environment variable name (the key itself never goes in docwizz.yaml)");
+        if (Requirements.Max is < 1 or > 10) throw new ArgumentException($"ai.requirements.max: {Requirements.Max} (1 to 10)");
+        if (Requirements.Budget is < 200 or > 20000) throw new ArgumentException($"ai.requirements.budget: {Requirements.Budget} (200 to 20000 characters)");
     }
+}
+
+// At most `max` work items per symbol, and at most `budget` characters of their text: small local models drown in more.
+class RequirementsAiConfig
+{
+    public int Max { get; set; } = 3;
+    public int Budget { get; set; } = 1200;
 }
 
 class Pattern

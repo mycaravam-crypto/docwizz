@@ -56,7 +56,7 @@ public class McpJourneyTests
     }
 
     // A running server: send a request, read its response (responses come back in order, one per line).
-    sealed class Server : IDisposable
+    internal sealed class Server : IDisposable
     {
         readonly Process process;
         int next;
@@ -137,7 +137,7 @@ public class McpJourneyTests
         server.Notify("notifications/initialized");
 
         var tools = server.Request("tools/list")["result"]!["tools"]!.AsArray().Select(t => t!["name"]!.GetValue<string>()).ToList();
-        Assert.Equal(["find_symbol", "context", "callers", "callees", "trace_endpoint", "module_summary", "impact", "gaps", "violations", "check", "rescan"], tools);
+        Assert.Equal(["find_symbol", "context", "callers", "callees", "trace_endpoint", "module_summary", "impact", "gaps", "violations", "check", "requirements_for_symbol", "symbols_for_requirement", "rescan"], tools);
         Assert.DoesNotContain("generate", tools);
         Assert.DoesNotContain("setup", tools);
 

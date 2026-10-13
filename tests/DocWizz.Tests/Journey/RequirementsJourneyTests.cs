@@ -64,6 +64,7 @@ public class RequirementsJourneyTests
     {
         var repo = new FakeHistory();
         repo.Write("Shop.csproj", """<Project Sdk="Microsoft.NET.Sdk" />""");
+        repo.Write("docwizz.yaml", "patterns: { all: { level: medium, sections: [summary] } }\n");   // every method needs a summary
         repo.Write("OrderService.cs", V1);
         repo.Commit("orders", FakeHistory.Verified(100));
         repo.Write("OrderService.cs", V2);
@@ -178,5 +179,88 @@ public class RequirementsJourneyTests
         Assert.Contains(json.GetProperty("warnings").EnumerateArray(), w => w.GetString()!.Contains("later commits are not covered"));
         // Both requirements now predate the change.
         Assert.All(json.GetProperty("requirements").EnumerateArray(), r => Assert.True(r.GetProperty("changedSince").GetBoolean()));
+    }
+
+    // --requirements (#167): a fake local model gets the linked work items, and the pages show intent sentences with
+    // their status; without the flag nothing about generate or context changes.
+    const string Reply = """
+        summary: Places an order and returns its amount. [source]
+        behaviour: Rejects amounts over 1000 before returning. [source; WI-101]
+        intent: Orders above 1000 must be rejected. [WI-101]
+        intent: The code satisfies WI-101. [WI-101]
+        """;
+
+    static Dictionary<string, string?> Model(Unit.AiProviderTests.FakeServer server) =>
+        new() { ["OLLAMA_HOST"] = server.Uri.ToString().TrimEnd('/'), ["DOCWIZZ_MODEL"] = "local:7b" };
+
+    static string Pages(string root) => string.Concat(Directory.EnumerateFiles(Path.Combine(root, "docs"), "*.md", SearchOption.AllDirectories)
+        .Order(StringComparer.Ordinal).Select(File.ReadAllText));
+
+    [Fact]
+    public void Generate_with_requirements_drafts_cited_intent_and_without_it_nothing_changes()
+    {
+        using var repo = Repository(out var history, out var workItems);
+        using var server = new Unit.AiProviderTests.FakeServer((200, JsonSerializer.Serialize(new { message = new { content = Reply } })));
+        var missing = Run(repo.Root, "generate", ".", "--ai", "--requirements");
+        Assert.Equal(1, missing.Exit);
+        Assert.Contains("--requirements: no requirement index", missing.Err);
+
+        // Baseline pages, no requirements anywhere.
+        Assert.Equal(0, Docwizz.Run(repo.Root, Model(server), "generate", ".", "--ai").Exit);
+        var plain = Pages(repo.Root);
+        Assert.DoesNotContain("WI-", plain);
+        var plainRequests = server.Requests.Count;
+        Assert.All(server.Requests, r => Assert.DoesNotContain("businessContext", r));
+
+        Assert.Equal(0, Run(repo.Root, "requirements", "import", ".", history, workItems).Exit);
+        // Imported but not asked for: the same pages, no new request.
+        Assert.Equal(0, Docwizz.Run(repo.Root, Model(server), "generate", ".", "--ai").Exit);
+        Assert.Equal(plain, Pages(repo.Root));
+        Assert.Equal(plainRequests, server.Requests.Count);
+
+        var withReq = Docwizz.Run(repo.Root, Model(server), "generate", ".", "--ai", "--requirements");
+        Assert.True(withReq.Exit == 0, withReq.ToString());
+        Assert.Contains("with requirements", withReq.Err);
+        var pages = Pages(repo.Root);
+        Assert.Contains("Orders above 1000 must be rejected. [WI-101 confirmed]", pages);
+        Assert.DoesNotContain("satisfies", pages);
+        Assert.Contains(server.Requests.Skip(plainRequests), r => r.Contains("businessContext") && r.Contains("WI-101"));
+
+        // Back without the flag: the requirement drafts aren't shown.
+        Assert.Equal(0, Run(repo.Root, "generate", ".").Exit);
+        Assert.DoesNotContain("WI-101", Pages(repo.Root));
+    }
+
+    [Fact]
+    public void Context_and_mcp_add_requirements_only_when_asked()
+    {
+        using var repo = Repository(out var history, out var workItems);
+        var before = Run(repo.Root, "context", ".", "--for", "Shop.OrderService.Place");
+        Assert.Equal(0, Run(repo.Root, "requirements", "import", ".", history, workItems).Exit);
+        Assert.Equal(before.Out, Run(repo.Root, "context", ".", "--for", "Shop.OrderService.Place").Out);   // imported, not asked for
+
+        var with = Run(repo.Root, "context", ".", "--for", "Shop.OrderService.Place", "--requirements");
+        Assert.True(with.Exit == 0, with.ToString());
+        Assert.Contains("- requirements: history = work items linked through commits", with.Out);
+        Assert.Contains("## Requirements (history: what was asked for, not proof of what the code does)", with.Out);
+        Assert.Contains("- WI-101 confirmed: Credit limit (User Story, Closed, revision 4); criteria: Orders above 1000 are rejected; linked commit", with.Out);
+        Assert.Contains("[history]", with.Out);
+        Assert.Contains("requirements are per symbol", Run(repo.Root, "context", ".", "--for", "OrderService.cs", "--requirements").Out);
+
+        using var server = new McpJourneyTests.Server(repo.Root);
+        var (body, error) = server.Call("requirements_for_symbol", new() { ["id"] = "Shop.OrderService.Cancel" });
+        Assert.False(error, body.ToJsonString());
+        Assert.Equal("linked", body["outcome"]!.GetValue<string>());
+        Assert.Equal(["confirmed", "candidate"], body["requirements"]!.AsArray().Select(r => r!["status"]!.GetValue<string>()));
+        var (symbols, _) = server.Call("symbols_for_requirement", new() { ["work_item"] = 101 });
+        Assert.Equal(["cs:Shop.OrderService.Place(int)"], symbols["symbols"]!.AsArray().Select(s => s!["id"]!.GetValue<string>()));
+        var (context, _) = server.Call("context", new() { ["target"] = "Shop.OrderService.Place", ["requirements"] = true });
+        Assert.Contains("WI-101 confirmed", context.ToJsonString());
+        var (plainContext, _) = server.Call("context", new() { ["target"] = "Shop.OrderService.Place" });
+        Assert.DoesNotContain("WI-", plainContext.ToJsonString());
+        var (missing, failed) = server.Call("symbols_for_requirement", new());
+        Assert.True(failed);
+        Assert.Contains("work_item", missing["error"]!.GetValue<string>());
+        Assert.Equal(0, server.Stop());
     }
 }

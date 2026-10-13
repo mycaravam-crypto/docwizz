@@ -70,8 +70,9 @@ class ContextBuilder(string root, CodeModel model)
 
     // The facts JSON for one symbol, the symbols it mentions (a draft's provenance) and their names for citations.
     // Models cite the facts' own fields too ("parameters", "calls"): a field of the symbol's own facts rests on the
-    // symbol, a list of neighbours on the neighbours in it.
-    public (string Json, List<string> Sources, Dictionary<string, List<string>> Names) For(Node n, DocumentationItem f)
+    // symbol, a list of neighbours on the neighbours in it. `business` (only with --requirements) adds the symbol's
+    // historical requirements as `businessContext`; each is cited by its own id (WI-12), never by the field's name.
+    public (string Json, List<string> Sources, Dictionary<string, List<string>> Names) For(Node n, DocumentationItem f, BusinessContext.Selection? business = null)
     {
         var sources = new List<string> { n.Id };
         var lists = new Dictionary<string, List<string>>();
@@ -107,11 +108,13 @@ class ContextBuilder(string root, CodeModel model)
             derived = f.Sections.Where(kv => kv.Value.Origin is Origin.Fact or Origin.Inferred)
                 .ToDictionary(kv => kv.Key, kv => $"{kv.Value.Text} ({kv.Value.Origin.ToString().ToLowerInvariant()})"),
             whyItNeedsDocs = f.Reasons,
+            businessContext = business is null ? null : BusinessContext.Facts(business),
             source = Source(n),
         }, Options);
         var all = sources.Concat(f.Sources).Distinct().ToList();
         var names = Names(all, n.Id);
-        foreach (var field in JsonDocument.Parse(json).RootElement.EnumerateObject().Where(p => p.Value.ValueKind switch
+        foreach (var e in business?.Entries ?? []) names.TryAdd(e.Ref, [$"workitem:{e.Id}"]);
+        foreach (var field in JsonDocument.Parse(json).RootElement.EnumerateObject().Where(p => p.Name != "businessContext" && p.Value.ValueKind switch
             {
                 JsonValueKind.Array => p.Value.GetArrayLength() > 0,
                 JsonValueKind.Object => p.Value.EnumerateObject().Any(),
