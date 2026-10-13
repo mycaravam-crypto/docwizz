@@ -281,7 +281,7 @@ static class AgentContext
     }
 
     static readonly string Provenance = "detected = read from the code; inferred = heuristic, confirm in the code; human = written docs, may be outdated; ai-drafted = 🤖 draft, not a fact";
-    static readonly string RequirementsProvenance = "history = work items linked through commits that changed this code (confirmed: direct commit link; candidate: only a PR link); what was asked for then, not what the code does now";
+    static readonly string RequirementsProvenance = "history = work items linked through commits that changed this code (confirmed: provider-verified commit link; candidate: only a PR link or a commit-message mention); what was asked for then, not what the code does now";
 
     static string Markdown(Package p)
     {

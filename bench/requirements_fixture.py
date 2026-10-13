@@ -1,7 +1,8 @@
 """The synthetic repository behind bench/requirements.py (#168): a small C# order domain (22 methods) and a scripted
 history with known links, plus the exports DocWizz reads, written the way the real exporters would:
 
-    gitwizz.history/v1            from the repository's own diffs (git show -U0 -M), as gitwizz#84 specifies
+    gitwizz.history/v2            from the repository's own diffs (git show -U0 -M), in the shape `gitwizz history export`
+                                  writes (gitwizz docs/history/README.md)
     ado.requirement-context/v1    one file per work item, as `ado workitem context` (ado-devops#83) writes
 
 Every name, work item and text here is invented. Fixed dates and author make the SHAs the same on every run, so the
@@ -94,7 +95,7 @@ STEPS = [
     # The exporter couldn't tell which PR this commit belongs to.
     ("Restock threshold", {
         "Restock": "public void Restock(string sku, int quantity)\n{\n    if (quantity < 10) return;\n    stock[sku] = quantity;\n}"},
-     {"status": "verified", "items": []}, [{"id": 9, "confidence": "ambiguous"}], {}),
+     {"status": "verified", "items": []}, [{"id": 8, "confidence": "ambiguous"}, {"id": 9, "confidence": "ambiguous"}], {}),
     # The link lookup was denied: the commit does belong to WI-109, but nobody can tell.
     ("Shipping rates by weight", {
         "Quote": "public decimal Quote(decimal weightKg)\n{\n    return weightKg <= 2 ? 5m : 5m + (weightKg - 2) * 1.5m;\n}"},
@@ -119,11 +120,20 @@ STEPS = [
     ("Use LINQ in billing", {}, {"status": "verified", "items": [113]}, [], {"InvoiceService": ("namespace", "using System.Linq;\n\nnamespace")}),
 ]
 
+
+def pull_request(pr_id, title, strategy, items):
+    """A completed pull request the provider confirms, and the work items it links to the PR."""
+    return {"id": f"#{pr_id}", "title": title, "url": None, "target": "main", "status": "confirmed", "strategy": strategy,
+            "mergeCommit": None, "commits": [],
+            "workItems": [{"workItem": f"AB#{i}", "source": "provider", "kind": "pr-link", "evidence": "ado pr context"} for i in items],
+            "workItemsStatus": "verified", "problem": None}
+
+
 PULL_REQUESTS = [
-    {"id": 7, "status": "completed", "title": "Invoice when shipping", "mergeStrategy": "squash",
-     "workItems": {"status": "verified", "items": [{"id": 105, "source": "pr-workitem"}]}},
-    {"id": 9, "status": "completed", "title": "Inventory tuning", "mergeStrategy": "merge",
-     "workItems": {"status": "verified", "items": [{"id": 108, "source": "pr-workitem"}]}},
+    pull_request(7, "Invoice when shipping", "squash", [105]),
+    # PR 8 and PR 9 both merged the restock commit: its attribution is ambiguous. PR 8 links no work item.
+    pull_request(8, "Inventory to release", "merge", []),
+    pull_request(9, "Inventory tuning", "merge", [108]),
 ]
 
 WORK_ITEMS = {
@@ -174,7 +184,7 @@ def changes(root, sha):
     for line in git(root, "show", "--format=", "-U0", "-M", "--no-color", sha).split("\n"):
         if line.startswith("diff --git "):
             m = re.match(r"^diff --git a/(.+) b/(.+)$", line)
-            current = {"path": m.group(2), "oldPath": None, "status": "modified", "hunks": []}
+            current = {"path": m.group(2), "oldPath": None, "status": "modified", "similarity": None, "granularity": "lines", "ranges": []}
             out.append(current)
         elif current is None:
             continue
@@ -183,11 +193,31 @@ def changes(root, sha):
         elif line.startswith("deleted file mode"):
             current["status"] = "deleted"
         elif line.startswith("rename from "):
-            current["oldPath"], current["status"] = line[len("rename from "):], "renamed"
+            current["oldPath"], current["status"], current["similarity"] = line[len("rename from "):], "renamed", 100
         elif (h := HUNK.match(line)):
-            current["hunks"].append({"oldStart": int(h.group(1)), "oldLines": int(h.group(2) or 1),
-                                     "newStart": int(h.group(3)), "newLines": int(h.group(4) or 1)})
+            current["ranges"].append({"oldStart": int(h.group(1)), "oldCount": int(h.group(2) or 1),
+                                      "newStart": int(h.group(3)), "newCount": int(h.group(4) or 1)})
+    for c in out:
+        if not c["ranges"]:
+            c["granularity"] = "file"   # binary, or a rename without content change
     return out
+
+
+def provider_links(links):
+    """What the provider links to the commit itself: a verified list, or a status without an answer."""
+    if links["status"] != "verified":
+        return {"status": links["status"], "items": None, "problem": f"ado commit context: {links['status']}"}
+    return {"status": "verified", "problem": None,
+            "items": [{"workItem": f"AB#{i}", "source": "provider", "kind": "commit-link", "evidence": "ado commit context: commit-workitem"}
+                      for i in links["items"]]}
+
+
+def pull_request_ref(prs):
+    if not prs:
+        return {"id": None, "resolution": "unknown", "basis": [], "candidates": []}
+    if prs[0]["confidence"] == "ambiguous":
+        return {"id": None, "resolution": "ambiguous", "basis": ["merged-branch"], "candidates": sorted(f"#{p['id']}" for p in prs)}
+    return {"id": f"#{prs[0]['id']}", "resolution": prs[0]["confidence"], "basis": ["squash-subject", "provider"], "candidates": []}
 
 
 def build(root, exports):
@@ -211,15 +241,19 @@ def build(root, exports):
         git(root, "add", "-A")
         git(root, "commit", "-qm", message)
         sha = git(root, "rev-parse", "HEAD").strip()
-        commits.append({"sha": sha, "changes": changes(root, sha),
-                        "workItems": {"status": links["status"], "items": [{"id": i, "source": "commit-workitem"} for i in links["items"]]},
-                        "pullRequests": prs})
+        commits.append({"sha": sha, "parents": [], "subject": message, "committedAt": DATE.replace("Z", "+00:00"), "kind": "commit",
+                        "files": changes(root, sha), "workItems": [], "providerLinks": provider_links(links),
+                        "pullRequest": pull_request_ref(prs)})
     os.makedirs(os.path.join(exports, "work-items"))
     history = os.path.join(exports, "history.json")
     with open(history, "w") as f:
-        json.dump({"schema": "gitwizz.history/v1", "repository": {"provider": "azure-devops", "name": "shop"},
-                   "range": {"base": None, "head": "main", "headSha": commits[-1]["sha"]}, "commits": commits,
-                   "pullRequests": PULL_REQUESTS, "warnings": [], "truncated": False}, f, indent=2)
+        json.dump({"schema": "gitwizz.history/v2", "provider": "azure-devops", "repository": "https://ado.example.invalid/shop",
+                   "range": {"since": None, "sinceSha": None, "until": "main", "untilSha": commits[-1]["sha"], "limit": 200,
+                             "commits": len(commits), "truncated": False, "shallow": False},
+                   "sources": {"commitMessages": "complete", "providerCommitLinks": "scripted", "pullRequests": "scripted",
+                               "pullRequestWorkItems": "scripted"},
+                   "commits": list(reversed(commits)),   # newest first, as gitwizz writes them
+                   "pullRequests": PULL_REQUESTS, "warnings": []}, f, indent=2)
     for wid, (title, criteria) in WORK_ITEMS.items():
         with open(os.path.join(exports, "work-items", f"{wid}.json"), "w") as f:
             json.dump({"schema": "ado.requirement-context/v1", "id": wid, "revision": 3, "currentRevision": 3, "isCurrent": True,

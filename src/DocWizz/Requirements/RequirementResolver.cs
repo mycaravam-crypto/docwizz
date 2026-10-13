@@ -2,9 +2,11 @@ using System.Text.Json;
 
 // `docwizz requirements show`: from the index (RequirementIndex) to the requirements of one current code symbol, or the
 // symbols of one work item. Deterministic and offline: the index file and the current code model, nothing else.
-//   confirmed  a commit with a direct commit↔work-item link changed the symbol
-//   candidate  only a completed PR's link (or an ambiguous PR association) covers a commit that changed it
-// A PR link is never promoted to confirmed: a PR touching a symbol is no proof the symbol implements all its work items.
+//   confirmed  a commit the provider links to the work item itself (verified commit link) changed the symbol
+//   candidate  only a confirmed PR's link (also through an ambiguous PR association), or a mention in the message of a
+//              commit that changed it, names the work item
+// Neither a PR link nor a message mention is ever promoted to confirmed: a PR touching a symbol is no proof the symbol
+// implements all its work items, and a message naming one is nobody's verified link.
 // Every link says whether the symbol changed after the newest commit behind it (changedSince): a historical requirement
 // describes the code as it was then, not necessarily as it is now.
 static class RequirementResolver
@@ -42,8 +44,9 @@ static class RequirementResolver
             foreach (var t in c.Touches.Where(t => t.Symbol == id))
             {
                 foreach (var wi in c.WorkItems) evidence.Add((wi, new("commit-workitem", c.Sha, null, null, t.File, t.Lines, t.SymbolLines), t, order));
+                foreach (var wi in c.Mentions.Except(c.WorkItems)) evidence.Add((wi, new("commit-message", c.Sha, null, null, t.File, t.Lines, t.SymbolLines), t, order));
                 foreach (var pr in c.PullRequests)
-                    if (prs.TryGetValue(pr.Id, out var p))
+                    if (prs.TryGetValue(pr.Id, out var p) && p.Status == "confirmed")
                         foreach (var wi in p.WorkItems) evidence.Add((wi, new("pr-workitem", c.Sha, pr.Id, pr.Confidence, t.File, t.Lines, t.SymbolLines), t, order));
             }
             if (c.Linkage != "verified")
@@ -52,10 +55,11 @@ static class RequirementResolver
                 warnings.Add($"commit {c.Sha[..7]} changed it, but its work-item links are {c.Linkage}");
             }
             foreach (var pr in c.PullRequests)
-                if (!prs.TryGetValue(pr.Id, out var p) || p.Linkage != "verified")
+                if (!prs.TryGetValue(pr.Id, out var p) || p.Status != "confirmed" || p.Linkage != "verified")
                 {
                     incomplete = true;
-                    warnings.Add($"PR {pr.Id} (commit {c.Sha[..7]}): work-item links are {(p is null ? "not in the export" : p.Linkage)}");
+                    warnings.Add($"PR {pr.Id} (commit {c.Sha[..7]}): " + (p is null ? "not in the export"
+                        : p.Status != "confirmed" ? $"{p.Status}, its work items are not used" : $"work-item links are {p.Linkage}"));
                 }
         }
         // Commits missing locally may have changed it; nobody can tell.
@@ -116,6 +120,7 @@ static class RequirementResolver
         if (!Covers(index, head) && index.Inputs.HeadSha is { } end && head is not null)
             yield return $"the history ends at {end[..Math.Min(7, end.Length)]}, HEAD is {head[..Math.Min(7, head.Length)]}: later commits are not covered";
         if (index.Inputs.Truncated) yield return "the history export was truncated: older commits are not covered";
+        if (index.Inputs.Shallow) yield return "the history was exported from a shallow clone: older commits are not covered";
     }
 
     public static string Json(object value) => JsonSerializer.Serialize(value, RequirementIndex.Write).Replace("\r\n", "\n") + "\n";
@@ -132,7 +137,7 @@ static class RequirementResolver
             sb.Append(r.WorkItem is { } w ? $" {w.Type} {w.State}: {w.Title} (revision {w.Revision}{(w.IsCurrent == false ? $", current {w.CurrentRevision}" : "")})\n" : " content unavailable\n");
             foreach (var crit in r.WorkItem?.Criteria ?? []) sb.Append($"  - {crit.Replace("\n", " ")}\n");
             foreach (var e in r.Evidence)
-                sb.Append($"  {e.Relation} via {e.Commit[..7]}{(e.PullRequest is { } p ? $" (PR {p}{(e.Confidence == "ambiguous" ? ", ambiguous" : "")})" : "")}: {e.File}:{e.Lines}\n");
+                sb.Append($"  {e.Relation} via {e.Commit[..7]}{(e.PullRequest is { } p ? $" (PR {p}{(e.Confidence is "ambiguous" or "inferred" ? $", {e.Confidence}" : "")})" : "")}: {e.File}:{e.Lines}\n");
         }
         if (c.FileLevel.Count > 0) sb.Append($"\n{c.FileLevel.Count} commit(s) changed its file without overlapping it (not asserted)\n");
         foreach (var w in c.Warnings) sb.Append($"⚠ {w}\n");

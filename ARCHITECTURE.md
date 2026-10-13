@@ -305,14 +305,17 @@ items without a summary, plus an overview for each module (folder) of three or m
 
 ## Requirement history
 
-- **[RequirementIndex](src/DocWizz/Requirements/RequirementIndex.cs)** reads exported `gitwizz.history/v1` and
-  `ado.requirement-context/v1` files and records facts only: per commit its linkage and what its hunks touched, mapped
+- **[RequirementIndex](src/DocWizz/Requirements/RequirementIndex.cs)** reads `gitwizz.history/v2` (gitwizz's history
+  export, read as its contract defines it, closed enumerations and all) and `ado.requirement-context/v1` files and
+  records facts only: per commit its provider linkage, message mentions, PR attribution and what its changed lines
+  touched (file-granularity changes stay file-level), mapped
   onto the symbols of a scan **as of that commit** (`ModelAt`, the `diff` baseline scan), innermost symbol first. It is
   kept apart from the code model (no work-item text among static facts) and from evidence catalogs (no inferred link
   ever becomes a declared one). Work-item text is cleaned and bounded at import. Its fingerprint covers every input
   digest and the scan scope; known commits are reused, so a refresh scans only new ones.
 - **[RequirementResolver](src/DocWizz/Requirements/RequirementResolver.cs)** decides at query time, against the current
-  model: `confirmed` needs a direct commit link, a PR link alone stays `candidate`, and `changedSince` compares the
+  model: `confirmed` needs a provider-verified commit link; a confirmed PR's link or a message mention alone stays
+  `candidate`, and an unconfirmed PR is not used, and `changedSince` compares the
   symbol's hash then and now. Outcomes keep "verified none" apart from "couldn't tell". No network anywhere.
 - **[BusinessContext](src/DocWizz/Requirements/BusinessContext.cs)** selects what a model or agent sees with
   `--requirements`: available items only, ranked deterministically, bounded by `ai.requirements`. `ContextBuilder` adds

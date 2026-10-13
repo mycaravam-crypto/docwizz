@@ -21,18 +21,51 @@ public class RequirementIndexTests
         new Node(Cancel, "method", "Cancel", File, 14, EndLine: 20, Hash: "x1"),
     ]);
 
-    static object Commit(int n, object workItems, object[]? prs = null, params (int Start, int Lines)[] hunks) => new
+    // gitwizz.history/v2 pieces (gitwizz docs/history/README.md). Tests list commits oldest first; History writes them
+    // newest first, as gitwizz does.
+    static object Commit(int n, object providerLinks, object? pullRequest = null, params (int Start, int Lines)[] hunks) =>
+        Commit(n, providerLinks, pullRequest, [], hunks);
+
+    static object Commit(int n, object providerLinks, object? pullRequest, object[] mentions, params (int Start, int Lines)[] hunks) => new
     {
-        sha = Sha(n),
-        changes = new[] { new { path = File, status = "modified", hunks = hunks.Select(h => new { oldStart = h.Start, oldLines = h.Lines, newStart = h.Start, newLines = h.Lines }) } },
-        workItems,
-        pullRequests = prs ?? [],
+        sha = Sha(n), parents = new[] { Sha(n + 1000) }, subject = $"change {n}", committedAt = "2026-10-01T08:00:00+00:00", kind = "commit",
+        files = new[] { Changed(hunks) },
+        workItems = mentions,
+        providerLinks,
+        pullRequest = pullRequest ?? NoPr,
     };
 
-    static object Verified(params int[] ids) => new { status = "verified", items = ids.Select(i => new { id = i, source = "commit-workitem" }) };
+    static object Changed((int Start, int Lines)[] hunks, string granularity = "lines") => new
+    {
+        path = File, oldPath = (string?)null, status = "modified", similarity = (int?)null, granularity,
+        ranges = hunks.Select(h => new { oldStart = h.Start, oldCount = h.Lines, newStart = h.Start, newCount = h.Lines }),
+    };
 
-    static byte[] History(object[] commits, object[]? prs = null, string schema = RequirementIndex.HistorySchema) =>
-        JsonSerializer.SerializeToUtf8Bytes(new { schema, repository = new { name = "shop" }, range = new { headSha = Sha(99) }, commits, pullRequests = prs ?? [], truncated = false });
+    static object Link(string id, string source, string kind) => new { workItem = id, source, kind, evidence = id };
+    static object Mention(int id) => Link($"AB#{id}", "commit-message", "ab");
+    static object Verified(params int[] ids) => new { status = "verified", items = ids.Select(i => Link($"AB#{i}", "provider", "commit-link")), problem = (string?)null };
+    static object Status(string status) => new { status, items = (object?)null, problem = $"lookup {status}" };
+
+    static readonly object NoPr = new { id = (string?)null, resolution = "unknown", basis = Array.Empty<string>(), candidates = Array.Empty<string>() };
+    static object Pr(int id, string resolution = "exact") => new { id = $"#{id}", resolution, basis = new[] { "merge-message" }, candidates = Array.Empty<string>() };
+    static object Ambiguous(params int[] ids) => new { id = (string?)null, resolution = "ambiguous", basis = new[] { "merged-branch" }, candidates = ids.Select(i => $"#{i}") };
+
+    static object PullRequest(int id, string status = "confirmed", string linkage = "verified", params int[] items) => new
+    {
+        id = $"#{id}", title = $"PR {id}", url = (string?)null, target = "main", status, strategy = "squash", mergeCommit = Sha(id),
+        commits = new[] { Sha(id) }, workItems = items.Select(i => Link($"AB#{i}", "provider", "pr-link")), workItemsStatus = linkage,
+        problem = status == "confirmed" ? null : "not confirmed",
+    };
+
+    static byte[] History(object[] commits, object[]? prs = null, string schema = RequirementIndex.HistorySchema, bool truncated = false, bool shallow = false,
+        string provider = "azure-devops") =>
+        JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            schema, provider, repository = "https://ado.example/shop",
+            range = new { since = "v1", sinceSha = Sha(98), until = "main", untilSha = Sha(99), limit = 200, commits = commits.Length, truncated, shallow },
+            sources = new { commitMessages = "complete", providerCommitLinks = "ado", pullRequests = "ado", pullRequestWorkItems = "ado" },
+            commits = commits.Reverse(), pullRequests = prs ?? [], warnings = Array.Empty<string>(),
+        });
 
     static List<(JsonElement, string, string)> Items(params (int Id, int Rev, string Title)[] items) => [.. items.Select(i =>
     {
@@ -68,8 +101,8 @@ public class RequirementIndexTests
     [Fact]
     public void A_pr_only_link_stays_a_candidate_and_a_direct_link_confirms_it()
     {
-        object[] prs = [new { id = 7, status = "completed", mergeStrategy = "squash", workItems = Verified(42, 43) }];
-        var index = Build(History([Commit(1, Verified(), [new { id = 7, confidence = "exact" }], (7, 1)), Commit(2, Verified(43), null, (8, 1))], prs));
+        object[] prs = [PullRequest(7, items: [42, 43])];
+        var index = Build(History([Commit(1, Verified(), Pr(7), (7, 1)), Commit(2, Verified(43), null, (8, 1))], prs));
         var c = RequirementResolver.For(index, Place, Current(Place), Sha(99));
         Assert.Equal([(43, "confirmed"), (42, "candidate")], c.Requirements.Select(r => (r.Id, r.Status)));
         Assert.Equal(["pr-workitem"], c.Requirements.Single(r => r.Id == 42).Evidence.Select(e => e.Relation));
@@ -79,8 +112,8 @@ public class RequirementIndexTests
     [Fact]
     public void An_ambiguous_pr_association_is_a_candidate_marked_ambiguous()
     {
-        object[] prs = [new { id = 7, workItems = Verified(42) }];
-        var index = Build(History([Commit(1, Verified(), [new { id = 7, confidence = "ambiguous" }], (7, 1))], prs));
+        object[] prs = [PullRequest(7, items: [42]), PullRequest(8, items: [])];
+        var index = Build(History([Commit(1, Verified(), Ambiguous(7, 8), (7, 1))], prs));
         var r = Assert.Single(RequirementResolver.For(index, Place, Current(Place), null).Requirements);
         Assert.Equal(("candidate", "ambiguous"), (r.Status, r.Evidence.Single().Confidence));
     }
@@ -109,7 +142,7 @@ public class RequirementIndexTests
         Assert.Equal("no-link", RequirementResolver.For(Build(History([Commit(1, Verified(), null, (7, 1))])), Place, Current(Place), null).Outcome);
         foreach (var status in new[] { "unavailable", "denied", "unknown" })
         {
-            var c = RequirementResolver.For(Build(History([Commit(1, new { status }, null, (7, 1))])), Place, Current(Place), null);
+            var c = RequirementResolver.For(Build(History([Commit(1, Status(status), null, (7, 1))])), Place, Current(Place), null);
             Assert.Equal(("unavailable", false), (c.Outcome, c.Complete));
             Assert.Contains(c.Warnings, w => w.Contains(status));
         }
@@ -185,22 +218,93 @@ public class RequirementIndexTests
     [Fact]
     public void Unknown_schemas_and_malformed_history_are_rejected_with_the_reason()
     {
-        Assert.Contains("unknown schema gitwizz.history/v2", Assert.Throws<ArgumentException>(() => Build(History([], schema: "gitwizz.history/v2"))).Message);
+        Assert.Contains("gitwizz.history/v1 is no longer read", Assert.Throws<ArgumentException>(() => Build(History([], schema: "gitwizz.history/v1"))).Message);
+        Assert.Contains("unknown schema gitwizz.history/v3", Assert.Throws<ArgumentException>(() => Build(History([], schema: "gitwizz.history/v3"))).Message);
         Assert.Contains("full 40-character SHA", Assert.Throws<ArgumentException>(() => Build(History([new { sha = "abc123" }]))).Message);
         Assert.Contains("listed twice", Assert.Throws<ArgumentException>(() => Build(History([Commit(1, Verified()), Commit(1, Verified())]))).Message);
-        Assert.Contains("work-item status 'maybe'", Assert.Throws<ArgumentException>(() => Build(History([Commit(1, new { status = "maybe" })]))).Message);
+        Assert.Contains("'maybe' is not one of", Assert.Throws<ArgumentException>(() => Build(History([Commit(1, Status("maybe"))]))).Message);
+        Assert.Contains("missing 'providerLinks'", Assert.Throws<ArgumentException>(() => Build(History([new { sha = Sha(1), kind = "commit", files = Array.Empty<object>(), workItems = Array.Empty<object>() }]))).Message);
+        // Only verified carries items; a message mention is never a provider link.
+        Assert.Contains("verified without a list", Assert.Throws<ArgumentException>(() => Build(History([Commit(1, new { status = "verified", items = (object?)null, problem = (string?)null })]))).Message);
+        Assert.Contains("items must be null", Assert.Throws<ArgumentException>(() => Build(History([Commit(1, new { status = "unavailable", items = new[] { Link("AB#1", "provider", "commit-link") }, problem = "x" })]))).Message);
+        Assert.Contains("never a provider link", Assert.Throws<ArgumentException>(() => Build(History([Commit(1, new { status = "verified", items = new[] { Mention(1) }, problem = (string?)null })]))).Message);
+        Assert.Contains("'rebase' is not one of", Assert.Throws<ArgumentException>(() => Build(History([Commit(1, Verified(), Pr(7, "rebase"))]))).Message);
+        Assert.Contains("'wizard' is not one of", Assert.Throws<ArgumentException>(() => Build(History([Commit(1, Verified())], provider: "wizard"))).Message);
         var wrong = JsonDocument.Parse("""{"schema":"ado.requirement-context/v9","id":1}""").RootElement.Clone();
         using var dir = new Sources(("wi.json", wrong.GetRawText()));
         Assert.Contains("unknown schema ado.requirement-context/v9", Assert.Throws<ArgumentException>(() => RequirementIndex.ReadWorkItems(dir.Root)).Message);
     }
 
     [Fact]
-    public void Open_pull_requests_are_not_used()
+    public void Unconfirmed_pull_requests_are_not_used_and_say_so()
     {
-        object[] prs = [new { id = 7, status = "active", workItems = Verified(42) }];
-        var index = Build(History([Commit(1, Verified(), [new { id = 7, confidence = "exact" }], (7, 1))], prs));
+        object[] prs = [PullRequest(7, status: "unconfirmed", items: [42])];
+        var index = Build(History([Commit(1, Verified(), Pr(7, "inferred"), (7, 1))], prs));
         var c = RequirementResolver.For(index, Place, Current(Place), null);
         Assert.Empty(c.Requirements);
-        Assert.Contains(index.Warnings, w => w.Contains("PR 7 is active"));
+        Assert.Equal(("unavailable", false), (c.Outcome, c.Complete));   // not "no-link": the PR's links are unknown
+        Assert.Contains(index.Warnings, w => w.Contains("PR #7 is unconfirmed"));
+        Assert.Contains(c.Warnings, w => w.Contains("unconfirmed, its work items are not used"));
+    }
+
+    [Fact]
+    public void A_message_mention_is_a_candidate_and_only_a_provider_link_confirms()
+    {
+        var index = Build(History([Commit(1, Verified(), null, [Mention(42)], (7, 1)), Commit(2, Status("denied"), null, [Mention(43)], (8, 1)),
+            Commit(3, Verified(43), null, [Mention(43)], (9, 1))]));
+        var c = RequirementResolver.For(index, Place, Current(Place), null);
+        Assert.Equal([(43, "confirmed"), (42, "candidate")], c.Requirements.Select(r => (r.Id, r.Status)));
+        Assert.Equal(["commit-message"], c.Requirements.Single(r => r.Id == 42).Evidence.Select(e => e.Relation).Distinct());
+        Assert.False(c.Complete);   // commit 2's provider links were denied
+        Assert.Equal([42], index.Commits[0].Mentions);
+        Assert.Empty(index.Commits[0].WorkItems);
+    }
+
+    [Fact]
+    public void A_file_level_change_never_becomes_a_symbol_link()
+    {
+        var commit = new
+        {
+            sha = Sha(1), parents = new[] { Sha(2) }, subject = "rename", committedAt = "2026-10-01T08:00:00+00:00", kind = "commit",
+            files = new[] { Changed([], granularity: "file") }, workItems = Array.Empty<object>(), providerLinks = Verified(42), pullRequest = NoPr,
+        };
+        var index = Build(History([commit]));
+        Assert.Empty(index.Commits.Single().Touches);
+        Assert.Equal([new RequirementIndex.FileTouch(File, "file")], index.Commits.Single().FileOnly);
+        Assert.Equal("not-in-history", RequirementResolver.For(index, Place, Current(Place), null).Outcome);
+        Assert.Contains("file granularity with line ranges", Assert.Throws<ArgumentException>(() => Build(History([new
+        {
+            sha = Sha(1), parents = new[] { Sha(2) }, subject = "x", committedAt = "x", kind = "commit", files = new[] { Changed([(3, 1)], granularity: "file") },
+            workItems = Array.Empty<object>(), providerLinks = Verified(), pullRequest = NoPr,
+        }]))).Message);
+    }
+
+    [Fact]
+    public void Github_issues_are_not_work_items_and_an_unverified_history_is_not_an_empty_answer()
+    {
+        var index = Build(History([Commit(1, Status("unknown"), null, [Link("#12", "commit-message", "closes")], (7, 1))], provider: "github", truncated: true, shallow: true));
+        Assert.Empty(index.Commits.Single().Mentions);
+        Assert.Contains(index.Warnings, w => w.StartsWith("#12") && w.Contains("not an Azure Boards work item"));
+        Assert.Contains(index.Warnings, w => w.Contains("no provider link was verified (github history)"));
+        Assert.Contains(index.Warnings, w => w.Contains("shallow clone"));
+        var c = RequirementResolver.For(index, Place, Current(Place), null);
+        Assert.Equal("unavailable", c.Outcome);
+        Assert.Contains(c.Warnings, w => w.Contains("truncated"));
+        Assert.Contains(c.Warnings, w => w.Contains("shallow clone"));
+        Assert.Equal(("github", true), (index.Inputs.Provider, index.Inputs.Shallow));
+    }
+
+    [Fact]
+    public void A_merge_commit_carries_no_changes_of_its_own()
+    {
+        var merge = new
+        {
+            sha = Sha(2), parents = new[] { Sha(1), Sha(3) }, subject = "Merged PR 7", committedAt = "2026-10-01T08:00:00+00:00", kind = "merge",
+            files = Array.Empty<object>(), workItems = Array.Empty<object>(), providerLinks = Verified(42), pullRequest = Pr(7),
+        };
+        var index = Build(History([Commit(1, Verified(), Pr(7), (7, 1)), merge], [PullRequest(7, items: [43])]));
+        Assert.Equal(["mapped", "no-source"], index.Commits.Select(c => c.Mapping));
+        // The merge's own link does not reach Place; the PR's does, as a candidate.
+        Assert.Equal([(43, "candidate")], RequirementResolver.For(index, Place, Current(Place), null).Requirements.Select(r => (r.Id, r.Status)));
     }
 }

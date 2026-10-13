@@ -80,7 +80,7 @@ sealed class McpServer(McpServer.Host host)
             Schema(("path", "string", "file or folder prefix", false), Offset, Limit, Budget), Violations),
         new("check", "The quality gate as JSON: pass/fail and why. With since, only problems introduced since that ref (definition of done).",
             Schema(("since", "string", "git ref, e.g. origin/main", false), Budget), a => host.Check(Str(a, "since")) ?? throw new ToolError($"not a git repository or unknown ref: {Str(a, "since")}")),
-        new("requirements_for_symbol", "Work items a symbol was changed for, from the imported history: confirmed (direct commit link) or candidate (PR link only), with commit, lines and whether the code changed since.",
+        new("requirements_for_symbol", "Work items a symbol was changed for, from the imported history: confirmed (provider-verified commit link) or candidate (PR link or commit-message mention only), with commit, lines and whether the code changed since.",
             Schema(("id", "string", "symbol id or qualified name (an id from history works for renamed or deleted code)", true), Budget), RequirementsForSymbol),
         new("symbols_for_requirement", "The symbols one work item is linked to through the commits that changed them, current code first.",
             Schema(("work_item", "integer", "work item id, e.g. 1234", true), Budget), SymbolsForRequirement),
