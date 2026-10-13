@@ -191,8 +191,9 @@ consistent but not significant on this fixture.
 
 Before considering a default:
 
-- **Make `deviation` stricter.** A deviation sentence should quote the code it contradicts (`[source]` plus the
-  condition), and be dropped otherwise. Or leave deviations out of the pages until they measure better.
+- **Let deviations by absence back in.** Quoted deviations (#183, run 3) removed the false ones but also the true
+  `Refund` catch. Next try: allow a deviation that quotes the statement where the asked-for check is missing (e.g.
+  `return amount;`), then rerun.
 - **Grow the gold set.** More contradiction cases and more constraint groups, so that a +0.15–0.2 gain can be
   told apart from noise. Also mark work items that span several methods (WI-112) as scope, not contradiction.
 - **Revisit the default bound.** It binds rarely, but when it does it drops the oldest work item first. Keep the
