@@ -50,3 +50,26 @@ Before, a class reached through a field (`orders.Place(...)` reaches `OrderServi
 `Cancel`, `Refund`, `Total`, `Ship` and their work items showed up in a checkout crawl. Now `contains` is followed only
 from a seed. The remaining link false positive, `Available` WI-111, is the resolver's (an unrelated edit in a linked
 commit, see the requirements benchmark), not the crawler's.
+
+## Domain labels (#187)
+
+`gold.json`'s `domain` block is ground truth for a future domain model, written by hand from the final code:
+
+- **areas:** every method's business area by what it does, not by namespace. `Shop.Api` holds checkout code, but
+  also `CardPayments.Charge` (billing) and `CheckoutController.Track` (shipping).
+- **processes:** checkout, parcel tracking and the order report, each with an entry point and its steps.
+- **rules:** per (work item, method) a verdict: `implemented`, `partial` (does its part, the rest is elsewhere or
+  missing), `contradicted` (`Refund` WI-103, `Overdue` WI-106) or `unrelated` (`Available` WI-111).
+
+`--expect` checks that every label names a method that exists, that every method has exactly one area, and that no
+label is stale. Nothing scores against these labels yet, so the report gives the baselines a domain model has to beat:
+
+| Baseline | Value |
+|---|---|
+| areas grouped by namespace, pair precision / recall | 0.685 / 0.771 (misplaces the three `Shop.Api` methods above) |
+| process steps reached by a crawl from the entry | checkout 9/9, parcel tracking 1/1, order report 1/1 |
+| rules shown as As-intended (`--format md`), by verdict | implemented 8/14, partial 3/5, contradicted **2/2**, unrelated **1/1** |
+
+The last row is the limit of the rule-based As-intended section: it shows both contradictions and the unrelated
+link as intent, because history can't tell what the code does. A domain model (or model wording, #188) earns its
+place by moving those three out of As-intended without losing the implemented ones.
