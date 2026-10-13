@@ -249,18 +249,24 @@ Sbom and Remediation live in `Analysis/`; the packages view is part of `Generato
 ## AI
 
 [AiProse](src/DocWizz/Ai/AiProse.cs) drafts summary, responsibilities, behaviour, side effects, errors and usage for
-items without a summary, plus a module overview.
+items without a summary, plus an overview for each module (folder) of three or more members.
 
 - **Input:** per item, the facts JSON from [ContextBuilder](src/DocWizz/Ai/ContextBuilder.cs) (graph neighbours,
   signature, derived sections with their origin) and that symbol's own source lines. Never the repository.
-- **Output:** JSON, one list of sentences per section, each citing facts. Citations resolve to symbol ids; a sentence
-  without a valid one is dropped.
+- **Output:** one cited sentence per line, `<section>: <sentence> [<fact>; <fact>]` (a JSON object of sections is still
+  read). Lines cost a model a third to half the tokens of JSON, and generating them is nearly all of the time. A citation is
+  a symbol name, `source`, a field of the symbol's own facts (resting on the symbol) or a neighbour list such as
+  `calls` (resting on the neighbours in it); it resolves to symbol ids. A sentence without a valid citation, or one
+  that only says a section is empty, is dropped.
+- **Requests:** four at once (a server with `OLLAMA_NUM_PARALLEL=4` runs them together; one that doesn't queues them).
+  Ratings ask for JSON; drafts ask for lines, so the provider's JSON mode is off for them.
 - **Transport:** [IAiProvider](src/DocWizz/Ai/AiProvider.cs) (`OllamaProvider` for `/api/chat`,
   `OpenAiCompatibleProvider` for `/v1/chat/completions`). Every provider connects through `LocalEndpoint`: each
   resolved address must be loopback or private and proxies are bypassed; Ollama cloud models are refused. Anything else
   that needs a model adds a provider rather than its own HTTP client.
-- **Cache:** per symbol, body hash, provider and model in `docs/.docwizz/ai-cache.json`, with provenance. Drafts are
-  marked 🤖 and never override written docs.
+- **Cache:** per symbol, body hash, provider and model in `docs/.docwizz/ai-cache.json`, with provenance; an answer
+  with nothing usable is cached too, so unchanged code is never sent again. Drafts are marked 🤖 and never override
+  written docs.
 - **Ratings:** the same facts plus the doc comment yield a 1–5 usefulness score, cached in `ai-assessments.json` and
   shown in `quality.md` only; never part of doc quality % or `check`.
 
