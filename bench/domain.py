@@ -11,7 +11,8 @@ bench/domain/gold.json, written by hand; reached methods' expected work items co
 Per case: reach recall (labelled path symbols found), leaks (labelled off-path symbols found), seed symbols, expected
 errors and truncation. Overall: work-item links on path symbols (precision and recall over (method, work item,
 status)), off-path links (requirements the crawl attached to symbols labelled off the path), byte-identical output
-on a second run, symbols and wall time per case. No model, no network.
+on a second run, symbols and wall time per case. Domain labels (#187: areas, processes, rules) are checked against the
+scanned model, and the baselines a domain model has to beat are reported. No model, no network.
 """
 import argparse
 import json
@@ -117,6 +118,66 @@ def evaluate(dll, repos, gold, links):
     }
 
 
+def intended(r):
+    """The Markdown's As-intended rule: a confirmed link on unchanged code, to an exported, current work item."""
+    return r["status"] == "confirmed" and not r["changedSince"] and r["availability"] == "available" and r.get("isCurrent") is not False
+
+
+def pairs(groups):
+    """Every unordered pair of methods that share a group."""
+    return {tuple(sorted((a, b))) for g in groups for a in g for b in g if a < b}
+
+
+def domain(dll, repo, gold, work):
+    """Domain labels (#187): checked against the scanned model, plus the baselines a domain model has to beat."""
+    d, problems = gold["domain"], []
+    model = os.path.join(work, "model.json")
+    sh(["dotnet", dll, "scan", ".", model], repo)
+    methods = {name(n["id"]) for n in json.load(open(model))["nodes"] if n["kind"] == "method" and n["file"].startswith("src/")}
+    labelled = [m for ms in d["areas"].values() for m in ms]
+    problems += [f"area label for a method that doesn't exist: {m}" for m in sorted(set(labelled) - methods)]
+    problems += [f"method without an area: {m}" for m in sorted(methods - set(labelled))]
+    problems += [f"method in more than one area: {m}" for m in sorted({m for m in labelled if labelled.count(m) > 1})]
+    named = [p["entry"] for p in d["processes"]] + [s for p in d["processes"] for s in p["steps"]] + [r["method"] for r in d["rules"] if r["method"]]
+    problems += [f"process or rule names a method that doesn't exist: {m}" for m in sorted(set(named) - methods)]
+
+    # Areas: the trivial grouping by namespace (Shop.Orders, Shop.Api, ...).
+    gold_pairs = pairs(d["areas"].values())
+    by_namespace = {}
+    for m in methods:
+        by_namespace.setdefault(m.rsplit(".", 2)[0], []).append(m)
+    base_pairs = pairs(by_namespace.values())
+    # A method is misplaced by namespace when its namespace isn't the one most of its gold area shares.
+    misplaced = []
+    for ms in d["areas"].values():
+        spaces = [m.rsplit(".", 2)[0] for m in ms]
+        usual = max(spaces, key=spaces.count)
+        misplaced += [m for m, ns in zip(ms, spaces) if ns != usual]
+    areas = {"precision": ratio(len(base_pairs & gold_pairs), len(base_pairs)), "recall": ratio(len(base_pairs & gold_pairs), len(gold_pairs)),
+             "misplaced": sorted(misplaced)}
+
+    # Processes: what a crawl from the entry reaches of the labelled steps.
+    processes = []
+    for p in d["processes"]:
+        out, _ = discover(dll, repo, {"seed": p["entry"], "depth": 4})
+        got = {name(s["id"]) for s in json.loads(out.stdout)["symbols"]} if out.returncode == 0 else set()
+        processes.append({"name": p["name"], "steps": len(p["steps"]), "reached": len(set(p["steps"]) & got)})
+
+    # Rules: what the As-intended section would show for each labelled (work item, method), by verdict.
+    verdicts = {(r["method"], r["workItem"]): r["verdict"] for r in d["rules"] if r["method"]}
+    shown = {}
+    for m in sorted({m for m, _ in verdicts}):
+        out, _ = discover(dll, repo, {"seed": m, "depth": 0})
+        for r in json.loads(out.stdout)["requirements"] if out.returncode == 0 else []:
+            if (m, r["id"]) in verdicts and intended(r):
+                shown[(m, r["id"])] = verdicts[(m, r["id"])]
+    by_verdict = {v: {"labelled": sum(x == v for x in verdicts.values()), "asIntended": sum(x == v for x in shown.values())}
+                  for v in sorted(set(verdicts.values()))}
+    wrong = sorted(f"{m.rsplit('.', 2)[-2]}.{m.rsplit('.', 1)[-1]} WI-{i} ({v})" for (m, i), v in shown.items() if v in ("contradicted", "unrelated"))
+    return {"labels": {"methods": len(methods), "areas": len(d["areas"]), "processes": len(d["processes"]), "rules": len(d["rules"])},
+            "problems": problems, "areaBaseline": areas, "processes": processes, "rules": by_verdict, "intentOnDisagreeingCode": wrong}
+
+
 def markdown(result):
     r = result["results"]
     lines = [
@@ -136,6 +197,21 @@ def markdown(result):
     for label, key in (("Links on path that gold doesn't have", "linkExtras"), ("Links on path that are missing", "linkMisses")):
         if r[key]:
             lines += ["", f"{label}:", ""] + [f"- {e}" for e in r[key]]
+    if "domain" in result:
+        d = result["domain"]
+        lines += ["", "## Domain labels (#187)", "",
+                  f"{d['labels']['methods']} methods in {d['labels']['areas']} areas, {d['labels']['processes']} processes, "
+                  f"{d['labels']['rules']} rules. Label problems: {len(d['problems'])}.", "",
+                  "Baselines a domain model has to beat:", "",
+                  f"- **Areas by namespace:** pair precision {d['areaBaseline']['precision']}, recall {d['areaBaseline']['recall']}"
+                  + (f"; misplaced: {', '.join(d['areaBaseline']['misplaced'])}" if d['areaBaseline']['misplaced'] else ""),
+                  "- **Process steps reached by a crawl from the entry:** "
+                  + ", ".join(f"{p['name']} {p['reached']}/{p['steps']}" for p in d["processes"]),
+                  "- **Rules shown as As-intended, by verdict:** "
+                  + ", ".join(f"{v} {x['asIntended']}/{x['labelled']}" for v, x in d["rules"].items()),
+                  "- **As-intended on code that contradicts or isn't about the work item:** "
+                  + (", ".join(d["intentOnDisagreeingCode"]) or "none")]
+        lines += [f"- label problem: {p}" for p in d["problems"]]
     if r["offPathExamples"]:
         lines += ["", "Off-path links (first 10):", ""] + [f"- {e}" for e in r["offPathExamples"]]
     return "\n".join(lines) + "\n"
@@ -164,6 +240,7 @@ def main(argv=None):
             "docwizz": sh(["dotnet", dll, "--version"], work).stdout.strip(),
             "inputs": {"gold": digest(GOLD), "history": digest(history)},
             "results": evaluate(dll, repos, gold, links),
+            "domain": domain(dll, repos["indexed"], gold, work),
         }
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -182,6 +259,7 @@ def main(argv=None):
         problems = [f"{x['name']}: {'; '.join(x['problems'])}" for x in r["rows"] if not x["ok"]]
         if not r["reproducible"]:
             problems.append("output differs between two identical runs")
+        problems += result["domain"]["problems"]
         for p in problems:
             print(f"FAIL: {p}", file=sys.stderr)
         return 1 if problems else 0

@@ -86,5 +86,49 @@
     {"name": "unknown symbol", "seed": "Shop.Nowhere.Thing", "depth": 2, "error": "no symbol"},
     {"name": "ambiguous member name", "seed": "Track", "depth": 2, "error": "Track"},
     {"name": "work item not in the index", "workItem": 999, "depth": 2, "error": "not present"}
-  ]
+  ],
+  "domain": {
+    "about": "Domain-level ground truth for #187, written by hand from the final code (bench/domain_fixture.py, bench/requirements_fixture.py), never from docwizz output. areas: every method's business area by what it does, not by its namespace (Shop.Api holds checkout, billing and shipping code). processes: a business flow's entry point and the methods that make it up. rules: per (work item, method), whether the method does what the work item asks: implemented, partial (does its part; the rest is elsewhere or missing), contradicted (does something else), unrelated (linked by history, but not about it). A work item with no method has methods: [].",
+    "areas": {
+      "ordering": ["Shop.Orders.OrderService.Place", "Shop.Orders.OrderService.Cancel", "Shop.Orders.OrderService.Refund", "Shop.Orders.OrderService.Total", "Shop.Orders.OrderService.Ship"],
+      "customers": ["Shop.Customers.CustomerService.Register", "Shop.Customers.CustomerService.CreditLimit", "Shop.Customers.CustomerService.Block", "Shop.Customers.CustomerService.Rename"],
+      "billing": ["Shop.Billing.InvoiceService.Issue", "Shop.Billing.InvoiceService.Pay", "Shop.Billing.InvoiceService.Overdue", "Shop.Billing.InvoiceService.Remind", "Shop.Api.IPayments.Charge", "Shop.Api.CardPayments.Charge"],
+      "inventory": ["Shop.Inventory.StockService.Reserve", "Shop.Inventory.StockService.Release", "Shop.Inventory.StockService.Restock", "Shop.Inventory.StockService.Available"],
+      "shipping": ["Shop.Shipping.ShippingService.Quote", "Shop.Shipping.ShippingService.Label", "Shop.Shipping.ShippingService.Track", "Shop.Api.CheckoutController.Track"],
+      "notifications": ["Shop.Notifications.Notifier.Email", "Shop.Notifications.Notifier.Sms"],
+      "pricing": ["Shop.Pricing.PriceService.Discount", "Shop.Pricing.PriceService.Tax"],
+      "checkout": ["Shop.Api.CheckoutController.Checkout", "Shop.Api.CheckoutController.Confirm", "Shop.Api.CheckoutController.Retry"],
+      "reporting": ["Shop.Api.ReportsJob.Run"]
+    },
+    "processes": [
+      {"name": "checkout", "entry": "Shop.Api.CheckoutController.Checkout", "steps": ["Shop.Inventory.StockService.Reserve", "Shop.Inventory.StockService.Available", "Shop.Orders.OrderService.Place", "Shop.Customers.CustomerService.CreditLimit", "Shop.Billing.InvoiceService.Issue", "Shop.Api.CardPayments.Charge", "Shop.Billing.InvoiceService.Pay", "Shop.Api.CheckoutController.Confirm", "Shop.Notifications.Notifier.Email"]},
+      {"name": "parcel tracking", "entry": "Shop.Api.CheckoutController.Track", "steps": ["Shop.Shipping.ShippingService.Track"]},
+      {"name": "order report", "entry": "Shop.Api.ReportsJob.Run", "steps": ["Shop.Orders.OrderService.Total"]}
+    ],
+    "rules": [
+      {"workItem": 101, "method": "Shop.Orders.OrderService.Place", "verdict": "implemented"},
+      {"workItem": 102, "method": "Shop.Orders.OrderService.Cancel", "verdict": "implemented"},
+      {"workItem": 103, "method": "Shop.Orders.OrderService.Refund", "verdict": "contradicted", "note": "never compared with the order total"},
+      {"workItem": 104, "method": "Shop.Customers.CustomerService.Register", "verdict": "implemented"},
+      {"workItem": 105, "method": "Shop.Billing.InvoiceService.Issue", "verdict": "partial", "note": "numbers the invoice; checkout calls it before anything ships, Ship never does"},
+      {"workItem": 105, "method": "Shop.Orders.OrderService.Ship", "verdict": "partial", "note": "marks the order shipped, issues no invoice"},
+      {"workItem": 106, "method": "Shop.Billing.InvoiceService.Overdue", "verdict": "contradicted", "note": "30 days, not 14"},
+      {"workItem": 106, "method": "Shop.Billing.InvoiceService.Remind", "verdict": "implemented"},
+      {"workItem": 107, "method": "Shop.Inventory.StockService.Reserve", "verdict": "implemented"},
+      {"workItem": 107, "method": "Shop.Inventory.StockService.Release", "verdict": "implemented"},
+      {"workItem": 108, "method": "Shop.Inventory.StockService.Restock", "verdict": "implemented"},
+      {"workItem": 109, "method": "Shop.Shipping.ShippingService.Quote", "verdict": "implemented", "note": "the link lookup was denied"},
+      {"workItem": 110, "method": "Shop.Customers.CustomerService.Rename", "verdict": "implemented", "note": "renamed from ChangeName after the linked commit"},
+      {"workItem": 111, "method": "Shop.Shipping.ShippingService.Track", "verdict": "implemented"},
+      {"workItem": 111, "method": "Shop.Inventory.StockService.Available", "verdict": "unrelated", "note": "an unrelated edit in the WI-111 commit"},
+      {"workItem": 112, "method": "Shop.Notifications.Notifier.Email", "verdict": "partial", "note": "the email half; Sms has the other"},
+      {"workItem": 112, "method": "Shop.Notifications.Notifier.Sms", "verdict": "partial", "note": "the SMS half; Email has the other"},
+      {"workItem": 113, "method": null, "verdict": "no-code", "note": "a using only"},
+      {"workItem": 114, "method": "Shop.Pricing.PriceService.Discount", "verdict": "implemented"},
+      {"workItem": 115, "method": "Shop.Pricing.PriceService.Discount", "verdict": "implemented"},
+      {"workItem": 116, "method": "Shop.Pricing.PriceService.Discount", "verdict": "implemented"},
+      {"workItem": 117, "method": "Shop.Pricing.PriceService.Discount", "verdict": "implemented"},
+      {"workItem": 118, "method": "Shop.Pricing.PriceService.Tax", "verdict": "partial", "note": "rates and reverse charge; rounding and display are not in this code"}
+    ]
+  }
 }
