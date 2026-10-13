@@ -443,7 +443,9 @@ remediation:
 ### AI
 
 `OLLAMA_HOST` (default `localhost:11434`) and `DOCWIZZ_MODEL` (default `qwen2.5-coder:7b`) select the Ollama server and
-model. For an OpenAI-compatible server (vLLM, NVIDIA NIM, LiteLLM):
+model. docwizz sends four requests at once; set `OLLAMA_NUM_PARALLEL=4` on the Ollama server so it runs them together,
+which roughly doubles drafting speed on one GPU (by default Ollama may run them one at a time). For an
+OpenAI-compatible server (vLLM, NVIDIA NIM, LiteLLM):
 
 ```yaml
 ai: { provider: openai-compatible, endpoint: http://10.0.0.5:8000/v1, model: <name>, api_key_env: DOCWIZZ_AI_KEY }
