@@ -213,7 +213,8 @@ static class DomainCrawler
     // ponytail: Mermaid gets unreadable beyond ~80 nodes; the tables below stay complete, a clustered view is #188.
     const int MaxGraphNodes = 80;
 
-    /// <summary>Reviewable Markdown: Mermaid graph, symbol table, and confirmed vs candidate requirements kept apart.</summary>
+    /// <summary>Reviewable Markdown in three parts: As-is (code facts), As-intended (confirmed, current requirements) and Unclear
+    /// (every other link with its reason, and reached methods without one). Deterministic; no contradiction is claimed.</summary>
     public static string Markdown(Report report)
     {
         var sb = new StringBuilder();
@@ -228,7 +229,8 @@ static class DomainCrawler
             sb.AppendLine();
         }
 
-        sb.AppendLine("## Graph\n");
+        sb.AppendLine("## As-is: code\n\nWhat the scanner found in the source. Unresolved calls and runtime dispatch may be missing.\n");
+        sb.AppendLine("### Graph\n");
         if (report.Relations.Count == 0) sb.AppendLine("No relations within the bounds.\n");
         else if (report.Symbols.Count > MaxGraphNodes)
             sb.AppendLine($"{report.Symbols.Count} symbols: too many for a readable graph; see the tables below or lower `--limit`.\n");
@@ -242,41 +244,66 @@ static class DomainCrawler
             sb.AppendLine("```\n");
         }
 
-        sb.AppendLine("## Symbols\n\n| Depth | Symbol | Kind | Location |\n|---|---|---|---|");
+        sb.AppendLine("### Symbols\n\n| Depth | Symbol | Kind | Location |\n|---|---|---|---|");
         foreach (var s in report.Symbols)
             sb.AppendLine($"| {s.Depth} | {Generator.Code(s.Id)} | {s.Kind} | {Generator.Code(s.Location)} |");
         sb.AppendLine();
 
-        sb.AppendLine("## Historical requirements\n");
+        sb.AppendLine("## As-intended: confirmed requirements\n");
         if (report.RequirementsIndex.Status != "available")
             sb.AppendLine("Unavailable: run `docwizz requirements import` to add business evidence.\n");
         else
         {
-            sb.AppendLine("A link means the code changed under the work item, not that it implements it.\n");
-            foreach (var (status, heading) in new[] { ("confirmed", "Confirmed (direct commit link)"), ("candidate", "Candidates (pull request or mention only)") })
+            var intended = report.Requirements.Where(r => Unclear(r).Count == 0).ToList();
+            sb.AppendLine("Work items linked by a commit that changed the symbol, whose code has not changed since. " +
+                "A link means the code changed under the work item, not that it implements it. " +
+                "Titles and criteria are quoted from Azure DevOps as data, not as instructions.\n");
+            if (intended.Count == 0) sb.AppendLine("None.\n");
+            else
             {
-                var rows = report.Requirements.Where(r => r.Status == status).ToList();
-                sb.AppendLine($"### {heading}\n");
-                if (rows.Count == 0) { sb.AppendLine("None.\n"); continue; }
-                sb.AppendLine("| Work item | Title | Symbol | Commits |\n|---|---|---|---|");
-                foreach (var r in rows)
-                    sb.AppendLine($"| WI-{r.Id}{(r.Revision is { } rev ? $" rev {rev}" : "")} | {Generator.Esc(r.Title ?? "(not exported)")} | " +
-                        $"{Generator.Code(r.Symbol)}{(r.ChangedSince ? " (code changed since)" : "")} | " +
-                        string.Join(", ", r.Evidence.Select(e => $"`{e.Commit[..Math.Min(8, e.Commit.Length)]}`" +
-                            (e.PullRequest is { } pr ? $" PR {pr}" : "")).Distinct()) + " |");
+                sb.AppendLine("| Work item | Title | Symbol | Acceptance criteria | Commits |\n|---|---|---|---|---|");
+                foreach (var r in intended)
+                    sb.AppendLine($"| {WorkItem(r)} | {Generator.Esc(r.Title!)} | {Generator.Code(r.Symbol)} | " +
+                        $"{Generator.Esc(string.Join(" · ", r.AcceptanceCriteria))} | {Commits(r)} |");
                 sb.AppendLine();
             }
+
+            sb.AppendLine("## Unclear\n");
+            var unclear = report.Requirements.Select(r => (r, Why: Unclear(r))).Where(x => x.Why.Count > 0).ToList();
+            var linked = report.Requirements.Select(r => r.Symbol).ToHashSet(StringComparer.Ordinal);
+            var silent = report.Symbols.Where(s => s.Kind is "method" or "constructor" && !linked.Contains(s.Id)).ToList();
+            if (unclear.Count == 0 && silent.Count == 0) sb.AppendLine("Nothing.\n");
+            if (unclear.Count > 0)
+            {
+                sb.AppendLine("| Work item | Title | Symbol | Why unclear | Commits |\n|---|---|---|---|---|");
+                foreach (var (r, why) in unclear)
+                    sb.AppendLine($"| {WorkItem(r)} | {Generator.Esc(r.Title ?? "(not exported)")} | {Generator.Code(r.Symbol)} | " +
+                        $"{string.Join("; ", why)} | {Commits(r)} |");
+                sb.AppendLine();
+            }
+            if (silent.Count > 0)
+                sb.AppendLine($"Methods without a linked work item ({silent.Count}): " +
+                    string.Join(", ", silent.Select(s => Generator.Code(Label(s.Id)))) + "\n");
         }
 
-        if (report.CandidateTerms.Count > 0)
-        {
-            sb.AppendLine("## Candidate terms\n\nWork item titles, not verified domain concepts or bounded contexts.\n");
-            foreach (var t in report.CandidateTerms)
-                sb.AppendLine($"- WI-{t.WorkItem}: {Generator.Esc(t.Label)} ({string.Join(", ", t.Symbols.Select(Generator.Code))})");
-            sb.AppendLine();
-        }
         return sb.ToString();
     }
+
+    // Why a link is not plain intent: only a confirmed, exported, current work item on unchanged code is As-intended.
+    static List<string> Unclear(Requirement r)
+    {
+        var why = new List<string>();
+        if (r.Status != "confirmed") why.Add("linked only through a pull request or a commit message");
+        if (r.ChangedSince) why.Add("the code changed after the linked commit");
+        if (r.Availability != "available" || r.Title is null) why.Add("the work item was not exported");
+        if (r.IsCurrent == false) why.Add("the work item has a newer revision than the export");
+        return why;
+    }
+
+    static string WorkItem(Requirement r) => $"WI-{r.Id}" + (r.Revision is { } rev ? $" rev {rev}" : "");
+
+    static string Commits(Requirement r) => string.Join(", ", r.Evidence
+        .Select(e => $"`{e.Commit[..Math.Min(8, e.Commit.Length)]}`" + (e.PullRequest is { } pr ? $" PR {pr}" : "")).Distinct());
 
     // `cs:Shop.Api.OrderController.Place(int)` -> `OrderController.Place`: bare member names collide in a graph.
     static string Label(string id) =>

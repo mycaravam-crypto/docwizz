@@ -64,9 +64,15 @@ The crawler only writes to stdout. Use shell redirection to save a report.
 - `candidateTerms[]` contains only **historical Work Item titles** and their associated
   current code symbols. The classification is explicitly `historical-requirement-title`:
   titles are *not* automatically validated capabilities or bounded contexts.
-- The output is stably ordered JSON (`docwizz.domain-discovery/v1`), Markdown (`--format md`: Mermaid
-  graph up to 80 symbols, symbol table, confirmed and candidate requirements in separate tables), or a
-  human-readable console summary. The same code model, history index, seed, commit and bounds produce the same output.
+- The output is stably ordered JSON (`docwizz.domain-discovery/v1`), Markdown (`--format md`), or a
+  human-readable console summary. The Markdown has three parts:
+  - **As-is**: the scanner's code facts, as a Mermaid graph (up to 80 symbols) and a symbol table.
+  - **As-intended**: confirmed links (a commit that changed the symbol names the work item) whose code has not
+    changed since, with their acceptance criteria.
+  - **Unclear**: every other link, each with its reason (PR or message only, code changed since, work item not
+    exported, newer work-item revision), and the reached methods that have no linked work item.
+
+  Contradictions between code and intent are not claimed: that needs a reader (or a model) comparing the two. The same code model, history index, seed, commit and bounds produce the same output.
 
 ## What it does not claim
 
