@@ -215,7 +215,8 @@ static class DomainCrawler
 
     /// <summary>Reviewable Markdown in three parts: As-is (code facts), As-intended (confirmed, current requirements) and Unclear
     /// (every other link with its reason, and reached methods without one). Deterministic; no contradiction is claimed.</summary>
-    public static string Markdown(Report report)
+    /// <param name="links">Path from the Markdown file to the repository root; null (stdout) writes locations as code.</param>
+    public static string Markdown(Report report, string? links = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"# Domain discovery: {report.Seed.Kind} {Generator.Code(report.Seed.Value)}\n");
@@ -246,7 +247,7 @@ static class DomainCrawler
 
         sb.AppendLine("### Symbols\n\n| Depth | Symbol | Kind | Location |\n|---|---|---|---|");
         foreach (var s in report.Symbols)
-            sb.AppendLine($"| {s.Depth} | {Generator.Code(s.Id)} | {s.Kind} | {Generator.Code(s.Location)} |");
+            sb.AppendLine($"| {s.Depth} | {Generator.Code(s.Id)} | {s.Kind} | {Source(s.Location, links)} |");
         sb.AppendLine();
 
         sb.AppendLine("## As-intended: confirmed requirements\n");
@@ -298,6 +299,17 @@ static class DomainCrawler
         if (r.Availability != "available" || r.Title is null) why.Add("the work item was not exported");
         if (r.IsCurrent == false) why.Add("the work item has a newer revision than the export");
         return why;
+    }
+
+    // `src/A.cs:12-20` -> [`src/A.cs:12-20`](../src/A.cs#L12-L20): GitHub's line anchors, a plain file link elsewhere.
+    static string Source(string location, string? links)
+    {
+        if (links is null) return Generator.Code(location);
+        var colon = location.LastIndexOf(':');
+        var (file, lines) = colon > 0 ? (location[..colon], location[(colon + 1)..]) : (location, "");
+        var anchor = lines.Length == 0 ? "" : "#L" + lines.Replace("-", "-L");
+        var target = (links == "." ? "" : links + "/") + file;
+        return $"[{Generator.Code(location)}]({target.Replace(" ", "%20").Replace("(", "%28").Replace(")", "%29")}{anchor})";
     }
 
     static string WorkItem(Requirement r) => $"WI-{r.Id}" + (r.Revision is { } rev ? $" rev {rev}" : "");

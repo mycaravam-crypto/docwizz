@@ -31,7 +31,18 @@ public class DomainJourneyTests
             "--depth", "2", "--limit", "20", "--format", "md");
         Assert.Equal(0, md.Exit);
         Assert.StartsWith("# Domain discovery: symbol `Shop.Application.OrderService`", md.Out);
-        Assert.Contains("## Symbols", md.Out);
+        Assert.Contains("### Symbols", md.Out);
+
+        // A file: written with links relative to it; a file docwizz didn't write is left alone.
+        var saved = Run(repo.Root, "domain", "discover", ".", "docs/orders.md", "--seed", "Shop.Application.OrderService",
+            "--depth", "1", "--format", "md");
+        Assert.Equal(0, saved.Exit);
+        Assert.Contains("](../src/", File.ReadAllText(Path.Combine(repo.Root, "docs", "orders.md")));
+        File.WriteAllText(Path.Combine(repo.Root, "notes.md"), "mine\n");
+        var refused = Run(repo.Root, "domain", "discover", ".", "notes.md", "--seed", "Shop.Application.OrderService", "--format", "md");
+        Assert.Equal(1, refused.Exit);
+        Assert.Contains("refusing to overwrite", refused.Err);
+        Assert.Equal("mine\n", File.ReadAllText(Path.Combine(repo.Root, "notes.md")));
     }
 
     [Fact]

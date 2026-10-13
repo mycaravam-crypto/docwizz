@@ -95,7 +95,7 @@ static async Task<int> Dispatch(string[] args)
         case "context":
             return ContextCommand(path, config, opts);
         case "domain":
-            return DomainCommand(path, config, opts, json);
+            return DomainCommand(path, config, opts, json, pos.ElementAtOrDefault(2));
         case "mcp":
             return await McpCommand(path, config, opts.ContainsKey("auto-rescan"));
         case "evidence-diff":
@@ -181,7 +181,7 @@ static int EvidenceDiffCommand(string root, string? before, string? after, bool 
 
 // First iteration of domain discovery: offline graph traversal with opt-in historical requirement evidence.
 // No model requests, Azure DevOps calls, Git changes or generated files.
-static int DomainCommand(string root, Config config, Dictionary<string, string> opts, bool json)
+static int DomainCommand(string root, Config config, Dictionary<string, string> opts, bool json, string? output)
 {
     var seed = opts.GetValueOrDefault("seed");
     var workItem = opts.GetValueOrDefault("work-item");
@@ -211,8 +211,24 @@ static int DomainCommand(string root, Config config, Dictionary<string, string> 
             Git(root, "rev-parse HEAD")?.Trim());
         if (index is not null && index.Inputs.Scope != ProjectScope.Fingerprint(config.Scope))
             report = report with { Warnings = [.. report.Warnings, "the imported requirement scope differs from the current project scope; reimport requirements"] };
-        Console.Write(json ? DomainCrawler.Json(report)
-            : opts.GetValueOrDefault("format") == "md" ? DomainCrawler.Markdown(report) : DomainCrawler.Text(report));
+        var md = opts.GetValueOrDefault("format") == "md";
+        if (output is null)
+        {
+            Console.Write(json ? DomainCrawler.Json(report) : md ? DomainCrawler.Markdown(report) : DomainCrawler.Text(report));
+            return 0;
+        }
+        // An explicit file: Markdown links each location relative to where the file is, and a file docwizz didn't write stays.
+        var target = Path.GetFullPath(output);
+        if (File.Exists(target) && !File.ReadAllText(target).Contains("Domain discovery", StringComparison.Ordinal)
+            && !File.ReadAllText(target).Contains(DomainCrawler.Schema, StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"{output} exists and is not a docwizz domain report; refusing to overwrite");
+            return 1;
+        }
+        var links = Path.GetRelativePath(Path.GetDirectoryName(target)!, Path.GetFullPath(root)).Replace('\\', '/');
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.WriteAllText(target, json ? DomainCrawler.Json(report) : md ? DomainCrawler.Markdown(report, links) : DomainCrawler.Text(report));
+        Console.WriteLine($"→ {output}");
         return 0;
     }
     catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
