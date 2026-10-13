@@ -51,11 +51,13 @@ static class AiProse
         what was asked for at the time, not what the code does now. Two more sections come from them:
         intent: what a requirement asks of this code. deviation: where the source does something a requirement does
         not ask for, or contradicts it. Every intent and deviation line cites the requirement's id (WI-12), and a
-        deviation line also cites source. All other sections describe what the code does, from the facts and source
-        only: never cite a WI id there, and never write that the code meets, implements or satisfies a requirement.
-        A requirement with status candidate may not apply to this code: write "may" for it.
-        intent: Orders above the customer's credit limit must be rejected. [WI-12]
-        deviation: The source rejects orders at the limit too, not only above it. [WI-12; source]
+        deviation line also cites source and quotes, in backticks, the exact code it is about: the condition or
+        statement that does something else. Write a deviation only when you can quote that code; a requirement this
+        code doesn't cover at all is no deviation. All other sections describe what the code does, from the facts
+        and source only: never cite a WI id there, and never write that the code meets, implements or satisfies a
+        requirement. A requirement with status candidate may not apply to this code: write "may" for it.
+        intent: Passwords must have at least 12 characters. [WI-12]
+        deviation: The source accepts 8 characters (`password.Length >= 8`), not 12. [WI-12; source]
         """;
 
     const string ModuleInstructions = """
@@ -154,7 +156,7 @@ static class AiProse
             {
                 var (json, sources, names) = facts.For(t.Node, t.Item, t.Business);
                 var reply = await ai.Complete(t.Business is null ? Instructions : Instructions + BusinessInstructions, json, json: false);
-                var d = (t.Business is { } b ? Ground(Parse(reply, sources, names), b) : Parse(reply, sources, names)) ?? NoDraft;
+                var d = (t.Business is { } b ? Ground(Parse(reply, sources, names), b, SourceOf(json)) : Parse(reply, sources, names)) ?? NoDraft;
                 if (Usable(d) || !result.ContainsKey(t.Node.Id)) Keep(cacheFile, cache, $"{t.Key}@{tag}", d);
                 return d;
             }, "summaries", t => Label(t.Node), t => $"summary failed for {t.Node.Id}", stop, step);
@@ -336,10 +338,33 @@ static class AiProse
     static readonly Regex Fulfils = new(@"\b(satisf(y|ies|ied)|fulfil+s?|fulfil+ed|meets|met|compl(y|ies|ied) with|implements|implemented)\b.*\b(requirement|WI-\d+|acceptance criteri)" +
         @"|\b(approved|certified|compliant|conformant|signed off|freigegeben|zertifiziert|genehmigt)\b", RegexOptions.IgnoreCase);
 
+    // `code` in a sentence: what a deviation quotes from the source.
+    static readonly Regex Quote = new(@"`([^`]+)`");
+
+    // The source the facts showed the model (null when they had none).
+    static string? SourceOf(string facts)
+    {
+        try { return JsonDocument.Parse(facts).RootElement.TryGetProperty("source", out var s) && s.ValueKind == JsonValueKind.String ? s.GetString() : null; }
+        catch (JsonException) { return null; }
+    }
+
+    // A deviation is a claim about the code, so it must be checkable there: it cites the source and quotes code that is
+    // in it (whitespace ignored). A deviation without such a quote is the model's guess and is dropped.
+    // ponytail: a quote only has to occur, so quoting a bare identifier passes; check what it quotes against the claim if
+    // the benchmark shows that happening.
+    static bool Quoted(Sentence s, string? source)
+    {
+        static string Bare(string t) => Regex.Replace(t, @"\s+", "");
+        var quotes = Quote.Matches(s.Text).Select(m => Bare(m.Groups[1].Value)).ToList();
+        return source is not null && s.From.Any(id => !id.StartsWith("workitem:", StringComparison.Ordinal))
+            && quotes.Count > 0 && quotes.All(q => q.Length > 0 && Bare(source).Contains(q, StringComparison.Ordinal));
+    }
+
     // A draft with business context, held to its rules: code sections rest on code (work-item citations are removed
     // from them, and a sentence left with none is dropped); intent and deviation sentences rest on a work item and say
-    // which one and how sure the link is ("[WI-12 confirmed]"); a claim that the code fulfils a requirement is dropped.
-    static Draft? Ground(Draft? draft, BusinessContext.Selection business)
+    // which one and how sure the link is ("[WI-12 confirmed]"); a deviation also quotes the source it is about; a claim
+    // that the code fulfils a requirement is dropped.
+    static Draft? Ground(Draft? draft, BusinessContext.Selection business, string? source)
     {
         if (draft?.Sections is not { } sections) return draft;
         static bool Wi(string id) => id.StartsWith("workitem:", StringComparison.Ordinal);
@@ -347,7 +372,7 @@ static class AiProse
         foreach (var (name, sentences) in sections)
             foreach (var s in sentences)
             {
-                if (Fulfils.IsMatch(s.Text)) continue;
+                if (Fulfils.IsMatch(s.Text) || (name == "deviation" && !Quoted(s, source))) continue;
                 Sentence? k;
                 if (BusinessSectionNames.Contains(name))
                 {

@@ -158,20 +158,42 @@ requests per mode.
 - **Cost.** About +34% prompt tokens and +7% wall time for B. C costs the same as B here: only two methods exceed
   the bound.
 
-Limits: one synthetic fixture, one 7B model, two runs, phrase matching for recall (a paraphrase that misses every
+#### Run 3: deviations must quote the code (#183)
+
+Same model and settings. Only the requirements prompt changed: its example moved to an unrelated domain (it had been
+copied word for word onto `Place`), and a deviation must quote the code it is about, which is then checked against
+the source.
+
+| Mode | Constraint recall (95% CI) | Unsupported WI | Injection kept | Contradictions flagged | False deviations |
+|---|---|---|---|---|---|
+| A | 0.45 [0.22, 0.74] | n/a | 0 | 0/2 | 0 |
+| B | 0.75 [0.57, 0.92] | 0.0 | 0 | 0/2 | **0** (was 3 / 4) |
+| C | 0.80 [0.59, 0.96] | 0.0 | 0 | 0/2 | **1** (was 4 / 4) |
+
+- **False deviations are nearly gone.** The one left (`Restock`, C) quotes real code (`` `quantity < 10` ``) but
+  draws a non-difference from it. That's the known ceiling: a quote proves the code exists, not that the claim is right.
+- **The true deviation was lost too.** `Refund` (never checks the total) is a deviation by absence. The prompt's "a
+  requirement this code doesn't cover at all is no deviation" probably keeps the model from writing it, although it
+  could quote `return amount;`. Contradictions flagged: 0/2 in both modes, down from 1/2.
+- **B's interval now clears A**, so the report's rule says "enable by default is defensible". Don't read too much into
+  it: A dipped (0.50, 0.50, now 0.45, same prompt), B's prompt changed in this run, and it is one run. The rule needs
+  repeated runs before it can decide a default.
+
+Limits: one synthetic fixture, one 7B model, three runs, phrase matching for recall (a paraphrase that misses every
 listed phrase counts as missed). Link errors (layer 1) and model errors (layer 2) are reported separately: the
 `Available` false link is a layer-1 error, and the false deviations are model errors on correct links.
 
 ## Recommendation
 
-**Keep `--requirements` opt-in.** Against the recorded thresholds (B's recall interval above A, unsupported WI ≤ 0.1,
+**Keep `--requirements` opt-in.** (After run 3, still opt-in: the deviation section is now precise but catches no contradiction.) Against the recorded thresholds (B's recall interval above A, unsupported WI ≤ 0.1,
 no injection kept, prompt tokens < 2× A, link precision ≥ 0.9), every condition holds except the first: the gain is
 consistent but not significant on this fixture.
 
 Before considering a default:
 
-- **Make `deviation` stricter.** A deviation sentence should quote the code it contradicts (`[source]` plus the
-  condition), and be dropped otherwise. Or leave deviations out of the pages until they measure better.
+- **Let deviations by absence back in.** Quoted deviations (#183, run 3) removed the false ones but also the true
+  `Refund` catch. Next try: allow a deviation that quotes the statement where the asked-for check is missing (e.g.
+  `return amount;`), then rerun.
 - **Grow the gold set.** More contradiction cases and more constraint groups, so that a +0.15–0.2 gain can be
   told apart from noise. Also mark work items that span several methods (WI-112) as scope, not contradiction.
 - **Revisit the default bound.** It binds rarely, but when it does it drops the oldest work item first. Keep the
