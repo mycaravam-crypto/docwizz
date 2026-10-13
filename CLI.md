@@ -532,6 +532,7 @@ It never judges content: whether a statement is true or a product can be approve
 docwizz requirements import . history.json work-items/                    # gitwizz.history/v2 + ado.requirement-context/v1
 docwizz requirements show . --for Shop.OrderService.Place [--format json] # one symbol's requirements
 docwizz requirements show . --work-item 101                               # one work item's symbols
+docwizz requirements query . query.json                                   # gitwizz's resolver: a PR's changed symbols
 ```
 
 `import` reads what `gitwizz history export` writes (`gitwizz.history/v2`, no adapter), maps every exported commit's
@@ -542,6 +543,22 @@ symbol) or `candidate` (only a confirmed pull request's link, or a mention in a 
 file and lines, and `changedSince` when the symbol changed after that commit. The `outcome` tells `linked`, `no-link` (verified
 none), `unavailable`, `not-in-history` and `not-current` apart. Files only, no network; the same inputs give the same
 bytes. Input shapes and rules: [docs/requirement-context.md](docs/requirement-context.md).
+
+`query` answers gitwizz (`gitwizz context <PR> --system`, `guide`, `evidence`) from the same index: it reads a
+`gitwizz.requirement-query/v1` file and prints `gitwizz.requirement-input/v1` for the requested symbols only. Set it in
+`.gitwizz.yml`:
+
+```yaml
+context:
+  requirements:
+    enabled: true
+    command: docwizz requirements query   # gitwizz appends <repository dir> <query file>
+```
+
+A `confirmed` link is `verified`, everything else `candidate`. A missing index, a truncated or shallow history,
+unknown commit links and linked work items that weren't exported are listed under `unavailable`, so gitwizz reports
+`partial` instead of "no requirements". `analyzedCommit` is where the imported history ends: when it isn't the PR's
+target, gitwizz marks the answer stale. A query it can't read exits 1 with the reason. No network, no AI, no writes.
 
 ## Commands
 
@@ -559,7 +576,7 @@ bytes. Input shapes and rules: [docs/requirement-context.md](docs/requirement-co
 | `mcp` | `docwizz mcp <dir> [--auto-rescan]` | read-only MCP server on stdio: find_symbol, context, callers, impact, check, … | coding agents |
 | `evidence-diff` | `docwizz evidence-diff <dir> <before.yaml> <after.yaml> [--format json]` | explicit evidence changes and affected tests | product documents |
 | `trace` | `docwizz trace <dir> <evidence.yaml> [--format json]` | explicit traceability and missing links | product documents |
-| `requirements` | `docwizz requirements import <dir> <history.json> [<work-items>]`, `docwizz requirements show <dir> (--for <symbol> \| --work-item <id>) [--format json]` | index exported history; one symbol's requirements, or one work item's symbols | coding agents, reviews |
+| `requirements` | `docwizz requirements import <dir> <history.json> [<work-items>]`, `docwizz requirements show <dir> (--for <symbol> \| --work-item <id>) [--format json]`, `docwizz requirements query <dir> <query.json>` | index exported history; one symbol's requirements, or one work item's symbols; gitwizz's requirement query | coding agents, reviews |
 | `product` | `docwizz product [check] <dir> <template.yaml> [out.md] [--context file.yaml] [--ai] [--format f]` | product draft from evidence; `check`: references and freshness | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
@@ -638,7 +655,7 @@ bytes. Input shapes and rules: [docs/requirement-context.md](docs/requirement-co
 | `remediate` | done (suggestions alone never fail) | a `--validate` run failed, or bad arguments |
 | `trace` | report on stdout | invalid/missing YAML; no data written |
 | `evidence-diff` | report on stdout | invalid/missing evidence catalogs; no data written |
-| `requirements` | `import`: index written or unchanged; `show`: answer on stdout (any outcome, `no-link` included) | missing or invalid input, unknown schema, no index, unknown target, bad arguments |
+| `requirements` | `import`: index written or unchanged; `show`: answer on stdout (any outcome, `no-link` included); `query`: answer on stdout (a missing index included) | missing or invalid input, unknown schema, no index (`show`), unknown target, an unreadable query, bad arguments |
 | `product` | draft written or unchanged; `check`: no errors (warnings allowed) | invalid template, unsafe overwrite, bad arguments; `check`: an error finding |
 | `init` | written | `docwizz.yaml` exists |
 | no command | — | prints how to start |
