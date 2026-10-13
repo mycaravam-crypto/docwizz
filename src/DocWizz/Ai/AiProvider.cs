@@ -14,10 +14,11 @@ interface IAiProvider : IDisposable
     string Model { get; }
     Uri Endpoint { get; }
 
-    // One chat completion that should answer with a JSON object: the reply text with any <think> block removed, or null
-    // when it is empty. Throws HttpRequestException when the server can't be used at all (not running, not local, no
-    // such model), so callers can stop instead of failing once per request.
-    Task<string?> Complete(string instructions, string facts);
+    // One chat completion: the reply text with any <think> block removed, or null when it is empty. With `json` the server
+    // is held to a JSON object; without it the prompt alone sets the shape (drafts ask for cited lines, which take a
+    // model about half the tokens). Throws HttpRequestException when the server can't be used at all (not running, not
+    // local, no such model), so callers can stop instead of failing once per request.
+    Task<string?> Complete(string instructions, string facts, bool json = true);
 }
 
 static class AiProviders
@@ -109,22 +110,24 @@ sealed class OllamaProvider(string model, Uri endpoint) : IAiProvider
         return b.Uri;
     }
 
-    public async Task<string?> Complete(string instructions, string facts)
+    public async Task<string?> Complete(string instructions, string facts, bool json = true)
     {
         using var response = await client.PostAsync("api/chat", new StringContent(JsonSerializer.Serialize(new
         {
             model,
             stream = false,
-            format = "json",
+            format = json ? "json" : null,
             options = new { temperature = 0 },
             messages = new[] { new { role = "system", content = instructions }, new { role = "user", content = facts } },
-        }), System.Text.Encoding.UTF8, "application/json"));
+        }, OmitNull), System.Text.Encoding.UTF8, "application/json"));
         if (response.StatusCode == HttpStatusCode.NotFound)
             throw new HttpRequestException($"model {model} not found (ollama pull {model}, or set DOCWIZZ_MODEL)");
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         return AiProviders.Answer(body.GetProperty("message").GetProperty("content").GetString());
     }
+
+    static readonly JsonSerializerOptions OmitNull = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 
     public void Dispose() => client.Dispose();
 }
@@ -166,7 +169,7 @@ sealed class OpenAiCompatibleProvider : IAiProvider
         return new(AiProviders.ModelName(config), new Uri(config.Endpoint!), key);
     }
 
-    public async Task<string?> Complete(string instructions, string facts)
+    public async Task<string?> Complete(string instructions, string facts, bool json = true)
     {
         while (true)
         {
@@ -177,7 +180,7 @@ sealed class OpenAiCompatibleProvider : IAiProvider
                 ["stream"] = false,
                 ["messages"] = new[] { new { role = "system", content = instructions }, new { role = "user", content = facts } },
             };
-            if (jsonMode) request["response_format"] = new { type = "json_object" };
+            if (json && jsonMode) request["response_format"] = new { type = "json_object" };
             HttpResponseMessage response;
             try
             {
@@ -191,7 +194,7 @@ sealed class OpenAiCompatibleProvider : IAiProvider
             }
             using (response)
             {
-                if (response.StatusCode == HttpStatusCode.BadRequest && jsonMode)
+                if (response.StatusCode == HttpStatusCode.BadRequest && json && jsonMode)
                 {
                     jsonMode = false;
                     continue;

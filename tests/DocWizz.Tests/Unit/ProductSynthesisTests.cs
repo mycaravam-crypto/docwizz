@@ -12,7 +12,7 @@ public class ProductSynthesisTests
         public string Name => "fake";
         public string Model => "fake-1";
         public Uri Endpoint => new("http://127.0.0.1/");
-        public Task<string?> Complete(string instructions, string facts)
+        public Task<string?> Complete(string instructions, string facts, bool json = true)
         {
             Sent.Add(facts);
             var section = System.Text.Json.JsonDocument.Parse(facts).RootElement.GetProperty("section").GetString()!;

@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 // Drafts documentation for items that need docs and have no summary, and an overview per module. Deterministic facts go
 // in, sections of cited sentences come out: every sentence names the facts it rests on, and one that cites nothing in the
@@ -16,28 +17,45 @@ static class AiProse
     // on a typical repo these small folders are most of the overview requests. Overviews already cached are still shown.
     const int MinModuleMembers = 3;
 
+    // Drafts are asked for one cited sentence per line, not JSON: the same sentences cost a model about half the tokens,
+    // and generating them is nearly all of the time. The worked example is what makes a 7B model keep the shape and copy
+    // names in full; without it most lines came back unusable (qwen2.5-coder:7b on the fixture).
     const string Instructions = """
         You write reference documentation for a codebase. You get facts about one symbol, produced by static
-        analysis, plus its source. Answer with one JSON object and nothing else:
-        {"summary": [], "responsibilities": [], "behaviour": [], "side_effects": [], "errors": [], "usage": []}
-        Each list holds sentences as {"text": "...", "from": ["..."]}. `from` names the facts the sentence rests on:
-        symbol names exactly as they appear in the facts, or "source" for the symbol's own source code.
+        analysis, plus its source. Answer with plain lines and nothing else, one sentence per line:
+        <section>: <sentence> [<fact>; <fact>]
+        <section> is one of summary, responsibilities, behaviour, side_effects, errors, usage. The brackets name the
+        facts the sentence rests on, separated by semicolons: symbol names exactly as they appear in the facts, a field
+        of the facts, or "source" for the symbol's own source code.
         summary: 1-3 sentences on what it does and when a caller would use it. responsibilities: what it is in
         charge of. behaviour: how it works, step by step where that helps. side_effects: database writes, HTTP
         calls, events. errors: what fails and how. usage: how callers use it.
-        `inferred` facts come from heuristics: state them only when the source confirms them. Leave a list empty
-        when the facts don't support it. Plain sentences: no markdown, don't restate the symbol's name, and don't
+        `inferred` facts come from heuristics: state them only when the source confirms them. Write no line for a
+        section the facts don't support. Plain sentences: no markdown, don't restate the symbol's name, and don't
         guess at anything the facts and source don't support.
+        Example answer, every line in exactly this shape (no lists, no blank lines, no line without brackets):
+        summary: Looks up one order by its id for the order page. [source]
+        behaviour: Loads the order through the repository and returns it unchanged. [Shop.Domain.IOrderRepository.FindAsync(int)]
+        errors: Returns 404 when no order has that id. [source]
+        usage: The order page calls it when it opens. [frontend/src/api/orders.ts#getOrder]
+        Copy names in brackets exactly as the facts write them, in full. A section with nothing to say gets no line at
+        all: never write "None" or "No side effects".
         """;
 
     const string ModuleInstructions = """
         You write the overview of one module (a folder of code) for developers new to it. You get facts from static
-        analysis: its members with their documentation, what it depends on and what depends on it. Answer with one
-        JSON object and nothing else: {"summary": [], "responsibilities": [], "usage": []}
-        Each list holds sentences as {"text": "...", "from": ["..."]}, where `from` names the members or modules
-        the sentence rests on, exactly as they appear in the facts. summary: 1-2 sentences on what the module is for.
-        responsibilities: what it is in charge of. usage: who uses it and how. Leave a list empty when the facts
-        don't support it; don't guess.
+        analysis: its members with their documentation, what it depends on and what depends on it. Answer with plain
+        lines and nothing else, one sentence per line:
+        <section>: <sentence> [<name>; <name>]
+        <section> is one of summary, responsibilities, usage. The brackets name the members or modules the sentence
+        rests on, separated by semicolons, exactly as they appear in the facts. summary: 1-2 sentences on what the
+        module is for. responsibilities: what it is in charge of. usage: who uses it and how. Write no line for a
+        section the facts don't support; don't guess.
+        Example answer, every line in exactly this shape (no lists, no blank lines, no line without brackets):
+        summary: Holds the HTTP endpoints for orders. [Shop.Api.OrderController; Shop.Api.OrderController.Get(int)]
+        responsibilities: Sends order reads to the order service. [Shop.Api.OrderController.Get(int); backend/Application]
+        usage: The frontend's order client calls these endpoints. [frontend/src/api]
+        Copy names in brackets exactly as the facts write them, in full.
         """;
 
     const string AssessInstructions = """
@@ -111,7 +129,7 @@ static class AiProse
             var drafted = await Ask(misses, async t =>
             {
                 var (json, sources, names) = facts.For(t.Node, t.Item);
-                var d = Parse(await ai.Complete(Instructions, json), sources, names) ?? NoDraft;
+                var d = Parse(await ai.Complete(Instructions, json, json: false), sources, names) ?? NoDraft;
                 if (Usable(d) || !result.ContainsKey(t.Node.Id)) Keep(cacheFile, cache, $"{Key(t.Node)}@{tag}", d);
                 return d;
             }, "summaries", t => Label(t.Node), t => $"summary failed for {t.Node.Id}", stop, step);
@@ -125,7 +143,7 @@ static class AiProse
             var overviews = await Ask(moduleMisses, async m =>
             {
                 var (json, sources, names) = facts.ForModule(m.Folder, m.Members, result);
-                var d = Parse(await ai.Complete(ModuleInstructions, json), sources, names) ?? NoDraft;
+                var d = Parse(await ai.Complete(ModuleInstructions, json, json: false), sources, names) ?? NoDraft;
                 Keep(cacheFile, cache, $"{m.Key}@{tag}", d);
                 return d;
             }, "module overviews", m => m.Folder, m => $"overview failed for {m.Folder}", stop, step);
@@ -243,29 +261,45 @@ static class AiProse
         catch (JsonException) { return null; }
     }
 
-    // Sections of cited sentences. `names` maps what the facts call a symbol (and "source") to its id; a sentence keeps
-    // only citations found there and is dropped without one. A reply that isn't the JSON asked for is taken as a summary.
+    // "<section>: <sentence> [<fact>; <fact>]", the line a draft prompt asks for.
+    static readonly Regex Line = new(@"^\s*(\w+)\s*:\s*(.+?)\s*\[([^\[\]]*)\]\s*\.?\s*$");
+    // A sentence that says a section is empty ("None."), which models write despite being told not to.
+    static readonly Regex Nothing = new(@"^(none|n/?a|nothing|no side effects)\.?$", RegexOptions.IgnoreCase);
+
+    // Sections of cited sentences, from the cited lines the prompts ask for or the JSON object older prompts asked for
+    // ({"section": [{"text", "from"}]}). `names` maps what the facts call a symbol (and "source", and the facts' own
+    // fields) to ids; a sentence keeps only citations found there and is dropped without one. A reply in neither shape
+    // is taken as a plain summary.
     static Draft? Parse(string? reply, List<string> sources, Dictionary<string, List<string>> names)
     {
         if (reply is null) return null;
-        JsonElement json;
-        try { json = JsonDocument.Parse(reply).RootElement; }
-        catch (JsonException) { return new Draft(reply, sources, []); } // no sections, not a draft from before sections
-        if (json.ValueKind != JsonValueKind.Object) return new Draft(reply, sources, []);
+        List<(string Section, string Text, IEnumerable<string> Cites)> said;
+        try
+        {
+            var json = JsonDocument.Parse(reply).RootElement;
+            if (json.ValueKind != JsonValueKind.Object) return new Draft(reply, sources, []);
+            said = [.. json.EnumerateObject().Where(p => p.Value.ValueKind == JsonValueKind.Array).SelectMany(p => p.Value.EnumerateArray()
+                .Where(s => s.ValueKind == JsonValueKind.Object)
+                .Select(s => (p.Name,
+                    s.TryGetProperty("text", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString()! : "",
+                    s.TryGetProperty("from", out var f) && f.ValueKind == JsonValueKind.Array
+                        ? f.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!) : [])))];
+        }
+        catch (JsonException)
+        {
+            var lines = reply.Split('\n').Select(l => Line.Match(l)).Where(m => m.Success).ToList();
+            if (lines.Count == 0) return new Draft(reply, sources, []); // no sections, not a draft from before sections
+            said = [.. lines.Select(m => (m.Groups[1].Value.ToLowerInvariant(), m.Groups[2].Value,
+                m.Groups[3].Value.Split(';').Select(c => c.Trim().Trim('"', '`'))))];
+        }
 
         var sections = new Dictionary<string, List<Sentence>>();
-        foreach (var section in json.EnumerateObject().Where(p => p.Value.ValueKind == JsonValueKind.Array))
+        foreach (var (section, raw, cites) in said)
         {
-            var kept = new List<Sentence>();
-            foreach (var s in section.Value.EnumerateArray().Where(s => s.ValueKind == JsonValueKind.Object))
-            {
-                var text = s.TryGetProperty("text", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString()!.Trim() : "";
-                var from = s.TryGetProperty("from", out var f) && f.ValueKind == JsonValueKind.Array
-                    ? f.EnumerateArray().SelectMany(x => x.ValueKind == JsonValueKind.String ? names.GetValueOrDefault(x.GetString()!) ?? [] : []).Distinct().ToList()
-                    : [];
-                if (text.Length > 0 && from.Count > 0) kept.Add(new(text, from));
-            }
-            if (kept.Count > 0) sections[section.Name] = kept;
+            var text = raw.Trim();
+            var from = cites.SelectMany(c => names.GetValueOrDefault(c) ?? []).Distinct().ToList();
+            if (text.Length == 0 || from.Count == 0 || Nothing.IsMatch(text)) continue;
+            (sections.TryGetValue(section, out var kept) ? kept : sections[section] = []).Add(new(text, from));
         }
         if (sections.Count == 0) return null;
         var summary = string.Join(" ", sections.GetValueOrDefault("summary")?.Select(x => x.Text) ?? []);
