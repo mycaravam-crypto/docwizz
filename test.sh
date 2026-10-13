@@ -752,6 +752,11 @@ assert "cs:Fixture.Application.IMaterialService.GetAsync(int)" in i["sections"][
 PY
 rm -rf "$docs"
 
+# Requirement context (#166-#168): the scripted history in bench/requirements_fixture.py against the hand-written
+# gold, and --requirements drafting against a fake model on loopback (cache, hosts, injection, citations).
+section "requirement context benchmark"
+python3 "$root/bench/requirements.py" --dll "$dll" --model fake --modes B --expect >/dev/null
+
 }
 
 group_d() {
