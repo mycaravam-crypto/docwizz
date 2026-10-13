@@ -1,0 +1,1641 @@
+{
+  "schema": "docwizz.requirement-benchmark/v1",
+  "docwizz": "docwizz 0.7.51-dev.1 (commit 88fd34c, .NET 10.0.12, linux-x64)",
+  "model": {
+    "name": "qwen2.5-coder:7b",
+    "provider": "ollama",
+    "endpoint": "http://127.0.0.1:11434",
+    "temperature": 0,
+    "digest": {
+      "digest": "dae161e27b0e90dd1856c8bb3209201fd6736d8eb66298e75ed87571486f4364",
+      "parameter_size": "7.6B",
+      "quantization_level": "Q4_K_M",
+      "format": "gguf"
+    }
+  },
+  "seed": 1,
+  "inputs": {
+    "history": "60c1d75d1e1d0545",
+    "workItems": "9a7b35901ca243ee",
+    "gold": "d8601ad89c92600a",
+    "budget": {
+      "B": "3 items / 1200 chars",
+      "C": "10 items / 20000 chars"
+    }
+  },
+  "links": {
+    "methods": 24,
+    "precision": 0.95,
+    "recall": 0.905,
+    "recallVisible": 1.0,
+    "statusAccuracy": 1.0,
+    "confirmed": {
+      "predicted": 17,
+      "gold": 16,
+      "precision": 0.941,
+      "recall": 1.0
+    },
+    "candidate": {
+      "predicted": 3,
+      "gold": 3,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "outcomeAccuracy": 1.0,
+    "falsePositives": [
+      "Shop.Inventory.StockService.Available WI-111"
+    ],
+    "missed": [
+      "Shop.Customers.CustomerService.Rename WI-110",
+      "Shop.Shipping.ShippingService.Quote WI-109"
+    ],
+    "wrongOutcomes": [],
+    "fileLevelAsserted": [],
+    "reproducible": true,
+    "indexFingerprint": "e17f54e7fb2862a6",
+    "rows": [
+      {
+        "method": "Shop.Orders.OrderService.Place",
+        "outcome": "linked",
+        "expected": "linked",
+        "got": [
+          [
+            101,
+            "confirmed"
+          ]
+        ],
+        "gold": [
+          [
+            101,
+            "confirmed"
+          ]
+        ]
+      },
+      {
+        "method": "Shop.Orders.OrderService.Cancel",
+        "outcome": "linked",
+        "expected": "linked",
+        "got": [
+          [
+            102,
+            "confirmed"
+          ]
+        ],
+        "gold": [
+          [
+            102,
+            "confirmed"
+          ]
+        ]
+      },
+      {
+        "method": "Shop.Orders.OrderService.Refund",
+        "outcome": "linked",
+        "expected": "linked",
+        "got": [
+          [
+            103,
+            "confirmed"
+          ]
+        ],
+        "gold": [
+          [
+            103,
+            "confirmed"
+          ]
+        ]
+      },
+      {
+        "method": "Shop.Orders.OrderService.Total",
+        "outcome": "no-link",
+        "expected": "no-link",
+        "got": [],
+        "gold": []
+      },
+      {
+        "method": "Shop.Orders.OrderService.Ship",
+        "outcome": "linked",
+        "expected": "linked",
+        "got": [
+          [
+            105,
+            "candidate"
+          ]
+        ],
+        "gold": [
+          [
+            105,
+            "candidate"
+          ]
+        ]
+      },
+      {
+        "method": "Shop.Customers.CustomerService.Register",
+        "outcome": "linked",
+        "expected": "linked",
+        "got": [
+          [
+            104,
+            "confirmed"
+          ]
+        ],
+        "gold": [
+          [
+            104,
+            "confirmed"
+          ]
+        ]
+      },
+      {
+        "method": "Shop.Customers.CustomerService.CreditLimit",
+        "outcome": "no-link",
+        "expected": "no-link",
+        "got": [],
+        "gold": []
+      },
+      {
+        "method": "Shop.Customers.CustomerService.Block",
+        "outcome": "no-link",
+        "expected": "no-link",
+        "got": [],
+        "gold": []
+      },
+      {
+        "method": "Shop.Customers.CustomerService.Rename",
+        "outcome": "no-link",
+        "expected": "no-link",
+        "got": [],
+        "gold": [
+          [
+            110,
+            "none"
+          ]
+        ]
+      },
+      {
+        "method": "Shop.Billing.InvoiceService.Issue",
+        "outcome": "linked",
+        "expected": "linked",
+        "got": [
+          [
+            105,
+            "candidate"
+          ]
+        ],
+        "gold": [
+          [
+            105,
+            "candidate"
+          ]
+        ]
+      },
+      {
+        "method": "Shop.Billing.InvoiceService.Pay",
+        "outcome": "no-link",
+        "expected": "no-link",
+        "got": [],
+        "gold": []
+      },
+      {
+        "method": "Shop.Billing.InvoiceService.Overdue",
+        "outcome": "linked",
+        "expected": "linked",
+        "got": [
+          [
+            106,
+            "confirmed"
+          ]
+        ],
+        "gold": [
+          [
+            106,
+            "confirmed"
+          ]
+        ]
+      },
+      {
+        "method": "Shop.Billing.InvoiceService.Remind",
+        "outcome": "linked",
+        "expected": "linked",
+        "got": [
+          [
+            106,
+            "confirmed"
+          ]
+        ],
+        "gold": [
+          [
+            106,
+            "confirmed"
+          ]
+        ]
+      },
+      {
+        "method": "Shop.Inventory.StockService.Reserve",
+        "outcome": "linked",
+        "expected": "linked",
+        "got": [
+          [
+            107,
+            "confirmed"
+          ]
+        ],
+        "gold": [
+          [
+            107,
+            "confirmed"
+          ]
+        ]
+      },
+      {
+        "method": "Shop.Inventory.StockService.Release",
+        "outcome": "linked",
+        "expected": "linked",
+        "got": [
+          [
+            107,
+            "confirmed"
+          ]
+        ],
+        "gold": [
+          [
+            107,
+            "confirmed"
+          ]
+        ]
+      },
+      {
+        "method": "Shop.Inventory.StockService.Restock",
+        "outcome": "linked",
+        "expected": "linked",
+        "got": [
+          [
+            108,
+            "candidate"
+          ]
+        ],
+        "gold": [
+          [
+            108,
+            "candidate"
+          ]
+        ]
+      },
+      {
+        "method": "Shop.Inventory.StockService.Available",
+        "outcome": "linked",
+        "expected": "linked",
+        "got": [
+          [
+            111,
+            "confirmed"
+          ]
+        ],
+        "gold": []
+      },
+      {
+        "method": "Shop.Shipping.ShippingService.Quote",
+        "outcome": "unavailable",
+        "expected": "unavailable",
+        "got": [],
+        "gold": [
+          [
+            109,
+            "none"
+          ]
+        ]
+      },
+      {
+        "method": "Shop.Shipping.ShippingService.Label",
+        "outcome": "no-link",
+        "expected": "no-link",
+        "got": [],
+        "gold": []
+      },
+      {
+        "method": "Shop.Shipping.ShippingService.Track",
+        "outcome": "linked",
+        "expected": "linked",
+        "got": [
+          [
+            111,
+            "confirmed"
+          ]
+        ],
+        "gold": [
+          [
+            111,
+            "confirmed"
+          ]
+        ]
+      },
+      {
+        "method": "Shop.Notifications.Notifier.Email",
+        "outcome": "linked",
+        "expected": "linked",
+        "got": [
+          [
+            112,
+            "confirmed"
+          ]
+        ],
+        "gold": [
+          [
+            112,
+            "confirmed"
+          ]
+        ]
+      },
+      {
+        "method": "Shop.Notifications.Notifier.Sms",
+        "outcome": "linked",
+        "expected": "linked",
+        "got": [
+          [
+            112,
+            "confirmed"
+          ]
+        ],
+        "gold": [
+          [
+            112,
+            "confirmed"
+          ]
+        ]
+      },
+      {
+        "method": "Shop.Pricing.PriceService.Discount",
+        "outcome": "linked",
+        "expected": "linked",
+        "got": [
+          [
+            114,
+            "confirmed"
+          ],
+          [
+            115,
+            "confirmed"
+          ],
+          [
+            116,
+            "confirmed"
+          ],
+          [
+            117,
+            "confirmed"
+          ]
+        ],
+        "gold": [
+          [
+            114,
+            "confirmed"
+          ],
+          [
+            115,
+            "confirmed"
+          ],
+          [
+            116,
+            "confirmed"
+          ],
+          [
+            117,
+            "confirmed"
+          ]
+        ]
+      },
+      {
+        "method": "Shop.Pricing.PriceService.Tax",
+        "outcome": "linked",
+        "expected": "linked",
+        "got": [
+          [
+            118,
+            "confirmed"
+          ]
+        ],
+        "gold": [
+          [
+            118,
+            "confirmed"
+          ]
+        ]
+      },
+      {
+        "method": "cs:Shop.Customers.CustomerService.ChangeName(int, string)",
+        "outcome": "not-current",
+        "expected": "not-current",
+        "got": [
+          [
+            110,
+            "confirmed"
+          ]
+        ],
+        "gold": [
+          [
+            110,
+            "confirmed"
+          ]
+        ]
+      }
+    ]
+  },
+  "drafts": [
+    {
+      "mode": "A",
+      "flags": [],
+      "config": null,
+      "requests": 38,
+      "requestsOnUnchangedRerun": 0,
+      "hosts": [
+        "127.0.0.1"
+      ],
+      "promptFingerprints": [
+        "15fff82bd05f",
+        "cbac9bc1bb89"
+      ],
+      "promptTokens": 22072,
+      "completionTokens": 3287,
+      "requestSeconds": 1190.67,
+      "wallSeconds": 313.35,
+      "businessContextRequests": 0,
+      "constraintRecall": 0.5,
+      "constraintRecallCI": [
+        0.261,
+        0.812
+      ],
+      "stressRecall": 0.167,
+      "boundHit": [],
+      "unsupportedRate": null,
+      "unsupportedRateCI": null,
+      "contradictionsFlagged": "0/2",
+      "falseDeviations": [],
+      "injectionPhrasesKept": 0,
+      "invalidCitations": 0,
+      "sentences": 70,
+      "methods": {
+        "Shop.Orders.OrderService.Place": {
+          "sentences": 4,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Orders.OrderService.Cancel": {
+          "sentences": 3,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Orders.OrderService.Refund": {
+          "sentences": 3,
+          "constraintsFound": 0,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": true,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Orders.OrderService.Total": {
+          "sentences": 3,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Orders.OrderService.Ship": {
+          "sentences": 2,
+          "constraintsFound": 0,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Customers.CustomerService.Register": {
+          "sentences": 3,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Customers.CustomerService.CreditLimit": {
+          "sentences": 4,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Customers.CustomerService.Block": {
+          "sentences": 2,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Customers.CustomerService.Rename": {
+          "sentences": 3,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Billing.InvoiceService.Issue": {
+          "sentences": 2,
+          "constraintsFound": 0,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Billing.InvoiceService.Pay": {
+          "sentences": 3,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Billing.InvoiceService.Overdue": {
+          "sentences": 2,
+          "constraintsFound": 0,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": true,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Billing.InvoiceService.Remind": {
+          "sentences": 2,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Inventory.StockService.Reserve": {
+          "sentences": 3,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Inventory.StockService.Release": {
+          "sentences": 4,
+          "constraintsFound": 0,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Inventory.StockService.Restock": {
+          "sentences": 6,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Inventory.StockService.Available": {
+          "sentences": 4,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Shipping.ShippingService.Quote": {
+          "sentences": 2,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Shipping.ShippingService.Label": {
+          "sentences": 2,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Shipping.ShippingService.Track": {
+          "sentences": 2,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Notifications.Notifier.Email": {
+          "sentences": 3,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Notifications.Notifier.Sms": {
+          "sentences": 3,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Pricing.PriceService.Discount": {
+          "sentences": 3,
+          "constraintsFound": 0,
+          "constraints": 4,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": true,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Pricing.PriceService.Tax": {
+          "sentences": 2,
+          "constraintsFound": 1,
+          "constraints": 2,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": true,
+          "bound": null,
+          "requirementSentences": []
+        }
+      }
+    },
+    {
+      "mode": "B",
+      "flags": [
+        "--requirements"
+      ],
+      "config": null,
+      "requests": 38,
+      "requestsOnUnchangedRerun": 0,
+      "hosts": [
+        "127.0.0.1"
+      ],
+      "promptFingerprints": [
+        "15fff82bd05f",
+        "b7db119f7b01",
+        "cbac9bc1bb89"
+      ],
+      "promptTokens": 32040,
+      "completionTokens": 3737,
+      "requestSeconds": 1349.08,
+      "wallSeconds": 355.76,
+      "businessContextRequests": 18,
+      "constraintRecall": 0.7,
+      "constraintRecallCI": [
+        0.5,
+        0.87
+      ],
+      "stressRecall": 0.667,
+      "boundHit": [
+        "Shop.Pricing.PriceService.Discount",
+        "Shop.Pricing.PriceService.Tax"
+      ],
+      "unsupportedRate": 0.0,
+      "unsupportedRateCI": [
+        0.0,
+        0.0
+      ],
+      "contradictionsFlagged": "0/2",
+      "falseDeviations": [
+        "Shop.Inventory.StockService.Restock",
+        "Shop.Notifications.Notifier.Sms",
+        "Shop.Orders.OrderService.Place",
+        "Shop.Pricing.PriceService.Discount",
+        "Shop.Shipping.ShippingService.Track"
+      ],
+      "injectionPhrasesKept": 0,
+      "invalidCitations": 0,
+      "sentences": 61,
+      "methods": {
+        "Shop.Orders.OrderService.Place": {
+          "sentences": 5,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 2,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": true,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": [
+            "intent: Credit limit on orders [WI-101 confirmed]",
+            "deviation: The source checks if the amount is greater than the credit limit (`amount > customers.CreditLimit(customerId)`), not if it is above the credit limit. [WI-101 confirmed]"
+          ]
+        },
+        "Shop.Orders.OrderService.Cancel": {
+          "sentences": 3,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Orders.OrderService.Refund": {
+          "sentences": 4,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 1,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": true,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": [
+            "intent: A refund may not exceed the order total. [WI-103 confirmed]"
+          ]
+        },
+        "Shop.Orders.OrderService.Total": {
+          "sentences": 0,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Orders.OrderService.Ship": {
+          "sentences": 2,
+          "constraintsFound": 0,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Customers.CustomerService.Register": {
+          "sentences": 3,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Customers.CustomerService.CreditLimit": {
+          "sentences": 0,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Customers.CustomerService.Block": {
+          "sentences": 0,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Customers.CustomerService.Rename": {
+          "sentences": 0,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Billing.InvoiceService.Issue": {
+          "sentences": 3,
+          "constraintsFound": 0,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Billing.InvoiceService.Pay": {
+          "sentences": 0,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Billing.InvoiceService.Overdue": {
+          "sentences": 2,
+          "constraintsFound": 0,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": true,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Billing.InvoiceService.Remind": {
+          "sentences": 2,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 1,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": [
+            "intent: An invoice is overdue 14 days after its due date. [WI-106 confirmed]"
+          ]
+        },
+        "Shop.Inventory.StockService.Reserve": {
+          "sentences": 4,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 1,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": [
+            "intent: Reserving more than is available fails. [WI-107 confirmed]"
+          ]
+        },
+        "Shop.Inventory.StockService.Release": {
+          "sentences": 3,
+          "constraintsFound": 0,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Inventory.StockService.Restock": {
+          "sentences": 4,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 2,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": true,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": [
+            "intent: Restocks under 10 units are ignored. [WI-108 candidate]",
+            "deviation: The source ignores quantities less than 10 (`quantity < 10`), not just restocks. [WI-108 candidate]"
+          ]
+        },
+        "Shop.Inventory.StockService.Available": {
+          "sentences": 3,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Shipping.ShippingService.Quote": {
+          "sentences": 0,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Shipping.ShippingService.Label": {
+          "sentences": 0,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Shipping.ShippingService.Track": {
+          "sentences": 4,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 2,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": true,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": [
+            "intent: Codes starting with TRK- are in transit. [WI-111 confirmed]",
+            "deviation: The source checks if the code starts with \"TRK-\" (`code.StartsWith(\"TRK-\")`), not if it starts with any tracking code. [WI-111 confirmed]"
+          ]
+        },
+        "Shop.Notifications.Notifier.Email": {
+          "sentences": 5,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 1,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": [
+            "intent: Emails are cut to 500 characters. [WI-112 confirmed]"
+          ]
+        },
+        "Shop.Notifications.Notifier.Sms": {
+          "sentences": 6,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 2,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": true,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": [
+            "intent: SMS texts are cut to 160 characters. [WI-112 confirmed]",
+            "deviation: The source truncates the text to 160 characters (`text.Length > 160`), not 500. [WI-112 confirmed]"
+          ]
+        },
+        "Shop.Pricing.PriceService.Discount": {
+          "sentences": 6,
+          "constraintsFound": 3,
+          "constraints": 4,
+          "wiSentences": 5,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": true,
+          "injection": 0,
+          "stress": true,
+          "bound": {
+            "leftOut": 1,
+            "criteriaCut": false
+          },
+          "requirementSentences": [
+            "intent: Discounts are capped at 50%. [WI-117 confirmed]",
+            "intent: The coupon code SAVE20 takes 20% off. [WI-116 confirmed, code changed since]",
+            "intent: Orders of 100 units or more get a bulk discount of 10%. [WI-115 confirmed, code changed since]",
+            "deviation: The source caps the discount at 50% (`rate = System.Math.Min(rate, 0.5m)`), not 50. [WI-117 confirmed]",
+            "deviation: The source applies a 10% discount for orders of 100 units or more (`if (quantity >= 100) rate += 0.10m`), not 10%. [WI-115 confirmed, code changed since]"
+          ]
+        },
+        "Shop.Pricing.PriceService.Tax": {
+          "sentences": 2,
+          "constraintsFound": 1,
+          "constraints": 2,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": true,
+          "bound": {
+            "leftOut": 0,
+            "criteriaCut": true
+          },
+          "requirementSentences": []
+        }
+      }
+    },
+    {
+      "mode": "C",
+      "flags": [
+        "--requirements"
+      ],
+      "config": {
+        "max": 10,
+        "budget": 20000
+      },
+      "requests": 38,
+      "requestsOnUnchangedRerun": 0,
+      "hosts": [
+        "127.0.0.1"
+      ],
+      "promptFingerprints": [
+        "15fff82bd05f",
+        "b7db119f7b01",
+        "cbac9bc1bb89"
+      ],
+      "promptTokens": 32231,
+      "completionTokens": 3486,
+      "requestSeconds": 1210.57,
+      "wallSeconds": 324.09,
+      "businessContextRequests": 18,
+      "constraintRecall": 0.7,
+      "constraintRecallCI": [
+        0.444,
+        0.917
+      ],
+      "stressRecall": 0.667,
+      "boundHit": [],
+      "unsupportedRate": 0.0,
+      "unsupportedRateCI": [
+        0.0,
+        0.0
+      ],
+      "contradictionsFlagged": "0/2",
+      "falseDeviations": [
+        "Shop.Notifications.Notifier.Sms",
+        "Shop.Orders.OrderService.Place",
+        "Shop.Shipping.ShippingService.Track"
+      ],
+      "injectionPhrasesKept": 0,
+      "invalidCitations": 0,
+      "sentences": 58,
+      "methods": {
+        "Shop.Orders.OrderService.Place": {
+          "sentences": 5,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 2,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": true,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": [
+            "intent: Credit limit on orders [WI-101 confirmed]",
+            "deviation: The source checks if the amount is greater than the credit limit (`amount > customers.CreditLimit(customerId)`), not if it is above the credit limit. [WI-101 confirmed]"
+          ]
+        },
+        "Shop.Orders.OrderService.Cancel": {
+          "sentences": 3,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Orders.OrderService.Refund": {
+          "sentences": 4,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 1,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": true,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": [
+            "intent: A refund may not exceed the order total. [WI-103 confirmed]"
+          ]
+        },
+        "Shop.Orders.OrderService.Total": {
+          "sentences": 0,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Orders.OrderService.Ship": {
+          "sentences": 2,
+          "constraintsFound": 0,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Customers.CustomerService.Register": {
+          "sentences": 3,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Customers.CustomerService.CreditLimit": {
+          "sentences": 0,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Customers.CustomerService.Block": {
+          "sentences": 0,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Customers.CustomerService.Rename": {
+          "sentences": 0,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Billing.InvoiceService.Issue": {
+          "sentences": 3,
+          "constraintsFound": 0,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Billing.InvoiceService.Pay": {
+          "sentences": 0,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Billing.InvoiceService.Overdue": {
+          "sentences": 2,
+          "constraintsFound": 0,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": true,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Billing.InvoiceService.Remind": {
+          "sentences": 2,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 1,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": [
+            "intent: An invoice is overdue 14 days after its due date. [WI-106 confirmed]"
+          ]
+        },
+        "Shop.Inventory.StockService.Reserve": {
+          "sentences": 4,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 1,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": [
+            "intent: Reserving more than is available fails. [WI-107 confirmed]"
+          ]
+        },
+        "Shop.Inventory.StockService.Release": {
+          "sentences": 3,
+          "constraintsFound": 0,
+          "constraints": 1,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Inventory.StockService.Restock": {
+          "sentences": 4,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 1,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": [
+            "intent: Restocks under 10 units are ignored. [WI-108 candidate]"
+          ]
+        },
+        "Shop.Inventory.StockService.Available": {
+          "sentences": 3,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Shipping.ShippingService.Quote": {
+          "sentences": 0,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Shipping.ShippingService.Label": {
+          "sentences": 0,
+          "constraintsFound": 0,
+          "constraints": 0,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Shipping.ShippingService.Track": {
+          "sentences": 4,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 2,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": true,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": [
+            "intent: Codes starting with TRK- are in transit. [WI-111 confirmed]",
+            "deviation: The source checks if the code starts with \"TRK-\" (`code.StartsWith(\"TRK-\")`), not if it starts with any tracking code. [WI-111 confirmed]"
+          ]
+        },
+        "Shop.Notifications.Notifier.Email": {
+          "sentences": 5,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 1,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": [
+            "intent: Emails are cut to 500 characters. [WI-112 confirmed]"
+          ]
+        },
+        "Shop.Notifications.Notifier.Sms": {
+          "sentences": 5,
+          "constraintsFound": 1,
+          "constraints": 1,
+          "wiSentences": 2,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": true,
+          "injection": 0,
+          "stress": false,
+          "bound": null,
+          "requirementSentences": [
+            "intent: SMS texts are cut to 160 characters. [WI-112 confirmed]",
+            "deviation: The source truncates the text to 160 characters (`text.Length > 160`), not 500. [WI-112 confirmed]"
+          ]
+        },
+        "Shop.Pricing.PriceService.Discount": {
+          "sentences": 3,
+          "constraintsFound": 4,
+          "constraints": 4,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": true,
+          "bound": null,
+          "requirementSentences": []
+        },
+        "Shop.Pricing.PriceService.Tax": {
+          "sentences": 3,
+          "constraintsFound": 0,
+          "constraints": 2,
+          "wiSentences": 0,
+          "unsupported": 0,
+          "invalidCitations": 0,
+          "contradiction": false,
+          "deviation": false,
+          "injection": 0,
+          "stress": true,
+          "bound": null,
+          "requirementSentences": []
+        }
+      }
+    }
+  ],
+  "recommendation": [
+    "Links: precision 0.95, recall 0.905 (1.0 of what the evidence shows); candidate precision 1.0.",
+    "Keep opt-in: no significant gain (recall 0.5 \u2192 0.7, B's 95% CI [0.5, 0.87] does not clear A), though safe (unsupported 0.0, injection phrases kept 0)."
+  ]
+}

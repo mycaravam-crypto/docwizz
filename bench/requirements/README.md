@@ -202,7 +202,29 @@ that goes ahead without it; a requirement about work other code does is no devia
   "someone should check X". Retrying needs either a stronger model, or a deterministic hint in the facts (e.g. the
   criterion's terms, such as "order total", that the source never mentions) instead of a prompt rule.
 
-Limits: one synthetic fixture, one 7B model, four runs, phrase matching for recall (a paraphrase that misses every
+#### Run 5: a deterministic `notInSource` hint (not adopted)
+
+Same settings. Each requirement in the facts got `notInSource`: the words and numbers of its criteria that the
+symbol's source never uses (camelCase split, number words as digits, a shared five-letter prefix counts as used). For
+`Refund` that is `exceed, total, ignored`; for `Overdue`, `invoice, 14, date`. The prompt said a check named there
+that the source goes ahead without is a deviation. Report: [`results/…run5-not-in-source.md`](results/2026-10-14-qwen2.5-coder-7b-run5-not-in-source.md).
+
+| Mode | Constraint recall (95% CI) | Unsupported WI | Injection kept | Contradictions flagged | False deviations |
+|---|---|---|---|---|---|
+| A | 0.50 [0.26, 0.81] | n/a | 0 | 0/2 | 0 |
+| B | 0.70 [0.50, 0.87] | 0.0 | 0 | 0/2 | **5** (run 3: 0) |
+| C | 0.70 [0.44, 0.92] | 0.0 | 0 | 0/2 | **3** (run 3: 1) |
+
+- **Both contradictions were still missed.** `Refund` got its intent only, again. `Overdue` got nothing, even with `14`
+  in the hint.
+- **The hint made the model hunt for differences.** `Sms` "160 characters, not 500" (500 is the email half of WI-112);
+  `Discount` "50%, not 50" and "10% … not 10%"; `Place` "greater than … not above"; `Track` "TRK- … not any tracking
+  code"; `Restock` "not just restocks". Each quotes real code, so the quote check keeps them all.
+- **Decision: reverted**, with the helper deleted. With this model, more hints mean more false deviations and no extra
+  catches. Deviations by absence stay out of reach for prompt and facts changes. The next lever is a stronger model,
+  or a check outside the model.
+
+Limits: one synthetic fixture, one 7B model, five runs, phrase matching for recall (a paraphrase that misses every
 listed phrase counts as missed). Link errors (layer 1) and model errors (layer 2) are reported separately: the
 `Available` false link is a layer-1 error, and the false deviations are model errors on correct links.
 
@@ -214,10 +236,10 @@ consistent but not significant on this fixture.
 
 Before considering a default:
 
-- **Deviations by absence: not with a prompt rule.** Quoted deviations (#183, run 3) removed the false ones but also
-  the true `Refund` catch. Run 4 allowed absence deviations in the prompt: `Refund` was still missed, and the pattern
-  produced a scope false positive (`Issue`). Next try, if any: a deterministic hint in the facts (criterion terms the
-  source never mentions), or a stronger local model.
+- **Deviations by absence: not with this model.** Quoted deviations (#183, run 3) removed the false ones but also
+  the true `Refund` catch. Run 4 (a prompt rule) and run 5 (a `notInSource` hint in the facts) both still missed
+  `Refund` and `Overdue`, and both added false deviations (run 5: 5 in B). Don't retry with qwen2.5-coder:7b. Try a
+  stronger local model first, with run 3's prompt unchanged.
 - **Grow the gold set.** More contradiction cases and more constraint groups, so that a +0.15–0.2 gain can be
   told apart from noise. Also mark work items that span several methods (WI-112) as scope, not contradiction.
 - **Revisit the default bound.** It binds rarely, but when it does it drops the oldest work item first. Keep the
