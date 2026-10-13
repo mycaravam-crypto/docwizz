@@ -109,6 +109,7 @@ public class AiProviderTests
         Assert.Equal("json", request.GetProperty("format").GetString());
         Assert.False(request.GetProperty("stream").GetBoolean());
         Assert.Equal(0, request.GetProperty("options").GetProperty("temperature").GetInt32());
+        Assert.Equal(16384, request.GetProperty("options").GetProperty("num_ctx").GetInt32());   // not Ollama's cutting default
         Assert.Equal("system", request.GetProperty("messages")[0].GetProperty("role").GetString());
     }
 

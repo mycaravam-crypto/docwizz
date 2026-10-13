@@ -77,6 +77,10 @@ static class LocalEndpoint
 sealed class OllamaProvider(string model, Uri endpoint) : IAiProvider
 {
     public const string DefaultModel = "qwen2.5-coder:7b";
+    // Ollama's default context (often 4096 tokens) silently cuts longer prompts from the front, system prompt first.
+    // One fixed size, so requests never make the server reload the model with another context.
+    // ponytail: fixed 16k; make it ai.context when a model or GPU needs another size.
+    public const int ContextTokens = 16384;
 
     readonly HttpClient client = LocalEndpoint.Client(endpoint, "Ollama");
 
@@ -117,7 +121,7 @@ sealed class OllamaProvider(string model, Uri endpoint) : IAiProvider
             model,
             stream = false,
             format = json ? "json" : null,
-            options = new { temperature = 0 },
+            options = new { temperature = 0, num_ctx = ContextTokens },
             messages = new[] { new { role = "system", content = instructions }, new { role = "user", content = facts } },
         }, OmitNull), System.Text.Encoding.UTF8, "application/json"));
         if (response.StatusCode == HttpStatusCode.NotFound)
