@@ -58,7 +58,7 @@ public class DomainCrawlerTests
         var model = Graph();
         var report = DomainCrawler.Discover(model, Endpoint, null, 3, 100);
         Assert.Equal("docwizz.domain-discovery/v1", report.Schema);
-        Assert.Equal([Endpoint, Service, Entity, Interface, "cs:Shop.Infrastructure.Db.Write()"],
+        Assert.Equal([Endpoint, Service, Interface, Entity, "cs:Shop.Infrastructure.Db.Write()"],
             report.Symbols.Select(s => s.Id).ToArray());
         Assert.Equal([0, 1, 2, 2, 3], report.Symbols.Select(s => s.Depth).ToArray());
         Assert.DoesNotContain(report.Symbols, s => s.Id.Contains("Reporting"));
