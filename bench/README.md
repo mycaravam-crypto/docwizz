@@ -132,3 +132,14 @@ and `DOCWIZZ_MCP_COMMAND` holds the command line of the MCP server for harness c
 A real run takes an hour or more on a local model, so it is never part of CI. The two self-tests take about two
 minutes and run weekly with the other benchmarks ([bench.yml](../.github/workflows/bench.yml)): they prove that every
 task is solvable and that no check passes by accident.
+
+## Requirement context
+
+```console
+$ python3 bench/requirements.py                      # links against gold: no model needed
+$ python3 bench/requirements.py --model fake --expect  # + the drafting pipeline against a fake model (test.sh runs this)
+$ python3 bench/requirements.py --model qwen2.5-coder:7b --endpoint http://127.0.0.1:11434 --modes A,B,C --out r.json --report r.md
+```
+
+Measures whether historical business context (`docwizz requirements`, `--requirements`) improves what a local model
+writes, rather than assuming it. Method, ground truth and the current numbers: [requirements/README.md](requirements/README.md).

@@ -29,8 +29,11 @@ jobs:
           npm ci --prefix scanner-vue --silent
           python3 bench/agents.py --agent reference --variants none --expect all --out "$RUNNER_TEMP/agents-reference.json"
           python3 bench/agents.py --agent noop --variants none --expect none --out "$RUNNER_TEMP/agents-noop.json"
+      - name: Requirement context benchmark (links against gold; drafting pipeline against a fake local model)
+        shell: bash
+        run: python3 bench/requirements.py --model fake --modes A,B,C --expect --out "$RUNNER_TEMP/requirements.json" --report "$RUNNER_TEMP/requirements.md"
       - name: Summary
         if: always()
         shell: bash
         run: |
-          { echo "### DocWizz benchmarks"; echo; cat "$RUNNER_TEMP/bench.md" 2>/dev/null; echo; echo '```json'; cat "$RUNNER_TEMP/bench.json" 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo "### DocWizz benchmarks"; echo; cat "$RUNNER_TEMP/bench.md" 2>/dev/null; echo; cat "$RUNNER_TEMP/requirements.md" 2>/dev/null; echo; echo '```json'; cat "$RUNNER_TEMP/bench.json" 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

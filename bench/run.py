@@ -5,6 +5,7 @@
     python3 bench/run.py --sizes small,medium,large --compare bench/baseline.json
     python3 bench/run.py --sizes small --out /tmp/r.json
     python3 bench/run.py agents --agent reference      # coding agents with and without docwizz (bench/agents.py)
+    python3 bench/run.py requirements --model fake     # requirement context: links and drafts (bench/requirements.py)
 
 Per size and command it records wall time, peak memory (the whole process tree, Node scanner included), the stage
 timings `--timings` prints, and the model's node/edge counts. `--compare` fails (exit 1) only on a *major* regression:
@@ -112,6 +113,10 @@ def main():
         sys.path.insert(0, HERE)
         import agents
         return agents.main(sys.argv[2:])
+    if sys.argv[1:2] == ["requirements"]:   # requirement context benchmark: bench/requirements.py
+        sys.path.insert(0, HERE)
+        import requirements
+        return requirements.main(sys.argv[2:])
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sizes", default="small,medium")
     ap.add_argument("--out", default=os.path.join(HERE, "results.json"))
