@@ -87,9 +87,9 @@ The crawler only writes to stdout. Use shell redirection to save a report.
 1. Separate versioned `DomainArchitectureModel`: confirmed vs inferred domain capabilities,
    business rules, actors and process steps; stable human review/confirmation.
 2. Bidirectional code/history enrichment with incremental fingerprints.
-3. As-is vs historically intended vs possible deviations; Mermaid domain/process views, sourced
-   architecture Markdown and optional local-only LLM wording.
-4. Ground-truth benchmark for semantic accuracy, evidence validity, false positives, traversal
-   efficiency and reviewer corrections.
+3. Mermaid domain/process views and optional local-only LLM wording over the cited facts (As-is /
+   As-intended / Unclear Markdown exists: `--format md`).
+4. Domain-level gold labels for semantic accuracy and reviewer corrections (the traversal benchmark exists:
+   [bench/domain/README.md](../bench/domain/README.md)).
 
 See the parent implementation task in [GitHub issue #177](https://github.com/mycaravam-crypto/docwizz/issues/177).
