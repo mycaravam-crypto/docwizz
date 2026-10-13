@@ -106,8 +106,8 @@ static class DomainCrawler
         var visited = new Dictionary<string, int>(StringComparer.Ordinal);
         var queue = new Queue<string>();
         var truncated = false;
-        foreach (var id in starts)
-            if (visited.Count < maxNodes) { visited.Add(id, 0); queue.Enqueue(id); }
+        foreach (var startId in starts)
+            if (visited.Count < maxNodes) { visited.Add(startId, 0); queue.Enqueue(startId); }
             else truncated = true;
 
         while (queue.Count > 0)
