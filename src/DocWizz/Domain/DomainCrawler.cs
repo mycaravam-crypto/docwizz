@@ -116,28 +116,28 @@ static class DomainCrawler
         var outgoing = allowed.ToLookup(e => e.From);
         var implementations = allowed.Where(e => e.Kind == "implements").ToLookup(e => e.To);
 
+        // Best-first instead of plain BFS: behaviour paths (calls, injects, accesses, http, persists…) are admitted
+        // before data construction, so the node budget reaches services and storage before DTOs. A node reached
+        // through a deferred edge stays deferred, as does everything behind it. Ties: depth, then ordinal id.
         var visited = new Dictionary<string, int>(StringComparer.Ordinal);
-        var queue = new Queue<string>();
-        var truncated = false;
-        foreach (var startId in starts)
-            if (visited.Count < maxNodes) { visited.Add(startId, 0); queue.Enqueue(startId); }
-            else truncated = true;
+        var frontier = new PriorityQueue<string, (int Tier, int Depth, string Id)>(Comparer<(int Tier, int Depth, string Id)>.Create(
+            (a, b) => a.Tier != b.Tier ? a.Tier.CompareTo(b.Tier)
+                : a.Depth != b.Depth ? a.Depth.CompareTo(b.Depth)
+                : string.CompareOrdinal(a.Id, b.Id)));
+        foreach (var startId in starts) frontier.Enqueue(startId, (0, 0, startId));
 
-        while (queue.Count > 0)
+        var truncated = false;
+        while (frontier.TryDequeue(out var current, out var at))
         {
-            var current = queue.Dequeue();
-            var level = visited[current];
-            if (level >= maxDepth) continue;
-            var following = outgoing[current].Select(e => e.To)
-                .Concat(implementations[current].Select(e => e.From))
-                .Distinct().Order(StringComparer.Ordinal);
-            foreach (var next in following)
-            {
-                if (visited.ContainsKey(next)) continue;
-                if (visited.Count >= maxNodes) { truncated = true; continue; }
-                visited.Add(next, level + 1);
-                queue.Enqueue(next);
-            }
+            if (visited.ContainsKey(current)) continue;
+            if (visited.Count >= maxNodes) { truncated = true; break; }
+            visited.Add(current, at.Depth);
+            if (at.Depth >= maxDepth) continue;
+            var following = outgoing[current].Select(e => (e.To, Deferred: Deferred(e, nodes[e.To])))
+                .Concat(implementations[current].Select(e => (To: e.From, Deferred: false)));
+            foreach (var (next, deferred) in following)
+                if (!visited.ContainsKey(next))
+                    frontier.Enqueue(next, (deferred ? 1 : at.Tier, at.Depth + 1, next));
         }
         if (truncated) warnings.Add($"node limit {maxNodes} reached: this is only a partial traversal");
 
@@ -192,6 +192,8 @@ static class DomainCrawler
             new(indexStatus, index?.Fingerprint, coversHead), maxDepth, maxNodes, truncated, symbols, relations,
             requirements, concepts, [.. warnings.Distinct()]);
     }
+
+    static bool Deferred(Edge e, Node to) => e.Kind == "creates" || to.Kind is "record" or "struct" or "enum";
 
     static bool SameCommit(string a, string b) =>
         a.StartsWith(b, StringComparison.OrdinalIgnoreCase) || b.StartsWith(a, StringComparison.OrdinalIgnoreCase);
