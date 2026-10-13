@@ -1,0 +1,81 @@
+# Domain discovery: recursive, evidence-led architecture exploration (MVP)
+
+The **read-only domain crawler** starts at one code symbol / endpoint, or at one imported Azure DevOps work
+item, and walks the selected, directed relationships in DocWizz's existing code model. It optionally
+attaches requirements from the local historical index. The crawler **does not infer** business
+capabilities or DDD bounded contexts from method names; it exposes candidate terms and the evidence
+required for human review.
+
+## Quick start
+
+From the application checkout, with installed GitWizz, ado-devops and DocWizz:
+
+```bash
+# The history range must cover the period you want to understand.
+gitwizz history export --since v1.0.0 --provider azure-devops --commit-lookups 300 -o history.json
+
+# Export the work items referenced in the history (one file per ID).
+mkdir -p work-items
+ado workitem context 4711 > work-items/4711.json
+
+# Native gitwizz.history/v2 import; no conversion adapter.
+docwizz requirements import . history.json work-items/
+
+# Bottom-up from an API entry point or a named class/method:
+docwizz domain discover . --seed "POST /api/orders" --depth 4 --limit 150 --format json
+
+# Top-down from one historic requirement:
+docwizz domain discover . --work-item 4711 --depth 3 --limit 100 --format json
+
+# Readable console output, still no AI or network:
+docwizz domain discover . --seed "Shop.OrderService.Place" --depth 3
+```
+
+When no requirements index exists, **code-seeded discovery works** but returns
+`requirementsIndex.status = unavailable`; work-item seeding requires an imported index.
+All queries are offline; only the separate GitWizz/ADO export commands contact Azure DevOps.
+The crawler only writes to stdout. Use shell redirection to save a report.
+
+## Discovery semantics
+
+- Uses a BFS with deterministic ordering, cycle detection, max depth 0–8 (default 3)
+  and 1–500 reached nodes (default 100). No arbitrary reverse caller walk.
+- Traverses code-model calls, injections, accesses, creation, interface implementations,
+  registrations, inheritance, persistence, events, HTTP, rendering, routes and external
+  systems. Type-to-member `contains` edges are traversed **only** from container types.
+- For interface implementations, can follow an `implements` edge backwards to reach a
+  concrete implementation; **the exported edge still preserves its original direction**.
+- File locations and evidence come from the existing scanner, never guessed by the model.
+  Unresolved calls, runtime reflection and dynamically loaded implementations may be absent.
+- Work-item seeding uses `RequirementResolver.Symbols` to find **current** related code symbols.
+  When none remain, the report explains that; deleted/renamed historical symbols are not invented
+  as current implementation sites.
+- Per reached code symbol, `RequirementResolver.For` attaches directly linked commit
+  requirements as `confirmed` and PR-only / message-mention links as `candidate`.
+  Maximum 10 linked work items per symbol and three criteria per item (further details remain in
+  `docwizz requirements show`). History freshness and partial linkages are warnings.
+- `candidateTerms[]` contains only **historical Work Item titles** and their associated
+  current code symbols. The classification is explicitly `historical-requirement-title`:
+  titles are *not* automatically validated capabilities or bounded contexts.
+- The output is stably ordered JSON (`docwizz.domain-discovery/v1`), or a human-readable
+  console summary. The same code model, history index, seed, commit and bounds produce the same output.
+
+## What it does not claim
+
+- A method changed under a linked work item does **not** necessarily implement the requirement.
+- Adjacent methods and the current implementation can contradict historical business intent.
+- A candidate term is not a confirmed business capability, business rule or bounded context.
+- `--depth` is a maximum graph hop distance, not a count of LLM reasoning iterations.
+- There are no automatic DevOps calls, no AI prompts, no edits and no architectural compliance claims.
+
+## Next iterations
+
+1. Separate versioned `DomainArchitectureModel`: confirmed vs inferred domain capabilities,
+   business rules, actors and process steps; stable human review/confirmation.
+2. Bidirectional code/history enrichment with incremental fingerprints and controlled frontier priority.
+3. As-is vs historically intended vs possible deviations; Mermaid domain/process views, sourced
+   architecture Markdown and optional local-only LLM wording.
+4. Ground-truth benchmark for semantic accuracy, evidence validity, false positives, traversal
+   efficiency and reviewer corrections.
+
+See the parent implementation task in [GitHub issue #177](https://github.com/mycaravam-crypto/docwizz/issues/177).

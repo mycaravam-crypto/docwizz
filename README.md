@@ -292,6 +292,22 @@ test there; this executes repository code. Status is `unvalidated`, `validated`,
 `not-actionable`. Without `--package`, it proposes `remediation.targets` and aligns NuGet versions that differ across
 projects.
 
+### Recursive domain discovery (MVP)
+
+The new read-only `docwizz domain discover` command explores code dependencies from one method,
+type, endpoint or previously imported work item. Its versioned JSON contains traversed symbols,
+technical relations, historical Work Item links and their provenance. It **does not** claim that
+Work Item titles define confirmed domain boundaries.
+
+```bash
+docwizz domain discover . --seed "POST /api/orders" --depth 3 --limit 100 --format json
+docwizz domain discover . --work-item 4711 --depth 3 --limit 100 --format json
+```
+
+The second form requires `docwizz requirements import`. Without an index, the first form still
+works with technical evidence only. Both are offline; no LLM and no repository changes.
+See [domain discovery](docs/domain-discovery.md) for the evidence contract and limitations.
+
 ### Requirements and traceability
 
 For projects that keep requirements as YAML evidence:
@@ -487,6 +503,7 @@ them (`UseNpgsql`, `fetch('https://…')`), *inferred* when only a package point
 | `docwizz diff <dir> [ref]`, `docwizz diff [dir] <base> <head>` | changed symbols, affected pages, linked tests |
 | `docwizz check <dir> [--since <ref>]` | quality gate; exit 1 on failure |
 | `docwizz context <dir> --for <target>` | token-budgeted facts for coding agents |
+| `docwizz domain discover <dir> --seed <symbol>` | bounded, read-only code and requirement graph traversal |
 | `docwizz mcp <dir>` | read-only MCP server for coding agents |
 | `docwizz sbom [dir] [out]` | CycloneDX 1.6 from direct manifest dependencies |
 | `docwizz remediate <dir>` | package update suggestions, optionally validated |

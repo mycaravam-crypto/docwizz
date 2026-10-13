@@ -44,6 +44,13 @@ static async Task<int> Dispatch(string[] args)
         requirementsAction = pos[1];
         pos.RemoveAt(1);
     }
+    // Subcommand before repository dir: docwizz domain discover <dir> ...
+    if (cmd == "domain")
+    {
+        if (pos.ElementAtOrDefault(1) != "discover")
+            return Usage("domain needs discover: docwizz domain discover <dir> --seed <symbol|endpoint>", "domain");
+        pos.RemoveAt(1);
+    }
     var path = pos.ElementAtOrDefault(1) ?? ".";
     var json = opts.GetValueOrDefault("format") == "json";
 
@@ -87,6 +94,8 @@ static async Task<int> Dispatch(string[] args)
             return 0;
         case "context":
             return ContextCommand(path, config, opts);
+        case "domain":
+            return DomainCommand(path, config, opts, json);
         case "mcp":
             return await McpCommand(path, config, opts.ContainsKey("auto-rescan"));
         case "evidence-diff":
@@ -165,6 +174,45 @@ static int EvidenceDiffCommand(string root, string? before, string? after, bool 
     }
     catch (ArgumentException ex) { Console.Error.WriteLine(ex.Message); return 1; }
     catch (IOException ex) { Console.Error.WriteLine(ex.Message); return 1; }
+}
+
+// First iteration of domain discovery: offline graph traversal with opt-in historical requirement evidence.
+// No model requests, Azure DevOps calls, Git changes or generated files.
+static int DomainCommand(string root, Config config, Dictionary<string, string> opts, bool json)
+{
+    var seed = opts.GetValueOrDefault("seed");
+    var workItem = opts.GetValueOrDefault("work-item");
+    if ((seed is null) == (workItem is null))
+        return Usage("domain discover needs exactly one of --seed <symbol|endpoint> or --work-item <id>", "domain");
+    if (!int.TryParse(opts.GetValueOrDefault("depth") ?? $"{DomainCrawler.DefaultDepth}", out var depth)
+        || depth is < 0 or > DomainCrawler.MaxDepth)
+        return Usage($"--depth must be 0 to {DomainCrawler.MaxDepth}", "domain");
+    if (!int.TryParse(opts.GetValueOrDefault("limit") ?? $"{DomainCrawler.DefaultLimit}", out var limit)
+        || limit is < 1 or > DomainCrawler.MaxLimit)
+        return Usage($"--limit must be 1 to {DomainCrawler.MaxLimit}", "domain");
+    int? workItemId = null;
+    if (workItem is not null)
+    {
+        if (!int.TryParse(workItem.TrimStart('#').Replace("WI-", "", StringComparison.OrdinalIgnoreCase), out var id)
+            || id <= 0)
+            return Usage("--work-item must be a positive work item number", "domain");
+        workItemId = id;
+    }
+
+    try
+    {
+        var file = Path.Combine(root, RequirementIndex.DefaultFile);
+        var index = File.Exists(file) ? RequirementIndex.Load(file) : null;
+        var (model, _, _) = LoadModel(root, config);
+        var report = DomainCrawler.Discover(model, seed, workItemId, depth, limit, index,
+            Git(root, "rev-parse HEAD")?.Trim());
+        if (index is not null && index.Inputs.Scope != ProjectScope.Fingerprint(config.Scope))
+            report = report with { Warnings = [.. report.Warnings, "the imported requirement scope differs from the current project scope; reimport requirements"] };
+        Console.Write(json ? DomainCrawler.Json(report) : DomainCrawler.Text(report));
+        return 0;
+    }
+    catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
+    catch (IOException e) { Console.Error.WriteLine(e.Message); return 1; }
 }
 
 // P2 traceability uses only explicit YAML links. No scan, inference or network calls.
@@ -566,6 +614,9 @@ static string Reference() => $"""
       docwizz diff [dir] <base> <head>  what changed between two git refs
       docwizz context <dir> --for <target>  token-budgeted facts about one symbol, file, folder or endpoint, for agents
         [--hops <1-4>] [--budget <tokens>] [--format md|json] [--include-ai] [--requirements]
+      docwizz domain discover <dir> --seed <symbol|endpoint>  bounded graph walk, optional historical requirements
+        [--work-item <id>] [--depth <0-8>] [--limit <1-500>] [--format json]
+        --work-item replaces --seed; the imported requirements index is required for a work-item seed
       docwizz mcp <dir>                 read-only MCP server on stdio for coding agents (find_symbol, context, impact, ...)
         [--auto-rescan]                 rescan when the model is stale instead of only saying so
       docwizz sbom [dir] [out]          export direct manifest dependencies as CycloneDX JSON
@@ -592,7 +643,7 @@ static string Reference() => $"""
     options:
       --profile <name|file.yaml>        setup/generate/check/analyze/architecture/diff: documentation profile,
                                         one of {string.Join(", ", Profiles.Names)}, or your own file
-      --format console|json             discover/analyze/check/architecture/diff/context/product/trace/evidence-diff/requirements/remediate output
+      --format console|json             discover/analyze/check/architecture/diff/context/domain/product/trace/evidence-diff/requirements/remediate output
       --timings                         time per stage and peak memory, on stderr (benchmarks)
       --help, -h                        help for a command: docwizz <command> --help
       --version, -v                     version, commit and runtime (also: docwizz version)
