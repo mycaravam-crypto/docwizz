@@ -757,6 +757,10 @@ rm -rf "$docs"
 section "requirement context benchmark"
 python3 "$root/bench/requirements.py" --dll "$dll" --model fake --modes B --expect >/dev/null
 
+# Domain discovery (#188): hand-labelled reach/avoid cases over the same history plus an API layer.
+section "domain discovery benchmark"
+python3 "$root/bench/domain.py" --dll "$dll" --expect >/dev/null
+
 }
 
 group_d() {

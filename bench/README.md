@@ -143,3 +143,13 @@ $ python3 bench/requirements.py --model qwen2.5-coder:7b --endpoint http://127.0
 
 Measures whether historical business context (`docwizz requirements`, `--requirements`) improves what a local model
 writes, rather than assuming it. Method, ground truth and the current numbers: [requirements/README.md](requirements/README.md).
+
+## Domain discovery
+
+```console
+$ python3 bench/domain.py            # 25 hand-labelled crawls: reach, leaks, work-item links
+$ python3 bench/domain.py --expect   # exit 1 unless every case matches gold (test.sh runs this)
+```
+
+Measures whether `docwizz domain discover` reaches what is on the path from its seed, and only that. No model.
+Method, ground truth and the current numbers: [domain/README.md](domain/README.md).
