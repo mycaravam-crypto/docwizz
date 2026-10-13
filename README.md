@@ -466,7 +466,9 @@ remediation:
 
 `OLLAMA_HOST` (default `localhost:11434`) and `DOCWIZZ_MODEL` (default `qwen2.5-coder:7b`) select the Ollama server and
 model. docwizz sends four requests at once; set `OLLAMA_NUM_PARALLEL=4` on the Ollama server so it runs them together,
-which roughly doubles drafting speed on one GPU (by default Ollama may run them one at a time). For an
+which roughly doubles drafting speed on one GPU (by default Ollama may run them one at a time). Each request asks for a
+16,384-token context (`num_ctx`), so long prompts aren't silently cut at Ollama's default; with four in parallel the
+server reserves room for four such contexts, so a small GPU may need a lower `OLLAMA_NUM_PARALLEL`. For an
 OpenAI-compatible server (vLLM, NVIDIA NIM, LiteLLM):
 
 ```yaml
@@ -509,7 +511,7 @@ them (`UseNpgsql`, `fetch('https://…')`), *inferred* when only a package point
 | `docwizz remediate <dir>` | package update suggestions, optionally validated |
 | `docwizz trace <dir> <evidence.yaml>` | requirement → architecture → test gaps |
 | `docwizz evidence-diff <dir> <before.yaml> <after.yaml>` | changed evidence and affected tests |
-| `docwizz requirements import\|show <dir> ...` | work items behind a symbol, from exported history |
+| `docwizz requirements import\|show\|query <dir> ...` | work items behind a symbol, from exported history; `query` answers gitwizz's PR context |
 | `docwizz product [check] <dir> <template.yaml> [out.md]` | work-product draft from code and evidence |
 | `docwizz init [dir]` | manual setup: starter `docwizz.yaml` with every default |
 | `docwizz scan <dir> [model.json]` | advanced: dump the raw code model, for debugging |
