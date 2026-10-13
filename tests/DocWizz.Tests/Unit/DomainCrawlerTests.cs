@@ -93,6 +93,25 @@ public class DomainCrawlerTests
     }
 
     [Fact]
+    public void Node_budget_reaches_behaviour_before_data_records()
+    {
+        const string Dto = "cs:Shop.Api.OrderDto";
+        var model = Model(
+            [.. Graph().Nodes, N(Dto, "src/Api/OrderDto.cs", kind: "record"), N("cs:Shop.Api.Mapper", "src/Api/Mapper.cs")],
+            [.. Graph().Edges, E(Endpoint, Dto, "creates"), E(Endpoint, "cs:Shop.Api.Mapper", "creates")]);
+
+        // Plain BFS would spend both remaining slots on depth-1 constructions; behaviour wins instead.
+        var tight = DomainCrawler.Discover(model, Endpoint, null, 3, 3);
+        Assert.Equal([Endpoint, Service, Interface], tight.Symbols.Select(s => s.Id).ToArray());
+        Assert.True(tight.Truncated);
+
+        // With budget to spare, deferred nodes are still reached at their real hop distance.
+        var all = DomainCrawler.Discover(model, Endpoint, null, 3, 100);
+        Assert.Contains(all.Symbols, s => s.Id == Dto && s.Depth == 1);
+        Assert.Contains(all.Relations, r => r.From == Endpoint && r.To == Dto && r.Kind == "creates");
+    }
+
+    [Fact]
     public void Confirmed_commit_link_stays_distinct_from_pr_candidate()
     {
         var report = DomainCrawler.Discover(Graph(), Endpoint, null, 2, 100, Index(), "abc123");

@@ -40,6 +40,9 @@ The crawler only writes to stdout. Use shell redirection to save a report.
 
 - Uses a BFS with deterministic ordering, cycle detection, max depth 0–8 (default 3)
   and 1–500 reached nodes (default 100). No arbitrary reverse caller walk.
+- The node budget goes to behaviour first: `creates` edges and edges into `record`/`struct`/`enum`
+  types (DTO construction) are deferred, together with everything behind them, until no behaviour
+  path within the depth bound is left. `depth` is the hop count along the path that admitted the node.
 - Traverses code-model calls, injections, accesses, creation, interface implementations,
   registrations, inheritance, persistence, events, HTTP, rendering, routes and external
   systems. Type-to-member `contains` edges are traversed **only** from container types.
@@ -72,7 +75,7 @@ The crawler only writes to stdout. Use shell redirection to save a report.
 
 1. Separate versioned `DomainArchitectureModel`: confirmed vs inferred domain capabilities,
    business rules, actors and process steps; stable human review/confirmation.
-2. Bidirectional code/history enrichment with incremental fingerprints and controlled frontier priority.
+2. Bidirectional code/history enrichment with incremental fingerprints.
 3. As-is vs historically intended vs possible deviations; Mermaid domain/process views, sourced
    architecture Markdown and optional local-only LLM wording.
 4. Ground-truth benchmark for semantic accuracy, evidence validity, false positives, traversal
