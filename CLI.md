@@ -11,6 +11,18 @@ New here? Run `docwizz setup .` and read what it prints. This page is for when y
 `docwizz help` lists the commands. `docwizz help <command>` or `docwizz <command> --help` shows one command's purpose,
 an example and its options.
 
+## Scanner distribution (G1)
+
+A packaging producer can run `npm ci --prefix scanner-vue`, then `node scanner-vue/package-distribution.mjs`
+and `dotnet pack src/DocWizz/DocWizz.csproj -c Release`. This stages Vue/TS and Java scanners
+with their pinned dependency tree under `scanner-vue/dist/` and includes it in the .NET tool package.
+The installed tool still requires Node.js 22, but does not install npm dependencies at runtime.
+
+The source-checkout GitHub Action continues to run `npm ci` until a reviewed, immutable scanner
+payload is distributed with the Action. Do not remove that installation prematurely: a source
+checkout does not include generated `scanner-vue/dist/` files. The manual `scanner-package`
+workflow validates the packaged scanner on a consumer path without invoking npm.
+
 ## At a glance
 
 | Command | Primary use | Typical user | Default path? |
