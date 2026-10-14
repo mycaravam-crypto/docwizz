@@ -76,6 +76,20 @@ An existing file that is not a DocWizz domain report is never overwritten.
 
   Contradictions between code and intent are not claimed: that needs a reader (or a model) comparing the two. The same code model, history index, seed, commit and bounds produce the same output.
 
+## Candidate business areas
+
+`docwizz domain areas . [--format json]` is the first layer of a separate domain model over the unchanged code model
+(`docwizz.domain-areas/v1`). Production methods are grouped by folder; then two kinds of evidence move a method:
+
+- **Delegation:** a method in an outer folder (one no other folder calls into: controllers, jobs) that calls into exactly
+  one other type joins that type's area (`CheckoutController.Track` → shipping, `CardPayments.Charge` → billing).
+- **Implementation:** an interface method joins its implementations' area when they all agree.
+
+Every member names its reason (`folder`, `delegates to …`, `implemented by …`) and every area is `inferred`. On the
+benchmark's hand labels this reaches pair precision 0.906 / recall 1.0, against 0.685 / 0.771 by namespace
+([bench/domain/README.md](../bench/domain/README.md)). Its known miss: a job that only reads one service (`ReportsJob.Run`)
+is put with that service.
+
 ## What it does not claim
 
 - A method changed under a linked work item does **not** necessarily implement the requirement.
@@ -86,8 +100,8 @@ An existing file that is not a DocWizz domain report is never overwritten.
 
 ## Next iterations
 
-1. Separate versioned `DomainArchitectureModel`: confirmed vs inferred domain capabilities,
-   business rules, actors and process steps; stable human review/confirmation.
+1. Extend the domain model beyond inferred areas (`domain areas` exists): business rules, actors and process steps;
+   stable human review/confirmation.
 2. Bidirectional code/history enrichment with incremental fingerprints.
 3. Mermaid domain/process views and optional local-only LLM wording over the cited facts (As-is /
    As-intended / Unclear Markdown exists: `--format md`).
