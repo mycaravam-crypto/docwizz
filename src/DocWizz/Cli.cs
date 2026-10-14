@@ -61,6 +61,8 @@ static class Cli
         ["requirements"] = new("requirements import|show|query <dir> ...", "index exported commit/PR/work-item history (import), then the requirements of one symbol (show) or of a PR's changed symbols for gitwizz (query)", "coding agents, reviews",
             "docwizz requirements show . --for MaterialService.CreateAsync --format json", "import <dir> <history.json> [<work-items dir|file>]; show <dir> --for <symbol> | --work-item <id>, --format json; query <dir> <query.json> (gitwizz.requirement-query/v1 → gitwizz.requirement-input/v1)",
             ["for", "work-item", "format"]),
+        ["load"] = new("load import <dir> <report.json>...", "import powerwizz load-test reports (powerwizz.report/v1); generate shows each endpoint's newest measured run in api.md", "performance",
+            "docwizz load import . perf/shop-bericht.json", "no options; one or more reports, each one run", []),
         ["sbom"] = new("sbom [dir] [out]", "export direct manifest dependencies as CycloneDX 1.6 JSON", "supply-chain inventory",
             "docwizz sbom . sbom.cdx.json", "no options", []),
         ["remediate"] = new("remediate <dir>", "package update suggestions: command or patch, impact, confidence", "maintenance",

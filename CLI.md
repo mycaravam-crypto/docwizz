@@ -30,6 +30,7 @@ an example and its options.
 | `trace` | explicit traceability gaps from a YAML catalog | product documents | optional |
 | `evidence-diff` | compare two evidence snapshots and explicit test impact | product documents | optional |
 | `requirements` | historical work items behind a code symbol, from exported history | coding agents, reviews | optional |
+| `load` | measured load per endpoint in `api.md`, from powerwizz reports | performance | optional |
 | `product` | product draft from a YAML template, from code and project evidence | architects | optional |
 | `init` | blank config with every default | manual setup | no |
 | `scan` | raw code model | advanced, debugging | no |
@@ -567,6 +568,38 @@ unknown commit links and linked work items that weren't exported are listed unde
 `partial` instead of "no requirements". `analyzedCommit` is where the imported history ends: when it isn't the PR's
 target, gitwizz marks the answer stale. A query it can't read exits 1 with the reason. No network, no AI, no writes.
 
+## Load-test results
+
+```bash
+docwizz load import . shop-bericht.json                  # one powerwizz run (powerwizz.report/v1)
+docwizz load import . runs/monday.json runs/friday.json  # several runs at once
+docwizz generate .                                       # api.md gets a Load section
+```
+
+`import` reads what powerwizz exports (`<name>-bericht.json`, `powerwizz.report/v1`; the format is in the
+[powerwizz README](https://github.com/mycaravam-crypto/powerwizz#json-report-for-docwizz)) and adds each run to
+`docs/.docwizz/load.json`. Every report is checked before anything is written: a missing or other `schema` exits 1 with
+the reason (`not powerwizz.report/v1 (schema: …)`), and so does a missing measurement. Fields v1 adds later are ignored.
+Runs accumulate, one per report; the same file imported again adds nothing. Delete the file to start over. A target
+that isn't local is reported, because its numbers aren't comparable to a local run. Only the aggregated report is
+read: no per-request CSVs, no `series`.
+
+`generate` matches each step to a detected endpoint by method and path, against the current code:
+
+- The path is the step's template: absolute, no query, placeholders literal (`/users/{{vu_id}}`).
+- Segment by segment: a route parameter (`{id}`, `{id:int}`, `:id`, `[id]`) matches any one segment, a `{{…}}`
+  placeholder or a concrete id included. Literal segments must be equal, ignoring case. The endpoint with the most
+  equal literal segments wins (`/api/items/special` beats `/api/items/{id}`); a tie is listed as ambiguous and not attached.
+- The base URL's path (`/app/` in `http://host/app/`) may precede the route; it is stripped when the whole path matches
+  nothing.
+- Steps that match no endpoint are listed under *Steps without a matching endpoint*.
+
+Per matched endpoint, `api.md` shows the newest run that exercised it (by `started_at`; older runs are not shown),
+labelled *measured*, with its evidence (report file, `started_at`, `target.base_url`, users / duration) and per step:
+requests, error rate, latency p50/p95/p99 in ms (±2.5 %, as powerwizz measures them). Each run's configuration (users,
+ramp-up, duration, auth) is shown once. A run that started before the last commit of the endpoint's file is marked
+*stale* (no git history: never). No network, no AI; nothing is written outside `docs/`.
+
 ## Commands
 
 | Command | Syntax | Purpose | Use |
@@ -584,6 +617,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `evidence-diff` | `docwizz evidence-diff <dir> <before.yaml> <after.yaml> [--format json]` | explicit evidence changes and affected tests | product documents |
 | `trace` | `docwizz trace <dir> <evidence.yaml> [--format json]` | explicit traceability and missing links | product documents |
 | `requirements` | `docwizz requirements import <dir> <history.json> [<work-items>]`, `docwizz requirements show <dir> (--for <symbol> \| --work-item <id>) [--format json]`, `docwizz requirements query <dir> <query.json>` | index exported history; one symbol's requirements, or one work item's symbols; gitwizz's requirement query | coding agents, reviews |
+| `load` | `docwizz load import <dir> <report.json>...` | import powerwizz load-test runs; `generate` shows each endpoint's newest one in `api.md` | performance |
 | `product` | `docwizz product [check] <dir> <template.yaml> [out.md] [--context file.yaml] [--ai] [--format f]` | product draft from evidence; `check`: references and freshness | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
@@ -663,6 +697,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `trace` | report on stdout | invalid/missing YAML; no data written |
 | `evidence-diff` | report on stdout | invalid/missing evidence catalogs; no data written |
 | `requirements` | `import`: index written or unchanged; `show`: answer on stdout (any outcome, `no-link` included); `query`: answer on stdout (a missing index included) | missing or invalid input, unknown schema, no index (`show`), unknown target, an unreadable query, bad arguments |
+| `load` | `import`: reports added, or unchanged | no report given, a missing file, not `powerwizz.report/v1`, a missing measurement, a broken index |
 | `product` | draft written or unchanged; `check`: no errors (warnings allowed) | invalid template, unsafe overwrite, bad arguments; `check`: an error finding |
 | `init` | written | `docwizz.yaml` exists |
 | no command | — | prints how to start |
@@ -682,6 +717,7 @@ full trace.
 | `docs/architecture/*.md` | **you**. Linked from the generated pages and never overwritten. |
 | `docs/.docwizz/model.json`, `documentation.json` | docwizz: the baseline `diff` compares against, and the documentation model as data. |
 | `docs/.docwizz/requirements.json` | docwizz `requirements import`: the requirement index. Contains work-item titles and criteria. |
+| `docs/.docwizz/load.json` | docwizz `load import`: the imported load-test runs (aggregates only, no credentials). |
 | `docs/.docwizz/ai-cache.json`, `ai-assessments.json` | docwizz: AI drafts and ratings, cached by code hash. Commit them to avoid re-sending code. |
 
 ## Versioning

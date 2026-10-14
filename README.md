@@ -24,7 +24,7 @@ anywhere: AI drafting is opt-in and local only.
 2. [Workflow](#workflow): [gaps](#find-the-gaps) · [architecture](#check-the-architecture) ·
    [docs](#generate-the-docs) · [AI drafts](#draft-missing-docs-with-a-local-ai) ·
    [change impact](#see-what-a-change-affects) · [CI](#gate-pull-requests)
-3. [Beyond docs](#beyond-docs): coding agents, dependencies, traceability
+3. [Beyond docs](#beyond-docs): coding agents, dependencies, load tests, traceability
 4. [Configuration](#configuration)
 5. [What it reads](#what-it-reads)
 6. [Commands](#commands)
@@ -308,6 +308,14 @@ The second form requires `docwizz requirements import`. Without an index, the fi
 works with technical evidence only. Both are offline; no LLM and no repository changes.
 See [domain discovery](docs/domain-discovery.md) for the evidence contract and limitations.
 
+### Load-test results
+
+`docwizz load import . shop-bericht.json` reads what [powerwizz](https://github.com/mycaravam-crypto/powerwizz) exports
+(`powerwizz.report/v1`, no adapter). `generate` then adds a *Load* section to `api.md`: requests, error rate and latency
+p50/p95/p99 per endpoint, labelled *measured*, from the newest run that exercised it, with the report, start time,
+target and load as evidence. A run older than the endpoint's last commit is marked *stale*; steps that match no
+endpoint are listed. Offline and deterministic. See [CLI.md](CLI.md#load-test-results).
+
 ### Requirements and traceability
 
 For projects that keep requirements as YAML evidence:
@@ -512,6 +520,7 @@ them (`UseNpgsql`, `fetch('https://…')`), *inferred* when only a package point
 | `docwizz trace <dir> <evidence.yaml>` | requirement → architecture → test gaps |
 | `docwizz evidence-diff <dir> <before.yaml> <after.yaml>` | changed evidence and affected tests |
 | `docwizz requirements import\|show\|query <dir> ...` | work items behind a symbol, from exported history; `query` answers gitwizz's PR context |
+| `docwizz load import <dir> <report.json>...` | powerwizz load-test runs as measured evidence in `api.md` |
 | `docwizz product [check] <dir> <template.yaml> [out.md]` | work-product draft from code and evidence |
 | `docwizz init [dir]` | manual setup: starter `docwizz.yaml` with every default |
 | `docwizz scan <dir> [model.json]` | advanced: dump the raw code model, for debugging |

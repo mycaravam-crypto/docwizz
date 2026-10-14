@@ -44,6 +44,13 @@ static async Task<int> Dispatch(string[] args)
         requirementsAction = pos[1];
         pos.RemoveAt(1);
     }
+    // `docwizz load import <dir> <report.json>...`: the same.
+    if (cmd == "load")
+    {
+        if (pos.ElementAtOrDefault(1) != "import")
+            return Usage("load needs import: docwizz load import <dir> <report.json>...", "load");
+        pos.RemoveAt(1);
+    }
     // Subcommand before repository dir: docwizz domain discover <dir> ...
     if (cmd == "domain")
     {
@@ -107,6 +114,8 @@ static async Task<int> Dispatch(string[] args)
                 "query" => RequirementsQuery(path, pos.ElementAtOrDefault(2), config),
                 _ => RequirementsShow(path, config, opts, json),
             };
+        case "load":
+            return LoadImport(path, [.. pos.Skip(2)]);
         case "trace":
             return TraceCommand(path, pos.ElementAtOrDefault(2), json);
         case "product":
@@ -286,6 +295,42 @@ static int RequirementsImport(string root, string? history, string? workItems, C
         var touched = index.Commits.SelectMany(c => c.Touches).Select(t => t.Symbol).Distinct().Count();
         Console.WriteLine($"→ {RequirementIndex.DefaultFile}: {index.Commits.Count} commits, {touched} symbols touched, {index.PullRequests.Count} PRs, {index.WorkItems.Count} work items");
         foreach (var w in index.Warnings) Console.Error.WriteLine($"docwizz: ⚠ {w}");
+        return 0;
+    }
+    catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
+    catch (IOException e) { Console.Error.WriteLine(e.Message); return 1; }
+}
+
+// `load import`: powerwizz load-test reports into the load index (files only, no network). Every report is checked
+// before anything is written; one that isn't powerwizz.report/v1 fails the import. Runs accumulate (one per report);
+// `generate` attaches each endpoint's newest run to api.md.
+static int LoadImport(string root, List<string> reports)
+{
+    if (reports.Count == 0) return Usage("load import needs a report (powerwizz.report/v1, powerwizz's <name>-bericht.json): docwizz load import <dir> <report.json>...", "load");
+    var target = Path.Combine(root, LoadReports.DefaultFile);
+    try
+    {
+        var parsed = new List<LoadReports.Report>();
+        foreach (var r in reports)
+        {
+            var file = File.Exists(r) ? r : Path.Combine(root, r);
+            if (!File.Exists(file)) throw new ArgumentException($"{r}: no such file");
+            parsed.Add(LoadReports.Parse(File.ReadAllBytes(file), Path.GetFileName(file)));
+        }
+        var previous = File.Exists(target) ? LoadReports.Load(target) : null;
+        var (index, added) = LoadReports.Merge(previous, parsed);
+        if (added == 0)
+        {
+            Console.WriteLine($"unchanged: {LoadReports.DefaultFile} ({Plural(index.Reports.Count, "report")})");
+            return 0;
+        }
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.WriteAllText(target + ".tmp", LoadReports.Serialize(index));
+        File.Move(target + ".tmp", target, overwrite: true);
+        Console.WriteLine($"→ {LoadReports.DefaultFile}: {Plural(index.Reports.Count, "report")} ({added} new), " +
+            $"{Plural(index.Reports.Sum(x => x.Steps.Count), "step")}; docwizz generate attaches them to api.md");
+        foreach (var r in parsed.Where(x => !x.Target.Local).DistinctBy(x => x.Digest))
+            Console.Error.WriteLine($"docwizz: ⚠ {r.File}: target {r.Target.BaseUrl} is not local; its numbers are not comparable to a local run");
         return 0;
     }
     catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
@@ -680,6 +725,7 @@ static string Reference() => $"""
       docwizz requirements show <dir> --for <symbol>  work items a symbol was changed for (confirmed/candidate)
       docwizz requirements query <dir> <query.json>   answer gitwizz's requirement query (gitwizz.requirement-input/v1)
         [--work-item <id>] [--format json]  the symbols of one work item instead; machine-readable
+      docwizz load import <dir> <report.json>...     import powerwizz load-test reports (powerwizz.report/v1) for api.md
       docwizz product <dir> <template.yaml> [out.md]  product draft from code and project evidence
         [--context <file.yaml>]         load sourced project facts
         [--ai]                          a self-hosted model words sections, citing evidence ids
@@ -941,11 +987,29 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
 
     bar.Begin("write pages", html ? "Markdown and HTML" : "Markdown");
     var rebuildHtml = html && refreshHtmlOnVersionChange && HtmlVersion.NeedsRefresh(outDir, AppVersion.Number);
+    // Imported load-test runs (docwizz load import) go into api.md; a broken index is skipped with the reason.
+    LoadReports.Index? load = null;
+    if (File.Exists(Path.Combine(root, LoadReports.DefaultFile)))
+    {
+        try { load = LoadReports.Load(Path.Combine(root, LoadReports.DefaultFile)); }
+        catch (ArgumentException e) { Console.Error.WriteLine($"docwizz: ⚠ {e.Message}; api.md has no load section"); }
+    }
+    // A file's last commit, for the stale mark on a run older than its endpoint's code (no git: never stale).
+    var lastChange = new Dictionary<string, DateTimeOffset?>();
+    DateTimeOffset? LastChange(string file)
+    {
+        if (!lastChange.TryGetValue(file, out var at))
+            lastChange[file] = at = DateTimeOffset.TryParse(Git(root, $"log -1 --format=%cI -- \"{file}\"")?.Trim(),
+                System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var t) ? t : null;
+        return at;
+    }
     var (pages, changed) = Timings.Measure("generate", () => new Generator(root, outDir, model, findings, arch, config, summaries, overviews, assessments)
     {
         WriteHtml = html,
         RebuildHtml = rebuildHtml,
         Screenshots = screenshots,
+        Load = load,
+        LastChange = LastChange,
         Files = [.. RepoFiles(root, config, [".github", ".circleci"]).Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))],
     }.Run());
     bar.Advance("write pages", $"{Plural(pages.Count, "page")}, {changed.Count} changed");

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -16,6 +17,10 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     public Action<int, int>? OnPageProcessed { get; init; }
     // Repository files (relative, `/`-separated) after exclude:/.gitignore; the deployment view picks its descriptors from them.
     public List<string> Files { get; init; } = [];
+    // Imported load-test runs (docwizz load import), and when a file last changed in history (null: unknown) to mark
+    // a run older than its endpoint's code as stale.
+    public LoadReports.Index? Load { get; init; }
+    public Func<string, DateTimeOffset?> LastChange { get; init; } = _ => null;
     internal static readonly string[] TopKinds = ["class", "record", "struct", "interface", "type", "enum", "delegate", "component", "module", "store",
         "procedure", "sql-function", "sql-view", "trigger", "table", "migration"];
     const int MaxDiagramEdges = 60;
@@ -390,6 +395,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         if (distinctFlow.Count is > 0 and <= MaxDiagramEdges * 2)
             sb.AppendLine("\n## Flow\n\n" + Mermaid("graph LR", distinctFlow, x => x));
 
+        if (Load is { Reports.Count: > 0 }) sb.Append(LoadSection(endpoints));
+
         // Absolute URLs are external systems (views/context.md), not missing endpoints.
         var unlinked = model.Edges.Where(e => e.Kind == "http" && e.To.StartsWith("http:") && !e.To.Contains("://")).ToList();
         if (unlinked.Count > 0)
@@ -399,6 +406,53 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         }
         return sb.ToString();
     }
+
+    // Measured load per endpoint: the newest imported run that has it, with its evidence; the test configuration once
+    // per run. Numbers are what the report says, never recomputed.
+    string LoadSection(List<Node> endpoints)
+    {
+        var attached = LoadReports.Attach(Load!, endpoints);
+        var sb = new StringBuilder("\n## Load\n\n");
+        sb.AppendLine("_measured_ by load tests (`docwizz load import`, powerwizz.report/v1): per endpoint the newest run that " +
+            $"exercised it. Latencies in ms, {LoadReports.Precision}. A run older than the endpoint's last code change is _stale_.\n");
+        var shown = attached.Shown.OrderBy(LoadReports.Started).ThenBy(r => r.File, StringComparer.Ordinal).ToList();
+        if (shown.Count > 0)
+        {
+            sb.AppendLine("| Report | Started | Target | Users | Ramp-up | Duration | Auth |\n|---|---|---|---|---|---|---|");
+            foreach (var r in shown)
+                sb.AppendLine($"| {Code(r.File)} | {r.StartedAt} | {Code(r.Target.BaseUrl)}{(r.Target.Local ? "" : " ⚠ not local: not comparable to a local run")} | " +
+                    $"{Opt(r.Config.Users)} | {Seconds(r.Config.RampUpS)} | {Seconds(r.Config.DurationS)} | {Esc(r.Config.Auth ?? "—")} |");
+        }
+        foreach (var n in endpoints.Where(e => attached.ByEndpoint.ContainsKey(e.Id)))
+        {
+            var (report, steps) = attached.ByEndpoint[n.Id];
+            var changed = LastChange(n.File);
+            var stale = changed is { } c && c > LoadReports.Started(report)
+                ? $" · **stale**: {Code(Path.GetFileName(n.File))} changed {c.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture)}, after this run"
+                : "";
+            sb.AppendLine($"\n### `{Naming.EndpointLabel(n)}`\n\n_measured_ · {Code(report.File)}, started {report.StartedAt}, " +
+                $"{Code(report.Target.BaseUrl)}{(report.Target.Local ? "" : " (not local)")}, {Opt(report.Config.Users)} users / {Seconds(report.Config.DurationS)}{stale}\n");
+            sb.AppendLine("| Step | Requests | Error rate | p50 | p95 | p99 |\n|---|---|---|---|---|---|");
+            foreach (var s in steps)
+                sb.AppendLine(FormattableString.Invariant($"| {(s.Name is null ? "" : $"{Esc(s.Name)} ")}{Code($"{s.Method} {s.Path}")} | {s.Requests} | {s.ErrorRate * 100:0.##} % | ") +
+                    FormattableString.Invariant($"{s.LatencyMs.P50:0.#} | {s.LatencyMs.P95:0.#} | {s.LatencyMs.P99:0.#} |"));
+        }
+        if (attached.Ambiguous.Count > 0)
+        {
+            sb.AppendLine("\n### Steps matching several endpoints (not attached)\n");
+            foreach (var m in attached.Ambiguous)
+                sb.AppendLine($"- {Code($"{m.Step.Method} {m.Step.Path}")} ({Esc(m.Report.File)}): {string.Join(", ", m.Endpoints.Select(e => $"`{Naming.EndpointLabel(e)}`"))}");
+        }
+        if (attached.Unmatched.Count > 0)
+        {
+            sb.AppendLine("\n### Steps without a matching endpoint\n");
+            foreach (var m in attached.Unmatched) sb.AppendLine($"- {Code($"{m.Step.Method} {m.Step.Path}")} ({Esc(m.Report.File)})");
+        }
+        return sb.ToString();
+    }
+
+    static string Opt(int? n) => n?.ToString(CultureInfo.InvariantCulture) ?? "—";
+    static string Seconds(double? s) => s is { } x ? FormattableString.Invariant($"{x:0.#} s") : "—";
 
     // The returned type and the declared/detected status codes: "`Material`<br>200, 404".
     static string Response(Node n)
