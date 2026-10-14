@@ -33,6 +33,6 @@ public class ScannerProcessTests
     {
         var command = OperatingSystem.IsWindows() ? "echo expected" : "printf expected";
         var output = await ScannerProcess.RunAsync(Shell(command), "", TimeSpan.FromSeconds(5));
-        Assert.Equal(OperatingSystem.IsWindows() ? "expected\\r\\n" : "expected", output);
+        Assert.Equal(OperatingSystem.IsWindows() ? "expected" + Environment.NewLine : "expected", output);
     }
 }
