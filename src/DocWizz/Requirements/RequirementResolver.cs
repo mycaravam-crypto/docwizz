@@ -23,7 +23,9 @@ static class RequirementResolver
     public record Symbol(string Id, string? Location, string? Hash);
     public record Requirement(int Id, string Status, bool ChangedSince, string Availability, RequirementIndex.WorkItem? WorkItem,
         List<Evidence> Evidence);
-    public record Evidence(string Relation, string Commit, int? PullRequest, string? Confidence, string File, string Lines, string SymbolLines);
+    // Symbol: for `renamed-from`, the old id whose evidence this is.
+    public record Evidence(string Relation, string Commit, int? PullRequest, string? Confidence, string File, string Lines, string SymbolLines,
+        string? Symbol = null);
     public record CommitTouch(string Commit, string Linkage, string Lines, List<int> PullRequests);
     public record IndexInfo(string Fingerprint, string? HistoryHead, string? Head, bool CoversHead);
 
@@ -32,7 +34,8 @@ static class RequirementResolver
     public record ReverseSymbol(string Id, string Status, bool Current, string? Location, bool ChangedSince, List<Evidence> Evidence);
 
     // The requirements of the symbol with this id. `node` is the symbol in the current model (null: not current).
-    public static Context For(RequirementIndex.Index index, string id, Node? node, string? head)
+    // `exists`: whether an id is in the current model; with it, the links of a symbol renamed to this one are carried over.
+    public static Context For(RequirementIndex.Index index, string id, Node? node, string? head, Func<string, bool>? exists = null)
     {
         var warnings = new List<string>(Coverage(index, head));
         var touched = index.Commits.Where(c => c.Touches.Any(t => t.Symbol == id)).ToList();
@@ -62,6 +65,10 @@ static class RequirementResolver
                         : p.Status != "confirmed" ? $"{p.Status}, its work items are not used" : $"work-item links are {p.Linkage}"));
                 }
         }
+        if (node is not null && exists is not null && RenamedFrom(index, id, exists) is { } was)
+            foreach (var r in For(index, was.Old, null, head).Requirements)
+                foreach (var e in r.Evidence)
+                    evidence.Add((r.Id, new("renamed-from", e.Commit, e.PullRequest, e.Confidence, e.File, e.Lines, e.SymbolLines, was.Old), was.Touch, was.Order));
         // Commits missing locally may have changed it; nobody can tell.
         if (index.Commits.Any(c => c.Mapping == "missing"))
         {
@@ -95,12 +102,42 @@ static class RequirementResolver
             fileLevel, Info(index, head), [.. warnings.Distinct()]);
     }
 
+    // The symbol this one was renamed from (#187): one that is gone from the current code, of the same type with the same
+    // parameters, whose last change sat in the same file at the line where this one starts in the commit that first
+    // changed it. Its links come over as `renamed-from` evidence, so they are candidates: the position says rename, the
+    // provider never linked the new name.
+    // ponytail: one hop, same file; follow chains and moves (another file or type) when real histories need it.
+    static (string Old, RequirementIndex.Touch Touch, int Order)? RenamedFrom(RequirementIndex.Index index, string id, Func<string, bool> exists)
+    {
+        var (owner, name, args) = Parts(id);
+        var first = index.Commits.Select((c, i) => (Touch: c.Touches.FirstOrDefault(t => t.Symbol == id), Order: i)).FirstOrDefault(x => x.Touch is not null);
+        if (first.Touch is null) return null;
+        var start = first.Touch.SymbolLines.Split('-')[0];
+        var last = new Dictionary<string, (RequirementIndex.Touch Touch, int Order)>(StringComparer.Ordinal);
+        foreach (var (c, i) in index.Commits.Select((c, i) => (c, i)))
+            foreach (var t in c.Touches.Where(t => t.Symbol != id && t.Kind == first.Touch.Kind && Parts(t.Symbol) is var p
+                && p.Owner == owner && p.Args == args && p.Name != name))
+                last[t.Symbol] = (t, i);
+        var old = last.Where(x => x.Value.Order < first.Order && x.Value.Touch.File == first.Touch.File
+            && x.Value.Touch.SymbolLines.Split('-')[0] == start && !exists(x.Key)).Select(x => x.Key).ToList();
+        return old is [var only] ? (only, first.Touch, first.Order) : null;
+    }
+
+    // `cs:Shop.Orders.OrderService.Place(int, decimal)` -> (`cs:Shop.Orders.OrderService`, `Place`, `(int, decimal)`).
+    static (string Owner, string Name, string Args) Parts(string id)
+    {
+        var paren = id.IndexOf('(');
+        var path = paren < 0 ? id : id[..paren];
+        var dot = path.LastIndexOf('.');
+        return (dot < 0 ? "" : path[..dot], path[(dot + 1)..], paren < 0 ? "" : id[paren..]);
+    }
+
     // The symbols one work item is linked to, current ones first.
     public static Reverse Symbols(RequirementIndex.Index index, int workItem, CodeModel model, string? head)
     {
         var nodes = model.Nodes.GroupBy(n => n.Id).ToDictionary(g => g.Key, g => g.First());
         var ids = index.Commits.SelectMany(c => c.Touches).Select(t => t.Symbol).Distinct().Order(StringComparer.Ordinal);
-        var symbols = ids.Select(id => (Id: id, Context: For(index, id, nodes.GetValueOrDefault(id), head)))
+        var symbols = ids.Select(id => (Id: id, Context: For(index, id, nodes.GetValueOrDefault(id), head, nodes.ContainsKey)))
             .Select(x => (x.Id, x.Context, Link: x.Context.Requirements.FirstOrDefault(r => r.Id == workItem)))
             .Where(x => x.Link is not null)
             .Select(x => new ReverseSymbol(x.Id, x.Link!.Status, nodes.ContainsKey(x.Id), x.Context.Symbol.Location, x.Link.ChangedSince, x.Link.Evidence))
@@ -137,7 +174,7 @@ static class RequirementResolver
             sb.Append(r.WorkItem is { } w ? $" {w.Type} {w.State}: {w.Title} (revision {w.Revision}{(w.IsCurrent == false ? $", current {w.CurrentRevision}" : "")})\n" : " content unavailable\n");
             foreach (var crit in r.WorkItem?.Criteria ?? []) sb.Append($"  - {crit.Replace("\n", " ")}\n");
             foreach (var e in r.Evidence)
-                sb.Append($"  {e.Relation} via {e.Commit[..7]}{(e.PullRequest is { } p ? $" (PR {p}{(e.Confidence is "ambiguous" or "inferred" ? $", {e.Confidence}" : "")})" : "")}: {e.File}:{e.Lines}\n");
+                sb.Append($"  {e.Relation}{(e.Symbol is { } old ? $" {old}" : "")} via {e.Commit[..7]}{(e.PullRequest is { } p ? $" (PR {p}{(e.Confidence is "ambiguous" or "inferred" ? $", {e.Confidence}" : "")})" : "")}: {e.File}:{e.Lines}\n");
         }
         if (c.FileLevel.Count > 0) sb.Append($"\n{c.FileLevel.Count} commit(s) changed its file without overlapping it (not asserted)\n");
         foreach (var w in c.Warnings) sb.Append($"⚠ {w}\n");

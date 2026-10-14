@@ -1,5 +1,5 @@
 {
-  "about": "Ground truth for bench/requirements_fixture.py, written by hand from the scripted history; never generated from a model or from docwizz output. links: the work items each method truly implements (the intent behind its changes), with the status a correct resolver can give from the exported evidence: confirmed (a directly linked commit), candidate (only a PR link), or none (the evidence doesn't show it: a denied lookup, a rename). outcome: what docwizz requirements show must answer. constraints: phrases (any one, case-insensitive) a grounded description of the requirement contains. contradicts: where the code does not do what the requirement asks. budgetStress: why the method's requirements exceed the default bound (3 items, 1200 characters).",
+  "about": "Ground truth for bench/requirements_fixture.py, written by hand from the scripted history; never generated from a model or from docwizz output. links: the work items each method truly implements (the intent behind its changes), with the status a correct resolver can give from the exported evidence: confirmed (a directly linked commit), candidate (only a PR link), or none (the evidence doesn't show it: a denied lookup). A rename is visible (same type, parameters and position; #187), but nobody linked the new name: candidate. outcome: what docwizz requirements show must answer. constraints: phrases (any one, case-insensitive) a grounded description of the requirement contains. contradicts: where the code does not do what the requirement asks. budgetStress: why the method's requirements exceed the default bound (3 items, 1200 characters).",
   "methods": {
     "Shop.Orders.OrderService.Place": { "links": [{ "id": 101, "status": "confirmed" }], "outcome": "linked", "constraints": [["credit limit"]] },
     "Shop.Orders.OrderService.Cancel": { "links": [{ "id": 102, "status": "confirmed" }], "outcome": "linked", "constraints": [["shipped", "ships"]] },
@@ -10,8 +10,8 @@
     "Shop.Customers.CustomerService.Register": { "links": [{ "id": 104, "status": "confirmed" }], "outcome": "linked", "constraints": [["already registered", "unique"]] },
     "Shop.Customers.CustomerService.CreditLimit": { "links": [], "outcome": "no-link" },
     "Shop.Customers.CustomerService.Block": { "links": [], "outcome": "no-link" },
-    "Shop.Customers.CustomerService.Rename": { "links": [{ "id": 110, "status": "none" }], "outcome": "no-link",
-      "note": "renamed from ChangeName after the linked commit: the link stays with the old id (not-current)" },
+    "Shop.Customers.CustomerService.Rename": { "links": [{ "id": 110, "status": "candidate" }], "outcome": "linked",
+      "note": "renamed from ChangeName after the linked commit: the old id keeps its confirmed link (not-current), the new one gets it as a renamed-from candidate" },
     "Shop.Billing.InvoiceService.Issue": { "links": [{ "id": 105, "status": "candidate" }], "outcome": "linked", "constraints": [["ships", "shipping", "shipped"]] },
     "Shop.Billing.InvoiceService.Pay": { "links": [], "outcome": "no-link" },
     "Shop.Billing.InvoiceService.Overdue": { "links": [{ "id": 106, "status": "confirmed" }], "outcome": "linked", "constraints": [["14 days", "14"]],

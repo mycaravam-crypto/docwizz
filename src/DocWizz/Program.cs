@@ -374,7 +374,8 @@ static int RequirementsShow(string root, Config config, Dictionary<string, strin
         if (r.Candidates.Count > 0) Console.Error.WriteLine("candidates:" + string.Concat(r.Candidates.Select(c => $"\n  {c}")));
         return 1;
     }
-    var context = RequirementResolver.For(index, symbolId, node, head);
+    var nodes = model.Nodes.Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
+    var context = RequirementResolver.For(index, symbolId, node, head, nodes.Contains);
     Console.Write(json ? RequirementResolver.Json(context) : RequirementResolver.Text(context));
     return 0;
 }
@@ -404,10 +405,10 @@ static int RequirementsQuery(string root, string? queryFile, Config config)
 }
 
 // A context target's requirement lines: per symbol only (a file or folder has no single history to show).
-static List<AgentContext.Line> RequirementLinesFor(RequirementIndex.Index index, AgentContext.Target t, string? head, Config config)
+static List<AgentContext.Line> RequirementLinesFor(RequirementIndex.Index index, AgentContext.Target t, string? head, Config config, CodeModel model)
 {
     if (t.Primary is not { } n) return [new("requirements are per symbol: use --for <symbol>", "history")];
-    var context = RequirementResolver.For(index, n.Id, n, head);
+    var context = RequirementResolver.For(index, n.Id, n, head, id => model.Nodes.Any(x => x.Id == id));
     return AgentContext.RequirementLines(context, BusinessContext.Select(context, config.Ai.Requirements));
 }
 
@@ -456,7 +457,7 @@ static int ContextCommand(string root, Config config, Dictionary<string, string>
     if (opts.ContainsKey("requirements"))
     {
         if (LoadRequirements(root) is not { } index) return 1;
-        requirements = RequirementLinesFor(index, t, Git(root, "rev-parse HEAD")?.Trim(), config);
+        requirements = RequirementLinesFor(index, t, Git(root, "rev-parse HEAD")?.Trim(), config, model);
     }
     var blocks = AgentContext.Blocks(graph, config, t, hops, includeAi, findings, arch, drafts, requirements);
     var aiLeftOut = includeAi ? 0 : t.Scope.Count(n => drafts.ContainsKey(n.Id));
@@ -955,8 +956,9 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
     bar.Begin("AI summaries", ai ? "drafting" : "from cache");
     // --requirements: each symbol's bounded requirement selection goes into its prompt (and its cache key).
     var head = requirements is null ? null : Git(root, "rev-parse HEAD")?.Trim();
+    var current = model.Nodes.Select(n => n.Id).ToHashSet(StringComparer.Ordinal);
     Func<Node, BusinessContext.Selection?>? business = requirements is null ? null
-        : n => BusinessContext.Select(RequirementResolver.For(requirements, n.Id, n, head), config.Ai.Requirements);
+        : n => BusinessContext.Select(RequirementResolver.For(requirements, n.Id, n, head, current.Contains), config.Ai.Requirements);
     var drafts = await AiProse.Summaries(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-cache.json"), ai, config.Ai,
         AiProgress(bar, "drafts"), business);
     // A draft fills what is missing, never what is written or derived: the summary, and sections the item doesn't have.

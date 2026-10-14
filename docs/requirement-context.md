@@ -21,11 +21,16 @@ ever written into an evidence catalog.
 | Status | Meaning |
 |---|---|
 | `confirmed` | a commit the **provider** links to the work item (a verified commit link, `providerLinks`) changed lines inside the symbol |
-| `candidate` | only a **confirmed pull request** is linked to the work item (also when the commit's PR attribution is ambiguous), or a commit that changed the symbol **mentions** it in its message (`AB#123`), and nothing verified links it |
+| `candidate` | only a **confirmed pull request** is linked to the work item (also when the commit's PR attribution is ambiguous), or a commit that changed the symbol **mentions** it in its message (`AB#123`), or the link belongs to the symbol's name **before a rename** (`renamed-from`), and nothing verified links it |
 
 A pull request that touched a symbol is no proof that the symbol implements every work item of that PR, and a message
 naming a work item is nobody's verified link, so both stay `candidate` unless a provider commit link confirms them. Each link also says `changedSince`: whether the symbol's
 code changed after the newest commit behind the link. A requirement describes the code as it was then.
+
+A rename keeps its links as candidates: when the commit that first changed a symbol has it in the same file, type and
+parameters, at the line where a method that is gone from the current code last sat, that method's links come over as
+`renamed-from` evidence naming the old id (`symbol`). `changedSince` then compares with the renaming commit. Only one
+rename is followed, inside one file; a move to another file or type stays `not-current` under the old id.
 
 Changed line ranges are mapped onto symbols as they were **at that commit**: each exported commit that changed scanned source files
 is scanned as of that commit (`git archive`, the same scan as `docwizz diff`). A range links only the innermost symbols
@@ -42,7 +47,7 @@ Every answer has an `outcome`:
 | `no-link` | every commit that changed the symbol has a verified, empty work-item linkage |
 | `unavailable` | no requirement found, and some linkage was `unavailable`, `denied` or `unknown`, a PR it came with is unconfirmed, or an exported commit is missing locally |
 | `not-in-history` | no exported commit changed the symbol |
-| `not-current` | the index knows the id from history but the current code doesn't (renamed, moved or deleted); `--for` takes the old id |
+| `not-current` | the index knows the id from history but the current code doesn't (renamed, moved or deleted); `--for` takes the old id; a rename in place also shows the links under the new id |
 
 When the history ends before `HEAD`, `index.coversHead` is `false` and a warning says later commits are not covered;
 a truncated export or one from a shallow clone says the same about older commits. When nothing in the export was

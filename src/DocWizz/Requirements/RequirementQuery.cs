@@ -56,7 +56,7 @@ static class RequirementQuery
                 // A changed signature is a new id: its history is under the old one.
                 var id = !known.Contains(s.Id) && s.PreviousId is { } was && known.Contains(was) ? was : s.Id;
                 var current = node(s.Id);
-                var context = RequirementResolver.For(index, id, current, head);
+                var context = RequirementResolver.For(index, id, current, head, x => node(x) is not null);
                 // Not Outcome == "unavailable": a symbol missing from the current code (one a PR adds or renames) is
                 // `not-current` there, and its unknown links must not read as "none" either.
                 if (context.Requirements.Count == 0 && !context.Complete)
