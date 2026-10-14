@@ -1,0 +1,44 @@
+# Packaging acceptance test: pack the tool (which stages scanner-vue), install it the way users do, and run the bundled
+# Vue/TS and Java scanners with npm out of the picture. npm runs only in the producing step.
+name: scanner-package
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: [scanner-vue/**, src/DocWizz/DocWizz.csproj, src/DocWizz/Scanning/Frontend.cs, .github/workflows/scanner-package.yml]
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with: { dotnet-version: 10.0.x }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: 22, cache: npm, cache-dependency-path: scanner-vue/package-lock.json }
+      - name: Pack
+        run: |
+          npm ci --prefix scanner-vue --silent
+          dotnet pack src/DocWizz/DocWizz.csproj -c Release -p:Version=0.0.0-test -o "$RUNNER_TEMP/nupkg" --nologo
+      - name: Install and run the bundled scanners
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Install as a user would; NuGet's extraction (not a plain unzip) decodes names such as node_modules/@vue.
+          dotnet tool install DocWizz --version 0.0.0-test --add-source "$RUNNER_TEMP/nupkg" --tool-path "$RUNNER_TEMP/tool"
+          index=$(find "$RUNNER_TEMP/tool/.store" -path '*/scanner-vue/dist/index.mjs')
+          [[ -n "$index" ]] || { echo "::error::scanner-vue/dist/index.mjs is not in the installed tool"; exit 1; }
+          dist=$(dirname "$index")
+          ls -a "$dist/node_modules"
+          [[ -d "$dist/node_modules/@vue/compiler-sfc" ]] || { echo "::error::node_modules/@vue/compiler-sfc missing"; exit 1; }
+          [[ ! -e "$dist/node_modules/.bin" ]] || { echo "::error::node_modules/.bin was packed"; exit 1; }
+          # The scanner sits next to the installed binary, where Frontend.FindScanner looks for it.
+          [[ -f "$(dirname "$(find "$RUNNER_TEMP/tool/.store" -name DocWizz.dll)")/scanner-vue/dist/index.mjs" ]] ||
+            { echo "::error::scanner-vue/dist is not next to DocWizz.dll"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/example"
+          printf 'export const n: number = 1\n' > "$RUNNER_TEMP/example/index.ts"
+          printf 'public class Test { public void run() {} }\n' > "$RUNNER_TEMP/example/Test.java"
+          echo "$RUNNER_TEMP/example/index.ts" | node "$dist/index.mjs" "$RUNNER_TEMP/example" \
+            | node -e 'const d=JSON.parse(require("fs").readFileSync(0));if(!Array.isArray(d.nodes))process.exit(1)'
+          echo "$RUNNER_TEMP/example/Test.java" | node "$dist/java.mjs" \
+            | node -e 'const d=JSON.parse(require("fs").readFileSync(0));if(d.files.length!==1)process.exit(1)'

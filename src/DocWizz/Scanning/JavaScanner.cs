@@ -185,7 +185,7 @@ static class JavaScanner
         var script = Frontend.FindScanner() is { } index ? Path.Combine(Path.GetDirectoryName(index)!, "java.mjs") : null;
         if (script is null || !File.Exists(script) || !Directory.Exists(Path.Combine(Path.GetDirectoryName(script)!, "node_modules", "tree-sitter-java")))
         {
-            Console.Error.WriteLine("docwizz: Java skipped — scanner-vue not found or not installed (npm ci in scanner-vue/)");
+            Console.Error.WriteLine($"docwizz: Java skipped — {Frontend.NotInstalled}");
             return null;
         }
         try

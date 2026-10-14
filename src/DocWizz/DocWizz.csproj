@@ -8,6 +8,8 @@
          doesn't break unrelated builds. -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+    <!-- Playwright ships .ps1 helpers in the tool's folder; they are its own scripts, not NuGet install hooks. -->
+    <NoWarn>$(NoWarn);NU5111</NoWarn>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>docwizz</ToolCommandName>
     <!-- Official release builds supply -p:Version from the immutable Git tag; any other build derives it from the
@@ -40,6 +42,19 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
+  <!-- Packing stages scanner-vue (Vue/TS and Java scanners plus their npm ci'd dependencies) and ships it inside the tool,
+       so an installed tool needs only Node. Staging on every pack keeps the payload in step with the source, and fails
+       the pack when scanner-vue/node_modules is missing instead of shipping a tool without scanners. -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);DocWizzPackScanner</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+  <Target Name="DocWizzPackScanner">
+    <Exec Command="node package-distribution.mjs" WorkingDirectory="$(MSBuildProjectDirectory)/../../scanner-vue" />
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(MSBuildProjectDirectory)/../../scanner-vue/dist/**/*"
+                              PackagePath="tools/$(TargetFramework)/any/scanner-vue/dist/%(RecursiveDir)" />
+    </ItemGroup>
+  </Target>
   <ItemGroup>
     <InternalsVisibleTo Include="DocWizz.Tests" />
   </ItemGroup>
