@@ -57,7 +57,9 @@ static class RequirementQuery
                 var id = !known.Contains(s.Id) && s.PreviousId is { } was && known.Contains(was) ? was : s.Id;
                 var current = node(s.Id);
                 var context = RequirementResolver.For(index, id, current, head);
-                if (context.Outcome == "unavailable")
+                // Not Outcome == "unavailable": a symbol missing from the current code (one a PR adds or renames) is
+                // `not-current` there, and its unknown links must not read as "none" either.
+                if (context.Requirements.Count == 0 && !context.Complete)
                     unavailable.Add(("history", $"{s.Id}: the work-item links of some commits that changed it are unknown"));
                 foreach (var r in context.Requirements.Where(r => r.Availability == "unavailable"))
                     unavailable.Add(("work-items", $"AB#{r.Id} is linked to {s.Id} but was not exported"));
