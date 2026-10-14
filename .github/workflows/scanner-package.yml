@@ -26,11 +26,15 @@ jobs:
           set -euo pipefail
           # Install as a user would; NuGet's extraction (not a plain unzip) decodes names such as node_modules/@vue.
           dotnet tool install DocWizz --version 0.0.0-test --add-source "$RUNNER_TEMP/nupkg" --tool-path "$RUNNER_TEMP/tool"
-          dist=$(dirname "$(find "$RUNNER_TEMP/tool/.store" -path '*/scanner-vue/dist/index.mjs')")
-          test -d "$dist/node_modules/@vue/compiler-sfc"
-          test ! -e "$dist/node_modules/.bin"
+          index=$(find "$RUNNER_TEMP/tool/.store" -path '*/scanner-vue/dist/index.mjs')
+          [[ -n "$index" ]] || { echo "::error::scanner-vue/dist/index.mjs is not in the installed tool"; exit 1; }
+          dist=$(dirname "$index")
+          ls -a "$dist/node_modules"
+          [[ -d "$dist/node_modules/@vue/compiler-sfc" ]] || { echo "::error::node_modules/@vue/compiler-sfc missing"; exit 1; }
+          [[ ! -e "$dist/node_modules/.bin" ]] || { echo "::error::node_modules/.bin was packed"; exit 1; }
           # The scanner sits next to the installed binary, where Frontend.FindScanner looks for it.
-          test -f "$(dirname "$(find "$RUNNER_TEMP/tool/.store" -name DocWizz.dll)")/scanner-vue/dist/index.mjs"
+          [[ -f "$(dirname "$(find "$RUNNER_TEMP/tool/.store" -name DocWizz.dll)")/scanner-vue/dist/index.mjs" ]] ||
+            { echo "::error::scanner-vue/dist is not next to DocWizz.dll"; exit 1; }
           mkdir -p "$RUNNER_TEMP/example"
           printf 'export const n: number = 1\n' > "$RUNNER_TEMP/example/index.ts"
           printf 'public class Test { public void run() {} }\n' > "$RUNNER_TEMP/example/Test.java"
