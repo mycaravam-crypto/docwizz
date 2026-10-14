@@ -20,6 +20,20 @@ jobs:
         run: |
           npm ci --prefix scanner-vue --silent
           dotnet pack src/DocWizz/DocWizz.csproj -c Release -p:Version=0.0.0-test -o "$RUNNER_TEMP/nupkg" --nologo
+      - name: Verify release-style payload independently of npm
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -C scanner-vue/dist -czf "$RUNNER_TEMP/scanner-vue.tar.gz" .
+          (cd "$RUNNER_TEMP" && sha256sum scanner-vue.tar.gz > scanner-vue.tar.gz.sha256)
+          (cd "$RUNNER_TEMP" && sha256sum -c scanner-vue.tar.gz.sha256)
+          mkdir -p "$RUNNER_TEMP/released-scanner"
+          tar -xzf "$RUNNER_TEMP/scanner-vue.tar.gz" -C "$RUNNER_TEMP/released-scanner"
+          test -f "$RUNNER_TEMP/released-scanner/java.mjs"
+          test -f "$RUNNER_TEMP/released-scanner/node_modules/tree-sitter-java/tree-sitter-java.wasm"
+          mkdir -p "$RUNNER_TEMP/release-example"
+          printf "public class Sample {}\n" > "$RUNNER_TEMP/release-example/Sample.java"
+          printf "%s\n" "$RUNNER_TEMP/release-example/Sample.java" | node "$RUNNER_TEMP/released-scanner/java.mjs" | node -e 'const d=JSON.parse(require("fs").readFileSync(0));if(d.files.length!==1)process.exit(1)'
       - name: Install and run the bundled scanners
         shell: bash
         run: |
