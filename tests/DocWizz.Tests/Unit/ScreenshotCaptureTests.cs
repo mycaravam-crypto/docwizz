@@ -153,6 +153,11 @@ public class ScreenshotCaptureTests
     public void A_login_form_on_a_signed_in_route_is_not_captured(string route, bool signedIn, bool passwordField, string? reason) =>
         Assert.Equal(reason, ScreenshotCapture.LoginFormFailure(route, signedIn, passwordField));
 
+    // A database connection form or a change-password section: the page's API calls went through with the token.
+    [Fact]
+    public void A_password_field_on_a_page_whose_authorized_api_calls_succeed_is_part_of_the_page() =>
+        Assert.Null(ScreenshotCapture.LoginFormFailure("/connect", true, true, authorizedApiCall: true));
+
     [Fact]
     public void Generated_markdown_and_html_link_only_successfully_captured_images()
     {
@@ -197,4 +202,26 @@ public class ScreenshotCaptureTests
     [InlineData("/orders", true, "redirected to / (needs authentication?)")]
     public void Signed_in_sign_in_page_redirect_is_explained(string route, bool signedIn, string expected) =>
         Assert.Equal(expected, ScreenshotCapture.Explain(route, "redirected to / (needs authentication?)", signedIn));
+
+    [Fact]
+    public void Session_storage_from_the_state_file_is_read_per_origin_and_seeded_without_overwriting()
+    {
+        var file = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(file, """
+                {"cookies": [], "origins": [
+                  {"origin": "http://localhost:5173/", "localStorage": [], "sessionStorage": [{"name": "token", "value": "a</script>b"}]},
+                  {"origin": "http://other.test", "localStorage": [{"name": "x", "value": "1"}]}]}
+                """);
+            var state = ScreenshotCapture.SessionStorage(file);
+            Assert.Equal(["http://localhost:5173"], state.Keys);
+            Assert.Equal("a</script>b", state["http://localhost:5173"]["token"]);
+            var script = ScreenshotCapture.SessionStorageScript(state);
+            Assert.Contains("sessionStorage.getItem(k) === null", script);
+            Assert.DoesNotContain("</script>", script);   // values are JSON-escaped, never raw script
+        }
+        finally { File.Delete(file); }
+        Assert.Empty(ScreenshotCapture.SessionStorage(null));
+    }
 }

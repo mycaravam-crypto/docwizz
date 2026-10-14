@@ -128,7 +128,8 @@ docwizz generate . --html --screenshots --base-url http://localhost:5173 --stora
 ```
 
 - Each route gets a fresh, isolated browser context: anonymous by default, or initialized from the saved storage state
-  (cookies and localStorage; sessionStorage is not preserved). docwizz never automates login or handles passwords.
+  (cookies and localStorage, plus `sessionStorage` entries you add to an origin in the file, for apps that keep their
+  token there; see the troubleshooting guide). docwizz never automates login or handles passwords.
 - With a session, each route after the first starts from the previous route's cookies and storage (kept in memory; the
   file is never written), so apps that rotate refresh tokens stay signed in. Routes such as `/logout` are skipped.
 - Before each capture docwizz waits for the network to go idle (up to 5 s) plus 400 ms; `--screenshot-delay <ms>`

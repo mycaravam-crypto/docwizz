@@ -32,11 +32,30 @@ New-Item -ItemType Directory -Force .auth | Out-Null
 npx playwright@1.63.0 codegen --save-storage=.auth/docwizz-state.json https://example.test
 ```
 
-Sign in using the opened browser, wait for an authenticated page to load, then close the browser to finish recording the state. The file stores cookies and localStorage data; **sessionStorage is not preserved**. DocWizz does not collect credentials or perform the login itself.
+Sign in using the opened browser, wait for an authenticated page to load, then close the browser to finish recording the state. The file stores cookies and localStorage data; **Playwright does not save sessionStorage**. DocWizz does not collect credentials or perform the login itself.
+
+**Apps that keep their token in sessionStorage:** add a `sessionStorage` list next to `localStorage` in the origin's entry
+(same `{ "name", "value" }` shape). DocWizz seeds every page of that origin with it before the app's scripts run, never
+overwriting what the page already holds, and carries what the page leaves to the next route. A small Playwright script
+can record it after signing in:
+
+```js
+const state = await context.storageState();
+const sessionStorage = await page.evaluate(() => Object.entries(sessionStorage).map(([name, value]) => ({ name, value })));
+const origin = new URL(page.url()).origin;
+let entry = state.origins.find(o => o.origin === origin);
+if (!entry) state.origins.push(entry = { origin, localStorage: [] });
+entry.sessionStorage = sessionStorage;
+require('fs').writeFileSync('.auth/docwizz-state.json', JSON.stringify(state), { mode: 0o600 });
+```
 
 Add `.auth/` to your application's `.gitignore`. Treat the state file as a credential: restrict filesystem access, never upload it to issues or CI artifacts, rotate/revoke sessions if exposed, and refresh it when the session expires.
 
 ## Generate screenshots
+
+Capture from a production build where you can: a dev server adds its own overlays (Vite's Vue Devtools button, error
+overlays) to every page. For a Vite app, `vite build` and then `vite preview` serves the build and reuses the dev
+server's `/api` proxy. A state file is per origin, so record it against the URL you capture from.
 
 ```powershell
 docwizz generate . --html --screenshots --base-url https://example.test --storage-state .auth/docwizz-state.json
@@ -76,7 +95,7 @@ This means DocWizz could not launch the browser revision expected by **its .NET 
 | `screenshot skipped: ... API answered 401/403 for /api/... (session not accepted?)` | The page loaded, but its data calls were rejected: the session expired or the test account lacks the role. Recreate the state or use an account with access. |
 | Every route shows the home page | The app uses hash routing (`/#/orders`) but the router was not detected as such; docwizz recognizes `createWebHashHistory`, `createHashRouter`, `<HashRouter>`, `useHash: true` and `withHashLocation()` in the file that declares the routes. |
 | `screenshot skipped: ... would end the session` | Logout routes are never opened, so later routes stay signed in. |
-| Only `/` is signed in, later routes are not | Fixed by carrying the session from route to route; if it persists, check whether the app keeps its token in sessionStorage (not saved by Playwright). |
+| Only `/` is signed in, later routes are not | Fixed by carrying the session from route to route; if it persists, check whether the app keeps its token in sessionStorage: Playwright doesn't save it, add it to the file as above. |
 | Pages captured half-loaded (spinners, empty tables) | Add `--screenshot-delay 1500` (milliseconds, up to 60000). |
 | `screenshot skipped: ... HTTP 4xx/5xx` | The target route returned an HTTP error; verify application and permissions. |
 | `N items lack docs; pass --ai` | A documentation-coverage notice, unrelated to screenshots; AI drafting is optional. |
@@ -84,6 +103,6 @@ This means DocWizz could not launch the browser revision expected by **its .NET 
 
 ### Known limitations
 
-DocWizz uses a **fresh browser context per route**: the first is seeded with the saved storage state, each later one with the previous route's cookies and storage (in memory only; the state file is never modified), so refresh-token rotation does not sign later routes out. Each screenshot is taken once the network is idle (up to 5 s), after 400 ms plus `--screenshot-delay`, but does not execute application-specific navigation or data setup. Dynamic routes, HTTP errors and URL redirects are skipped. Login forms with a password field are detected; other login overlays that do not change the URL may not be; manually inspect the resulting images. If your app uses sessionStorage-only authentication, use an application/test-environment mechanism compatible with Playwright storage state.
+DocWizz uses a **fresh browser context per route**: the first is seeded with the saved storage state, each later one with the previous route's cookies and storage (in memory only; the state file is never modified), so refresh-token rotation does not sign later routes out. Each screenshot is taken once the network is idle (up to 5 s), after 400 ms plus `--screenshot-delay`, but does not execute application-specific navigation or data setup. Dynamic routes, HTTP errors and URL redirects are skipped. Login forms with a password field are detected; other login overlays that do not change the URL may not be; manually inspect the resulting images. sessionStorage listed in the state file is seeded into every page and carried the same way.
 
 For reproducible documentation in CI, provision test data, use a non-production environment, refresh the login state securely and review screenshots before publishing.
