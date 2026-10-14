@@ -2,7 +2,9 @@
 // Resolve on every request and cache only successful scans; CLI commands retain their existing behavior.
 sealed class McpRefModelCache
 {
+    internal const int Capacity = 4;
     readonly Dictionary<(string Sha, string? Scope), CodeModel> models = new();
+    readonly Queue<(string Sha, string? Scope)> order = new();
 
     public CodeModel? Get(string gitRef, string? scope, Func<string, string?> resolve, Func<string, CodeModel?> scan)
     {
@@ -11,7 +13,12 @@ sealed class McpRefModelCache
         var key = (sha, scope);
         if (models.TryGetValue(key, out var model)) return model;
         model = scan(sha);
-        if (model is not null) models[key] = model;
+        if (model is not null)
+        {
+            models[key] = model;
+            order.Enqueue(key);
+            if (order.Count > Capacity) models.Remove(order.Dequeue());
+        }
         return model;
     }
 
