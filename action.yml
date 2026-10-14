@@ -29,18 +29,22 @@ runs:
       with: { dotnet-version: 10.0.x }
     - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
       with: { node-version: 22, package-manager-cache: false }  # the caller's package.json is not ours to cache
+    - name: Install pinned scanner payload
+      shell: bash
+      env:
+        ACTION_REPOSITORY: ${{ github.action_repository }}
+        ACTION_REF: ${{ github.action_ref }}
+      run: bash "$GITHUB_ACTION_PATH/.github/scripts/install-scanner-release.sh" "$ACTION_REPOSITORY" "$ACTION_REF" "$RUNNER_TEMP/docwizz-scanner"
     - name: Build DocWizz
       shell: bash
-      run: |
-        npm ci --prefix "$GITHUB_ACTION_PATH/scanner-vue" --silent
-        dotnet build "$GITHUB_ACTION_PATH/src/DocWizz" -c Release -o "$RUNNER_TEMP/docwizz" --nologo -v q
+      run: dotnet build "$GITHUB_ACTION_PATH/src/DocWizz" -c Release -o "$RUNNER_TEMP/docwizz" --nologo -v q
     - name: docwizz check --since
       id: check
       shell: bash
       env:
         BASE: ${{ inputs.base || github.event.pull_request.base.sha }}
         TARGET: ${{ inputs.path }}
-        DOCWIZZ_SCANNER_VUE: ${{ github.action_path }}/scanner-vue/index.mjs
+        DOCWIZZ_SCANNER_VUE: ${{ runner.temp }}/docwizz-scanner/index.mjs
       run: |
         [ -n "$BASE" ] || { echo "::error::no base ref: run on pull_request or set the base input"; exit 1; }
         git rev-parse --verify -q "$BASE^{commit}" >/dev/null || { echo "::error::$BASE is not in the checkout; use actions/checkout with fetch-depth: 0"; exit 1; }
