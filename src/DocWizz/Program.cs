@@ -488,16 +488,35 @@ static async Task<int> McpCommand(string root, Config config, bool autoRescan)
     CodeModel? RefModel(string gitRef) => refs.Get(gitRef, ProjectScope.Fingerprint(config.Scope),
         r => Git(root, $"rev-parse --verify {r}^{{commit}}")?.Trim(),
         sha => ModelAt(root, sha, config));
+    // The scan-start timestamp, not the end, prevents edits during a scan from being treated as cached.
+    CodeModel? working = null;
+    DateTime scanStart = default;
+    string? scanHead = null;
+    string? Head() => Git(root, "rev-parse --short HEAD")?.Trim();
+    int ChangedSince(DateTime time) => BuildFiles(root, config).Count(f => File.GetLastWriteTimeUtc(f) > time);
+    CodeModel WorkingModel(bool force = false)
+    {
+        var head = Head();
+        if (!force && working is not null && head == scanHead && ChangedSince(scanStart) == 0)
+            return working;
+        var start = DateTime.UtcNow;
+        // A scan observing a moving HEAD cannot be cached under a mismatching commit.
+        var fresh = BuildModel(root, config).Model;
+        working = fresh;
+        scanStart = start;
+        scanHead = head;
+        return fresh;
+    }
     var host = new McpServer.Host(root, config, autoRescan,
         Load: () => LoadModel(root, config),
-        Scan: () => BuildModel(root, config).Model,
-        Head: () => Git(root, "rev-parse --short HEAD")?.Trim(),
-        ChangedSince: t => BuildFiles(root, config).Count(f => File.GetLastWriteTimeUtc(f) > t),
+        Scan: () => WorkingModel(force: true),
+        Head: Head,
+        ChangedSince: ChangedSince,
         Impact: gitRef => RefModel(gitRef) is { } before
-            ? DiffJson(Diff.Compare(before, BuildModel(root, config).Model, config), gitRef, null) : null,
+            ? DiffJson(Diff.Compare(before, WorkingModel(), config), gitRef, null) : null,
         Check: since =>
         {
-            var model = BuildModel(root, config).Model;
+            var model = WorkingModel();
             if (since is null)
             {
                 var findings = Analyzer.Analyze(model, config);
