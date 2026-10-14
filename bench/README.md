@@ -135,6 +135,13 @@ task is solvable and that no check passes by accident.
 
 ## MCP session reuse (#204)
 
+For a reproducible before/after comparison without a local SDK, manually start the GitHub Actions
+[`mcp-performance` workflow](../.github/workflows/mcp-performance.yml) on the default branch.
+It builds the commit immediately before #205 and the checked-out version on the **same runner**,
+executes both on the medium/large fixtures, and publishes the resulting tables in the job summary
+and as an artifact. The workflow is opt-in only; it does not gate ordinary pull requests.
+
+
 ```console
 $ npm ci --prefix scanner-vue
 $ python3 bench/mcp.py --sizes medium,large             # --repeats 5 by default, --dll <old DocWizz.dll> for a baseline
