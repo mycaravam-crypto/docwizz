@@ -137,7 +137,9 @@ docwizz generate . --html --screenshots --base-url http://localhost:5173 --stora
 - `--storage-state` paths are relative to the scanned directory.
 - Routes of a hash-history router (`createWebHashHistory`, `createHashRouter`, `<HashRouter>`, Angular `useHash: true` /
   `withHashLocation()` in the routes file) are opened as `<base-url>/#/route`.
-- Dynamic routes, HTTP errors (400+), URL redirects, expired sessions and signed-in routes that show a password field
+- A route that redirects to another of the app's routes (a router alias such as `{ path: '/erp', redirect: '/icd-schema' }`)
+  is skipped as an alias; the target is captured on its own.
+- Dynamic routes, HTTP errors (400+), other URL redirects, expired sessions and signed-in routes that show a password field
   (a login form without a redirect) are skipped with a warning. With a session, a route whose API calls (fetch/XHR)
   are answered 401 or 403 is skipped too: SPA servers answer every page with 200, so the API is where a rejected
   session shows. API 404s are not treated as failures. A login overlay without a password field can't be

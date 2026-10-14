@@ -39,17 +39,22 @@ static class ScreenshotCapture
         return $"{slug}-{hash}.png";
     }
 
-    // Returns a capture failure reason; a client-side SPA guard can redirect after an HTTP 200.
-    public static string? NavigationFailure(Uri requested, Uri landed, int? status, bool hash = false)
+    // Returns a capture failure reason; a client-side SPA guard can redirect after an HTTP 200. `routes`: the app's static
+    // routes. Landing on another of them (not `/` or a sign-in page, where guards send the unauthenticated) is an alias
+    // such as { path: '/erp', redirect: '/icd-schema' }: skipped, but not a session problem.
+    public static string? NavigationFailure(Uri requested, Uri landed, int? status, bool hash = false, IReadOnlySet<string>? routes = null)
     {
+        string Redirected(string to) =>
+            routes is not null && to.TrimEnd('/') is { Length: > 0 } t && routes.Any(r => r.TrimEnd('/') == t) && !PasswordPage.IsMatch(to)
+                ? $"redirects to {to} (an alias of that route)" : $"redirected to {to} (needs authentication?)";
         if (status is null) return "no HTTP response";
         if (status >= 400) return $"HTTP {status}";
         if (requested.Scheme != landed.Scheme || requested.Authority != landed.Authority)
             return $"redirected to another origin ({PathOf(landed)}) (needs authentication?)";
         if (PathOf(requested).TrimEnd('/') != PathOf(landed).TrimEnd('/'))
-            return $"redirected to {PathOf(landed)} (needs authentication?)";
+            return Redirected(PathOf(landed));
         if (hash && HashPathOf(requested).TrimEnd('/') != HashPathOf(landed).TrimEnd('/'))
-            return $"redirected to #{HashPathOf(landed)} (needs authentication?)";
+            return Redirected(HashPathOf(landed)) is var r && r.StartsWith("redirects", StringComparison.Ordinal) ? r : $"redirected to #{HashPathOf(landed)} (needs authentication?)";
         return null;
     }
 
@@ -153,6 +158,7 @@ static class ScreenshotCapture
             Console.Error.WriteLine($"docwizz: screenshot skipped: {route} would end the session");
         routes = routes.Where(r => !EndsSession(r)).ToList();
         if (routes.Count == 0) return images;
+        var known = routes.ToHashSet(StringComparer.Ordinal);
 
         var target = new Uri(baseUrl.TrimEnd('/') + "/", UriKind.Absolute);
         var folder = Path.Combine(outDir, "screenshots");
@@ -192,7 +198,7 @@ static class ScreenshotCapture
                             new() { WaitUntil = WaitUntilState.Load, Timeout = 15000 });
                         // A SPA guard may redirect after the initial (successful) document load.
                         await Settle(page, delayMs);
-                        var failure = NavigationFailure(url, new Uri(page.Url), response?.Status, hash) ??
+                        var failure = NavigationFailure(url, new Uri(page.Url), response?.Status, hash, known) ??
                             (storageStateFile is null ? null : ApiFailure(apiResponses)) ??
                             LoginFormFailure(route, storageStateFile is not null, await page.Locator("input[type=password]:visible").CountAsync() > 0, authorized);
                         if (failure is not null)
@@ -203,7 +209,7 @@ static class ScreenshotCapture
                         }
                         await page.ScreenshotAsync(new() { Path = fullPath, FullPage = true, Timeout = 10000 });
                         // Also reject redirects triggered while rendering the screenshot.
-                        failure = NavigationFailure(url, new Uri(page.Url), response?.Status, hash);
+                        failure = NavigationFailure(url, new Uri(page.Url), response?.Status, hash, known);
                         if (failure is not null)
                         {
                             File.Delete(fullPath);

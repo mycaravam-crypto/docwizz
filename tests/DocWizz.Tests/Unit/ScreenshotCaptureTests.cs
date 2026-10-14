@@ -242,4 +242,17 @@ public class ScreenshotCaptureTests
         }
         finally { Directory.Delete(outDir, true); }
     }
+
+    [Theory]
+    [InlineData("/erp", "/icd-schema", "redirects to /icd-schema (an alias of that route)")]
+    [InlineData("/orders", "/", "redirected to / (needs authentication?)")]
+    [InlineData("/orders", "/login", "redirected to /login (needs authentication?)")]
+    [InlineData("/orders", "/elsewhere", "redirected to /elsewhere (needs authentication?)")]
+    public void A_redirect_to_another_app_route_is_an_alias_not_a_session_problem(string requested, string landed, string expected)
+    {
+        var routes = new HashSet<string> { "/", "/login", "/orders", "/erp", "/icd-schema" };
+        const string origin = "http://localhost:5173";
+        Assert.Equal(expected, ScreenshotCapture.NavigationFailure(new Uri(origin + requested), new Uri(origin + landed), 200, routes: routes));
+        Assert.Equal($"redirected to {landed} (needs authentication?)", ScreenshotCapture.NavigationFailure(new Uri(origin + requested), new Uri(origin + landed), 200));
+    }
 }
