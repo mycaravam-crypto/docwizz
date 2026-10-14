@@ -543,8 +543,10 @@ It never judges content: whether a statement is true or a product can be approve
 
 `docwizz load import . shop-bericht.json [more.json ...]` reads [powerwizz](https://github.com/mycaravam-crypto/powerwizz#json-report-for-docwizz)
 reports (`powerwizz.report/v1`) natively, offline and without an adapter, and keeps them in `docs/.docwizz/load.json`.
-The same run (start time and target) imported again replaces itself; unknown fields are ignored. `generate` then adds
-**Load (measured)** to `api.md`: per matched endpoint the requests, error rate and p50/p95/p99 latency of the newest run,
+The same run (start time and target) imported again replaces itself; unknown fields are ignored. A field v1 has that is
+missing or of another type (`steps[0].error_rate`, `latency_ms.p95`, `started_at`, …) exits 1 naming it, so a missing
+number never shows as 0. `generate` then adds **Load (measured)** to `api.md`: per matched endpoint the requests, error
+rate and p50/p95/p99 latency of the newest run, one row per step of that run that called it,
 with the run as evidence, and the run's users, ramp-up, duration and auth once. A run against a non-local target is
 marked as not comparable, and a run older than the endpoint file's last commit is marked _stale_.
 
@@ -686,7 +688,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `trace` | report on stdout | invalid/missing YAML; no data written |
 | `evidence-diff` | report on stdout | invalid/missing evidence catalogs; no data written |
 | `requirements` | `import`: index written or unchanged; `show`: answer on stdout (any outcome, `no-link` included); `query`: answer on stdout (a missing index included) | missing or invalid input, unknown schema, no index (`show`), unknown target, an unreadable query, bad arguments |
-| `load` | reports stored (unmatched or ambiguous steps are listed on stderr) | no report, a file that isn't `powerwizz.report/v1` (wrong or missing `schema`), invalid JSON |
+| `load` | reports stored (unmatched or ambiguous steps are listed on stderr) | no report, a file that isn't `powerwizz.report/v1` (wrong or missing `schema`), invalid JSON, a missing or mistyped field, a broken `load.json` |
 | `product` | draft written or unchanged; `check`: no errors (warnings allowed) | invalid template, unsafe overwrite, bad arguments; `check`: an error finding |
 | `init` | written | `docwizz.yaml` exists |
 | no command | — | prints how to start |

@@ -38,10 +38,50 @@ public class LoadJourneyTests
         var api = File.ReadAllText(Path.Combine(fixture.Dir, "docs", "api.md"));
         var load = api[api.IndexOf("## Load (measured)", StringComparison.Ordinal)..];
         load = load[..(load.IndexOf("\n## ", 3, StringComparison.Ordinal) is var end and > 0 ? end : load.Length)];
-        Assert.Contains("| `GET /api/materials/{id}` | 898 | 0.00 % | 24.2 | 39.4 | 41.4 | new.json 2026-10-13 18:39Z |", load);
+        Assert.Contains("| `GET /api/materials/{id}` | browse/detail | 898 | 0.00 % | 24.2 | 39.4 | 41.4 | new.json 2026-10-13 18:39Z |", load);
         Assert.DoesNotContain("old.json", load);   // the newest run per endpoint
         Assert.DoesNotContain("`PUT /api/materials/{id}`", load);
         Assert.Contains("| new.json 2026-10-13 18:39Z | `http://127.0.0.1:18080/app/` | 50 | 10 s | 60 s | PerUser |", load);
         Assert.Contains("- `POST /api/checkout (new.json)`", load);
+    }
+
+    [Fact]
+    public void A_run_older_than_its_endpoints_last_commit_is_stale()
+    {
+        using var repo = new FakeHistory();   // commits are dated 2026-01-01T00:00:00Z
+        repo.Write("Shop.csproj", """<Project Sdk="Microsoft.NET.Sdk.Web" />""");
+        repo.Write("Program.cs", """
+            var app = WebApplication.CreateBuilder(args).Build();
+            app.MapGet("/api/orders/{id}", (int id) => id);
+            app.MapGet("/api/health", () => "ok");
+            app.Run();
+            """);
+        repo.Commit("orders");
+        var reports = Directory.CreateTempSubdirectory("docwizz-load-reports-").FullName;
+        try
+        {
+            static string Run(string startedAt, string path) => $$$"""
+                {"schema":"powerwizz.report/v1","started_at":"{{{startedAt}}}","target":{"base_url":"http://localhost:5000/","local":true},
+                 "config":{"users":5,"ramp_up_s":1,"duration_s":10,"auth":"None"},
+                 "steps":[{"name":"s","method":"GET","path":"{{{path}}}","requests":10,"failures":0,"error_rate":0.0,"latency_ms":{"p50":1,"p95":2,"p99":3}}]}
+                """;
+            File.WriteAllText(Path.Combine(reports, "before.json"), Run("2025-12-01T00:00:00Z", "/api/orders/{{vu_id}}"));
+            File.WriteAllText(Path.Combine(reports, "after.json"), Run("2026-02-01T00:00:00Z", "/api/health"));
+            var import = Docwizz.Run("load", "import", repo.Root, Path.Combine(reports, "before.json"), Path.Combine(reports, "after.json"));
+            Assert.True(import.Exit == 0, import.ToString());
+            var generate = Docwizz.Run("generate", repo.Root);
+            Assert.True(generate.Exit == 0, generate.ToString());
+            var rows = File.ReadAllLines(Path.Combine(repo.Root, "docs", "api.md")).Where(l => l.StartsWith("| `GET /api/")).ToList();
+            Assert.EndsWith("before.json 2025-12-01 00:00Z _stale_ |", Assert.Single(rows, r => r.Contains("/api/orders/")));
+            Assert.EndsWith("after.json 2026-02-01 00:00Z |", Assert.Single(rows, r => r.Contains("/api/health")));
+
+            // A broken index is reported (exit 1), never a crash.
+            File.WriteAllText(Path.Combine(repo.Root, LoadReports.DefaultFile), "{ not json");
+            var broken = Docwizz.Run("load", "import", repo.Root, Path.Combine(reports, "after.json"));
+            Assert.Equal(1, broken.Exit);
+            Assert.Contains("delete it and run docwizz load import again", broken.Err);
+            Docwizz.NoStackTrace(broken);
+        }
+        finally { Directory.Delete(reports, recursive: true); }
     }
 }
