@@ -1,0 +1,57 @@
+# Explicit packaging acceptance test. npm runs only in the producing job.
+name: scanner-package
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with: { dotnet-version: 10.0.x }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: 22, cache: npm, cache-dependency-path: scanner-vue/package-lock.json }
+      - name: Produce scanner payload and pack
+        shell: bash
+        run: |
+          npm ci --prefix scanner-vue --silent
+          node scanner-vue/package-distribution.mjs
+          dotnet pack src/DocWizz/DocWizz.csproj -c Release -p:Version=0.0.0-test -o "$RUNNER_TEMP" --nologo
+      - name: Validate self-contained package payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/unpacked"
+          python3 - "$RUNNER_TEMP" <<'PY'
+          import glob, os, sys, zipfile
+          base = sys.argv[1]
+          packages = glob.glob(os.path.join(base, 'DocWizz*.nupkg'))
+          assert len(packages) == 1, packages
+          with zipfile.ZipFile(packages[0]) as zip:
+              required = ('scanner-vue/dist/index.mjs', 'scanner-vue/dist/java.mjs',
+                          'scanner-vue/dist/node_modules/typescript/',
+                          'scanner-vue/dist/node_modules/tree-sitter-java/tree-sitter-java.wasm')
+              names = zip.namelist()
+              for path in required:
+                  assert any(path in n for n in names), f'missing {path}'
+              zip.extractall(os.path.join(base, 'unpacked'))
+          PY
+          # Consumer runtime: no npm command, no dependency installation.
+          mkdir -p "$RUNNER_TEMP/example"
+          printf 'export const n: number = 1\n' > "$RUNNER_TEMP/example/index.ts"
+          printf '%s\n' "$RUNNER_TEMP/example/index.ts" | node "$RUNNER_TEMP/unpacked/tools/net10.0/any/scanner-vue/dist/index.mjs" "$RUNNER_TEMP/example" > "$RUNNER_TEMP/vue.json"
+          python3 - "$RUNNER_TEMP/vue.json" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1]))
+          assert isinstance(data.get('nodes'),list)
+          PY
+          printf '%s\n' "$RUNNER_TEMP/example/Test.java" > "$RUNNER_TEMP/files"
+          printf 'public class Test { public void run() {} }\n' > "$RUNNER_TEMP/example/Test.java"
+          node "$RUNNER_TEMP/unpacked/tools/net10.0/any/scanner-vue/dist/java.mjs" < "$RUNNER_TEMP/files" > "$RUNNER_TEMP/java.json"
+          python3 - "$RUNNER_TEMP/java.json" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1]))
+          assert len(data['files']) == 1
+          PY
