@@ -70,8 +70,12 @@ gives the baselines a domain model has to beat:
 | areas grouped by namespace, pair precision / recall | 0.685 / 0.771 (misplaces the three `Shop.Api` methods above) |
 | areas by `docwizz domain areas`, pair precision / recall | **0.906 / 1.0** (misplaces `ReportsJob.Run`: a job that only reads `OrderService.Total` is reporting, not ordering) |
 | process steps reached by a crawl from the entry | checkout 9/9, parcel tracking 1/1, order report 1/1 |
-| rules shown as As-intended (`--format md`), by verdict | implemented 8/14, partial 3/5, contradicted **2/2**, unrelated **1/1** |
+| rules shown as As-intended (`--format md`), by verdict, before the cross-checks | implemented 8/14, partial 3/5, contradicted 2/2, unrelated 1/1 |
+| the same with the cross-checks (numbers, name, sibling) | implemented 8/14, partial 3/5, contradicted **0/2**, unrelated **0/1** |
 
-The last row is the limit of the rule-based As-intended section: it shows both contradictions and the unrelated
-link as intent, because history can't tell what the code does. A domain model (or model wording, #188) earns its
-place by moving those three out of As-intended without losing the implemented ones.
+History alone showed both contradictions and the unrelated link as intent. The cross-checks compare each work
+item's text with the linked method's source and move exactly those three to Unclear: `Refund` WI-103 (mentions
+`Total`, never calls it), `Overdue` WI-106 (states 14, the code uses 30), `Available` WI-111 (`Track` has the work
+item's `TRK-`, `Available` has none of its values). `--expect` fails if one of them is shown as intent again or if a
+cross-check takes out an implemented or partial link. Each check fires once on 23 labelled rules: their precision on
+real code is unmeasured, which is why a hit only moves the link to Unclear and claims nothing.

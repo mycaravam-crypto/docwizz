@@ -390,7 +390,7 @@ still runs, but marks requirement evidence as unavailable. The crawler uses a de
 BFS and never sends code or work items to AI or a network service. The JSON schema is
 `docwizz.domain-discovery/v1`; `candidateTerms` are Work Item titles, not verified domain names. `--format md` renders the same report
 as reviewable Markdown in three parts: As-is (Mermaid graph and symbol table), As-intended (confirmed links on unchanged
-code, with criteria) and Unclear (every other link with its reason, and methods without one).
+code that no cross-check questions, with criteria) and Unclear (every other link with its reason, and methods without one).
 `domain areas` groups every production method by folder, then moves a method of an outer folder (controllers, jobs:
 no other folder calls into it) that calls into exactly one other type to that type's area, and an interface method to
 its implementations' area. Every member carries its reason; the schema is `docwizz.domain-areas/v1` and every area is

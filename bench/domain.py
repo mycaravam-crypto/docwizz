@@ -118,9 +118,11 @@ def evaluate(dll, repos, gold, links):
     }
 
 
-def intended(r):
-    """The Markdown's As-intended rule: a confirmed link on unchanged code, to an exported, current work item."""
-    return r["status"] == "confirmed" and not r["changedSince"] and r["availability"] == "available" and r.get("isCurrent") is not False
+def intended(r, checks=True):
+    """The Markdown's As-intended rule: a confirmed link on unchanged code, to an exported, current work item, that no
+    cross-check questions. checks=False is the rule before the cross-checks (#187), the baseline they have to beat."""
+    return (r["status"] == "confirmed" and not r["changedSince"] and r["availability"] == "available" and r.get("isCurrent") is not False
+            and not (checks and r["checks"]))
 
 
 def pairs(groups):
@@ -177,15 +179,22 @@ def domain(dll, repo, gold, work):
 
     # Rules: what the As-intended section would show for each labelled (work item, method), by verdict.
     verdicts = {(r["method"], r["workItem"]): r["verdict"] for r in d["rules"] if r["method"]}
-    shown = {}
+    shown, before = {}, {}
     for m in sorted({m for m, _ in verdicts}):
         out, _ = discover(dll, repo, {"seed": m, "depth": 0})
         for r in json.loads(out.stdout)["requirements"] if out.returncode == 0 else []:
             if (m, r["id"]) in verdicts and intended(r):
                 shown[(m, r["id"])] = verdicts[(m, r["id"])]
-    by_verdict = {v: {"labelled": sum(x == v for x in verdicts.values()), "asIntended": sum(x == v for x in shown.values())}
+            if (m, r["id"]) in verdicts and intended(r, checks=False):
+                before[(m, r["id"])] = verdicts[(m, r["id"])]
+    by_verdict = {v: {"labelled": sum(x == v for x in verdicts.values()), "asIntended": sum(x == v for x in shown.values()),
+                      "withoutChecks": sum(x == v for x in before.values())}
                   for v in sorted(set(verdicts.values()))}
+    # The cross-checks may only take out links that disagree with the code, never ones that hold.
+    problems += [f"a cross-check took {m} WI-{i} ({v}) out of As-intended" for (m, i), v in sorted(before.items())
+                 if v in ("implemented", "partial") and (m, i) not in shown]
     wrong = sorted(f"{m.rsplit('.', 2)[-2]}.{m.rsplit('.', 1)[-1]} WI-{i} ({v})" for (m, i), v in shown.items() if v in ("contradicted", "unrelated"))
+    problems += [f"As-intended on code that disagrees: {w}" for w in wrong]
     return {"labels": {"methods": len(methods), "areas": len(d["areas"]), "processes": len(d["processes"]), "rules": len(d["rules"])},
             "problems": problems, "areaBaseline": areas, "areaModel": model, "processes": processes, "rules": by_verdict, "intentOnDisagreeingCode": wrong}
 
@@ -221,8 +230,8 @@ def markdown(result):
                   + (f"; misplaced: {', '.join(d['areaModel']['misplaced'])}" if d['areaModel']['misplaced'] else ""),
                   "- **Process steps reached by a crawl from the entry:** "
                   + ", ".join(f"{p['name']} {p['reached']}/{p['steps']}" for p in d["processes"]),
-                  "- **Rules shown as As-intended, by verdict:** "
-                  + ", ".join(f"{v} {x['asIntended']}/{x['labelled']}" for v, x in d["rules"].items()),
+                  "- **Rules shown as As-intended, by verdict (without the cross-checks):** "
+                  + ", ".join(f"{v} {x['asIntended']}/{x['labelled']} ({x['withoutChecks']})" for v, x in d["rules"].items()),
                   "- **As-intended on code that contradicts or isn't about the work item:** "
                   + (", ".join(d["intentOnDisagreeingCode"]) or "none")]
         lines += [f"- label problem: {p}" for p in d["problems"]]

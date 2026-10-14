@@ -185,6 +185,67 @@ public class DomainCrawlerTests
     static int At(string text, string value) => text.IndexOf(value, StringComparison.Ordinal);
 
     [Fact]
+    public void Cross_checks_move_links_the_code_disagrees_with_out_of_as_intended()
+    {
+        string[] source =
+        [
+            "public class Orders {",
+            "public decimal Refund(decimal a) { return a; }",
+            "public decimal Total(int id) { return 10m; }",
+            "public bool Overdue(int days) { return days > 30; }",
+            "public bool Remind(int id) { return true; }",
+            "public string Track(string c) { return c.StartsWith(\"TRK-\") ? \"in transit\" : \"unknown\"; }",
+            "public int Available(string sku) { return 0; }",
+            "}",
+        ];
+        var root = Directory.CreateTempSubdirectory("docwizz-checks-").FullName;
+        Directory.CreateDirectory(Path.Combine(root, "src"));
+        File.WriteAllLines(Path.Combine(root, "src/Orders.cs"), source);
+        string Id(string m) => $"cs:Shop.Orders.{m}()";
+        string[] methods = ["Refund", "Total", "Overdue", "Remind", "Track", "Available"];
+        var model = Model(
+            [N("cs:Shop.Orders", "src/Orders.cs"), .. methods.Select((m, i) => N(Id(m), "src/Orders.cs", kind: "method", hash: m) with { Line = i + 2, EndLine = i + 2 })],
+            methods.Select(m => E("cs:Shop.Orders", Id(m), "contains")));
+        RequirementIndex.Commit Commit(char sha, int workItem, params string[] changed) => new(new string(sha, 40), "verified", [workItem], [], [], "mapped",
+            [.. changed.Select(m => new RequirementIndex.Touch(Id(m), "method", m, "src/Orders.cs", "1", "1"))], []);
+        RequirementIndex.WorkItem Item(int id, string title, params string[] criteria) => new(id, 1, 1, true, "User Story", "Closed",
+            title, null, null, null, null, null, [.. criteria], $"d{id}", []);
+        var index = Index() with
+        {
+            Commits = [Commit('a', 1, "Refund"), Commit('b', 2, "Overdue", "Remind"), Commit('c', 3, "Track", "Available")],
+            PullRequests = [],
+            WorkItems =
+            [
+                Item(1, "Partial refunds", "A refund may not exceed the order total."),
+                Item(2, "Overdue reminders", "An invoice is overdue 14 days after its due date.", "The reminder names the invoice."),
+                Item(3, "Tracking codes", "Codes starting with TRK- are in transit."),
+            ],
+        };
+        try
+        {
+            var checks = methods.SelectMany(m => DomainCrawler.Discover(model, Id(m), null, 0, 10, index, "abc123", root).Requirements)
+                .ToDictionary(r => r.Symbol[(r.Symbol.LastIndexOf('.') + 1)..^2], r => string.Join("; ", r.Checks));
+            Assert.Equal("the work item mentions `Total`, which this method doesn't call", checks["Refund"]);
+            Assert.Equal("the work item states 14, the code uses 30", checks["Overdue"]);
+            Assert.Equal("`Orders.Track`, also linked to the work item, has its values; this method has none", checks["Available"]);
+            // Overdue shares the work item with Remind, and Track holds its TRK-: neither is questioned.
+            Assert.Equal("", checks["Remind"]);
+            Assert.Equal("", checks["Track"]);
+            // Both methods in one walk: each is compared with the other, not with itself.
+            var both = DomainCrawler.Discover(model, null, 2, 0, 10, index, "abc123", root).Requirements;
+            Assert.Equal(["the work item states 14, the code uses 30"], both.Single(r => r.Symbol == Id("Overdue")).Checks);
+            Assert.Empty(both.Single(r => r.Symbol == Id("Remind")).Checks);
+
+            var md = DomainCrawler.Markdown(DomainCrawler.Discover(model, Id("Overdue"), null, 0, 10, index, "abc123", root));
+            Assert.Contains("None.", md[At(md, "## As-intended")..At(md, "## Unclear")]);
+            Assert.Contains("the work item states 14, the code uses 30", md[At(md, "## Unclear")..]);
+            // Without the sources there is nothing to check: the link stays As-intended.
+            Assert.Empty(DomainCrawler.Discover(model, Id("Overdue"), null, 0, 10, index, "abc123").Requirements.Single().Checks);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public void Work_item_seed_starts_from_linked_current_symbols_only()
     {
         var report = DomainCrawler.Discover(Graph(), null, 101, 1, 100, Index(), "abc123");

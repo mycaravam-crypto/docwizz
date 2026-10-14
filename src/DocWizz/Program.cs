@@ -221,7 +221,7 @@ static int DomainCommand(string root, Config config, Dictionary<string, string> 
         var index = File.Exists(file) ? RequirementIndex.Load(file) : null;
         var (model, _, _) = LoadModel(root, config);
         var report = DomainCrawler.Discover(model, seed, workItemId, depth, limit, index,
-            Git(root, "rev-parse HEAD")?.Trim());
+            Git(root, "rev-parse HEAD")?.Trim(), root);
         if (index is not null && index.Inputs.Scope != ProjectScope.Fingerprint(config.Scope))
             report = report with { Warnings = [.. report.Warnings, "the imported requirement scope differs from the current project scope; reimport requirements"] };
         var md = opts.GetValueOrDefault("format") == "md";
