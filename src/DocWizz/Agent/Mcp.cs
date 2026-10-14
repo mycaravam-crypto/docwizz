@@ -305,7 +305,7 @@ sealed class McpServer(McpServer.Host host)
             if (t.Primary is not { } n) requirements = [new("requirements are per symbol: use a symbol as target", "history")];
             else
             {
-                var context = RequirementResolver.For(Requirements(), n.Id, n, host.Head());
+                var context = RequirementResolver.For(Requirements(), n.Id, n, host.Head(), Exists);
                 requirements = AgentContext.RequirementLines(context, BusinessContext.Select(context, host.Config.Ai.Requirements));
             }
         }
@@ -327,11 +327,13 @@ sealed class McpServer(McpServer.Host host)
         catch (ArgumentException e) { throw new ToolError(e.Message); }
     }
 
+    bool Exists(string id) => model.Nodes.Any(n => n.Id == id);
+
     object RequirementsForSymbol(JsonObject a)
     {
         var query = Required(a, "id");
         var index = Requirements();
-        if (AgentContext.Resolve(model, query) is { Target.Primary: { } n }) return RequirementResolver.For(index, n.Id, n, host.Head());
+        if (AgentContext.Resolve(model, query) is { Target.Primary: { } n }) return RequirementResolver.For(index, n.Id, n, host.Head(), Exists);
         if (index.Commits.SelectMany(c => c.Touches).Any(t => t.Symbol == query)) return RequirementResolver.For(index, query, null, host.Head());
         return Symbol(query);   // throws the resolver's error, with candidates
     }

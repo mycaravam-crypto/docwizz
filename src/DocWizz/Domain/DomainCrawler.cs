@@ -179,7 +179,7 @@ static class DomainCrawler
         if (index is not null)
             foreach (var s in symbols.Where(s => nodes[s.Id].Kind is not ("external" or "config")))
             {
-                var context = RequirementResolver.For(index, s.Id, nodes[s.Id], head);
+                var context = RequirementResolver.For(index, s.Id, nodes[s.Id], head, nodes.ContainsKey);
                 if (!context.Complete) warnings.Add($"historical linkage for {s.Id} is incomplete");
                 if (context.Requirements.Count > MaxRequirementsPerSymbol)
                     warnings.Add($"{s.Id}: only {MaxRequirementsPerSymbol} of {context.Requirements.Count} requirements shown");
@@ -360,7 +360,9 @@ static class DomainCrawler
     static List<string> Unclear(Requirement r)
     {
         var why = new List<string>();
-        if (r.Status != "confirmed") why.Add("linked only through a pull request or a commit message");
+        if (r.Status != "confirmed")
+            why.Add(r.Evidence.All(e => e.Relation == "renamed-from") ? "linked under its name before a rename"
+                : "linked only through a pull request or a commit message");
         if (r.ChangedSince) why.Add("the code changed after the linked commit");
         if (r.Availability != "available" || r.Title is null) why.Add("the work item was not exported");
         if (r.IsCurrent == false) why.Add("the work item has a newer revision than the export");

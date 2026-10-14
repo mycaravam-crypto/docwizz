@@ -162,6 +162,28 @@ public class RequirementIndexTests
     }
 
     [Fact]
+    public void A_rename_carries_the_old_ids_links_over_as_candidates()
+    {
+        // Commit 1 links WI-42 to Place; commit 2 renames Place to Submit in place (same type, parameters and lines).
+        const string Submit = "cs:Shop.OrderService.Submit(int)";
+        var renamed = Models.Model([.. At().Nodes.Select(n => n.Id == Place ? n with { Id = Submit, Name = "Submit", Hash = "s1" } : n)]);
+        var index = Build(History([Commit(1, Verified(42), null, (7, 1)), Commit(2, Verified(), null, (5, 1))]),
+            modelAt: sha => sha == Sha(2) ? renamed : At());
+        var now = renamed.Nodes.Select(n => n.Id).ToHashSet();
+        var submit = renamed.Nodes.Single(n => n.Id == Submit);
+
+        var r = Assert.Single(RequirementResolver.For(index, Submit, submit, null, now.Contains).Requirements);
+        Assert.Equal((42, "candidate", false), (r.Id, r.Status, r.ChangedSince));
+        Assert.Equal(("renamed-from", Place, Sha(1)), (r.Evidence.Single().Relation, r.Evidence.Single().Symbol, r.Evidence.Single().Commit));
+        Assert.Contains($"renamed-from {Place} via", RequirementResolver.Text(RequirementResolver.For(index, Submit, submit, null, now.Contains)));
+        Assert.Equal([Place, Submit], RequirementResolver.Symbols(index, 42, renamed, null).Symbols.Select(s => s.Id).Order());
+
+        // Not a rename: the old method still exists, or nobody said what exists.
+        Assert.Empty(RequirementResolver.For(index, Submit, submit, null, _ => true).Requirements);
+        Assert.Empty(RequirementResolver.For(index, Submit, submit, null).Requirements);
+    }
+
+    [Fact]
     public void Reverse_lookup_lists_the_symbols_of_a_work_item()
     {
         var index = Build(History([Commit(1, Verified(42), null, (7, 1), (15, 1))]));

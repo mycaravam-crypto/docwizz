@@ -108,12 +108,14 @@ Layer 1 is deterministic. The numbers below hold for any machine:
 
 | Methods | Precision | Recall | Recall (visible evidence) | Confirmed P/R | Candidate P/R | Outcomes | Reproducible |
 |---|---|---|---|---|---|---|---|
-| 24 | 0.95 | 0.905 | 1.0 | 0.941/1.0 | 1.0/1.0 | 1.0 | yes |
+| 24 | 0.952 | 0.952 | 1.0 | 0.941/1.0 | 1.0/1.0 | 1.0 | yes |
 
 - **False positive:** `Available` WI-111. An unrelated edit in a linked commit becomes a confirmed link. Hunk overlap
   can't tell intent. No real-model draft cited it (unsupported WI 0 in both runs), but nothing guarantees that.
-- **Missed:** `Rename` WI-110 (the link stays with the old id, reported as `not-current`) and `Quote` WI-109 (the
-  lookup was denied, reported as `unavailable`, never as "no link").
+- **Missed:** `Quote` WI-109 (the lookup was denied, reported as `unavailable`, never as "no link").
+- **Rename** (#187, since 2026-10-14): `Rename` WI-110 was missed (the link stayed with the old id `ChangeName`). The
+  resolver now follows an in-place rename and shows it as a `renamed-from` candidate, and gold labels it `candidate`
+  (it was `none`), so recall went from 0.905 to 0.952. The draft runs below predate this.
 
 ### Drafts with a real local model (#174)
 
