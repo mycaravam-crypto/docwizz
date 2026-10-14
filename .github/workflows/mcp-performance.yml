@@ -1,0 +1,80 @@
+# Explicit measurement only; never runs on pull requests or a schedule.
+name: mcp-performance
+on:
+  workflow_dispatch:
+    inputs:
+      sizes:
+        description: 'Synthetic fixture sizes (medium,large)'
+        required: true
+        default: 'medium,large'
+        type: choice
+        options:
+          - medium,large
+          - medium
+          - large
+      repeats:
+        description: 'Repeated impact/check calls per size'
+        required: true
+        default: '3'
+        type: choice
+        options:
+          - '3'
+          - '5'
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: edea4e29facf7a53b9cb9d349f1915c3a24519cf # main immediately before #205
+          path: previous
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with: { dotnet-version: 10.0.x }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: 22, cache: npm, cache-dependency-path: scanner-vue/package-lock.json }
+      - name: Build previous and current implementations
+        shell: bash
+        run: |
+          npm ci --prefix scanner-vue --silent
+          dotnet build previous/src/DocWizz -c Release -o "$RUNNER_TEMP/docwizz-before" --nologo -v q
+          dotnet build src/DocWizz -c Release -o "$RUNNER_TEMP/docwizz-after" --nologo -v q
+      - name: Benchmark both implementations on the same runner
+        shell: bash
+        env:
+          SIZES: ${{ inputs.sizes }}
+          REPEATS: ${{ inputs.repeats }}
+        run: |
+          set -euo pipefail
+          {
+            echo "# MCP scan reuse: before and after #205"
+            echo
+            echo "Runner: $(uname -a)"
+            echo "SDK: $(dotnet --version); Node: $(node --version)"
+            echo "Sizes: $SIZES; repeats per tool: $REPEATS"
+            echo
+            echo "## Before (edea4e29)"
+            python3 bench/mcp.py --dll "$RUNNER_TEMP/docwizz-before/DocWizz.dll" --sizes "$SIZES" --repeats "$REPEATS"
+            echo
+            echo "## After (current checkout)"
+            python3 bench/mcp.py --dll "$RUNNER_TEMP/docwizz-after/DocWizz.dll" --sizes "$SIZES" --repeats "$REPEATS"
+          } | tee "$RUNNER_TEMP/mcp-performance.md"
+      - name: Publish results
+        if: always()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/mcp-performance.md"; then
+            cat "$RUNNER_TEMP/mcp-performance.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Benchmark did not produce results; inspect job logs." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: mcp-performance
+          path: ${{ runner.temp }}/mcp-performance.md
+          if-no-files-found: ignore
