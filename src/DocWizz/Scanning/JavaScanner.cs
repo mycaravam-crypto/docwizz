@@ -191,7 +191,7 @@ static class JavaScanner
         try
         {
             var psi = new ProcessStartInfo("node", [script]) { RedirectStandardInput = true, RedirectStandardOutput = true };
-            var json = ScannerProcess.Run(psi, string.Join('\\n', files.Select(Path.GetFullPath)));
+            var json = ScannerProcess.Run(psi, string.Join('\n', files.Select(Path.GetFullPath)));
             return JsonSerializer.Deserialize<Syntax>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))!.Files;
         }
         catch (Exception e)
