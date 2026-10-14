@@ -40,6 +40,11 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
+  <!-- Include the staged scanner payload in the .NET tool package. -->
+  <ItemGroup Condition="Exists('../../scanner-vue/dist/index.mjs')">
+    <None Include="../../scanner-vue/dist/**/*" Pack="true"
+          PackagePath="tools/net10.0/any/scanner-vue/dist/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="DocWizz.Tests" />
   </ItemGroup>
