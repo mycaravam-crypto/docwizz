@@ -58,6 +58,32 @@ public class CSharpScannerTests
         Assert.Contains("anonymous", nodes["cs:endpoint:GET /health"].Tags!);
     }
 
+    // Regression (erp-connector): authorization through the project's own helpers that wrap RequireAuthorization.
+    [Fact]
+    public void Minimal_api_authorization_through_source_helpers()
+    {
+        var (nodes, _) = Scan(("Program.cs", """
+            var app = WebApplication.Create();
+            app.MapDelete("/users/{name}", (string name) => Results.NoContent()).RequirePermission("users.edit");
+            var settings = app.MapGroup("/settings").RequireAdmin();
+            settings.MapPut("/scheduler", () => Results.NoContent());
+            app.MapPost("/login", () => Results.Ok()).Tagged();
+            """), ("Auth.cs", """
+            public static class AuthExtensions
+            {
+                public static TBuilder RequirePermission<TBuilder>(this TBuilder b, params string[] anyOf)
+                    where TBuilder : IEndpointConventionBuilder => b.RequireAdmin();
+                public static TBuilder RequireAdmin<TBuilder>(this TBuilder b)
+                    where TBuilder : IEndpointConventionBuilder => b.RequireAuthorization("admin");
+                public static TBuilder Tagged<TBuilder>(this TBuilder b)
+                    where TBuilder : IEndpointConventionBuilder => b.WithTags("x");
+            }
+            """));
+        Assert.Contains("authorize", nodes["cs:endpoint:DELETE /users/{name}"].Tags!);
+        Assert.Contains("authorize", nodes["cs:endpoint:PUT /settings/scheduler"].Tags!);
+        Assert.DoesNotContain("authorize", nodes["cs:endpoint:POST /login"].Tags!);
+    }
+
     [Fact]
     public void Controller_actions_are_endpoints_with_binding_sources()
     {

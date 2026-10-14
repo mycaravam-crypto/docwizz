@@ -490,7 +490,7 @@ static class CSharpScanner
     };
 
     // `app.MapGroup("/api").MapGroup("/x")`, possibly via a local (`var g = app.MapGroup(..)`), → "/api/x";
-    // Auth is set when any group in the chain calls RequireAuthorization().
+    // Auth is set when any group in the chain calls RequireAuthorization(), directly or through a helper (Authorizes).
     // ponytail: groups passed in as parameters stay unresolved; follow the call site if that matters.
     static (string Prefix, bool Auth) Group(SemanticModel sm, ExpressionSyntax receiver, int depth)
     {
@@ -498,7 +498,7 @@ static class CSharpScanner
         if (receiver is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax call } inv)
         {
             var (prefix, auth) = Group(sm, call.Expression, depth + 1);
-            auth |= call.Name.Identifier.Text == "RequireAuthorization";
+            auth |= Authorizes(sm, inv);
             return call.Name.Identifier.Text == "MapGroup" && inv.ArgumentList.Arguments is [{ Expression: LiteralExpressionSyntax l }, ..]
                 ? (JoinRoute(prefix, l.Token.ValueText), auth) : (prefix, auth);
         }
@@ -506,6 +506,24 @@ static class CSharpScanner
             && local.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is VariableDeclaratorSyntax { Initializer.Value: var init })
             return Group(sm, init, depth + 1);
         return ("", false);
+    }
+
+    // RequireAuthorization(), or a helper in the source that calls it: `.RequirePermission(..)` whose body is
+    // `builder.RequireAuthorization(policy)`. Helpers are followed three calls deep.
+    static bool Authorizes(SemanticModel sm, InvocationExpressionSyntax call, int depth = 0)
+    {
+        if (call.Expression is not MemberAccessExpressionSyntax ma) return false;
+        if (ma.Name.Identifier.Text == "RequireAuthorization") return true;
+        if (depth > 2) return false;
+        // Without ASP.NET references the builder is an error type and the call doesn't bind: take the source
+        // extension methods of that name instead.
+        IEnumerable<IMethodSymbol> methods = Resolve(sm.GetSymbolInfo(call)) is IMethodSymbol m ? [m.ReducedFrom ?? m]
+            : sm.Compilation.GetSymbolsWithName(ma.Name.Identifier.Text, SymbolFilter.Member).OfType<IMethodSymbol>().Where(x => x.IsExtensionMethod);
+        return methods.SelectMany(x => x.OriginalDefinition.DeclaringSyntaxReferences).Any(r =>
+        {
+            var model = sm.Compilation.GetSemanticModel(r.SyntaxTree);
+            return r.GetSyntax().DescendantNodes().OfType<InvocationExpressionSyntax>().Any(i => Authorizes(model, i, depth + 1));
+        });
     }
 
     static string JoinRoute(string prefix, string route) =>
@@ -547,7 +565,7 @@ static class CSharpScanner
             if (ma.Name.Identifier.Text is "WithSummary" or "WithDescription"
                 && outer.ArgumentList.Arguments.FirstOrDefault()?.Expression is LiteralExpressionSyntax l)
                 text ??= l.Token.ValueText;
-            if (ma.Name.Identifier.Text == "RequireAuthorization") tags.Add("authorize");
+            if (Authorizes(sm, outer)) tags.Add("authorize");
             if (ma.Name.Identifier.Text == "AllowAnonymous") tags.Add("anonymous");
         }
         // A statement alone in an `if` (`if (env.IsDevelopment()) { app.MapPost(..) }`) takes the comment above the `if`.

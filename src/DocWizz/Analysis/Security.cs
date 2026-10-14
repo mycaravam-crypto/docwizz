@@ -4,7 +4,8 @@
 // Findings support a review. They are not an ISO/IEC 27001 assessment, and no rule claims compliance with anything.
 //
 // Authentication and authorization come from endpoint metadata: ASP.NET [Authorize]/[AllowAnonymous] (controller and
-// action), RequireAuthorization()/AllowAnonymous() on minimal APIs and their MapGroup; Spring @PreAuthorize/@Secured/
+// action), RequireAuthorization()/AllowAnonymous() on minimal APIs and their MapGroup, also
+// through a helper in the source that calls RequireAuthorization (`.RequirePermission(..)`); Spring @PreAuthorize/@Secured/
 // @RolesAllowed/@PermitAll. Policies configured elsewhere (a fallback policy, a security filter chain) are invisible.
 class SecurityConfig
 {
