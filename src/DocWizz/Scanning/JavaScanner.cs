@@ -191,12 +191,7 @@ static class JavaScanner
         try
         {
             var psi = new ProcessStartInfo("node", [script]) { RedirectStandardInput = true, RedirectStandardOutput = true };
-            var p = Process.Start(psi)!;
-            p.StandardInput.Write(string.Join('\n', files.Select(Path.GetFullPath)));
-            p.StandardInput.Close();
-            var json = p.StandardOutput.ReadToEnd();
-            p.WaitForExit();
-            if (p.ExitCode != 0) throw new InvalidOperationException($"exit code {p.ExitCode}");
+            var json = ScannerProcess.Run(psi, string.Join('\\n', files.Select(Path.GetFullPath)));
             return JsonSerializer.Deserialize<Syntax>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))!.Files;
         }
         catch (Exception e)
