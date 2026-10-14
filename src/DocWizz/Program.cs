@@ -988,6 +988,7 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
         screenshots = await ScreenshotCapture.Run(model, outDir, screenshotBaseUrl, screenshotStorageState, screenshotDelayMs);
         bar.Advance("screenshots", Plural(screenshots.Count, "route"));
     }
+    else screenshots = ScreenshotCapture.Existing(model, outDir);
 
     bar.Begin("write pages", html ? "Markdown and HTML" : "Markdown");
     var rebuildHtml = html && refreshHtmlOnVersionChange && HtmlVersion.NeedsRefresh(outDir, AppVersion.Number);
@@ -1043,6 +1044,7 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
         details.Add($"AI            {Plural(summaries.Count, "summary", "summaries")}, {Plural(overviews.Count, "module overview")}, {Plural(assessments.Count, "rating")}" +
             (ai ? "" : " (cached; --ai drafts more)"));
     if (screenshotBaseUrl is not null) details.Add($"Screenshots   {Plural(screenshots.Count, "route")} from {screenshotBaseUrl}");
+    else if (screenshots.Count > 0) details.Add($"Screenshots   {Plural(screenshots.Count, "route")} kept from the last capture (--screenshots to refresh)");
     details.Add($"Pages         {pages.Count:N0} {(html ? "Markdown + HTML" : "Markdown")}: {changed.Count:N0} changed, {pages.Count - changed.Count:N0} unchanged");
     var slowest = bar.Durations.Where(d => d.Time.TotalSeconds >= 0.05).OrderByDescending(d => d.Time).Take(3)
         .Select(d => $"{d.Stage} {CliProgress.Duration(d.Time)}").ToList();

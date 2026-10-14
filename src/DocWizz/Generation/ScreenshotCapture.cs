@@ -133,6 +133,12 @@ static class ScreenshotCapture
         await page.WaitForTimeoutAsync(400 + delayMs);
     }
 
+    // Without --screenshots: the last successful captures stay linked. A failed capture deletes its file, so a file that
+    // exists is the newest good one; a route that left the code is no longer linked (its file stays until the next capture).
+    public static Dictionary<string, string> Existing(CodeModel model, string outDir) =>
+        Routes(model).Where(r => !EndsSession(r) && File.Exists(Path.Combine(outDir, "screenshots", FileName(r))))
+            .ToDictionary(r => r, r => $"screenshots/{FileName(r)}", StringComparer.Ordinal);
+
     // Captures static routes (hash-router routes as /#/route) anonymously or with a provided session, waiting delayMs
     // extra per page; returns only successful images.
     public static async Task<Dictionary<string, string>> Run(CodeModel model, string outDir, string baseUrl,
