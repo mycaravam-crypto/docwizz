@@ -411,13 +411,14 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         if (load.Endpoints.Count > 0)
         {
             static string Run(LoadReports.Report r) => FormattableString.Invariant($"{Esc(r.File ?? "")} {r.StartedAt.UtcDateTime:yyyy-MM-dd HH:mm}Z");
-            sb.AppendLine("| Endpoint | Requests | Error rate | p50 | p95 | p99 | Run |\n|---|---|---|---|---|---|---|");
-            foreach (var (e, step, report, stale) in load.Endpoints)
-            {
-                var (label, latency) = (Code(Naming.EndpointLabel(nodes[e])), step.LatencyMs);
-                sb.AppendLine(FormattableString.Invariant(
-                    $"| {label} | {step.Requests} | {step.ErrorRate:P2} | {latency.P50:0.#} | {latency.P95:0.#} | {latency.P99:0.#} | {Run(report)}{(stale ? " _stale_" : "")} |"));
-            }
+            sb.AppendLine("| Endpoint | Step | Requests | Error rate | p50 | p95 | p99 | Run |\n|---|---|---|---|---|---|---|---|");
+            foreach (var (e, steps, report, stale) in load.Endpoints)
+                foreach (var step in steps)
+                {
+                    var (label, latency) = (Code(Naming.EndpointLabel(nodes[e])), step.LatencyMs);
+                    sb.AppendLine(FormattableString.Invariant(
+                        $"| {label} | {Esc(step.Name ?? "—")} | {step.Requests} | {step.ErrorRate:P2} | {latency.P50:0.#} | {latency.P95:0.#} | {latency.P99:0.#} | {Run(report)}{(stale ? " _stale_" : "")} |"));
+                }
             sb.AppendLine("\n| Run | Target | Users | Ramp-up | Duration | Auth |\n|---|---|---|---|---|---|");
             foreach (var r in load.Endpoints.Select(m => m.Report).Distinct().OrderBy(r => r.StartedAt))
             {

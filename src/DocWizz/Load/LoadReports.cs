@@ -9,7 +9,7 @@ static class LoadReports
     public const string DefaultFile = "docs/.docwizz/load.json";
 
     public record Latency(double P50, double P95, double P99);
-    public record Step(string Name, string Method, string Path, long Requests, long Failures, double ErrorRate, Latency LatencyMs);
+    public record Step(string? Name, string Method, string Path, long Requests, long Failures, double ErrorRate, Latency LatencyMs);
     public record Target(string BaseUrl, bool Local);
     public record RunConfig(int Users, double RampUpS, double DurationS, string? Auth);
     // File: the report's file name, kept as evidence.
@@ -17,31 +17,76 @@ static class LoadReports
     public record Index(string Schema, List<Report> Reports);
 
     // Stale: the endpoint's code changed after the run, so the numbers may no longer hold.
-    public record Measured(string Endpoint, Step Step, Report Report, bool Stale);
+    // Steps: every step of that run that matched the endpoint (two scenarios may call the same endpoint).
+    public record Measured(string Endpoint, List<Step> Steps, Report Report, bool Stale);
     public record Attached(List<Measured> Endpoints, List<string> Unmatched, List<string> Ambiguous);
 
     static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower, WriteIndented = true };
 
-    /// <summary>Reads one powerwizz report. Throws ArgumentException naming the file when it isn't powerwizz.report/v1.</summary>
+    /// <summary>
+    /// Reads one powerwizz report. Throws ArgumentException naming the file when it isn't powerwizz.report/v1, and naming
+    /// the field when one v1 has is missing or of another type: a missing error rate or latency must not read as 0.
+    /// </summary>
     public static Report Read(string file)
     {
-        Report? report;
+        JsonElement root;
         try
         {
             using var doc = JsonDocument.Parse(System.IO.File.ReadAllText(file));
-            var schema = doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("schema", out var s) ? s.ToString() : null;
-            if (schema != ReportSchema)
-                throw new ArgumentException($"{file}: not {ReportSchema} (schema: {schema ?? "missing"})");
-            report = doc.RootElement.Deserialize<Report>(Json);
+            root = doc.RootElement.Clone();
         }
         catch (JsonException e) { throw new ArgumentException($"{file}: not valid JSON ({e.Message})"); }
-        if (report is not { Target.BaseUrl: not null, Steps: not null } || report.Steps.Any(x => x is not { Method: not null, Path: not null, LatencyMs: not null }))
-            throw new ArgumentException($"{file}: {ReportSchema} without target.base_url, steps or their method, path and latency_ms");
+        var schema = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("schema", out var s) ? s.ToString() : null;
+        if (schema != ReportSchema)
+            throw new ArgumentException($"{file}: not {ReportSchema} (schema: {schema ?? "missing"})");
+        Validate(root, file);
+        var report = root.Deserialize<Report>(Json)!;
         return report with { File = Path.GetFileName(file) };
     }
 
-    public static Index Load(string file) => JsonSerializer.Deserialize<Index>(System.IO.File.ReadAllText(file), Json) is { Schema: Schema } i ? i
-        : throw new ArgumentException($"{file}: not a {Schema} index; run docwizz load import again");
+    // The fields Read relies on, with their JSON kind; unknown fields are not looked at (v1 may add some).
+    static void Validate(JsonElement root, string file)
+    {
+        void Need(JsonElement e, string at, string name, string what, params JsonValueKind[] kinds)
+        {
+            if (!e.TryGetProperty(name, out var v) || !kinds.Contains(v.ValueKind))
+                throw new ArgumentException($"{file}: {at}{name} missing or not {what}");
+        }
+        const JsonValueKind Str = JsonValueKind.String, Num = JsonValueKind.Number, Obj = JsonValueKind.Object, Arr = JsonValueKind.Array;
+        Need(root, "", "started_at", "a timestamp", Str);
+        if (!DateTimeOffset.TryParse(root.GetProperty("started_at").GetString(), System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal, out _))
+            throw new ArgumentException($"{file}: started_at missing or not a timestamp");
+        Need(root, "", "target", "an object", Obj);
+        Need(root.GetProperty("target"), "target.", "base_url", "a URL", Str);
+        Need(root.GetProperty("target"), "target.", "local", "true or false", JsonValueKind.True, JsonValueKind.False);
+        if (root.TryGetProperty("config", out var config) && config.ValueKind != JsonValueKind.Null)
+        {
+            Need(root, "", "config", "an object", Obj);
+            foreach (var n in new[] { "users", "ramp_up_s", "duration_s" }) Need(config, "config.", n, "a number", Num);
+        }
+        Need(root, "", "steps", "an array", Arr);
+        var i = 0;
+        foreach (var step in root.GetProperty("steps").EnumerateArray())
+        {
+            var at = $"steps[{i++}].";
+            if (step.ValueKind != Obj) throw new ArgumentException($"{file}: {at[..^1]} not an object");
+            Need(step, at, "method", "an HTTP method", Str);
+            Need(step, at, "path", "a path", Str);
+            foreach (var n in new[] { "requests", "error_rate" }) Need(step, at, n, "a number", Num);
+            Need(step, at, "latency_ms", "an object", Obj);
+            foreach (var n in new[] { "p50", "p95", "p99" }) Need(step.GetProperty("latency_ms"), $"{at}latency_ms.", n, "a number", Num);
+        }
+    }
+
+    public static Index Load(string file)
+    {
+        Index? index;
+        try { index = JsonSerializer.Deserialize<Index>(System.IO.File.ReadAllText(file), Json); }
+        catch (JsonException e) { throw new ArgumentException($"{file}: not valid JSON ({e.Message}); delete it and run docwizz load import again"); }
+        return index is { Schema: Schema } i ? i
+            : throw new ArgumentException($"{file}: not a {Schema} index; delete it and run docwizz load import again");
+    }
 
     /// <summary>Adds reports to an index; a report of the same run (start time and target) replaces the earlier copy.</summary>
     public static Index Merge(Index? index, IEnumerable<Report> reports)
@@ -61,7 +106,7 @@ static class LoadReports
     public static Attached Attach(CodeModel model, Index index, Func<Node, DateTimeOffset?> changed)
     {
         var endpoints = model.Nodes.Where(n => n.Tags is ["endpoint", _, ..]).ToList();
-        var newest = new Dictionary<string, (Step Step, Report Report)>(StringComparer.Ordinal);
+        var newest = new Dictionary<string, (List<Step> Steps, Report Report)>(StringComparer.Ordinal);
         // Per step (method and path) only the newest run's verdict counts, like per endpoint.
         var unmatched = new Dictionary<string, string>(StringComparer.Ordinal);
         var ambiguous = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -84,12 +129,14 @@ static class LoadReports
                 if (scored.Count == 0) unmatched[key] = label;
                 else if (scored.Count > 1 && scored[1].Score == scored[0].Score)
                     ambiguous[key] = $"{label}: {string.Join(", ", scored.TakeWhile(x => x.Score == scored[0].Score).Select(x => Naming.EndpointLabel(x.Endpoint)).Order(StringComparer.Ordinal))}";
-                else newest[scored[0].Endpoint.Id] = (step, report);
+                // Reports come oldest first: a newer run replaces the steps, another step of the same run joins them.
+                else if (newest.TryGetValue(scored[0].Endpoint.Id, out var seen) && ReferenceEquals(seen.Report, report)) seen.Steps.Add(step);
+                else newest[scored[0].Endpoint.Id] = ([step], report);
             }
         }
         var byId = endpoints.ToDictionary(e => e.Id, StringComparer.Ordinal);
         return new([.. newest.OrderBy(x => x.Key, StringComparer.Ordinal)
-                .Select(x => new Measured(x.Key, x.Value.Step, x.Value.Report, changed(byId[x.Key]) is { } at && at > x.Value.Report.StartedAt))],
+                .Select(x => new Measured(x.Key, x.Value.Steps, x.Value.Report, changed(byId[x.Key]) is { } at && at > x.Value.Report.StartedAt))],
             [.. unmatched.OrderBy(x => x.Key, StringComparer.Ordinal).Select(x => x.Value)],
             [.. ambiguous.OrderBy(x => x.Key, StringComparer.Ordinal).Select(x => x.Value)]);
     }

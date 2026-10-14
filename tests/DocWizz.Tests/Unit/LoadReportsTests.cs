@@ -7,8 +7,8 @@ public class LoadReportsTests
     static Node Endpoint(string verb, string route, string file = "src/Api.cs") =>
         N($"cs:Api.{verb}_{route.Trim('/').Replace('/', '_')}", file, kind: "method", tags: ["endpoint", verb], route: route);
 
-    static LoadReports.Step Step(string method, string path, long requests = 10) =>
-        new("s", method, path, requests, 0, 0, new(1, 2, 3));
+    static LoadReports.Step Step(string method, string path, long requests = 10, string name = "s") =>
+        new(name, method, path, requests, 0, 0, new(1, 2, 3));
 
     static LoadReports.Report Report(string startedAt, string baseUrl, params LoadReports.Step[] steps) =>
         new(LoadReports.ReportSchema, DateTimeOffset.Parse(startedAt), new(baseUrl, true), new(5, 1, 10, "None"), [.. steps], "r.json");
@@ -29,7 +29,7 @@ public class LoadReportsTests
             Step("GET", "/api/nothing")));
 
         Assert.Equal(["cs:Api.GET_api_items_special", "cs:Api.GET_api_items_{id}", "cs:Api.PUT_api_stock_:sku"], got.Endpoints.Select(m => m.Endpoint));
-        Assert.Equal("/api/items/special", got.Endpoints[0].Step.Path);
+        Assert.Equal("/api/items/special", Assert.Single(got.Endpoints[0].Steps).Path);
         Assert.Equal(["GET /api/nothing (r.json)", "POST /api/items/1 (r.json)"], got.Unmatched);
         Assert.Empty(got.Ambiguous);
     }
@@ -51,7 +51,7 @@ public class LoadReportsTests
         var index = LoadReports.Merge(null, [Report("2026-10-14T08:00:00Z", "http://shop/", Step("GET", "/api/items/1", 200)),
             Report("2026-10-13T08:00:00Z", "http://shop/", Step("GET", "/api/items/1", 100))]);
         var fresh = LoadReports.Attach(model, index, _ => DateTimeOffset.Parse("2026-10-14T07:00:00Z")).Endpoints.Single();
-        Assert.Equal(200, fresh.Step.Requests);
+        Assert.Equal(200, Assert.Single(fresh.Steps).Requests);
         Assert.False(fresh.Stale);
         Assert.True(LoadReports.Attach(model, index, _ => DateTimeOffset.Parse("2026-10-14T09:00:00Z")).Endpoints.Single().Stale);
         // The same run imported again replaces itself.
@@ -81,5 +81,75 @@ public class LoadReportsTests
             Assert.Equal(39.417, report.Steps.Single().LatencyMs.P95);
         }
         finally { Directory.Delete(dir, true); }
+    }
+
+    [Theory]
+    [InlineData("api/items/{id:int}", "/api/items/{{vu_id}}")]   // a constrained parameter
+    [InlineData("api/items/{id}", "/API/Items/42")]               // literals ignore case
+    [InlineData("api/items/{id}", "/api/items/42?verbose=1")]     // the query string is not part of the path
+    [InlineData("users/:userId/orders/[orderId]", "/users/{{vu_id}}/orders/7")]
+    public void More_route_shapes_match(string route, string path)
+    {
+        var got = Attach(Model([Endpoint("GET", route)]), Report("2026-10-13T18:00:00Z", "http://shop/", Step("GET", path)));
+        Assert.Single(got.Endpoints);
+        Assert.Empty(got.Unmatched);
+    }
+
+    [Theory]
+    [InlineData("/api/{{vu_id}}")]          // a placeholder doesn't stand in for a literal
+    [InlineData("/api/items/1/extra")]      // the shape has to match
+    [InlineData("/other/api/items/1")]      // only the base URL's path is stripped
+    public void A_step_of_another_shape_is_unmatched(string path)
+    {
+        var got = Attach(Model([Endpoint("GET", "api/items/{id}"), Endpoint("GET", "api/items")]),
+            Report("2026-10-13T18:00:00Z", "http://shop/app/", Step("GET", path)));
+        Assert.Empty(got.Endpoints);
+        Assert.Single(got.Unmatched);
+    }
+
+    [Fact]
+    public void Every_step_of_the_newest_run_on_an_endpoint_is_kept()
+    {
+        var model = Model([Endpoint("GET", "api/items/{id}")]);
+        var got = Attach(model,
+            Report("2026-10-13T08:00:00Z", "http://shop/", Step("GET", "/api/items/1", 1, "old")),
+            Report("2026-10-14T08:00:00Z", "http://shop/", Step("GET", "/api/items/{{vu_id}}", 200, "browse/detail"), Step("GET", "/api/items/7", 30, "order/check")));
+        Assert.Equal(["browse/detail", "order/check"], got.Endpoints.Single().Steps.Select(x => x.Name));
+    }
+
+    [Fact]
+    public void A_missing_or_mistyped_measurement_is_an_error_naming_the_field_not_a_zero()
+    {
+        var dir = Directory.CreateTempSubdirectory("docwizz-load-").FullName;
+        try
+        {
+            string Write(string json) { var f = Path.Combine(dir, "r.json"); File.WriteAllText(f, json); return f; }
+            string Error(string steps, string started = "\"started_at\":\"2026-10-13T18:39:16Z\",") =>
+                Assert.Throws<ArgumentException>(() => LoadReports.Read(Write($$"""
+                    {"schema":"powerwizz.report/v1",{{started}}"target":{"base_url":"http://shop/","local":true},"steps":[{{steps}}]}
+                    """))).Message;
+            const string Latency = "\"latency_ms\":{\"p50\":1,\"p95\":2,\"p99\":3}";
+            Assert.EndsWith("steps[0].error_rate missing or not a number",
+                Error($$"""{"method":"GET","path":"/x","requests":1,{{Latency}}}"""));
+            Assert.EndsWith("steps[0].latency_ms.p95 missing or not a number",
+                Error("""{"method":"GET","path":"/x","requests":1,"error_rate":0,"latency_ms":{"p50":1,"p99":3}}"""));
+            Assert.EndsWith("steps[0].requests missing or not a number",
+                Error($$"""{"method":"GET","path":"/x","requests":"many","error_rate":0,{{Latency}}}"""));
+            Assert.EndsWith("started_at missing or not a timestamp", Error("", started: ""));
+            Assert.EndsWith("started_at missing or not a timestamp", Error("", started: "\"started_at\":\"yesterday\","));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void A_broken_index_is_an_error_not_a_crash()
+    {
+        var file = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(file, "{ not json");
+            Assert.Contains("delete it and run docwizz load import again", Assert.Throws<ArgumentException>(() => LoadReports.Load(file)).Message);
+        }
+        finally { File.Delete(file); }
     }
 }
