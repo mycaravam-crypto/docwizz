@@ -70,17 +70,25 @@ header nav a:hover, header nav a[aria-current] { color: var(--accent); backgroun
 .side-top { display: flex; align-items: center; justify-content: space-between; margin: 0 0 15px; color: var(--ink); font-size: 12px; font-weight: 750; text-transform: uppercase; letter-spacing: .10em; }
 .filter-wrap { position: relative; margin-bottom: 16px; }
 #side-filter { font-size: 13px; }
-.side details { margin: 0 0 10px; }
-.side summary { cursor: pointer; padding: 10px 12px; color: var(--muted); font-size: 11px; line-height: 1.4; font-weight: 800; text-transform: uppercase; letter-spacing: .10em; border-radius: 7px; }
-.side summary:hover { color: var(--ink); background: var(--surface-soft); }
-.side ul, .toc ul { margin: 0; padding: 0; list-style: none; }
+/* Sidebar tree: top-level sections read as headings; groups fold with a chevron on the right, nested levels indent. */
+.side ul { margin: 0; padding: 0; list-style: none; }
+.side ul ul { margin: 2px 0 4px 10px; padding-left: 2px; border-left: 1px solid var(--line); }
 .side li { margin: 1px 0; }
-.side a { display: block; padding: 7px 12px; color: var(--text); font-size: 13px; line-height: 1.45; text-decoration: none; border-left: 3px solid transparent; border-radius: 0 8px 8px 0; overflow-wrap: anywhere; }
-.side a:hover { background: var(--surface-soft); color: var(--ink); }
+.side a, .side summary { display: block; padding: 6px 10px; color: var(--text); font-size: 13px; line-height: 1.45; text-decoration: none; border-left: 3px solid transparent; border-radius: 0 8px 8px 0; overflow-wrap: break-word; }
+.side > ul > li > a, .side > ul > li > details > summary { color: var(--ink); font-weight: 650; }
+.side summary { display: flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; }
+.side summary::-webkit-details-marker { display: none; }
+.side summary::after { content: "›"; margin-left: auto; color: var(--muted); font-size: 15px; line-height: 1; transition: transform .15s; }
+.side details[open] > summary::after { transform: rotate(90deg); }
+.side summary a { flex: 1; padding: 0; border: 0; border-radius: 0; color: inherit; font-weight: inherit; }
+.side a:hover, .side summary:hover { background: var(--surface-soft); color: var(--ink); }
+.side summary a:hover { background: none; }
 .side a[aria-current] { background: var(--accent-soft); border-left-color: var(--accent); color: var(--accent); font-weight: 700; }
+.side summary:has(a[aria-current]) { background: var(--accent-soft); border-left-color: var(--accent); }
+.side summary a[aria-current] { background: none; }
 .side-empty { padding: 8px 12px; color: var(--muted); font-size: 13px; }
 main { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: clamp(22px, 3.5vw, 54px); overflow-wrap: anywhere; }
-.breadcrumbs { display: flex; align-items: center; gap: 8px; margin-bottom: 22px; color: var(--muted); font-size: 12px; }
+.breadcrumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-bottom: 22px; color: var(--muted); font-size: 12px; }
 .breadcrumbs a { color: var(--muted); text-decoration: none; }
 .breadcrumbs a:hover { color: var(--accent); }
 .breadcrumbs span:last-child { color: var(--text); font-weight: 600; }
@@ -113,6 +121,7 @@ main tbody tr:nth-child(even) { background: var(--stripe); }
 main tbody tr:hover { background: var(--accent-soft); }
 main tbody tr:last-child td { border-bottom: 0; }
 .generator { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.toc ul { margin: 0; padding: 0; list-style: none; }
 .toc-inner { border-left: 1px solid var(--line); padding: 8px 0 8px 18px; }
 .toc-title { margin-bottom: 13px; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .10em; }
 .toc a { display: block; margin: 5px 0; padding: 5px 0 5px 12px; color: var(--muted); font-size: 12px; line-height: 1.45; border-left: 2px solid transparent; text-decoration: none; overflow-wrap: anywhere; }
@@ -197,22 +206,17 @@ main tbody tr:last-child td { border-bottom: 0; }
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && document.body.dataset.navOpen === 'true') toggleNav(false);
   });
+  // An entry stays when it or anything under it matches; groups holding a match open.
   function filterLinks() {
     const value = filter.value.trim().toLowerCase();
-    let shown = 0;
-    side.querySelectorAll('details').forEach(group => {
-      let matches = 0;
-      group.querySelectorAll('li').forEach(li => {
-        const match = li.textContent.toLowerCase().includes(value);
-        li.hidden = !match;
-        if (match) { matches++; shown++; }
-      });
-      group.hidden = value.length > 0 && matches === 0;
-      if (value && matches > 0) group.open = true;
-    });
-    const empty = document.getElementById('side-empty');
-    empty.hidden = !value || shown !== 0;
+    const items = Array.from(side.querySelectorAll('li'));
+    items.forEach(li => { li.hidden = !li.textContent.toLowerCase().includes(value); });
+    if (value) side.querySelectorAll('li:not([hidden]) > details').forEach(d => { d.open = true; });
+    document.getElementById('side-empty').hidden = !value || items.some(li => !li.hidden);
   }
+  // A deep tree would otherwise hide the current page below the fold.
+  const current = side.querySelector('a[aria-current="page"]');
+  if (current) side.scrollTop = current.offsetTop - side.clientHeight / 2;
   filter.addEventListener('input', filterLinks);
   const sections = Array.from(document.querySelectorAll('main h2[id]'));
   const tocLinks = Array.from(document.querySelectorAll('.toc a[href^="#"]'));

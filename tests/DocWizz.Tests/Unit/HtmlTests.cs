@@ -70,12 +70,13 @@ public class HtmlTests
             Assert.Contains($"href=\"../{Path.ChangeExtension(page, ".html")}\"", html);
         Assert.Contains("href=\"../modules/src-Core.html\" aria-current=\"page\"", html);
         // The group holding the current page is open, the others closed.
-        Assert.Contains("<details open><summary>Modules</summary>", html);
-        Assert.Contains("<details><summary>Views</summary>", html);
+        Assert.Contains("<details open><summary>Code</summary>", html);
+        Assert.Contains("<details><summary>Architecture</summary>", html);
 
         var index = Html.Page("index.md", "# demo\n", Pages);
         Assert.Contains("href=\"modules/src-Web.html\"", index);
         Assert.Contains("href=\"index.html\" aria-current=\"page\"", index);
+        Assert.Contains("<details><summary>Code</summary>", index);
     }
 
     [Fact]
