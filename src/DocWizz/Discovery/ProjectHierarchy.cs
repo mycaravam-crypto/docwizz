@@ -171,68 +171,38 @@ sealed class ProjectHierarchy
         return sb.AppendLine().ToString();
     }
 
+    // Solution → project → module folders, each collapsed unless it holds the current page. Module labels are relative
+    // to their project's folder, which the project line above already names.
     public string Sidebar(Func<string, string, string> link)
     {
         if (Projects.Count == 0) return "";
-        var b = new StringBuilder("<details open><summary>Solutions &amp; projects</summary><ul>");
-        void ProjectLine(Project p)
+        string Module(string folder, string label) => $"<li>{link($"modules/{Naming.Slug(folder)}.md", label)}</li>";
+        string ProjectLine(Project p)
         {
-            b.Append("<li>").Append(link(p.Page, p.Name)).Append(" <small>(")
-                .Append(System.Net.WebUtility.HtmlEncode(p.Path)).Append(")</small>");
-            if (p.Modules.Count > 0)
-            {
-                b.Append("<ul>");
-                foreach (var module in p.Modules.Order(StringComparer.Ordinal))
-                    b.Append("<li>").Append(link($"modules/{Naming.Slug(module)}.md", module)).Append("</li>");
-                b.Append("</ul>");
-            }
-            b.Append("</li>");
+            var dir = (Path.GetDirectoryName(p.Path) ?? "").Replace('\\', '/');
+            var modules = string.Concat(p.Modules.Order(StringComparer.Ordinal).Select(m => Module(m,
+                m == dir ? "(root)" : dir.Length > 0 && m.StartsWith(dir + "/", StringComparison.Ordinal) ? m[(dir.Length + 1)..] : m)));
+            return modules.Length == 0 ? $"<li>{link(p.Page, p.Name)}</li>" : Html.Folder(link(p.Page, p.Name), modules);
         }
+        var b = new StringBuilder();
         foreach (var solution in Solutions)
-        {
-            b.Append("<li>").Append(link(solution.Page, solution.Path)).Append("<ul>");
-            foreach (var (id, _) in solution.Projects)
-                if (ById(id) is { } p) ProjectLine(p);
-            b.Append("</ul></li>");
-        }
-        var standalone = Projects.Where(p => p.Solutions.Count == 0).ToList();
-        if (standalone.Count > 0)
-        {
-            b.Append("<li>Without a solution<ul>");
-            foreach (var p in standalone) ProjectLine(p);
-            b.Append("</ul></li>");
-        }
-        if (UnassignedModules.Count > 0)
-        {
-            b.Append("<li>Unassigned modules<ul>");
-            foreach (var folder in UnassignedModules)
-                b.Append("<li>").Append(link($"modules/{Naming.Slug(folder)}.md", folder)).Append("</li>");
-            b.Append("</ul></li>");
-        }
-        return b.Append("</ul></details>").ToString();
+            b.Append(Html.Folder(link(solution.Page, solution.Path),
+                string.Concat(solution.Projects.Select(s => ById(s.ProjectId)).OfType<Project>().Select(ProjectLine))));
+        b.Append(Html.Folder("Without a solution", string.Concat(Projects.Where(p => p.Solutions.Count == 0).Select(ProjectLine))));
+        b.Append(Html.Folder("Unassigned modules", string.Concat(UnassignedModules.Select(m => Module(m, m)))));
+        return b.ToString();
     }
 
-    public string Breadcrumbs(string rel, Func<string, string, string> link)
+    // The solution and project above `rel`, as links; the page itself is left to the caller.
+    public List<string> Breadcrumbs(string rel, Func<string, string, string> link)
     {
         var parts = new List<string>();
-        if (solutionPages.TryGetValue(rel, out var sol))
-            parts.Add(System.Net.WebUtility.HtmlEncode(sol.Path));
-        else
-        {
-            Project? project = projectPages.GetValueOrDefault(rel);
-            if (project is null && modulePages.TryGetValue(rel, out var owners) && owners.Count == 1)
-                project = owners[0];
-            if (project is not null)
-            {
-                var membership = project.Solutions.FirstOrDefault(m => solutionPages.ContainsKey(m.SolutionPage));
-                if (membership is not null)
-                    parts.Add(link(membership.SolutionPage, solutionPages[membership.SolutionPage].Path));
-                parts.Add(rel == project.Page ? System.Net.WebUtility.HtmlEncode(project.Name)
-                    : link(project.Page, project.Name));
-            }
-            if (rel.StartsWith("modules/", StringComparison.Ordinal))
-                parts.Add(System.Net.WebUtility.HtmlEncode(Path.GetFileNameWithoutExtension(rel)));
-        }
-        return string.Join("<span aria-hidden=\"true\">/</span>", parts);
+        var project = projectPages.GetValueOrDefault(rel)
+            ?? (modulePages.TryGetValue(rel, out var owners) && owners.Count == 1 ? owners[0] : null);
+        if (project is null) return parts;
+        var membership = project.Solutions.FirstOrDefault(m => solutionPages.ContainsKey(m.SolutionPage));
+        if (membership is not null) parts.Add(link(membership.SolutionPage, solutionPages[membership.SolutionPage].Path));
+        if (rel != project.Page) parts.Add(link(project.Page, project.Name));
+        return parts;
     }
 }

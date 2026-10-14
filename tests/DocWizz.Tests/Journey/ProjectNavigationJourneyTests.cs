@@ -81,7 +81,10 @@ public class ProjectNavigationJourneyTests
         var projectMd = ProjectHierarchy.ProjectPage("Core/Shared.csproj");
         var solutionMd = ProjectHierarchy.SolutionPage("Backend.slnx");
         var projectHtml = File.ReadAllText(FileAt(repo, Path.ChangeExtension(projectMd, ".html")));
-        Assert.Contains("Solutions &amp; projects", projectHtml);
+        // Only the path to the current page is unfolded: the Code group and this project's solution, not the others.
+        Assert.Contains("<details open><summary>Code</summary>", projectHtml);
+        Assert.Contains("<details open><summary><a href=\"../" + Path.ChangeExtension(solutionMd, ".html") + "\"", projectHtml);
+        Assert.DoesNotContain("<details open>", File.ReadAllText(FileAt(repo, "index.html")));
         Assert.Contains("href=\"../" + Path.ChangeExtension(solutionMd, ".html") + "\"", projectHtml);
         Assert.Contains("href=\"../modules/Core-Domain.html\"", projectHtml);
         Assert.Contains("aria-label=\"Site\"", projectHtml);
