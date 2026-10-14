@@ -70,7 +70,7 @@ public class LoadReportsTests
             var missing = Assert.Throws<ArgumentException>(() => LoadReports.Read(Write("b.json", """{"steps":[]}""")));
             Assert.Contains("(schema: missing)", missing.Message);
             var report = LoadReports.Read(Write("c.json", """
-                {"schema":"powerwizz.report/v1","started_at":"2026-10-13T18:39:16Z","future":{"x":1},
+                {"schema":"powerwizz.report/v1","started_at":"2026-10-13T18:39:16Z","future":{"x":1},"label":"dev, Debug",
                  "target":{"base_url":"http://127.0.0.1:18080/","local":true},
                  "config":{"users":50,"ramp_up_s":10,"duration_s":60,"auth":"PerUser"},
                  "steps":[{"name":"browse/detail","method":"GET","path":"/api/items/{{vu_id}}","requests":898,"failures":0,
@@ -78,6 +78,9 @@ public class LoadReportsTests
                 """));
             Assert.Equal("c.json", report.File);
             Assert.Equal(50, report.Config!.Users);
+            Assert.Equal("dev, Debug", report.Label);
+            var odd = Assert.Throws<ArgumentException>(() => LoadReports.Read(Write("d.json", File.ReadAllText(Path.Combine(dir, "c.json")).Replace("\"dev, Debug\"", "42"))));
+            Assert.Contains("label not text", odd.Message);
             Assert.Equal(39.417, report.Steps.Single().LatencyMs.P95);
         }
         finally { Directory.Delete(dir, true); }

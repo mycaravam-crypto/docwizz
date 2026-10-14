@@ -15,8 +15,9 @@ static class LoadReports
     // File: the report's file name, kept as evidence.
     // One second of the run (powerwizz's `series`, totals over all steps): T is the end of the second.
     public record Point(double T, long Requests, double P95Ms);
+    // Label: what the run measured, as powerwizz's user wrote it ("dev, Debug, testdb"); untrusted free text.
     public record Report(string Schema, DateTimeOffset StartedAt, Target Target, RunConfig? Config, List<Step> Steps, string? File = null,
-        List<Point>? Series = null);
+        List<Point>? Series = null, string? Label = null);
     // One run's steps on one endpoint.
     public record Run(Report Report, List<Step> Steps);
     public record Index(string Schema, List<Report> Reports);
@@ -66,6 +67,8 @@ static class LoadReports
         Need(root, "", "target", "an object", Obj);
         Need(root.GetProperty("target"), "target.", "base_url", "a URL", Str);
         Need(root.GetProperty("target"), "target.", "local", "true or false", JsonValueKind.True, JsonValueKind.False);
+        if (root.TryGetProperty("label", out var label) && label.ValueKind is not (JsonValueKind.Null or JsonValueKind.String))
+            throw new ArgumentException($"{file}: label not text");
         if (root.TryGetProperty("config", out var config) && config.ValueKind != JsonValueKind.Null)
         {
             Need(root, "", "config", "an object", Obj);
