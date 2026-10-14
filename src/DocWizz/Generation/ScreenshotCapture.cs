@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -81,8 +82,10 @@ static class ScreenshotCapture
     public static bool EndsSession(string route) => SessionEnding.IsMatch(route);
 
     // A password field on a page that has no reason for one: the app fell back to its login form without redirecting.
-    public static string? LoginFormFailure(string route, bool signedIn, bool passwordFieldVisible) =>
-        signedIn && passwordFieldVisible && !PasswordPage.IsMatch(route) ? "shows a login form (session not accepted?)" : null;
+    // Unless the page's own API calls went through with the token (a 2xx answer to a request carrying Authorization):
+    // then it is signed in, and the field belongs to the page (a database connection, a change-password form).
+    public static string? LoginFormFailure(string route, bool signedIn, bool passwordFieldVisible, bool authorizedApiCall = false) =>
+        signedIn && passwordFieldVisible && !authorizedApiCall && !PasswordPage.IsMatch(route) ? "shows a login form (session not accepted?)" : null;
 
     // Signed in, a sign-in page redirecting away is expected, not a session problem.
     public static string Explain(string route, string failure, bool signedIn) =>
@@ -97,6 +100,29 @@ static class ScreenshotCapture
         StorageStatePath = carriedState is null ? storageStateFile : null,
         StorageState = carriedState
     };
+
+    // sessionStorage per origin. Playwright's storage state has none, so an app that keeps its token there (closing the
+    // tab signs out) can't be captured from it: docwizz also reads a `sessionStorage` list next to `localStorage` in the
+    // file's `origins` (same {name, value} entries), seeds every page with it and carries what the page left, like cookies.
+    public static Dictionary<string, Dictionary<string, string>> SessionStorage(string? storageStateFile)
+    {
+        var state = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
+        if (storageStateFile is null) return state;
+        using var json = JsonDocument.Parse(File.ReadAllText(storageStateFile));
+        if (!json.RootElement.TryGetProperty("origins", out var origins) || origins.ValueKind != JsonValueKind.Array) return state;
+        foreach (var o in origins.EnumerateArray())
+            if (o.TryGetProperty("origin", out var origin) && origin.ValueKind == JsonValueKind.String
+                && o.TryGetProperty("sessionStorage", out var items) && items.ValueKind == JsonValueKind.Array)
+                state[origin.GetString()!.TrimEnd('/')] = items.EnumerateArray()
+                    .Where(i => i.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String && i.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.String)
+                    .ToDictionary(i => i.GetProperty("name").GetString()!, i => i.GetProperty("value").GetString()!, StringComparer.Ordinal);
+        return state;
+    }
+
+    // Runs before the app's own scripts on every document: fills in what the page doesn't hold yet, never overwrites.
+    public static string SessionStorageScript(Dictionary<string, Dictionary<string, string>> state) =>
+        $"(() => {{ try {{ const s = ({JsonSerializer.Serialize(state)})[location.origin]; " +
+        "if (s) for (const [k, v] of Object.entries(s)) if (sessionStorage.getItem(k) === null) sessionStorage.setItem(k, v); } catch {} })();";
 
     // Lets the SPA finish auth checks, guards and data loading: network idle (bounded, as polling apps never go idle),
     // then a short pause plus any extra delay the user asked for.
@@ -131,6 +157,7 @@ static class ScreenshotCapture
             using var playwright = await Playwright.CreateAsync();
             await using var browser = await playwright.Chromium.LaunchAsync(new() { Headless = true });
             string? session = null; // in memory only
+            var sessionStorage = SessionStorage(storageStateFile);
 
             foreach (var route in routes)
             {
@@ -142,13 +169,18 @@ static class ScreenshotCapture
                 {
                     // Separate contexts prevent routes from altering one another's cookies and storage.
                     await using var context = await browser.NewContextAsync(ContextOptions(storageStateFile, session));
+                    if (sessionStorage.Count > 0) await context.AddInitScriptAsync(SessionStorageScript(sessionStorage));
+                    IPage? page = null;
                     try
                     {
-                        var page = await context.NewPageAsync();
+                        page = await context.NewPageAsync();
                         var apiResponses = new ConcurrentQueue<(int, string)>();
+                        var authorized = false;
                         page.Response += (_, r) =>
                         {
-                            if (r.Request.ResourceType is "fetch" or "xhr") apiResponses.Enqueue((r.Status, r.Url));
+                            if (r.Request.ResourceType is not ("fetch" or "xhr")) return;
+                            apiResponses.Enqueue((r.Status, r.Url));
+                            if (r.Status is >= 200 and < 300 && r.Request.Headers.ContainsKey("authorization")) authorized = true;
                         };
                         var response = await page.GotoAsync(url.ToString(),
                             new() { WaitUntil = WaitUntilState.Load, Timeout = 15000 });
@@ -156,7 +188,7 @@ static class ScreenshotCapture
                         await Settle(page, delayMs);
                         var failure = NavigationFailure(url, new Uri(page.Url), response?.Status, hash) ??
                             (storageStateFile is null ? null : ApiFailure(apiResponses)) ??
-                            LoginFormFailure(route, storageStateFile is not null, await page.Locator("input[type=password]:visible").CountAsync() > 0);
+                            LoginFormFailure(route, storageStateFile is not null, await page.Locator("input[type=password]:visible").CountAsync() > 0, authorized);
                         if (failure is not null)
                         {
                             if (File.Exists(fullPath)) File.Delete(fullPath);
@@ -179,6 +211,10 @@ static class ScreenshotCapture
                         // Hand refreshed cookies and tokens to the next route, even when this one was skipped.
                         if (storageStateFile is not null)
                             try { session = await context.StorageStateAsync(); }
+                            catch (PlaywrightException) { }
+                        if (sessionStorage.Count > 0 && page is not null && Uri.TryCreate(page.Url, UriKind.Absolute, out var at) && at.Scheme.StartsWith("http"))
+                            // As a JSON string: Playwright .NET maps a returned object to an empty Dictionary.
+                            try { sessionStorage[at.GetLeftPart(UriPartial.Authority)] = JsonSerializer.Deserialize<Dictionary<string, string>>(await page.EvaluateAsync<string>("() => JSON.stringify(Object.fromEntries(Object.entries(sessionStorage)))"))!; }
                             catch (PlaywrightException) { }
                     }
                 }
