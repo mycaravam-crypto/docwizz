@@ -1,5 +1,23 @@
 # Benchmarks
 
+## MCP session reuse (#204)
+
+After merging the QW1/QW2 changes, benchmark repeated calls in the *same* MCP process:
+
+```console
+$ npm ci --prefix scanner-vue
+$ python3 bench/mcp.py --sizes medium,large
+```
+
+The benchmark generates and commits each deterministic fixture, adds one uncommitted source edit,
+then issues two `impact(HEAD)` and two `check` calls in sequence. It reports the first and repeated
+wall times separately; repeated calls exercise session caches instead of starting a new process.
+For a baseline comparison, build the old version separately and pass its assembly with
+`--dll /path/to/old/DocWizz.dll`. Use the **same machine and fixture sizes** for both
+versions. This is a manual diagnostic, not a CI gate: shared-runner timing variance
+must not fail unrelated pull requests. Commit measured numbers to issue #204 rather than
+replacing the existing CLI scan baseline with estimated values.
+
 How long DocWizz takes and how much memory it needs as a repository grows, measured reproducibly so a regression
 shows up before users notice it.
 
