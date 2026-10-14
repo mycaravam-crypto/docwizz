@@ -11,7 +11,7 @@ static class Frontend
     {
         if (files.Count == 0) return ([], []);
         var script = FindScanner();
-        if (script is null || !Directory.Exists(Path.Combine(Path.GetDirectoryName(script)!, "node_modules")))
+        if (script is null || !ScannerAvailable(script))
         {
             Console.Error.WriteLine("docwizz: Vue/TS skipped — scanner-vue not found or not installed (npm ci in scanner-vue/)");
             return ([], []);
@@ -35,11 +35,18 @@ static class Frontend
         }
     }
 
+    // A bundled scanner needs no node_modules; source scanners still require npm dependencies.
+    internal static bool ScannerAvailable(string script) => File.Exists(script) &&
+        (Path.GetFileName(Path.GetDirectoryName(script)) == "dist" ||
+         Directory.Exists(Path.Combine(Path.GetDirectoryName(script)!, "node_modules")));
+
     // scanner-vue/index.mjs (DOCWIZZ_SCANNER_VUE overrides); java.mjs sits next to it.
     // ponytail: found by walking up from the binary; ship it inside the tool package when publishing.
     public static string? FindScanner()
     {
         if (Environment.GetEnvironmentVariable("DOCWIZZ_SCANNER_VUE") is { } env) return env;
+        var bundled = Path.Combine(AppContext.BaseDirectory, "scanner-vue", "dist", "index.mjs");
+        if (File.Exists(bundled)) return bundled;
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
             var candidate = Path.Combine(dir.FullName, "scanner-vue", "index.mjs");
