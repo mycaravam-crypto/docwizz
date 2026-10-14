@@ -2,9 +2,9 @@
 // Resolve on every request and cache only successful scans; CLI commands retain their existing behavior.
 sealed class McpRefModelCache
 {
-    readonly Dictionary<(string Sha, string Scope), CodeModel> models = new();
+    readonly Dictionary<(string Sha, string? Scope), CodeModel> models = new();
 
-    public CodeModel? Get(string gitRef, string scope, Func<string, string?> resolve, Func<string, CodeModel?> scan)
+    public CodeModel? Get(string gitRef, string? scope, Func<string, string?> resolve, Func<string, CodeModel?> scan)
     {
         var sha = resolve(gitRef);
         if (sha is null || !IsFullSha(sha)) return null;
