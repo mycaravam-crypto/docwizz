@@ -13,12 +13,18 @@ static class LoadReports
     public record Target(string BaseUrl, bool Local);
     public record RunConfig(int Users, double RampUpS, double DurationS, string? Auth);
     // File: the report's file name, kept as evidence.
-    public record Report(string Schema, DateTimeOffset StartedAt, Target Target, RunConfig? Config, List<Step> Steps, string? File = null);
+    // One second of the run (powerwizz's `series`, totals over all steps): T is the end of the second.
+    public record Point(double T, long Requests, double P95Ms);
+    public record Report(string Schema, DateTimeOffset StartedAt, Target Target, RunConfig? Config, List<Step> Steps, string? File = null,
+        List<Point>? Series = null);
+    // One run's steps on one endpoint.
+    public record Run(Report Report, List<Step> Steps);
     public record Index(string Schema, List<Report> Reports);
 
     // Stale: the endpoint's code changed after the run, so the numbers may no longer hold.
     // Steps: every step of that run that matched the endpoint (two scenarios may call the same endpoint).
-    public record Measured(string Endpoint, List<Step> Steps, Report Report, bool Stale);
+    // Runs: every run on the endpoint against the newest run's target (others aren't comparable), oldest first, newest included.
+    public record Measured(string Endpoint, List<Step> Steps, Report Report, bool Stale, List<Run> Runs);
     public record Attached(List<Measured> Endpoints, List<string> Unmatched, List<string> Ambiguous);
 
     static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower, WriteIndented = true };
@@ -77,6 +83,17 @@ static class LoadReports
             Need(step, at, "latency_ms", "an object", Obj);
             foreach (var n in new[] { "p50", "p95", "p99" }) Need(step.GetProperty("latency_ms"), $"{at}latency_ms.", n, "a number", Num);
         }
+        if (root.TryGetProperty("series", out var series) && series.ValueKind != JsonValueKind.Null)
+        {
+            Need(root, "", "series", "an array", Arr);
+            var j = 0;
+            foreach (var point in series.EnumerateArray())
+            {
+                var at = $"series[{j++}].";
+                if (point.ValueKind != Obj) throw new ArgumentException($"{file}: {at[..^1]} not an object");
+                foreach (var n in new[] { "t", "requests", "p95_ms" }) Need(point, at, n, "a number", Num);
+            }
+        }
     }
 
     public static Index Load(string file)
@@ -107,6 +124,7 @@ static class LoadReports
     {
         var endpoints = model.Nodes.Where(n => n.Tags is ["endpoint", _, ..]).ToList();
         var newest = new Dictionary<string, (List<Step> Steps, Report Report)>(StringComparer.Ordinal);
+        var runs = new Dictionary<string, List<Run>>(StringComparer.Ordinal);
         // Per step (method and path) only the newest run's verdict counts, like per endpoint.
         var unmatched = new Dictionary<string, string>(StringComparer.Ordinal);
         var ambiguous = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -131,14 +149,32 @@ static class LoadReports
                     ambiguous[key] = $"{label}: {string.Join(", ", scored.TakeWhile(x => x.Score == scored[0].Score).Select(x => Naming.EndpointLabel(x.Endpoint)).Order(StringComparer.Ordinal))}";
                 // Reports come oldest first: a newer run replaces the steps, another step of the same run joins them.
                 else if (newest.TryGetValue(scored[0].Endpoint.Id, out var seen) && ReferenceEquals(seen.Report, report)) seen.Steps.Add(step);
-                else newest[scored[0].Endpoint.Id] = ([step], report);
+                else
+                {
+                    newest[scored[0].Endpoint.Id] = ([step], report);
+                    // The same list as the newest entry's, so the run's later steps join both.
+                    (runs.TryGetValue(scored[0].Endpoint.Id, out var list) ? list : runs[scored[0].Endpoint.Id] = []).Add(new(report, newest[scored[0].Endpoint.Id].Steps));
+                }
             }
         }
         var byId = endpoints.ToDictionary(e => e.Id, StringComparer.Ordinal);
         return new([.. newest.OrderBy(x => x.Key, StringComparer.Ordinal)
-                .Select(x => new Measured(x.Key, x.Value.Steps, x.Value.Report, changed(byId[x.Key]) is { } at && at > x.Value.Report.StartedAt))],
+                .Select(x => new Measured(x.Key, x.Value.Steps, x.Value.Report, changed(byId[x.Key]) is { } at && at > x.Value.Report.StartedAt,
+                    [.. runs[x.Key].Where(r => r.Report.Target == x.Value.Report.Target)]))],
             [.. unmatched.OrderBy(x => x.Key, StringComparer.Ordinal).Select(x => x.Value)],
             [.. ambiguous.OrderBy(x => x.Key, StringComparer.Ordinal).Select(x => x.Value)]);
+    }
+
+    /// <summary>
+    /// A run's series for a chart: at most <paramref name="max"/> buckets of equal length, each with its end second, the
+    /// requests per second over it and its highest p95 (the worst second, not an average that would hide a spike).
+    /// </summary>
+    public static List<(double T, double Rps, double P95)> Buckets(List<Point> series, int max = 60)
+    {
+        var points = series.OrderBy(p => p.T).ToList();
+        if (points.Count == 0) return [];
+        var size = (int)Math.Ceiling(points.Count / (double)max);
+        return [.. points.Chunk(size).Select(c => (c[^1].T, c.Sum(p => p.Requests) / Math.Max(c[^1].T - c[0].T + 1, 1), c.Max(p => p.P95Ms)))];
     }
 
     static string[] Segments(string path) => path.Split('?')[0].Split('/', StringSplitOptions.RemoveEmptyEntries);

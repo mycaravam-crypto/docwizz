@@ -412,7 +412,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         {
             static string Run(LoadReports.Report r) => FormattableString.Invariant($"{Esc(r.File ?? "")} {r.StartedAt.UtcDateTime:yyyy-MM-dd HH:mm}Z");
             sb.AppendLine("| Endpoint | Step | Requests | Error rate | p50 | p95 | p99 | Run |\n|---|---|---|---|---|---|---|---|");
-            foreach (var (e, steps, report, stale) in load.Endpoints)
+            foreach (var (e, steps, report, stale, _) in load.Endpoints)
                 foreach (var step in steps)
                 {
                     var (label, latency) = (Code(Naming.EndpointLabel(nodes[e])), step.LatencyMs);
@@ -427,11 +427,54 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
                     ? FormattableString.Invariant($"| {Run(r)} | {target} | {c.Users} | {c.RampUpS:0.#} s | {c.DurationS:0.#} s | {Esc(c.Auth ?? "—")} |")
                     : $"| {Run(r)} | {target} | — | — | — | — |");
             }
+            sb.Append(LoadTrend(load));
+            sb.Append(LoadCharts(load, Run));
         }
         else sb.AppendLine("No imported step matches a detected endpoint.");
         if (load.Unmatched.Count > 0) sb.AppendLine("\nSteps without a matching endpoint:\n\n" + string.Join("\n", load.Unmatched.Select(s => $"- {Code(s)}")));
         if (load.Ambiguous.Count > 0) sb.AppendLine("\nSteps matching several endpoints equally well (not attached):\n\n" + string.Join("\n", load.Ambiguous.Select(s => $"- {Esc(s)}")));
         return sb.ToString();
+    }
+
+    // Per endpoint and step, how the newest run compares with the earlier ones against the same target: p95 and error
+    // rate oldest → newest, and the change from the previous run. Facts only: no threshold says what is a regression.
+    string LoadTrend(LoadReports.Attached load)
+    {
+        var rows = new List<string>();
+        foreach (var m in load.Endpoints.Where(m => m.Runs.Count > 1))
+            foreach (var name in m.Steps.Select(s => s.Name).Distinct())
+            {
+                var series = m.Runs.Select(r => r.Steps.FirstOrDefault(s => s.Name == name)).Where(s => s is not null).Select(s => s!).ToList();
+                if (series.Count < 2) continue;
+                var (previous, newest) = (series[^2].LatencyMs.P95, series[^1].LatencyMs.P95);
+                var change = previous > 0 ? FormattableString.Invariant($"{(newest - previous) / previous * 100:+0.#;-0.#;0} %") : "—";
+                rows.Add(FormattableString.Invariant(
+                    $"| {Code(Naming.EndpointLabel(nodes[m.Endpoint]))} | {Esc(name ?? "—")} | {series.Count} | {string.Join(" → ", series.Select(s => s.LatencyMs.P95.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)))} | {change} | ") +
+                    string.Join(" → ", series.Select(s => s.ErrorRate.ToString("P2", System.Globalization.CultureInfo.InvariantCulture))) + " |");
+            }
+        if (rows.Count == 0) return "";
+        return "\n### Trend\n\nEvery run of a step against the newest run's target, oldest first (runs against another target aren't " +
+            "comparable and are left out). Change: the newest p95 against the run before it.\n\n" +
+            "| Endpoint | Step | Runs | p95 | Change | Error rate |\n|---|---|---|---|---|---|\n" + string.Join("\n", rows) + "\n";
+    }
+
+    // Each shown run's own timeline (powerwizz's per-second series, all steps together): p95 latency and requests per
+    // second, at most 60 points; a point is the worst p95 of its seconds, so a spike isn't averaged away.
+    static string LoadCharts(LoadReports.Attached load, Func<LoadReports.Report, string> run)
+    {
+        var sb = new StringBuilder();
+        foreach (var r in load.Endpoints.Select(m => m.Report).Distinct().Where(r => r.Series is { Count: > 1 }).OrderBy(r => r.StartedAt))
+        {
+            var buckets = LoadReports.Buckets(r.Series!);
+            string Values(Func<(double T, double Rps, double P95), double> f) => string.Join(", ", buckets.Select(b => f(b).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)));
+            string Chart(string title, string axis, string values) =>
+                $"```mermaid\nxychart-beta\n    title \"{MermaidText(title)}\"\n    x-axis \"s\" [{Values(b => b.T)}]\n    y-axis \"{axis}\"\n    line [{values}]\n```\n";
+            sb.Append($"\n#### Run {Esc(run(r))}\n\n");
+            sb.Append(Chart($"p95 latency, {run(r)}", "ms", Values(b => b.P95)));
+            sb.Append('\n').Append(Chart($"requests per second, {run(r)}", "req/s", Values(b => b.Rps)));
+        }
+        return sb.Length == 0 ? "" : "\n### Timeline\n\nPer run, all steps together, per second as powerwizz measured it " +
+            "(at most 60 points; a point spanning several seconds shows their worst p95 and their average requests per second).\n" + sb;
     }
 
     // The returned type and the declared/detected status codes: "`Material`<br>200, 404".

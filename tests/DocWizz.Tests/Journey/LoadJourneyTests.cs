@@ -20,7 +20,9 @@ public class LoadJourneyTests
         using var fixture = new ContextJourneyTests.FixtureCopy();
         var dir = Path.GetDirectoryName(fixture.Dir)!;
         File.WriteAllText(Path.Combine(dir, "old.json"), Report("2026-10-12T08:00:00Z", 111, 99.9));
-        File.WriteAllText(Path.Combine(dir, "new.json"), Report("2026-10-13T18:39:16Z", 898, 39.417));
+        File.WriteAllText(Path.Combine(dir, "new.json"), Report("2026-10-13T18:39:16Z", 898, 39.417)
+            .Replace("\"series\":[]", "\"series\":[{\"t\":1,\"requests\":9,\"failures\":0,\"p50_ms\":2,\"p95_ms\":43.5,\"p99_ms\":50}," +
+                "{\"t\":2,\"requests\":12,\"failures\":0,\"p50_ms\":2,\"p95_ms\":61,\"p99_ms\":70}]"));
         File.WriteAllText(Path.Combine(dir, "other.json"), """{"schema":"gitwizz.history/v2"}""");
 
         var wrong = Docwizz.Run("load", "import", fixture.Dir, Path.Combine(dir, "other.json"));
@@ -43,6 +45,12 @@ public class LoadJourneyTests
         Assert.DoesNotContain("`PUT /api/materials/{id}`", load);
         Assert.Contains("| new.json 2026-10-13 18:39Z | `http://127.0.0.1:18080/app/` | 50 | 10 s | 60 s | PerUser |", load);
         Assert.Contains("- `POST /api/checkout (new.json)`", load);
+
+        // Trend over both runs (same target), and the newest run's per-second timeline as charts.
+        Assert.Contains("| `GET /api/materials/{id}` | browse/detail | 2 | 99.9 → 39.4 | -60.5 % | 0.00 % → 0.00 % |", load);
+        Assert.Contains("#### Run new.json 2026-10-13 18:39Z", load);
+        Assert.Contains("x-axis \"s\" [1, 2]\n    y-axis \"ms\"\n    line [43.5, 61]", load);
+        Assert.Contains("y-axis \"req/s\"\n    line [9, 12]", load);
     }
 
     [Fact]

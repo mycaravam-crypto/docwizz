@@ -152,4 +152,49 @@ public class LoadReportsTests
         }
         finally { File.Delete(file); }
     }
+
+    [Fact]
+    public void A_trend_has_every_run_against_the_newest_runs_target_oldest_first()
+    {
+        var model = Model([Endpoint("GET", "api/items/{id}")]);
+        var got = Attach(model,
+            Report("2026-10-01T08:00:00Z", "http://shop/", Step("GET", "/api/items/1", 1)),
+            Report("2026-10-05T08:00:00Z", "https://staging/", Step("GET", "/api/items/1", 2)),   // another target: not comparable
+            Report("2026-10-09T08:00:00Z", "http://shop/", Step("GET", "/api/items/1", 3), Step("GET", "/api/items/2", 4, "s2")));
+        var m = got.Endpoints.Single();
+        Assert.Equal([1L, 3L], m.Runs.Select(r => r.Steps[0].Requests));
+        Assert.Equal(2, m.Runs[^1].Steps.Count);   // the newest run's steps, all of them
+        Assert.Same(m.Report, m.Runs[^1].Report);
+    }
+
+    [Fact]
+    public void Buckets_keep_the_worst_p95_and_average_the_requests_per_second()
+    {
+        List<LoadReports.Point> series = [.. Enumerable.Range(1, 120).Select(t => new LoadReports.Point(t, 10, t == 50 ? 900 : 20))];
+        var b = LoadReports.Buckets(series);
+        Assert.Equal(60, b.Count);
+        Assert.Equal((50.0, 10.0, 900.0), b[24]);           // seconds 49-50: the spike survives
+        Assert.All(b, x => Assert.Equal(10, x.Rps));
+        Assert.Equal(3, LoadReports.Buckets([.. series.Take(3)]).Count);   // short runs are not stretched
+        Assert.Empty(LoadReports.Buckets([]));
+    }
+
+    [Fact]
+    public void A_series_point_without_its_numbers_is_an_error_and_the_series_is_kept()
+    {
+        var dir = Directory.CreateTempSubdirectory("docwizz-load-").FullName;
+        try
+        {
+            string Write(string series) { var f = Path.Combine(dir, "r.json"); File.WriteAllText(f, $$"""
+                {"schema":"powerwizz.report/v1","started_at":"2026-10-13T18:39:16Z","target":{"base_url":"http://shop/","local":true},
+                 "steps":[],"series":{{series}}}
+                """); return f; }
+            var read = LoadReports.Read(Write("""[{"t":1,"requests":9,"failures":0,"p50_ms":2,"p95_ms":43.5,"p99_ms":50}]"""));
+            Assert.Equal(new LoadReports.Point(1, 9, 43.5), Assert.Single(read.Series!));
+            Assert.EndsWith("series[0].p95_ms missing or not a number",
+                Assert.Throws<ArgumentException>(() => LoadReports.Read(Write("""[{"t":1,"requests":9}]"""))).Message);
+            Assert.Null(LoadReports.Read(Write("null")).Series);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
 }
