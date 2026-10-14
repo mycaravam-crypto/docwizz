@@ -557,6 +557,13 @@ Each step is matched to a detected endpoint by method, then segment by segment:
 - The base URL's path prefix (`/app/`) may precede the route; it is stripped when the rest matches.
 - The most literal segments win. A tie is ambiguous and not attached; it is listed, like a step with no endpoint.
 
+With more than one run, **Trend** lists per endpoint and step every run against the newest run's target, oldest first:
+p95 and error rate, and the newest p95's change from the run before it (`+36.4 %`). Runs against another target aren't
+comparable and are left out; nothing judges what counts as a regression. **Timeline** draws each shown run's per-second
+`series` (all steps together) as Mermaid line charts of p95 latency and requests per second, at most 60 points: a point
+spanning several seconds shows their worst p95, so a spike isn't averaged away. A `series` point without `t`,
+`requests` or `p95_ms` exits 1 naming it.
+
 ## Requirement history
 
 ```bash
