@@ -133,6 +133,25 @@ A real run takes an hour or more on a local model, so it is never part of CI. Th
 minutes and run weekly with the other benchmarks ([bench.yml](../.github/workflows/bench.yml)): they prove that every
 task is solvable and that no check passes by accident.
 
+## MCP session reuse (#204)
+
+```console
+$ npm ci --prefix scanner-vue
+$ python3 bench/mcp.py --sizes medium,large             # --repeats 5 by default, --dll <old DocWizz.dll> for a baseline
+```
+
+Measures repeated calls in the *same* `docwizz mcp` process, where the session caches apply. For each deterministic
+fixture it commits the generated repository, adds one uncommitted source edit, starts the server and times the
+`initialize` answer as **startup** (process start and model load). Then it calls `impact(HEAD)` and `check` once each,
+followed by `--repeats` more calls, and reports the first call and the median of the repeats. The last column lists
+the `model.source` each tool's answers reported, so a repeat that rescanned (or a stale model) is visible instead of
+passing for a cache hit. Server stderr goes to a file, so a chatty scan cannot block the run.
+
+To compare against an older version, build it separately and pass its assembly with `--dll /path/to/old/DocWizz.dll`.
+Use the **same machine and fixture sizes** for both. This is a manual diagnostic, not a CI gate: shared-runner timing
+variance must not fail unrelated pull requests. Post measured numbers on issue #204 rather than replacing the CLI scan
+baseline above with estimated values.
+
 ## Requirement context
 
 ```console
