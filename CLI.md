@@ -564,7 +564,8 @@ The same run (start time and target) imported again replaces itself; unknown fie
 missing or of another type (`steps[0].error_rate`, `latency_ms.p95`, `started_at`, …) exits 1 naming it, so a missing
 number never shows as 0. `generate` then adds **Load (measured)** to `api.md`: per matched endpoint the requests, error
 rate and p50/p95/p99 latency of the newest run, one row per step of that run that called it,
-with the run as evidence, and the run's users, ramp-up, duration and auth once. A run against a non-local target is
+with the run as evidence, and the run's label (powerwizz `--label`, e.g. `dev, Debug build`: what was measured),
+users, ramp-up, duration and auth once. A run against a non-local target is
 marked as not comparable, and a run older than the endpoint file's last commit is marked _stale_.
 
 Each step is matched to a detected endpoint by method, then segment by segment:

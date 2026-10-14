@@ -43,7 +43,7 @@ public class LoadJourneyTests
         Assert.Contains("| `GET /api/materials/{id}` | browse/detail | 898 | 0.00 % | 24.2 | 39.4 | 41.4 | new.json 2026-10-13 18:39Z |", load);
         Assert.DoesNotContain("old.json", load);   // the newest run per endpoint
         Assert.DoesNotContain("`PUT /api/materials/{id}`", load);
-        Assert.Contains("| new.json 2026-10-13 18:39Z | `http://127.0.0.1:18080/app/` | 50 | 10 s | 60 s | PerUser |", load);
+        Assert.Contains("| new.json 2026-10-13 18:39Z | — | `http://127.0.0.1:18080/app/` | 50 | 10 s | 60 s | PerUser |", load);
         Assert.Contains("- `POST /api/checkout (new.json)`", load);
 
         // Trend over both runs (same target), and the newest run's per-second timeline as charts.

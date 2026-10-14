@@ -419,13 +419,14 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
                     sb.AppendLine(FormattableString.Invariant(
                         $"| {label} | {Esc(step.Name ?? "—")} | {step.Requests} | {step.ErrorRate:P2} | {latency.P50:0.#} | {latency.P95:0.#} | {latency.P99:0.#} | {Run(report)}{(stale ? " _stale_" : "")} |"));
                 }
-            sb.AppendLine("\n| Run | Target | Users | Ramp-up | Duration | Auth |\n|---|---|---|---|---|---|");
+            sb.AppendLine("\n| Run | Label | Target | Users | Ramp-up | Duration | Auth |\n|---|---|---|---|---|---|---|");
             foreach (var r in load.Endpoints.Select(m => m.Report).Distinct().OrderBy(r => r.StartedAt))
             {
                 var target = Code(r.Target.BaseUrl) + (r.Target.Local ? "" : " (**not local**: not comparable to a local run)");
+                var label = string.IsNullOrWhiteSpace(r.Label) ? "—" : Esc(r.Label.Length > 200 ? r.Label[..200] + "…" : r.Label);
                 sb.AppendLine(r.Config is { } c
-                    ? FormattableString.Invariant($"| {Run(r)} | {target} | {c.Users} | {c.RampUpS:0.#} s | {c.DurationS:0.#} s | {Esc(c.Auth ?? "—")} |")
-                    : $"| {Run(r)} | {target} | — | — | — | — |");
+                    ? FormattableString.Invariant($"| {Run(r)} | {label} | {target} | {c.Users} | {c.RampUpS:0.#} s | {c.DurationS:0.#} s | {Esc(c.Auth ?? "—")} |")
+                    : $"| {Run(r)} | {label} | {target} | — | — | — | — |");
             }
             sb.Append(LoadTrend(load));
             sb.Append(LoadCharts(load, Run));
