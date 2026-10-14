@@ -142,7 +142,8 @@ docwizz generate . --html --screenshots --base-url http://localhost:5173 --stora
   are answered 401 or 403 is skipped too: SPA servers answer every page with 200, so the API is where a rejected
   session shows. API 404s are not treated as failures. A login overlay without a password field can't be
   recognized.
-- Captures go to `docs/screenshots/`, linked from `frontend.md`. **The storage-state file holds session tokens:** keep
+- Captures go to `docs/screenshots/`, linked from `frontend.md`. A later `generate` without `--screenshots` keeps the
+  last captures linked (the summary says so); only `--screenshots` replaces them. **The storage-state file holds session tokens:** keep
   it out of Git, restrict access, and use a low-privilege test account with sanitized data.
 
 For Windows Chromium installation, missing headless-shell executables, authenticated login steps and troubleshooting,

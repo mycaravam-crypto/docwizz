@@ -224,4 +224,22 @@ public class ScreenshotCaptureTests
         finally { File.Delete(file); }
         Assert.Empty(ScreenshotCapture.SessionStorage(null));
     }
+
+    [Fact]
+    public void Without_a_capture_the_last_screenshots_stay_linked()
+    {
+        var model = Model([N("ts:route:/", "src/router.ts", kind: "route", route: "/"), N("ts:route:/orders", "src/router.ts", kind: "route", route: "/orders"),
+            N("ts:route:/logout", "src/router.ts", kind: "route", route: "/logout")]);
+        var outDir = Directory.CreateTempSubdirectory("docwizz-shots-").FullName;
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(outDir, "screenshots"));
+            File.WriteAllBytes(Path.Combine(outDir, "screenshots", ScreenshotCapture.FileName("/orders")), [1]);
+            File.WriteAllBytes(Path.Combine(outDir, "screenshots", ScreenshotCapture.FileName("/logout")), [1]);
+            // /orders has a capture, / has none, /logout is never linked.
+            Assert.Equal(new Dictionary<string, string> { ["/orders"] = $"screenshots/{ScreenshotCapture.FileName("/orders")}" },
+                ScreenshotCapture.Existing(model, outDir));
+        }
+        finally { Directory.Delete(outDir, true); }
+    }
 }
