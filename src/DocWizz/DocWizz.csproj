@@ -45,11 +45,14 @@
   <!-- Packing stages scanner-vue (Vue/TS and Java scanners plus their npm ci'd dependencies) and ships it inside the tool,
        so an installed tool needs only Node. Staging on every pack keeps the payload in step with the source, and fails
        the pack when scanner-vue/node_modules is missing instead of shipping a tool without scanners. -->
-  <Target Name="DocWizzPackScanner" BeforeTargets="_GetPackageFiles">
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);DocWizzPackScanner</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+  <Target Name="DocWizzPackScanner">
     <Exec Command="node package-distribution.mjs" WorkingDirectory="$(MSBuildProjectDirectory)/../../scanner-vue" />
     <ItemGroup>
-      <None Include="$(MSBuildProjectDirectory)/../../scanner-vue/dist/**/*" Pack="true"
-            PackagePath="tools/$(TargetFramework)/any/scanner-vue/dist/%(RecursiveDir)%(Filename)%(Extension)" />
+      <TfmSpecificPackageFile Include="$(MSBuildProjectDirectory)/../../scanner-vue/dist/**/*"
+                              PackagePath="tools/$(TargetFramework)/any/scanner-vue/dist/%(RecursiveDir)" />
     </ItemGroup>
   </Target>
   <ItemGroup>
