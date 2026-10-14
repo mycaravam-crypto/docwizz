@@ -34,4 +34,21 @@ public class McpRefModelCacheTests
         Assert.Null(cache.Get("HEAD", "scope", _ => new string('c', 40), Build));
         Assert.Equal(2, builds);
     }
+    [Fact]
+    public void Evicts_oldest_commit_when_capacity_is_exceeded()
+    {
+        var cache = new McpRefModelCache();
+        var scans = 0;
+        CodeModel Build(string _) { scans++; return new CodeModel(null, [], []); }
+        string Sha(int i) => i.ToString("x40");
+        for (var i = 0; i <= McpRefModelCache.Capacity; i++)
+            Assert.NotNull(cache.Get("ref", null, _ => Sha(i), Build));
+        Assert.Equal(McpRefModelCache.Capacity + 1, scans);
+        // The newest remains cached; the first commit has been evicted.
+        Assert.NotNull(cache.Get("ref", null, _ => Sha(McpRefModelCache.Capacity), Build));
+        Assert.Equal(McpRefModelCache.Capacity + 1, scans);
+        Assert.NotNull(cache.Get("ref", null, _ => Sha(0), Build));
+        Assert.Equal(McpRefModelCache.Capacity + 2, scans);
+    }
+
 }
