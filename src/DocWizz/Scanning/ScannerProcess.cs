@@ -17,7 +17,9 @@ static class ScannerProcess
         return RunAsync(start, input, TimeSpan.FromSeconds(seconds)).GetAwaiter().GetResult();
     }
 
-    internal static async Task<string> RunAsync(ProcessStartInfo start, string input, TimeSpan timeout)
+    // `diagnostics` receives what a successful scanner wrote to stderr (scanner-vue reports skipped files there and
+    // still exits 0); defaults to docwizz's own stderr, as before stderr was captured.
+    internal static async Task<string> RunAsync(ProcessStartInfo start, string input, TimeSpan timeout, TextWriter? diagnostics = null)
     {
         start.RedirectStandardInput = true;
         start.RedirectStandardOutput = true;
@@ -30,14 +32,19 @@ static class ScannerProcess
             using var cts = new CancellationTokenSource(timeout);
             var write = Task.Run(async () =>
             {
-                await process.StandardInput.WriteAsync(input);
-                process.StandardInput.Close();
+                try
+                {
+                    await process.StandardInput.WriteAsync(input);
+                    process.StandardInput.Close();
+                }
+                catch (IOException) { }   // the scanner exited before reading it all; its exit code and stderr say why
             });
             await Task.WhenAll(write, process.WaitForExitAsync(cts.Token)).WaitAsync(cts.Token);
             var output = await stdout;
             var errors = await stderr;
             if (process.ExitCode != 0)
                 throw new InvalidOperationException($"exit code {process.ExitCode}{Tail(errors)}");
+            if (errors.Length > 0) (diagnostics ?? Console.Error).Write(errors);
             return output;
         }
         catch (OperationCanceledException)

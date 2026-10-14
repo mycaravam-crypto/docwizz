@@ -705,6 +705,10 @@ Every command exits **2** when docwizz itself fails unexpectedly (a bug, a full 
 line instead of a stack trace, so CI can tell "docwizz broke" from "the gate failed". Set `DOCWIZZ_DEBUG=1` for the
 full trace.
 
+The Node scanners (Java, Vue, React, Angular, TypeScript) get 10 minutes per run. One that takes longer is stopped and
+that language is skipped with a warning, so a hung scanner can't block CI; set `DOCWIZZ_SCANNER_TIMEOUT_SECONDS` to
+change the limit. A scanner that fails shows the last lines it wrote to stderr in its warning.
+
 ## Generated vs. your files
 
 | Path | Who owns it |

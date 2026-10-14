@@ -492,7 +492,9 @@ static async Task<int> McpCommand(string root, Config config, bool autoRescan)
         ?? ModelAt(root, gitRef, config); // Preserve git failure diagnostics for unresolved refs.
     string? Head() => Git(root, "rev-parse --short HEAD")?.Trim();
     int ChangedSince(DateTime time) => BuildFiles(root, config).Count(f => File.GetLastWriteTimeUtc(f) > time);
-    var working = new McpWorkingModelCache(Head, ChangedSince, () => BuildModel(root, config).Model);
+    // Fingerprints the same file list BuildModel reads (RepoFiles), not just source extensions.
+    var working = new McpWorkingModelCache(Head, () => McpWorkingModelCache.Fingerprint(root, RepoFiles(root, config)),
+        () => BuildModel(root, config).Model);
     var host = new McpServer.Host(root, config, autoRescan,
         Load: () => LoadModel(root, config),
         Scan: () => working.Get(force: true),

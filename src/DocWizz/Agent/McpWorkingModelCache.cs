@@ -1,21 +1,38 @@
-// MCP working-tree scans are reusable only while both HEAD and source mtimes stay unchanged.
-// The timestamp is captured before scanning to catch edits made during the scan.
-sealed class McpWorkingModelCache(Func<string?> head, Func<DateTime, int> changedSince, Func<CodeModel> scan)
+using System.Security.Cryptography;
+using System.Text;
+
+// MCP working-tree scans are reusable only while HEAD and the scanned file set are unchanged: same paths, sizes and
+// mtimes, so deleted, renamed (mtime-preserving) and non-source inputs (.csproj, package.json, config) invalidate too.
+// The fingerprint is taken before scanning, so an edit made during the scan forces the next request to rescan.
+sealed class McpWorkingModelCache(Func<string?> head, Func<string> fingerprint, Func<CodeModel> scan)
 {
     CodeModel? model;
     string? scannedHead;
-    DateTime started;
+    string? scannedFingerprint;
 
     public CodeModel Get(bool force = false)
     {
         var current = head();
-        if (!force && model is not null && current == scannedHead && changedSince(started) == 0)
+        var files = fingerprint();
+        if (!force && model is not null && current == scannedHead && files == scannedFingerprint)
             return model;
-        var start = DateTime.UtcNow;
-        var fresh = scan();
-        model = fresh;
-        started = start;
+        model = scan();
         scannedHead = current;
-        return fresh;
+        scannedFingerprint = files;
+        return model;
+    }
+
+    // What a scan of `files` (as listed, under `root`) would read: relative path, size and mtime of each.
+    public static string Fingerprint(string root, IEnumerable<string> files)
+    {
+        var text = new StringBuilder();
+        foreach (var file in files)
+        {
+            var info = new FileInfo(file);
+            text.Append(Path.GetRelativePath(root, file).Replace('\\', '/')).Append('\t');
+            if (info.Exists) text.Append(info.Length).Append('\t').Append(info.LastWriteTimeUtc.Ticks);
+            text.Append('\n');
+        }
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())));
     }
 }
