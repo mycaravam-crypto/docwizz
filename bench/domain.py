@@ -155,6 +155,18 @@ def domain(dll, repo, gold, work):
         misplaced += [m for m, ns in zip(ms, spaces) if ns != usual]
     areas = {"precision": ratio(len(base_pairs & gold_pairs), len(base_pairs)), "recall": ratio(len(base_pairs & gold_pairs), len(gold_pairs)),
              "misplaced": sorted(misplaced)}
+    # The model: `docwizz domain areas` (folder plus delegation and interface evidence). Misplaced: in a group whose
+    # gold area most of the group doesn't share.
+    out = sh(["dotnet", dll, "domain", "areas", ".", "--format", "json"], repo)
+    got = [[name(m["id"]) for m in a["members"]] for a in json.loads(out.stdout)["areas"]]
+    area_of = {m: a for a, ms in d["areas"].items() for m in ms}
+    model_pairs = pairs(got)
+    wrong = sorted(m for g in got for m in g
+                   if area_of.get(m) != max((area_of.get(x) for x in g), key=[area_of.get(x) for x in g].count))
+    model = {"precision": ratio(len(model_pairs & gold_pairs), len(model_pairs)), "recall": ratio(len(model_pairs & gold_pairs), len(gold_pairs)),
+             "misplaced": wrong}
+    if model["precision"] < areas["precision"] or model["recall"] < areas["recall"]:
+        problems.append(f"domain areas no better than namespaces: {model['precision']}/{model['recall']} vs {areas['precision']}/{areas['recall']}")
 
     # Processes: what a crawl from the entry reaches of the labelled steps.
     processes = []
@@ -175,7 +187,7 @@ def domain(dll, repo, gold, work):
                   for v in sorted(set(verdicts.values()))}
     wrong = sorted(f"{m.rsplit('.', 2)[-2]}.{m.rsplit('.', 1)[-1]} WI-{i} ({v})" for (m, i), v in shown.items() if v in ("contradicted", "unrelated"))
     return {"labels": {"methods": len(methods), "areas": len(d["areas"]), "processes": len(d["processes"]), "rules": len(d["rules"])},
-            "problems": problems, "areaBaseline": areas, "processes": processes, "rules": by_verdict, "intentOnDisagreeingCode": wrong}
+            "problems": problems, "areaBaseline": areas, "areaModel": model, "processes": processes, "rules": by_verdict, "intentOnDisagreeingCode": wrong}
 
 
 def markdown(result):
@@ -205,6 +217,8 @@ def markdown(result):
                   "Baselines a domain model has to beat:", "",
                   f"- **Areas by namespace:** pair precision {d['areaBaseline']['precision']}, recall {d['areaBaseline']['recall']}"
                   + (f"; misplaced: {', '.join(d['areaBaseline']['misplaced'])}" if d['areaBaseline']['misplaced'] else ""),
+                  f"- **Areas by `docwizz domain areas`:** pair precision {d['areaModel']['precision']}, recall {d['areaModel']['recall']}"
+                  + (f"; misplaced: {', '.join(d['areaModel']['misplaced'])}" if d['areaModel']['misplaced'] else ""),
                   "- **Process steps reached by a crawl from the entry:** "
                   + ", ".join(f"{p['name']} {p['reached']}/{p['steps']}" for p in d["processes"]),
                   "- **Rules shown as As-intended, by verdict:** "

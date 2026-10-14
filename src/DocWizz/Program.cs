@@ -45,10 +45,12 @@ static async Task<int> Dispatch(string[] args)
         pos.RemoveAt(1);
     }
     // Subcommand before repository dir: docwizz domain discover <dir> ...
+    string? domainAction = null;
     if (cmd == "domain")
     {
-        if (pos.ElementAtOrDefault(1) != "discover")
-            return Usage("domain needs discover: docwizz domain discover <dir> --seed <symbol|endpoint>", "domain");
+        if (pos.ElementAtOrDefault(1) is not ("discover" or "areas"))
+            return Usage("domain needs discover or areas: docwizz domain discover <dir> --seed <symbol|endpoint>", "domain");
+        domainAction = pos[1];
         pos.RemoveAt(1);
     }
     var path = pos.ElementAtOrDefault(1) ?? ".";
@@ -94,6 +96,10 @@ static async Task<int> Dispatch(string[] args)
             return 0;
         case "context":
             return ContextCommand(path, config, opts);
+        case "domain" when domainAction == "areas":
+            var areas = DomainAreas.Group(LoadModel(path, config).Item1);
+            Console.Write(json ? DomainAreas.Json(areas) : DomainAreas.Text(areas));
+            return 0;
         case "domain":
             return DomainCommand(path, config, opts, json, pos.ElementAtOrDefault(2));
         case "mcp":
@@ -659,6 +665,7 @@ static string Reference() => $"""
       docwizz context <dir> --for <target>  token-budgeted facts about one symbol, file, folder or endpoint, for agents
         [--hops <1-4>] [--budget <tokens>] [--format md|json] [--include-ai] [--requirements]
       docwizz domain discover <dir> --seed <symbol|endpoint>  bounded graph walk, optional historical requirements
+      docwizz domain areas <dir>        candidate business areas: methods grouped by folder and delegation, inferred
         [--work-item <id>] [--depth <0-8>] [--limit <1-500>] [--format json]
         --work-item replaces --seed; the imported requirements index is required for a work-item seed
       docwizz mcp <dir>                 read-only MCP server on stdio for coding agents (find_symbol, context, impact, ...)
