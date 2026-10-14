@@ -4,6 +4,7 @@
     python3 bench/agents.py --agent reference                    # self-test: every check passes on the known solution
     python3 bench/agents.py --agent noop                         # self-test: no task passes when nothing is done
     python3 bench/agents.py --agent aider --model openai/qwen3-coder --endpoint http://127.0.0.1:8000/v1 --runs 3
+    OLLAMA_API_BASE=http://127.0.0.1:11434 python3 bench/agents.py --agent aider --model ollama_chat/qwen2.5-coder:7b --runs 3
     python3 bench/agents.py --agent command --cmd 'opencode run -m local/qwen3-coder "$(cat {prompt_file})"'
     python3 bench/run.py agents ...                              # the same, through the benchmark entry point
 
@@ -114,11 +115,18 @@ def agent_aider(task, repo, prompt, env, args):
     """Aider, headless, against an OpenAI-compatible endpoint (--endpoint, key from OPENAI_API_KEY or 'local')."""
     prompt_file = os.path.join(repo, "..", "prompt.txt")
     open(prompt_file, "w").write(prompt)
+    # Aider has no --temperature: it goes into a model settings file. `ollama_chat/<model>` talks to Ollama natively
+    # (OLLAMA_API_BASE) and sizes num_ctx per request; Ollama's OpenAI endpoint can't, and cuts long prompts silently.
+    settings = os.path.join(repo, "..", "aider-model-settings.yml")
+    open(settings, "w").write(f"- name: {json.dumps(args.model)}\n  extra_params:\n    temperature: {args.temperature}\n")
     env = dict(env, OPENAI_API_BASE=args.endpoint or env.get("OPENAI_API_BASE", ""), OPENAI_API_KEY=env.get("OPENAI_API_KEY", "local"))
     cmd = ["aider", "--yes-always", "--no-auto-commits", "--no-show-model-warnings", "--no-check-update", "--no-pretty",
-           "--model", args.model, "--temperature", str(args.temperature), "--message-file", prompt_file]
+           "--model", args.model, "--model-settings-file", settings, "--message-file", prompt_file]
     p = subprocess.run(cmd, cwd=repo, env=env, capture_output=True, text=True, timeout=args.timeout)
     out = p.stdout + p.stderr
+    # Aider failing before any model call is a broken setup, not a failed task: stop instead of scoring it 0 %.
+    if p.returncode != 0 and "Tokens:" not in out:
+        sys.exit(f"aider exited {p.returncode} before calling the model:\n{out[-2000:]}")
     def k(v):   # "2.3k" → 2300
         return int(float(v[:-1]) * 1000) if v.endswith("k") else int(float(v))
     tokens = re.findall(r"Tokens: ([\d.]+k?) sent, ([\d.]+k?) received", out)
