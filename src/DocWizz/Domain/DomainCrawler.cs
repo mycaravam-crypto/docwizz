@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 // A bounded, read-only first pass towards domain architecture discovery: traverse observed code edges and
 // attach historical requirements as separately labelled evidence. No AI interpretation and no ADO calls.
@@ -31,7 +32,8 @@ static class DomainCrawler
     public record Relation(string From, string To, string Kind, string Certainty, string? Label);
     public record Evidence(string Relation, string Commit, int? PullRequest, string? Confidence, string File, string Lines);
     public record Requirement(string Symbol, int Id, string Status, bool ChangedSince, string Availability,
-        string? Title, int? Revision, bool? IsCurrent, List<string> AcceptanceCriteria, List<Evidence> Evidence);
+        string? Title, int? Revision, bool? IsCurrent, List<string> AcceptanceCriteria, List<Evidence> Evidence,
+        List<string> Checks);
     // A work-item title is a candidate term, NOT a verified domain concept or bounded context.
     public record CandidateTerm(int WorkItem, string Label, List<string> Symbols, string Classification);
     public record Report(string Schema, Seed Seed, ModelVersion Model, IndexVersion RequirementsIndex,
@@ -50,9 +52,10 @@ static class DomainCrawler
     /// <param name="maxNodes">Maximum number of visited symbols.</param>
     /// <param name="index">Optional previously imported requirements index.</param>
     /// <param name="head">Current HEAD for freshness assessment, if known.</param>
+    /// <param name="root">Repository root to read method bodies for the cross-checks; null skips them.</param>
     /// <returns>Read-only, versioned code and requirement evidence, including warnings and truncation.</returns>
     public static Report Discover(CodeModel model, string? codeSeed, int? workItem, int maxDepth, int maxNodes,
-        RequirementIndex.Index? index = null, string? head = null)
+        RequirementIndex.Index? index = null, string? head = null, string? root = null)
     {
         if ((codeSeed is null) == (workItem is null))
             throw new ArgumentException("choose exactly one of --seed <symbol|endpoint> or --work-item <id>");
@@ -169,6 +172,10 @@ static class DomainCrawler
             .ThenBy(e => e.To, StringComparer.Ordinal).ToList();
 
         var requirements = new List<Requirement>();
+        // Every current method a work item is linked to, once per work item: the cross-checks compare it with its siblings.
+        var linkedTo = new Dictionary<int, List<Node>>();
+        List<Node> Linked(int id) => linkedTo.TryGetValue(id, out var l) ? l : linkedTo[id] =
+            [.. RequirementResolver.Symbols(index!, id, model, head).Symbols.Where(x => x.Current && nodes.ContainsKey(x.Id)).Select(x => nodes[x.Id])];
         if (index is not null)
             foreach (var s in symbols.Where(s => nodes[s.Id].Kind is not ("external" or "config")))
             {
@@ -182,7 +189,9 @@ static class DomainCrawler
                         r.WorkItem?.Title, r.WorkItem?.Revision, r.WorkItem?.IsCurrent,
                         [.. (r.WorkItem?.Criteria ?? []).Take(3)],
                         [.. r.Evidence.Select(e => new Evidence(e.Relation, e.Commit, e.PullRequest,
-                            e.Confidence, e.File, e.Lines))]));
+                            e.Confidence, e.File, e.Lines))],
+                        root is null || r.WorkItem is null ? [] : Checks(r.WorkItem, nodes[s.Id], context.Requirements, model, root,
+                            [.. Linked(r.Id).Where(n => n.Id != s.Id)])));
                 }
             }
 
@@ -196,6 +205,62 @@ static class DomainCrawler
             new(indexStatus, index?.Fingerprint, coversHead), maxDepth, maxNodes, truncated, symbols, relations,
             requirements, concepts, [.. warnings.Distinct()]);
     }
+
+    // Cross-checks between a work item's text and the linked method's code (#187). A hit moves the link out of As-intended
+    // with its reason; none claims the code is wrong, a reviewer decides. Only regexes run over the untrusted text.
+    //   numbers   the work item states numbers, the code uses others and none of them (14 days vs. `> 30`)
+    //   name      the work item names a method of the same class that this one neither calls nor shares the work item with
+    //   sibling   another method linked to the work item has its values (TRK-, 500), this one has none (an unrelated edit)
+    static List<string> Checks(RequirementIndex.WorkItem item, Node method, List<RequirementResolver.Requirement> all,
+        CodeModel model, string root, List<Node> siblings)
+    {
+        var checks = new List<string>();
+        if (method.Kind is not ("method" or "constructor") || Body(root, method) is not { } body) return checks;
+        var text = Text(item);
+        var stated = Stated(text);
+        var tokens = Regex.Matches(text, @"\b[A-Z]{2,}(?:\d+\b|-)").Select(m => m.Value).ToHashSet();
+        bool Has(string code) => Numbers(code).Any(stated.Contains) || tokens.Any(code.Contains);
+
+        var used = Numbers(body).Where(n => n is not (0 or 1)).ToHashSet();
+        var explained = all.Where(r => r.WorkItem is not null)
+            .SelectMany(r => Stated(Text(r.WorkItem!))).ToHashSet();
+        if (stated.Count > 0 && used.Count > 0 && !used.Any(stated.Contains) && !used.All(explained.Contains))
+            checks.Add($"the work item states {string.Join(", ", Numbers(text).Distinct())}, the code uses {string.Join(", ", used)}");
+
+        var calls = model.Edges.Where(e => e.From == method.Id && e.Kind == "calls").Select(e => e.To).ToHashSet();
+        var shared = siblings.Select(n => n.Id).ToHashSet();
+        var owner = model.Edges.FirstOrDefault(e => e.Kind == "contains" && e.To == method.Id)?.From;
+        foreach (var m in model.Edges.Where(e => owner is not null && e.Kind == "contains" && e.From == owner && e.To != method.Id)
+            .Select(e => e.To).Distinct().Order(StringComparer.Ordinal))
+        {
+            var name = m[(m.IndexOf(':') + 1)..].Split('(')[0].Split('.').Last();
+            var words = Regex.Replace(name, "(?<=[a-z0-9])(?=[A-Z])", " ");
+            if (!calls.Contains(m) && !shared.Contains(m) && Regex.IsMatch(text, $@"\b{Regex.Escape(words)}\b", RegexOptions.IgnoreCase))
+                checks.Add($"the work item mentions {Generator.Code(name)}, which this method doesn't call");
+        }
+
+        if (!Has(body) && siblings.FirstOrDefault(n => Body(root, n) is { } b && Has(b)) is { } other)
+            checks.Add($"{Generator.Code(Label(other.Id))}, also linked to the work item, has its values; this method has none");
+        return checks;
+    }
+
+    static string? Body(string root, Node n)
+    {
+        var path = Path.Combine(root, n.File);
+        if (!File.Exists(path)) return null;
+        var lines = File.ReadAllLines(path);
+        var (from, to) = (Math.Max(1, n.Line), Math.Min(lines.Length, n.EndLine ?? n.Line));
+        return from > to ? null : string.Join('\n', lines[(from - 1)..to]);
+    }
+
+    static string Text(RequirementIndex.WorkItem item) => string.Join('\n', [item.Title ?? "", .. item.Criteria]);
+
+    // Numbers as written, except a digit inside a name (SAVE20, x1).
+    static IEnumerable<decimal> Numbers(string s) => Regex.Matches(s, @"(?<![\w.])\d+(?:\.\d+)?")
+        .Select(m => decimal.Parse(m.Value, System.Globalization.CultureInfo.InvariantCulture));
+
+    // A work item's numbers, and each as a fraction: "19 percent" and "5%" are 0.19 and 0.05 in code.
+    static HashSet<decimal> Stated(string text) => [.. Numbers(text).SelectMany(n => new[] { n, n / 100 })];
 
     static bool Deferred(Edge e, Node to) => e.Kind == "creates" || to.Kind is "record" or "struct" or "enum";
 
@@ -213,8 +278,9 @@ static class DomainCrawler
     // ponytail: Mermaid gets unreadable beyond ~80 nodes; the tables below stay complete, a clustered view is #188.
     const int MaxGraphNodes = 80;
 
-    /// <summary>Reviewable Markdown in three parts: As-is (code facts), As-intended (confirmed, current requirements) and Unclear
-    /// (every other link with its reason, and reached methods without one). Deterministic; no contradiction is claimed.</summary>
+    /// <summary>Reviewable Markdown in three parts: As-is (code facts), As-intended (confirmed, current requirements the
+    /// cross-checks don't question) and Unclear (every other link with its reason, and reached methods without one).
+    /// Deterministic; no contradiction is claimed.</summary>
     /// <param name="links">Path from the Markdown file to the repository root; null (stdout) writes locations as code.</param>
     public static string Markdown(Report report, string? links = null)
     {
@@ -298,6 +364,7 @@ static class DomainCrawler
         if (r.ChangedSince) why.Add("the code changed after the linked commit");
         if (r.Availability != "available" || r.Title is null) why.Add("the work item was not exported");
         if (r.IsCurrent == false) why.Add("the work item has a newer revision than the export");
+        why.AddRange(r.Checks);
         return why;
     }
 

@@ -70,11 +70,22 @@ An existing file that is not a DocWizz domain report is never overwritten.
   human-readable console summary. The Markdown has three parts:
   - **As-is**: the scanner's code facts, as a Mermaid graph (up to 80 symbols) and a symbol table.
   - **As-intended**: confirmed links (a commit that changed the symbol names the work item) whose code has not
-    changed since, with their acceptance criteria.
+    changed since and that no cross-check questions, with their acceptance criteria.
   - **Unclear**: every other link, each with its reason (PR or message only, code changed since, work item not
-    exported, newer work-item revision), and the reached methods that have no linked work item.
+    exported, newer work-item revision, a cross-check), and the reached methods that have no linked work item.
 
-  Contradictions between code and intent are not claimed: that needs a reader (or a model) comparing the two. The same code model, history index, seed, commit and bounds produce the same output.
+  Three deterministic cross-checks compare the work item's title and criteria with the linked method's source
+  (`checks` in the JSON):
+  - **numbers:** the work item states numbers, the method uses others and none of them ("14 days" vs. `> 30`).
+    A percentage also matches as a fraction (5 % is `0.05m`); 0 and 1 are ignored, and so are numbers another
+    work item of the same method states.
+  - **name:** the work item names a method of the same class (`order total` → `Total`) that this method neither
+    calls nor shares the work item with.
+  - **sibling:** another method linked to the same work item contains its values (a number, or a code such as
+    `TRK-`), this one contains none: typically an unrelated edit in the linked commit.
+
+  A hit only moves the link to Unclear with its reason. Contradictions between code and intent are not claimed:
+  that needs a reader (or a model) comparing the two. The same code model, history index, seed, commit and bounds produce the same output.
 
 ## Candidate business areas
 
