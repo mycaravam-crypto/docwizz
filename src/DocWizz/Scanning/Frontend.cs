@@ -24,12 +24,7 @@ static class Frontend
             // (older Node ignores it). Anyone who set their own cache directory keeps it.
             if (Environment.GetEnvironmentVariable("NODE_COMPILE_CACHE") is null)
                 psi.Environment["NODE_COMPILE_CACHE"] = Path.Combine(Path.GetTempPath(), "docwizz-node-compile-cache");
-            var p = Process.Start(psi)!;
-            p.StandardInput.Write(string.Join('\n', files.Select(Path.GetFullPath)));
-            p.StandardInput.Close();
-            var json = p.StandardOutput.ReadToEnd();
-            p.WaitForExit();
-            if (p.ExitCode != 0) throw new InvalidOperationException($"exit code {p.ExitCode}");
+            var json = ScannerProcess.Run(psi, string.Join('\n', files.Select(Path.GetFullPath)));
             var m = JsonSerializer.Deserialize<FrontendModel>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
             return (m.Nodes, m.Edges);
         }

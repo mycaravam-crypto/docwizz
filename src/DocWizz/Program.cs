@@ -484,23 +484,34 @@ static (CodeModel Model, string Source, DateTime Since) LoadModel(string root, C
 static async Task<int> McpCommand(string root, Config config, bool autoRescan)
 {
     Console.Error.WriteLine($"docwizz mcp: serving {Path.GetFullPath(root)} on stdio (read-only; Ctrl+D or closing stdin stops it)");
+    var refs = new McpRefModelCache();
+    var scope = ProjectScope.Fingerprint(config.Scope);
+    CodeModel? RefModel(string gitRef) => refs.Get(gitRef, scope,
+        r => GitRun(root, $"rev-parse --verify {r}^{{commit}}") is { Exit: 0 } ok ? ok.Out.Trim() : null,
+        sha => ModelAt(root, sha, config))
+        ?? ModelAt(root, gitRef, config); // Preserve git failure diagnostics for unresolved refs.
+    string? Head() => Git(root, "rev-parse --short HEAD")?.Trim();
+    int ChangedSince(DateTime time) => BuildFiles(root, config).Count(f => File.GetLastWriteTimeUtc(f) > time);
+    // Fingerprints the same file list BuildModel reads (RepoFiles), not just source extensions.
+    var working = new McpWorkingModelCache(Head, () => McpWorkingModelCache.Fingerprint(root, RepoFiles(root, config)),
+        () => BuildModel(root, config).Model);
     var host = new McpServer.Host(root, config, autoRescan,
         Load: () => LoadModel(root, config),
-        Scan: () => BuildModel(root, config).Model,
-        Head: () => Git(root, "rev-parse --short HEAD")?.Trim(),
-        ChangedSince: t => BuildFiles(root, config).Count(f => File.GetLastWriteTimeUtc(f) > t),
-        Impact: gitRef => ModelAt(root, gitRef, config) is { } before
-            ? DiffJson(Diff.Compare(before, BuildModel(root, config).Model, config), gitRef, null) : null,
+        Scan: () => working.Get(force: true),
+        Head: Head,
+        ChangedSince: ChangedSince,
+        Impact: gitRef => RefModel(gitRef) is { } before
+            ? DiffJson(Diff.Compare(before, working.Get(), config), gitRef, null) : null,
         Check: since =>
         {
-            var model = BuildModel(root, config).Model;
+            var model = working.Get();
             if (since is null)
             {
                 var findings = Analyzer.Analyze(model, config);
                 var (failures, _) = CheckFailures(root, model, config, findings, Architecture.Check(model, config));
                 return new { pass = failures.Count == 0, failures };
             }
-            if (ModelAt(root, since, config) is not { } before) return null;
+            if (RefModel(since) is not { } before) return null;
             var result = Diff.Compare(before, model, config);
             var (ok, summary) = Gate(result, config);
             return DiffJson(result, since, new { pass = ok, summary });
