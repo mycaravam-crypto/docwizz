@@ -13,15 +13,15 @@ an example and its options.
 
 ## Scanner distribution (G1)
 
-A packaging producer can run `npm ci --prefix scanner-vue`, then `node scanner-vue/package-distribution.mjs`
-and `dotnet pack src/DocWizz/DocWizz.csproj -c Release`. This stages Vue/TS and Java scanners
-with their pinned dependency tree under `scanner-vue/dist/` and includes it in the .NET tool package.
-The installed tool still requires Node.js 22, but does not install npm dependencies at runtime.
+To package the tool, run `npm ci --prefix scanner-vue`, then `dotnet pack src/DocWizz/DocWizz.csproj -c Release`.
+Pack stages the Vue/TS and Java scanners with their pinned dependency tree in `scanner-vue/dist/` (git-ignored) and
+ships them inside the .NET tool; it fails if `npm ci` has not run. The installed tool still needs Node.js 22, but it does
+not install npm dependencies at runtime.
 
 The source-checkout GitHub Action continues to run `npm ci` until a reviewed, immutable scanner
 payload is distributed with the Action. Do not remove that installation prematurely: a source
-checkout does not include generated `scanner-vue/dist/` files. The manual `scanner-package`
-workflow validates the packaged scanner on a consumer path without invoking npm.
+checkout does not include generated `scanner-vue/dist/` files. The `scanner-package` workflow installs the packed
+tool and runs its bundled scanners without npm.
 
 ## At a glance
 

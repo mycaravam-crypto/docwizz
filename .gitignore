@@ -1,6 +1,7 @@
 bin/
 obj/
 node_modules/
+scanner-vue/dist/
 model.json
 staging/
 bench/results.json

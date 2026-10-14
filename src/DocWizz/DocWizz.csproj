@@ -40,11 +40,16 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
-  <!-- Include the staged scanner payload in the .NET tool package. -->
-  <ItemGroup Condition="Exists('../../scanner-vue/dist/index.mjs')">
-    <None Include="../../scanner-vue/dist/**/*" Pack="true"
-          PackagePath="tools/net10.0/any/scanner-vue/dist/%(RecursiveDir)%(Filename)%(Extension)" />
-  </ItemGroup>
+  <!-- Packing stages scanner-vue (Vue/TS and Java scanners plus their npm ci'd dependencies) and ships it inside the tool,
+       so an installed tool needs only Node. Staging on every pack keeps the payload in step with the source, and fails
+       the pack when scanner-vue/node_modules is missing instead of shipping a tool without scanners. -->
+  <Target Name="DocWizzPackScanner" BeforeTargets="_GetPackageFiles">
+    <Exec Command="node package-distribution.mjs" WorkingDirectory="$(MSBuildProjectDirectory)/../../scanner-vue" />
+    <ItemGroup>
+      <None Include="$(MSBuildProjectDirectory)/../../scanner-vue/dist/**/*" Pack="true"
+            PackagePath="tools/$(TargetFramework)/any/scanner-vue/dist/%(RecursiveDir)%(Filename)%(Extension)" />
+    </ItemGroup>
+  </Target>
   <ItemGroup>
     <InternalsVisibleTo Include="DocWizz.Tests" />
   </ItemGroup>
