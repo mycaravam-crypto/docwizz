@@ -304,6 +304,8 @@ items without a summary, plus an overview for each module (folder) of three or m
   [ProductSynthesis](src/DocWizz/Product/ProductSynthesis.cs) sends each section's evidence through `IAiProvider` and
   keeps only sentences that cite that section's ids and claim no status or conformity.
   [ProductCheck](src/DocWizz/Product/ProductCheck.cs) checks references and freshness, never content.
+  The product state (`in Bearbeitung`, `vorgelegt`, `fertiggestellt`) comes only from a human-kept
+  [ReviewLog](src/DocWizz/Product/ReviewLog.cs) that names the SHA-256 of the reviewed draft; docwizz never writes it.
 
 ## Requirement history
 

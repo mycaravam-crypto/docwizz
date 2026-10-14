@@ -172,4 +172,49 @@ public class ProductJourneyTests
         Assert.Equal(1, exit);
         Assert.Contains("drop --ai", Docwizz.Run("product", "check", repo.Root, Path.Combine(repo.Root, "template.yaml"), "--ai").Err);
     }
+
+    // The state is a person's record of reviewing exactly this draft; a regenerated draft is in progress again.
+    [Fact]
+    public void Product_check_reports_the_state_a_person_recorded_for_exactly_this_draft()
+    {
+        var template = Template + "\n  - id: structure\n    title: Bausteine\n    required: true\n    sources: [code]\n";
+        using var repo = new Sources(("template.yaml", template), ("Example.cs", "public class Example {}"));
+        var templatePath = Path.Combine(repo.Root, "template.yaml");
+        System.Text.Json.JsonElement State(out int exit)
+        {
+            var r = Docwizz.Run("product", "check", repo.Root, templatePath, "--format", "json");
+            exit = r.Exit;
+            return System.Text.Json.JsonDocument.Parse(r.Out).RootElement.GetProperty("state");
+        }
+        Assert.Equal(0, Docwizz.Run("product", repo.Root, templatePath).Exit);
+        var open = State(out var exit);
+        Assert.Equal(0, exit);
+        Assert.Equal("in Bearbeitung", open.GetProperty("value").GetString());
+        Assert.Equal(Path.Combine("docs", "products", "sw-architecture.review.yaml"), open.GetProperty("reviewLog").GetString());
+        var sha = open.GetProperty("draftSha256").GetString()!;
+        Assert.Matches("^[a-f0-9]{64}$", sha);
+
+        var log = Path.Combine(repo.Root, "docs", "products", "sw-architecture.review.yaml");
+        var record = $"schema: 1\nreviews:\n  - state: vorgelegt\n    by: Erika Muster\n    date: 2026-10-14\n    sha256: {sha}\n";
+        File.WriteAllText(log, record);
+        var submitted = State(out exit);
+        Assert.Equal(0, exit);
+        Assert.Equal(("vorgelegt", "Erika Muster", "2026-10-14"),
+            (submitted.GetProperty("value").GetString(), submitted.GetProperty("by").GetString(), submitted.GetProperty("date").GetString()));
+        var text = Docwizz.Run("product", "check", repo.Root, templatePath);
+        Assert.Contains("State: vorgelegt (Erika Muster, 2026-10-14;", text.Out);
+        Assert.Contains($"Draft sha256: {sha}", text.Out);
+        Assert.Equal(record, File.ReadAllText(log));   // check reads the log, never writes it
+
+        // New code, regenerated draft: the review was of other content.
+        File.WriteAllText(Path.Combine(repo.Root, "Other.cs"), "public class Other {}");
+        Assert.Equal(0, Docwizz.Run("product", repo.Root, templatePath).Exit);
+        var regenerated = State(out exit);
+        Assert.Equal(0, exit);   // a warning, not a failure: drafts change while in progress
+        Assert.Equal("in Bearbeitung", regenerated.GetProperty("value").GetString());
+        Assert.Contains("PROD-008", Docwizz.Run("product", "check", repo.Root, templatePath).Out);
+
+        File.WriteAllText(log, "schema: 1\nreviews:\n  - state: freigegeben\n");
+        Assert.Equal(1, Docwizz.Run("product", "check", repo.Root, templatePath).Exit);   // PROD-007: an unreadable log fails
+    }
 }

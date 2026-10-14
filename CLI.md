@@ -539,8 +539,35 @@ official templates or a conformity claim.
 | PROD-004 | error | the draft or its evidence report missing, not docwizz's, or stale |
 | PROD-005 | warning | a project statement that reads like an instruction to a model |
 | PROD-006 | error | a 🤖 sentence citing an id that isn't evidence of its section |
+| PROD-007 | error | a review log that isn't valid (below) |
+| PROD-008 | warning | reviews only of earlier content: the draft changed since, so it is `in Bearbeitung` again |
+| PROD-009 | error | `fertiggestellt` without `vorgelegt` before it for the same draft |
 
 It never judges content: whether a statement is true or a product can be approved stays a human decision.
+
+**Product state.** `product check` also reports the V-Modell XT state of the draft, from a review log a person keeps
+next to it, `<product_id>.review.yaml`. docwizz reads it and never writes it, so no docwizz output can claim a review.
+Each entry names the state, who set it, when, and the SHA-256 of the exact draft reviewed (`product check` prints it as
+`Draft sha256`):
+
+```yaml
+schema: 1
+reviews:                       # in order; append, don't edit
+  - state: vorgelegt           # submitted for review
+    by: Erika Muster
+    date: 2026-10-14
+    sha256: 3f5c…              # the draft's SHA-256 from product check
+    note: zur QS               # optional
+  - state: fertiggestellt      # reviewed and completed; needs vorgelegt before it for the same draft
+    by: Max Prüfer
+    date: 2026-10-15
+    sha256: 3f5c…
+```
+
+The state is that of the last review of the current draft, else `in Bearbeitung`. Regenerating a draft whose content
+changes ends its state: the reviews were of other content (PROD-008). JSON adds `state` with `value`, `by`, `date`,
+`draftSha256` and `reviewLog`. A recorded state says that a person reviewed this content, not that it is correct or
+conforms to V-Modell XT.
 
 ## Load-test results
 

@@ -326,7 +326,7 @@ For projects that keep requirements as YAML evidence:
   `generate --ai --requirements` and `context --requirements` hand that bounded, cited context to a local model or
   agent. See [requirement context](docs/requirement-context.md).
 - `docwizz product` drafts a work product from a template, code and evidence; `product check` verifies references and
-  freshness. Illustrative V-Modell XT 2.4 templates are in [templates/vmodell-xt/](templates/vmodell-xt/) (not
+  freshness, and reports the product state (`vorgelegt`, `fertiggestellt`) only from a review log a person keeps. Illustrative V-Modell XT 2.4 templates are in [templates/vmodell-xt/](templates/vmodell-xt/) (not
   official templates or a conformity claim).
 
 See [project evidence](docs/project-evidence.md) and [CLI.md](CLI.md#product-drafts).

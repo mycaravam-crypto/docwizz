@@ -80,15 +80,65 @@ static class ProductCheck
         return findings;
     }
 
+    // V-Modell XT product states. A draft is "in Bearbeitung" unless a person recorded a review of exactly this draft in
+    // <id>.review.yaml next to it (ReviewLog); docwizz never writes that file, so it can't claim a review itself.
+    public const string InProgress = "in Bearbeitung", Submitted = "vorgelegt", Completed = "fertiggestellt";
+    static readonly HashSet<string> Recorded = [Submitted, Completed];
+
+    // The state, the review that set it (if any), the draft's SHA-256 a review must name, and where the log is.
+    public record State(string Value, string? By, DateOnly? Date, string? DraftSha256, string ReviewLog);
+
+    // The draft's state from its review log, adding findings to `findings`: PROD-007 an invalid log, PROD-008 reviews
+    // only of earlier content, PROD-009 "fertiggestellt" without "vorgelegt" before it for the same content.
+    public static State ReviewState(string root, string draft, List<Finding> findings)
+    {
+        var path = Path.ChangeExtension(draft, ".review.yaml");
+        var rel = Path.GetRelativePath(root, path);
+        var sha = File.Exists(draft) ? ReviewLog.Hash(draft) : null;
+        State Open() => new(InProgress, null, null, sha, rel);
+        if (!File.Exists(path)) return Open();
+        ReviewLog log;
+        try { using var reader = File.OpenText(path); log = ReviewLog.Parse(reader, Recorded); }
+        catch (Exception e) when (e is ArgumentException or IOException)
+        {
+            findings.Add(new("PROD-007", "error", null, $"{rel}: {e.Message}"));
+            return Open();
+        }
+        if (sha is null) return Open();   // no draft: PROD-004 says so
+        var current = log.Reviews.Where(r => r.Sha256 == sha).ToList();
+        if (current.Count == 0)
+        {
+            if (log.Reviews.Count > 0)
+            {
+                var last = log.Reviews[^1];
+                findings.Add(new("PROD-008", "warning", null,
+                    $"the draft changed since its last review ({last.State}, {last.By}, {last.Date:yyyy-MM-dd}); it is {InProgress} until reviewed again"));
+            }
+            return Open();
+        }
+        // In log order: submitted first, then completed; a completion of content nobody submitted doesn't count.
+        Review? set = null;
+        foreach (var r in current)
+            if (r.State == Completed && set?.State is not (Submitted or Completed))
+                findings.Add(new("PROD-009", "error", null, $"{rel}: {Completed} on {r.Date:yyyy-MM-dd} by {r.By} without {Submitted} before it for this draft"));
+            else set = r;
+        return set is null ? Open() : new(set.State, set.By, set.Date, sha, rel);
+    }
+
     // The findings for a terminal, errors first, with the verdict and what the check does not cover.
-    public static void Report(ProductTemplate template, List<Finding> findings, TextWriter o)
+    public static void Report(ProductTemplate template, List<Finding> findings, State state, TextWriter o)
     {
         o.WriteLine($"Product {template.ProductId} ({template.XtVariant} {template.XtVersion})");
+        o.WriteLine(state.By is null
+            ? $"State: {state.Value} (no review of this draft in {state.ReviewLog})"
+            : $"State: {state.Value} ({state.By}, {state.Date:yyyy-MM-dd}; {state.ReviewLog})");
+        if (state.DraftSha256 is not null) o.WriteLine($"Draft sha256: {state.DraftSha256}");
         foreach (var f in findings.OrderBy(f => f.Severity == "error" ? 0 : 1).ThenBy(f => f.Rule, StringComparer.Ordinal))
             o.WriteLine($"  {f.Rule}  {f.Severity,-7}  {(f.Section is null ? "" : $"[{f.Section}] ")}{f.Message}");
         var errors = findings.Count(f => f.Severity == "error");
         o.WriteLine();
         o.WriteLine(errors == 0 ? $"product check: PASS ({findings.Count} warnings)" : $"product check: FAIL — {errors} errors, {findings.Count - errors} warnings");
-        o.WriteLine("This checks references and freshness only. Content, decisions and approval need human review.");
+        o.WriteLine("This checks references and freshness only. Content, decisions and approval need human review;");
+        o.WriteLine("the state comes only from the review log a person keeps.");
     }
 }

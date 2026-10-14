@@ -541,10 +541,12 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
     {
         if (ai) return Usage("product check makes no AI calls; drop --ai", "product");
         var findings = ProductCheck.Run(root, template, BuildModel(root, config).Model, project, full);
+        var state = ProductCheck.ReviewState(root, full, findings);
         var errors = findings.Count(f => f.Severity == "error");
-        if (json) Console.WriteLine(JsonSerializer.Serialize(new { product = template.ProductId, pass = errors == 0, findings,
-            note = "references and freshness only; content, decisions and approval need human review" }, JsonOptions()));
-        else ProductCheck.Report(template, findings, Console.Out);
+        if (json) Console.WriteLine(JsonSerializer.Serialize(new { product = template.ProductId, pass = errors == 0,
+            state = new { value = state.Value, by = state.By, date = state.Date?.ToString("yyyy-MM-dd"), draftSha256 = state.DraftSha256, reviewLog = state.ReviewLog },
+            findings, note = "references and freshness only; content, decisions and approval need human review; the state comes only from the review log a person keeps" }, JsonOptions()));
+        else ProductCheck.Report(template, findings, state, Console.Out);
         return errors == 0 ? 0 : 1;
     }
     if (json) return Usage("--format applies to product check, not to writing a draft", "product");
@@ -720,7 +722,7 @@ static string Reference() => $"""
       docwizz product <dir> <template.yaml> [out.md]  product draft from code and project evidence
         [--context <file.yaml>]         load sourced project facts
         [--ai]                          a self-hosted model words sections, citing evidence ids
-      docwizz product check <dir> <template.yaml> [draft.md]  references and freshness of a draft; exit 1 on errors
+      docwizz product check <dir> <template.yaml> [draft.md]  references, freshness and review state of a draft; exit 1 on errors
 
     options:
       --profile <name|file.yaml>        setup/generate/check/analyze/architecture/diff: documentation profile,

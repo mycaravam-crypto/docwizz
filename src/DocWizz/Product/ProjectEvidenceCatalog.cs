@@ -89,17 +89,17 @@ internal sealed record ProjectEvidenceCatalog(IReadOnlyList<ProjectEvidence> Ite
         return new(items, links);
     }
 
-    static YamlNode? Node(YamlMappingNode map, string key) =>
+    internal static YamlNode? Node(YamlMappingNode map, string key) =>
         map.Children.TryGetValue(new YamlScalarNode(key), out var node) ? node : null;
 
-    static string Value(YamlMappingNode map, string key, string context)
+    internal static string Value(YamlMappingNode map, string key, string context)
     {
         if (Node(map, key) is not YamlScalarNode { Value: { } value } || string.IsNullOrWhiteSpace(value))
             throw new ArgumentException($"{context}.{key} must be a non-empty scalar");
         return value.Trim();
     }
 
-    static void Keys(YamlMappingNode map, HashSet<string> allowed, string context)
+    internal static void Keys(YamlMappingNode map, HashSet<string> allowed, string context)
     {
         foreach (var key in map.Children.Keys)
             if (key is not YamlScalarNode scalar || scalar.Value is null || !allowed.Contains(scalar.Value))
