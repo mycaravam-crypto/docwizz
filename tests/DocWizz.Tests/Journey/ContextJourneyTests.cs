@@ -15,7 +15,7 @@ public class ContextJourneyTests
         throw new InvalidOperationException("repository root not found above the test binary");
     }
 
-    sealed class FixtureCopy : IDisposable
+    internal sealed class FixtureCopy : IDisposable
     {
         public string Dir { get; }
 

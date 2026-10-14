@@ -44,6 +44,11 @@ static async Task<int> Dispatch(string[] args)
         requirementsAction = pos[1];
         pos.RemoveAt(1);
     }
+    if (cmd == "load")
+    {
+        if (pos.ElementAtOrDefault(1) != "import") return Usage("load needs import: docwizz load import <dir> <report.json>...", "load");
+        pos.RemoveAt(1);
+    }
     // Subcommand before repository dir: docwizz domain discover <dir> ...
     string? domainAction = null;
     if (cmd == "domain")
@@ -113,6 +118,8 @@ static async Task<int> Dispatch(string[] args)
                 "query" => RequirementsQuery(path, pos.ElementAtOrDefault(2), config),
                 _ => RequirementsShow(path, config, opts, json),
             };
+        case "load":
+            return LoadImport(path, pos.Skip(2).ToList(), config);
         case "trace":
             return TraceCommand(path, pos.ElementAtOrDefault(2), json);
         case "product":
@@ -292,6 +299,28 @@ static int RequirementsImport(string root, string? history, string? workItems, C
         var touched = index.Commits.SelectMany(c => c.Touches).Select(t => t.Symbol).Distinct().Count();
         Console.WriteLine($"→ {RequirementIndex.DefaultFile}: {index.Commits.Count} commits, {touched} symbols touched, {index.PullRequests.Count} PRs, {index.WorkItems.Count} work items");
         foreach (var w in index.Warnings) Console.Error.WriteLine($"docwizz: ⚠ {w}");
+        return 0;
+    }
+    catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
+    catch (IOException e) { Console.Error.WriteLine(e.Message); return 1; }
+}
+
+// `load import`: validate powerwizz reports, keep them in the index and say which steps match an endpoint. Offline.
+static int LoadImport(string root, List<string> reports, Config config)
+{
+    if (reports.Count == 0) return Usage("load import needs at least one powerwizz report (powerwizz.report/v1)", "load");
+    var target = Path.Combine(root, LoadReports.DefaultFile);
+    try
+    {
+        var read = reports.Select(r => LoadReports.Read(File.Exists(r) ? r : Path.Combine(root, r))).ToList();
+        var index = LoadReports.Merge(File.Exists(target) ? LoadReports.Load(target) : null, read);
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.WriteAllText(target + ".tmp", LoadReports.Serialize(index));
+        File.Move(target + ".tmp", target, overwrite: true);
+        var attached = LoadReports.Attach(LoadModel(root, config).Model, index, _ => null);
+        Console.WriteLine($"→ {LoadReports.DefaultFile}: {index.Reports.Count} reports, {attached.Endpoints.Count} endpoints measured");
+        foreach (var s in attached.Unmatched) Console.Error.WriteLine($"docwizz: no endpoint matches {s}");
+        foreach (var s in attached.Ambiguous) Console.Error.WriteLine($"docwizz: ambiguous, not attached: {s}");
         return 0;
     }
     catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
@@ -665,6 +694,7 @@ static string Reference() => $"""
       docwizz context <dir> --for <target>  token-budgeted facts about one symbol, file, folder or endpoint, for agents
         [--hops <1-4>] [--budget <tokens>] [--format md|json] [--include-ai] [--requirements]
       docwizz domain discover <dir> --seed <symbol|endpoint>  bounded graph walk, optional historical requirements
+      docwizz load import <dir> <report.json>...  powerwizz load-test results, shown per endpoint in api.md
       docwizz domain areas <dir>        candidate business areas: methods grouped by folder and delegation, inferred
         [--work-item <id>] [--depth <0-8>] [--limit <1-500>] [--format json]
         --work-item replaces --seed; the imported requirements index is required for a work-item seed
@@ -953,6 +983,7 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
         WriteHtml = html,
         RebuildHtml = rebuildHtml,
         Screenshots = screenshots,
+        Load = LoadAttached(root, model),
         Files = [.. RepoFiles(root, config, [".github", ".circleci"]).Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))],
     }.Run());
     bar.Advance("write pages", $"{Plural(pages.Count, "page")}, {changed.Count} changed");
@@ -1416,6 +1447,23 @@ static int ArchitectureCommand(string root, Config config, bool json)
 
 static List<Node> TooComplex(IEnumerable<Node> nodes, CheckConfig check) =>
     check.MaxComplexity is { } max ? nodes.Where(n => n.Complexity > max).OrderByDescending(n => n.Complexity).ToList() : [];
+
+// Imported load reports attached to endpoints; a run before the endpoint file's last commit is stale. Null without an index.
+static LoadReports.Attached? LoadAttached(string root, CodeModel model)
+{
+    var file = Path.Combine(root, LoadReports.DefaultFile);
+    if (!File.Exists(file)) return null;
+    try
+    {
+        return LoadReports.Attach(model, LoadReports.Load(file),
+            n => DateTimeOffset.TryParse(Git(root, $"log -1 --format=%cI -- \"{n.File}\"")?.Trim(), out var at) ? at : null);
+    }
+    catch (Exception e) when (e is ArgumentException or JsonException)
+    {
+        Console.Error.WriteLine($"docwizz: ⚠ {e.Message}; api.md has no load section");
+        return null;
+    }
+}
 
 static string? Git(string dir, string args)
 {

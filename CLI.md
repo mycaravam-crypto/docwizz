@@ -30,6 +30,7 @@ an example and its options.
 | `trace` | explicit traceability gaps from a YAML catalog | product documents | optional |
 | `evidence-diff` | compare two evidence snapshots and explicit test impact | product documents | optional |
 | `requirements` | historical work items behind a code symbol, from exported history | coding agents, reviews | optional |
+| `load` | measured load-test numbers per endpoint, from powerwizz reports | performance | optional |
 | `product` | product draft from a YAML template, from code and project evidence | architects | optional |
 | `init` | blank config with every default | manual setup | no |
 | `scan` | raw code model | advanced, debugging | no |
@@ -538,6 +539,22 @@ official templates or a conformity claim.
 
 It never judges content: whether a statement is true or a product can be approved stays a human decision.
 
+## Load-test results
+
+`docwizz load import . shop-bericht.json [more.json ...]` reads [powerwizz](https://github.com/mycaravam-crypto/powerwizz#json-report-for-docwizz)
+reports (`powerwizz.report/v1`) natively, offline and without an adapter, and keeps them in `docs/.docwizz/load.json`.
+The same run (start time and target) imported again replaces itself; unknown fields are ignored. `generate` then adds
+**Load (measured)** to `api.md`: per matched endpoint the requests, error rate and p50/p95/p99 latency of the newest run,
+with the run as evidence, and the run's users, ramp-up, duration and auth once. A run against a non-local target is
+marked as not comparable, and a run older than the endpoint file's last commit is marked _stale_.
+
+Each step is matched to a detected endpoint by method, then segment by segment:
+
+- A route parameter (`{id}`, `:id`, `[id]`) matches any one segment, including powerwizz placeholders (`{{vu_id}}`).
+  Literal segments must be equal, ignoring case. The query string is ignored.
+- The base URL's path prefix (`/app/`) may precede the route; it is stripped when the rest matches.
+- The most literal segments win. A tie is ambiguous and not attached; it is listed, like a step with no endpoint.
+
 ## Requirement history
 
 ```bash
@@ -588,6 +605,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `mcp` | `docwizz mcp <dir> [--auto-rescan]` | read-only MCP server on stdio: find_symbol, context, callers, impact, check, … | coding agents |
 | `evidence-diff` | `docwizz evidence-diff <dir> <before.yaml> <after.yaml> [--format json]` | explicit evidence changes and affected tests | product documents |
 | `trace` | `docwizz trace <dir> <evidence.yaml> [--format json]` | explicit traceability and missing links | product documents |
+| `load` | `docwizz load import <dir> <report.json>...` | store powerwizz reports; `generate` adds measured numbers per endpoint to `api.md` | performance |
 | `requirements` | `docwizz requirements import <dir> <history.json> [<work-items>]`, `docwizz requirements show <dir> (--for <symbol> \| --work-item <id>) [--format json]`, `docwizz requirements query <dir> <query.json>` | index exported history; one symbol's requirements, or one work item's symbols; gitwizz's requirement query | coding agents, reviews |
 | `product` | `docwizz product [check] <dir> <template.yaml> [out.md] [--context file.yaml] [--ai] [--format f]` | product draft from evidence; `check`: references and freshness | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
@@ -668,6 +686,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `trace` | report on stdout | invalid/missing YAML; no data written |
 | `evidence-diff` | report on stdout | invalid/missing evidence catalogs; no data written |
 | `requirements` | `import`: index written or unchanged; `show`: answer on stdout (any outcome, `no-link` included); `query`: answer on stdout (a missing index included) | missing or invalid input, unknown schema, no index (`show`), unknown target, an unreadable query, bad arguments |
+| `load` | reports stored (unmatched or ambiguous steps are listed on stderr) | no report, a file that isn't `powerwizz.report/v1` (wrong or missing `schema`), invalid JSON |
 | `product` | draft written or unchanged; `check`: no errors (warnings allowed) | invalid template, unsafe overwrite, bad arguments; `check`: an error finding |
 | `init` | written | `docwizz.yaml` exists |
 | no command | — | prints how to start |
