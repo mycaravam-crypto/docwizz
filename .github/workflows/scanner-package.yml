@@ -4,7 +4,8 @@ name: scanner-package
 on:
   workflow_dispatch:
   pull_request:
-    paths: [scanner-vue/**, src/DocWizz/DocWizz.csproj, src/DocWizz/Scanning/Frontend.cs, .github/workflows/scanner-package.yml]
+    paths: [scanner-vue/**, src/DocWizz/DocWizz.csproj, src/DocWizz/Scanning/Frontend.cs, action.yml,
+      .github/scripts/*-scanner-release.sh, .github/workflows/scanner-package.yml]
 permissions:
   contents: read
 jobs:
@@ -20,20 +21,22 @@ jobs:
         run: |
           npm ci --prefix scanner-vue --silent
           dotnet pack src/DocWizz/DocWizz.csproj -c Release -p:Version=0.0.0-test -o "$RUNNER_TEMP/nupkg" --nologo
-      - name: Verify release-style payload independently of npm
+      - name: Install the release payload as the Action does
         shell: bash
+        env:
+          DOCWIZZ_SCANNER_RELEASE_BASE: file://${{ runner.temp }}/payload
         run: |
           set -euo pipefail
-          tar -C scanner-vue/dist -czf "$RUNNER_TEMP/scanner-vue.tar.gz" .
-          (cd "$RUNNER_TEMP" && sha256sum scanner-vue.tar.gz > scanner-vue.tar.gz.sha256)
-          (cd "$RUNNER_TEMP" && sha256sum -c scanner-vue.tar.gz.sha256)
-          mkdir -p "$RUNNER_TEMP/released-scanner"
-          tar -xzf "$RUNNER_TEMP/scanner-vue.tar.gz" -C "$RUNNER_TEMP/released-scanner"
-          test -f "$RUNNER_TEMP/released-scanner/java.mjs"
-          test -f "$RUNNER_TEMP/released-scanner/node_modules/tree-sitter-java/tree-sitter-java.wasm"
-          mkdir -p "$RUNNER_TEMP/release-example"
-          printf "public class Sample {}\n" > "$RUNNER_TEMP/release-example/Sample.java"
-          printf "%s\n" "$RUNNER_TEMP/release-example/Sample.java" | node "$RUNNER_TEMP/released-scanner/java.mjs" | node -e 'const d=JSON.parse(require("fs").readFileSync(0));if(d.files.length!==1)process.exit(1)'
+          bash .github/scripts/pack-scanner-release.sh "$RUNNER_TEMP/payload"
+          install=.github/scripts/install-scanner-release.sh
+          bash "$install" owner/repo v0.0.0 "$RUNNER_TEMP/released-scanner"
+          printf 'public class Sample {}\n' > "$RUNNER_TEMP/Sample.java"
+          echo "$RUNNER_TEMP/Sample.java" | node "$RUNNER_TEMP/released-scanner/java.mjs" \
+            | node -e 'const d=JSON.parse(require("fs").readFileSync(0));if(d.files.length!==1)process.exit(1)'
+          # Fails closed: a tampered archive, a moving ref.
+          echo tampered >> "$RUNNER_TEMP/payload/scanner-vue.tar.gz"
+          ! bash "$install" owner/repo v0.0.0 "$RUNNER_TEMP/tampered" || { echo "::error::checksum not enforced"; exit 1; }
+          ! bash "$install" owner/repo main "$RUNNER_TEMP/branch" || { echo "::error::branch ref accepted"; exit 1; }
       - name: Install and run the bundled scanners
         shell: bash
         run: |

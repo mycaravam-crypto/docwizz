@@ -68,10 +68,9 @@ jobs:
             echo "Refusing to overwrite existing tag $tag" >&2
             exit 1
           fi
+          # The Action installs this lockfile-built scanner payload from the release; pack it before tagging so a failure
+          # never leaves a tag without its assets.
+          bash .github/scripts/pack-scanner-release.sh "$RUNNER_TEMP/payload"
           git tag "$tag" "$RELEASE_SHA"
           git push origin "refs/tags/$tag"
-          # Publish the locked runtime payload alongside the immutable release tag.
-          node scanner-vue/package-distribution.mjs
-          tar -C scanner-vue/dist -czf "$RUNNER_TEMP/scanner-vue.tar.gz" .
-          (cd "$RUNNER_TEMP" && sha256sum scanner-vue.tar.gz > scanner-vue.tar.gz.sha256)
-          gh release create "$tag" --verify-tag --generate-notes --title "$tag" "$RUNNER_TEMP/scanner-vue.tar.gz" "$RUNNER_TEMP/scanner-vue.tar.gz.sha256"
+          gh release create "$tag" --verify-tag --generate-notes --title "$tag" "$RUNNER_TEMP"/payload/scanner-vue.tar.gz*
