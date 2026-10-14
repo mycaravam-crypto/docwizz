@@ -259,6 +259,12 @@ jobs:
 
 See [CLI.md](CLI.md#8-context-for-coding-agents) and the [AGENTS.md template](templates/AGENTS.md).
 
+### Load-test results
+
+`docwizz load import . shop-bericht.json` reads [powerwizz](https://github.com/mycaravam-crypto/powerwizz) load-test
+reports; `api.md` then shows the measured requests, error rate and p50/p95/p99 latency per endpoint, with the run as
+evidence ([details](CLI.md#load-test-results)).
+
 ### Dependencies
 
 - `docwizz sbom . sbom.json` exports a CycloneDX 1.6 inventory of the direct dependencies declared in NuGet, npm, Maven
@@ -506,12 +512,14 @@ them (`UseNpgsql`, `fetch('https://…')`), *inferred* when only a package point
 | `docwizz check <dir> [--since <ref>]` | quality gate; exit 1 on failure |
 | `docwizz context <dir> --for <target>` | token-budgeted facts for coding agents |
 | `docwizz domain discover <dir> --seed <symbol>` | bounded, read-only code and requirement graph traversal |
+| `docwizz domain areas <dir>` | candidate business areas, inferred from folders and delegation |
 | `docwizz mcp <dir>` | read-only MCP server for coding agents |
 | `docwizz sbom [dir] [out]` | CycloneDX 1.6 from direct manifest dependencies |
 | `docwizz remediate <dir>` | package update suggestions, optionally validated |
 | `docwizz trace <dir> <evidence.yaml>` | requirement → architecture → test gaps |
 | `docwizz evidence-diff <dir> <before.yaml> <after.yaml>` | changed evidence and affected tests |
 | `docwizz requirements import\|show\|query <dir> ...` | work items behind a symbol, from exported history; `query` answers gitwizz's PR context |
+| `docwizz load import <dir> <report.json>...` | powerwizz load-test results, shown per endpoint in `api.md` |
 | `docwizz product [check] <dir> <template.yaml> [out.md]` | work-product draft from code and evidence |
 | `docwizz init [dir]` | manual setup: starter `docwizz.yaml` with every default |
 | `docwizz scan <dir> [model.json]` | advanced: dump the raw code model, for debugging |

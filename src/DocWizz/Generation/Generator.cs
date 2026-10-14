@@ -13,6 +13,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     public bool WriteHtml { get; init; }
     public bool RebuildHtml { get; init; }
     public IReadOnlyDictionary<string, string> Screenshots { get; init; } = new Dictionary<string, string>();
+    // Measured load-test results per endpoint (docwizz load import); null when none were imported.
+    public LoadReports.Attached? Load { get; init; }
     public Action<int, int>? OnPageProcessed { get; init; }
     // Repository files (relative, `/`-separated) after exclude:/.gitignore; the deployment view picks its descriptors from them.
     public List<string> Files { get; init; } = [];
@@ -356,6 +358,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             sb.AppendLine($"| {n.Tags![1]} | `/{n.Route?.TrimStart('/')}` | {Esc(Summary(n) ?? "—")} | {(input == "" ? "—" : input)} | " +
                 $"{Response(n)} | {auth} | {SourceLink(n.File, n.Line, $"{Path.GetFileName(n.File)}:{n.Line}")} | {string.Join(", ", from)} |");
         }
+        if (Load is { } load) sb.Append(LoadSection(load));
         // Middleware in registration order, per place that configures it (a project's top-level code, Startup.Configure).
         foreach (var g in model.Edges.Where(e => e.Kind == "pipeline").GroupBy(e => e.From))
         {
@@ -397,6 +400,36 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             sb.AppendLine("\n## Frontend calls without a matching endpoint\n");
             foreach (var e in unlinked) sb.AppendLine($"- `{e.To[5..]}` from `{nodes.GetValueOrDefault(e.From)?.Name ?? e.From}`");
         }
+        return sb.ToString();
+    }
+
+    // Measured, not derived from code: the numbers come from a powerwizz run, with the run as evidence.
+    string LoadSection(LoadReports.Attached load)
+    {
+        var sb = new StringBuilder("\n## Load (measured)\n\nFrom imported powerwizz reports (`docwizz load import`); the newest run per endpoint. " +
+            "Latencies in ms, ±2.5 % per the report. _stale_: the endpoint's code changed after the run.\n\n");
+        if (load.Endpoints.Count > 0)
+        {
+            static string Run(LoadReports.Report r) => FormattableString.Invariant($"{Esc(r.File ?? "")} {r.StartedAt.UtcDateTime:yyyy-MM-dd HH:mm}Z");
+            sb.AppendLine("| Endpoint | Requests | Error rate | p50 | p95 | p99 | Run |\n|---|---|---|---|---|---|---|");
+            foreach (var (e, step, report, stale) in load.Endpoints)
+            {
+                var (label, latency) = (Code(Naming.EndpointLabel(nodes[e])), step.LatencyMs);
+                sb.AppendLine(FormattableString.Invariant(
+                    $"| {label} | {step.Requests} | {step.ErrorRate:P2} | {latency.P50:0.#} | {latency.P95:0.#} | {latency.P99:0.#} | {Run(report)}{(stale ? " _stale_" : "")} |"));
+            }
+            sb.AppendLine("\n| Run | Target | Users | Ramp-up | Duration | Auth |\n|---|---|---|---|---|---|");
+            foreach (var r in load.Endpoints.Select(m => m.Report).Distinct().OrderBy(r => r.StartedAt))
+            {
+                var target = Code(r.Target.BaseUrl) + (r.Target.Local ? "" : " (**not local**: not comparable to a local run)");
+                sb.AppendLine(r.Config is { } c
+                    ? FormattableString.Invariant($"| {Run(r)} | {target} | {c.Users} | {c.RampUpS:0.#} s | {c.DurationS:0.#} s | {Esc(c.Auth ?? "—")} |")
+                    : $"| {Run(r)} | {target} | — | — | — | — |");
+            }
+        }
+        else sb.AppendLine("No imported step matches a detected endpoint.");
+        if (load.Unmatched.Count > 0) sb.AppendLine("\nSteps without a matching endpoint:\n\n" + string.Join("\n", load.Unmatched.Select(s => $"- {Code(s)}")));
+        if (load.Ambiguous.Count > 0) sb.AppendLine("\nSteps matching several endpoints equally well (not attached):\n\n" + string.Join("\n", load.Ambiguous.Select(s => $"- {Esc(s)}")));
         return sb.ToString();
     }
 
