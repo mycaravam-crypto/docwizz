@@ -24,7 +24,7 @@ static class Frontend
             // (older Node ignores it). Anyone who set their own cache directory keeps it.
             if (Environment.GetEnvironmentVariable("NODE_COMPILE_CACHE") is null)
                 psi.Environment["NODE_COMPILE_CACHE"] = Path.Combine(Path.GetTempPath(), "docwizz-node-compile-cache");
-            var json = ScannerProcess.Run(psi, string.Join('\\n', files.Select(Path.GetFullPath)));
+            var json = ScannerProcess.Run(psi, string.Join('\n', files.Select(Path.GetFullPath)));
             return (m.Nodes, m.Edges);
         }
         catch (Exception e)
