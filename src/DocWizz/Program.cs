@@ -485,9 +485,11 @@ static async Task<int> McpCommand(string root, Config config, bool autoRescan)
 {
     Console.Error.WriteLine($"docwizz mcp: serving {Path.GetFullPath(root)} on stdio (read-only; Ctrl+D or closing stdin stops it)");
     var refs = new McpRefModelCache();
-    CodeModel? RefModel(string gitRef) => refs.Get(gitRef, ProjectScope.Fingerprint(config.Scope),
-        r => Git(root, $"rev-parse --verify {r}^{{commit}}")?.Trim(),
-        sha => ModelAt(root, sha, config));
+    var scope = ProjectScope.Fingerprint(config.Scope);
+    CodeModel? RefModel(string gitRef) => refs.Get(gitRef, scope,
+        r => GitRun(root, $"rev-parse --verify {r}^{{commit}}") is { Exit: 0 } ok ? ok.Out.Trim() : null,
+        sha => ModelAt(root, sha, config))
+        ?? ModelAt(root, gitRef, config); // Preserve git failure diagnostics for unresolved refs.
     string? Head() => Git(root, "rev-parse --short HEAD")?.Trim();
     int ChangedSince(DateTime time) => BuildFiles(root, config).Count(f => File.GetLastWriteTimeUtc(f) > time);
     var working = new McpWorkingModelCache(Head, ChangedSince, () => BuildModel(root, config).Model);
