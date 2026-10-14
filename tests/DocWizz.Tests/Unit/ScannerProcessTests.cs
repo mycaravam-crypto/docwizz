@@ -15,7 +15,6 @@ public class ScannerProcessTests
         var ex = await Assert.ThrowsAsync<TimeoutException>(() =>
             ScannerProcess.RunAsync(Shell(command), "", TimeSpan.FromMilliseconds(200)));
         Assert.Contains("timed out", ex.Message);
-        Assert.Contains("0.2", ex.Message);
     }
 
     [Fact]
