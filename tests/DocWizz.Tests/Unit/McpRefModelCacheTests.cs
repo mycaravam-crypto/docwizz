@@ -8,7 +8,7 @@ public class McpRefModelCacheTests
         var cache = new McpRefModelCache();
         var sha = new string('a', 40);
         var builds = 0;
-        CodeModel Build(string _) { builds++; return new CodeModel(); }
+        CodeModel Build(string _) { builds++; return new CodeModel(null, [], []); }
         string? Resolve(string _) => sha;
 
         Assert.NotNull(cache.Get("HEAD", "scope-a", Resolve, Build));
