@@ -99,6 +99,10 @@ def benchmark(size, dll, repeats):
                 result = {"startup": startup, "sources": []}
                 for tool in ("impact", "check"):
                     calls = [session.tool(tool, BUDGET) for _ in range(1 + repeats)]
+                    if any(stale for _, _, stale in calls):
+                        raise RuntimeError(f"{size} {tool}: model was stale; timings cannot represent cache reuse")
+                    if len({source for _, source, _ in calls}) != 1:
+                        raise RuntimeError(f"{size} {tool}: model source changed during measurements: {calls}")
                     result[tool + "_first"] = calls[0][0]
                     result[tool + "_repeat"] = statistics.median(s for s, _, _ in calls[1:])
                     seen = dict.fromkeys(src + (" (stale)" if stale else "") for _, src, stale in calls)
