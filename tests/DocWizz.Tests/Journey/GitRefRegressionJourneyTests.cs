@@ -74,6 +74,21 @@ public class GitRefRegressionJourneyTests
         var diff = RunFrom(repo.Root, "diff", "HEAD~1", "HEAD");
         Assert.Equal(1, diff.Exit);
         Assert.Contains("not a git repo or unknown ref", diff.Err);
+        // git's own reason, so an intermittent failure in CI says which command failed and why.
+        Assert.Contains("(git rev-parse --show-prefix: exit 128: fatal: not a git repository", diff.Err);
+        Docwizz.NoStackTrace(diff);
+    }
+
+    [Fact]
+    public void An_unknown_ref_says_which_git_command_failed()
+    {
+        using var repo = new Sources(("Shop.cs", "namespace Shop; public class A { }"));
+        Git(repo.Root, "init", "-q");
+        Git(repo.Root, "add", "-A");
+        Git(repo.Root, "-c", "user.name=DocWizz", "-c", "user.email=docwizz@example.invalid", "-c", "commit.gpgsign=false", "commit", "-qm", "base");
+        var diff = RunFrom(repo.Root, "diff", "no-such-ref", "HEAD");
+        Assert.Equal(1, diff.Exit);
+        Assert.Contains("not a git repo or unknown ref: no-such-ref (git rev-parse --short no-such-ref: exit 128: fatal:", diff.Err);
         Docwizz.NoStackTrace(diff);
     }
 }

@@ -1157,13 +1157,17 @@ static object DiffJson(DiffResult d, string baseline, object? check)
 // Scans the tree as it was at <ref>, extracted from git into a temp dir.
 static CodeModel? ModelAt(string root, string gitRef, Config config)
 {
-    var prefix = Git(root, "rev-parse --show-prefix")?.Trim();
-    var sha = Git(root, $"rev-parse --short {gitRef}")?.Trim();
-    if (prefix is null || sha is null)
+    var prefixRun = GitRun(root, "rev-parse --show-prefix");
+    var shaRun = prefixRun.Exit == 0 ? GitRun(root, $"rev-parse --short {gitRef}") : prefixRun;
+    if (prefixRun.Exit != 0 || shaRun.Exit != 0)
     {
-        Console.Error.WriteLine($"not a git repo or unknown ref: {gitRef}");
+        // git's own reason: a missing repository and an unknown ref read alike otherwise, and a transient failure
+        // (#133) leaves nothing to go on.
+        Console.Error.WriteLine($"not a git repo or unknown ref: {gitRef} ({(prefixRun.Exit != 0
+            ? GitFailure("rev-parse --show-prefix", prefixRun) : GitFailure($"rev-parse --short {gitRef}", shaRun))})");
         return null;
     }
+    var (prefix, sha) = (prefixRun.Out.Trim(), shaRun.Out.Trim());
     var tmp = Directory.CreateTempSubdirectory("docwizz-");
     try
     {
@@ -1465,18 +1469,32 @@ static LoadReports.Attached? LoadAttached(string root, CodeModel model)
     }
 }
 
-static string? Git(string dir, string args)
+static string? Git(string dir, string args) => GitRun(dir, args) is { Exit: 0 } r ? r.Out : null;
+
+// A git command with its exit code and what it said on stderr, for errors that need to say why git failed (#133: a
+// bare "unknown ref" left an intermittent CI failure undiagnosable). Exit -1: git couldn't be started. Both streams are
+// drained concurrently, so a chatty stderr can't fill its pipe and hang the command.
+static (int Exit, string Out, string Err) GitRun(string dir, string args)
 {
     try
     {
-        var p = Process.Start(new ProcessStartInfo("git", args)
+        using var p = Process.Start(new ProcessStartInfo("git", args)
             { WorkingDirectory = dir, RedirectStandardOutput = true, RedirectStandardError = true })!;
+        var err = p.StandardError.ReadToEndAsync();
         var output = p.StandardOutput.ReadToEnd();
         p.WaitForExit();
-        return p.ExitCode == 0 ? output : null;
+        return (p.ExitCode, output, err.Result);
     }
-    catch { return null; }
+    catch (Exception e)
+    {
+        return (-1, "", $"git could not be started: {e.Message}");
+    }
 }
+
+// Why a git command failed, in one line: its exit code and the first line it wrote to stderr.
+static string GitFailure(string args, (int Exit, string Out, string Err) r) =>
+    $"git {args}: " + (r.Exit == -1 ? r.Err : $"exit {r.Exit}" +
+        (r.Err.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() is { } line ? $": {line}" : ""));
 
 // `generate`: the stable one-line result, and the report printed below it.
 record GenerateReport(string Line, List<string> Details);
