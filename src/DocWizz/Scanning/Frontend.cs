@@ -35,10 +35,9 @@ static class Frontend
         }
     }
 
-    // A bundled scanner needs no node_modules; source scanners still require npm dependencies.
+    // Both source and packaged payloads must contain their dependencies next to the entry point.
     internal static bool ScannerAvailable(string script) => File.Exists(script) &&
-        (Path.GetFileName(Path.GetDirectoryName(script)) == "dist" ||
-         Directory.Exists(Path.Combine(Path.GetDirectoryName(script)!, "node_modules")));
+        Directory.Exists(Path.Combine(Path.GetDirectoryName(script)!, "node_modules"));
 
     // scanner-vue/index.mjs (DOCWIZZ_SCANNER_VUE overrides); java.mjs sits next to it.
     // ponytail: found by walking up from the binary; ship it inside the tool package when publishing.
