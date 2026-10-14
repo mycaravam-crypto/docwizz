@@ -2,15 +2,26 @@ using System.Text.RegularExpressions;
 using Markdig;
 
 // HTML twins of the generated Markdown, written next to it: the same tree, so relative links to sources keep working.
-// Links between generated pages go to their HTML twin; Mermaid blocks render with mermaid.js (from a CDN, the code stays
-// readable offline); search.js holds the search index as a script, which works from file:// where fetch() does not.
+// Links between generated pages go to their HTML twin; Mermaid blocks render with mermaid.min.js, shipped inside docwizz
+// and written next to the pages, so diagrams render offline too; search.js holds the search index as a script, which
+// works from file:// where fetch() does not.
 // Every page carries the whole site in its sidebar, so each one stands alone and opens from disk.
 static class Html
 {
     static readonly (string Page, string Label)[] Top =
         [("index.md", "Overview"), ("architecture.md", "Architecture"), ("api.md", "API"), ("frontend.md", "Frontend"), ("quality.md", "Quality")];
-    // Pinned: a new Mermaid release must not change every diagram unannounced.
-    public const string MermaidUrl = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+    // Pinned and vendored (vendor/README.md): a new Mermaid release must not change every diagram unannounced, and a
+    // reader without network access still sees the diagrams. A classic script, not an ES module: browsers refuse
+    // module imports from file://.
+    public const string MermaidVersion = "11.4.1";
+    public const string MermaidFile = "mermaid.min.js";
+    static readonly Lazy<string> mermaid = new(() =>
+    {
+        using var stream = typeof(Html).Assembly.GetManifestResourceStream(MermaidFile)
+            ?? throw new InvalidOperationException($"{MermaidFile} is missing from the docwizz build");
+        return new StreamReader(stream).ReadToEnd();
+    });
+    public static string MermaidScript => mermaid.Value;
 
     // The page's `# ` heading, else its file name.
     public static string Title(string rel, string markdown)
@@ -113,16 +124,19 @@ static class Html
               if (e.key === '/' && el !== q && !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && !el.isContentEditable) { e.preventDefault(); q.focus(); }
             });
             </script>
-            <script type="module">
-            if (document.querySelector('.mermaid')) {
-              const { default: mermaid } = await import('{{MermaidUrl}}');
-              mermaid.initialize({ startOnLoad: false, theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default' });
-              await mermaid.run();
-            }
-            </script>
+            {{(body.Contains("class=\"mermaid\"") ? MermaidTags(up) : "")}}
             </body></html>
             """;
     }
+
+    // Only pages with a diagram load the 2.5 MB script.
+    static string MermaidTags(string up) => $$"""
+        <script src="{{up}}{{MermaidFile}}"></script>
+        <script>
+        mermaid.initialize({ startOnLoad: false, theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default' });
+        mermaid.run();
+        </script>
+        """;
 
     // Explicit headings improve reading navigation on long reports.
     static string TableOfContents(string body)

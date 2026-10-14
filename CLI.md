@@ -93,6 +93,9 @@ docwizz generate . site --html                             # Markdown and HTML i
 docwizz generate . site --refresh-html-on-version-change   # re-render all HTML after a docwizz upgrade
 ```
 
+With `--html`, `search.js` and `mermaid.min.js` (the pinned Mermaid docwizz ships, about 2.5 MB) sit next to the pages,
+so the site, diagrams included, works from disk without a network connection.
+
 Only pages whose content changed are rewritten, and the summary counts them. Every HTML page names the docwizz version
 in its footer; `--refresh-html-on-version-change` (implies `--html`) rewrites all HTML when
 `<out>/.docwizz/html-version.txt` differs from the running version. On an interactive terminal a live progress bar

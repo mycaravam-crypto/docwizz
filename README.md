@@ -148,7 +148,7 @@ containers, components, data and deployment. `api.md` traces every endpoint to w
 ```
 
 - **HTML** (`--html`): an offline site with sidebar, search (`/`), outline and dark mode. Open `docs/index.html`.
-  Mermaid diagrams load from a pinned CDN.
+  Mermaid diagrams render offline too: docwizz ships a pinned Mermaid and writes it next to the pages.
 - **Incremental**: only changed pages are rewritten. Pages you write yourself (e.g. `docs/architecture/`) are linked,
   never overwritten. After upgrading docwizz, `--refresh-html-on-version-change` rewrites all HTML pages.
 - **Machine-readable**: `docs/.docwizz/documentation.json` lists every item's required sections, where each comes from

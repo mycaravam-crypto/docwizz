@@ -107,10 +107,9 @@ public class HtmlTests
     }
 
     [Fact]
-    public void Mermaid_is_pinned_and_search_is_a_combobox()
+    public void Search_is_a_combobox()
     {
         var html = Html.Page("index.md", "# demo\n", Pages);
-        Assert.Matches(@"mermaid@\d+\.\d+\.\d+/", html);
         Assert.Contains("role=\"combobox\"", html);
         Assert.Contains("href=\"#content\"", html);
         Assert.Contains("@media print", html);
@@ -136,5 +135,24 @@ public class HtmlTests
     {
         var reversed = Pages.Reverse().ToDictionary(p => p.Key, p => p.Value);
         Assert.Equal(Html.Page("index.md", "# demo\n", Pages), Html.Page("index.md", "# demo\n", reversed));
+    }
+
+    // Offline: the pinned script ships inside docwizz and loads from next to the pages, never from the network.
+    [Fact]
+    public void Diagrams_load_the_vendored_mermaid_and_only_where_there_is_one()
+    {
+        var diagram = Html.Page("views/context.md", "# Context\n\n```mermaid\ngraph LR\n  a --> b\n```\n", Pages);
+        Assert.Contains("class=\"mermaid\"", diagram);
+        Assert.Contains("<script src=\"../mermaid.min.js\"></script>", diagram);
+        Assert.DoesNotContain("type=\"module\"", diagram);
+        Assert.DoesNotMatch(@"(src|import\()[=(]?[""']https?:", diagram);
+        Assert.DoesNotContain(Html.MermaidFile, Html.Page("index.md", "# demo\n", Pages));
+    }
+
+    [Fact]
+    public void The_vendored_mermaid_is_the_pinned_version()
+    {
+        Assert.Contains($"\"{Html.MermaidVersion}\"", Html.MermaidScript);
+        Assert.EndsWith("globalThis.mermaid = globalThis.__esbuild_esm_mermaid.default;\n", Html.MermaidScript);
     }
 }

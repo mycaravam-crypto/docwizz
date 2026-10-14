@@ -64,6 +64,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             var markdown = pages.Where(p => p.Key.EndsWith(".md")).ToDictionary(p => p.Key, p => Html.Title(p.Key, p.Value));
             foreach (var rel in markdown.Keys) pages[Path.ChangeExtension(rel, ".html")] = Html.Page(rel, pages[rel], markdown, hierarchy);
             pages["search.js"] = $"window.docwizzSearch = {pages["search.json"]};\n";
+            pages[Html.MermaidFile] = Html.MermaidScript;
         }
 
         // Only pages we generated earlier are removed, so renamed/deleted modules don't linger and hand-written ones stay.

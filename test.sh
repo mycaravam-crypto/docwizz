@@ -690,6 +690,10 @@ for f in index api architecture modules/backend-Application views/deployment; do
 grep -q '<td>GET</td>' "$html/api.html" && grep -q 'id="flows"' "$html/api.html"
 grep -q 'href="../api.html#flows"' "$html/modules/backend-Application.html" && grep -q 'id="materialservice"' "$html/modules/backend-Application.html"
 grep -q 'class="mermaid"' "$html/architecture.html"
+# diagrams render offline: the vendored script next to the pages, nothing loaded from a CDN
+grep -q '<script src="mermaid.min.js"></script>' "$html/architecture.html"
+cmp -s "$html/mermaid.min.js" "$root/src/DocWizz/Generation/Html/vendor/mermaid.min.js" || { echo "mermaid.min.js not the vendored copy"; exit 1; }
+if grep -rlq 'cdn.jsdelivr\|unpkg.com' "$html" --include=*.html; then echo "HTML loads from a CDN"; exit 1; fi
 grep -q '^window.docwizzSearch = \[' "$html/search.js"
 dw generate fixture "$html" >/dev/null 2>&1   # without --html the twins go, like any stale generated page
 [ ! -f "$html/index.html" ] || { echo "stale HTML kept"; exit 1; }

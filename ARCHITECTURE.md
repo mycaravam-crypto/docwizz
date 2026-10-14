@@ -237,7 +237,9 @@ Sbom and Remediation live in `Analysis/`; the packages view is part of `Generato
   project name with its manifest path only when names collide.
 - **HTML.** With `--html`, [Html](src/DocWizz/Generation/Html/Html.cs) renders every page with Markdig next to its
   Markdown twin, so relative source links still work. Each page embeds the whole site navigation and works from disk;
-  search reads `search.js` and ranks exact names, then prefixes, then substrings. Mermaid is a pinned CDN version.
+  search reads `search.js` and ranks exact names, then prefixes, then substrings. Mermaid is a pinned version
+  [shipped inside docwizz](src/DocWizz/Generation/Html/vendor/README.md) and written as `mermaid.min.js` next to the pages;
+  only pages with a diagram load it, as a classic script because browsers refuse ES module imports from `file://`.
   [HtmlVersion](src/DocWizz/Generation/Html/HtmlVersion.cs) stamps the docwizz version for
   `--refresh-html-on-version-change`.
 - **Screenshots.** [ScreenshotCapture](src/DocWizz/Generation/ScreenshotCapture.cs) uses Playwright to capture the

@@ -35,6 +35,6 @@ security:
 # Test code (path globs): scanned only to link tests to the code they exercise; never analyzed or documented.
 tests: ["tests/*", "test/*", "*.Tests/*", "*.Test/*", "*/__tests__/*", "*.test.ts", "*.spec.ts", "*/e2e/*", "*/src/test/*"]
 # Path globs (relative, `/`-separated) left out of the model entirely.
-exclude: ["fixture/*", "fixture-legacy/*"]   # test inputs, deliberately under-documented
+exclude: ["fixture/*", "fixture-legacy/*", "src/DocWizz/Generation/Html/vendor/*"]   # test inputs, deliberately under-documented; vendored Mermaid
 # Count a plain // comment block directly above a C# member as its summary (for code that doesn't use /// XML docs).
 comment_docs: true    # this codebase explains itself in // comments
