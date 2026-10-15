@@ -1227,8 +1227,6 @@ static object DiffJson(DiffResult d, string baseline, object? check)
 // historical: a selected project that doesn't exist yet at gitRef is left out instead of failing (requirements import
 // maps every exported commit, most of them older than some of today's projects).
 // Cache raw immutable blobs only; symbol resolution still runs for the historical context.
-var historicalBlobCache = new Dictionary<string, byte[]>(StringComparer.Ordinal);
-
 static byte[]? GitBlob(string top, string blobId)
 {
     try
@@ -1290,13 +1288,13 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
                 Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
                 // A bounded in-process cache avoids redundant Git reads without persisting
                 // sensitive historical content or leaking scanner semantics across versions.
-                if (!historicalBlobCache.TryGetValue(blobId, out var bytes))
+                if (!HistoricalBlobCache.Data.TryGetValue(blobId, out var bytes))
                 {
                     var blob = GitBlob(top, blobId);
                     if (blob is null) { success = false; break; }
                     bytes = blob;
-                    if (historicalBlobCache.Count >= 256) historicalBlobCache.Clear();
-                    HistoricalBlobCache[blobId] = bytes;
+                    if (HistoricalBlobCache.Data.Count >= 256) HistoricalBlobCache.Data.Clear();
+                    HistoricalBlobCache.Data[blobId] = bytes;
                 }
                 File.WriteAllBytes(targetFile, bytes);
             }
