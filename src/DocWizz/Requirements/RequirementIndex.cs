@@ -302,6 +302,12 @@ static partial class RequirementIndex
     // `prefix` is the scanned directory's path inside the repository (history paths are repository-relative);
     // `previous` lends the touches of commits it already mapped under the same scope, so a refresh only scans new commits;
     // `progress` hears (mapped, commits to map, the commit and its file count) before each commit is scanned.
+    // Keep existing callers using a full historical model compatible.
+    public static Index Build(byte[] history, List<(JsonElement Item, string Digest, string Name)> workItems, string? scope,
+        string prefix, Func<string, CodeModel?> modelAt, Func<string, bool> scanned, Index? previous = null,
+        Action<int, int, string?>? progress = null) =>
+        Build(history, workItems, scope, prefix, (sha, _) => modelAt(sha), scanned, previous, progress);
+
     public static Index Build(byte[] history, List<(JsonElement Item, string Digest, string Name)> workItems, string? scope,
         string prefix, Func<string, List<string>, CodeModel?> modelAt, Func<string, bool> scanned, Index? previous = null,
         Action<int, int, string?>? progress = null, Action<Index>? checkpoint = null)
