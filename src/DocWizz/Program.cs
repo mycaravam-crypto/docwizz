@@ -1248,6 +1248,16 @@ static byte[]? GitBlob(string top, string blobId)
 
 static CodeModel? ModelAt(string root, string gitRef, Config config, bool historical = false, List<string>? changedFiles = null)
 {
+    var profile = Environment.GetEnvironmentVariable("DOCWIZZ_REQUIREMENTS_PROFILE") == "1" && changedFiles is not null;
+    var clock = System.Diagnostics.Stopwatch.StartNew();
+    var last = TimeSpan.Zero;
+    void Mark(string stage)
+    {
+        if (!profile) return;
+        var elapsed = clock.Elapsed;
+        Console.Error.WriteLine($"docwizz requirements profile: {gitRef[..Math.Min(7, gitRef.Length)]} {stage} +{(elapsed - last).TotalSeconds:0.000}s total={elapsed.TotalSeconds:0.000}s");
+        last = elapsed;
+    }
     var prefixRun = GitRun(root, "rev-parse --show-prefix");
     var shaRun = prefixRun.Exit == 0 ? GitRun(root, $"rev-parse --short {gitRef}") : prefixRun;
     if (prefixRun.Exit != 0 || shaRun.Exit != 0)
@@ -1259,6 +1269,7 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
         return null;
     }
     var (prefix, sha) = (prefixRun.Out.Trim(), shaRun.Out.Trim());
+    Mark("git ref resolution");
     var tmp = Directory.CreateTempSubdirectory("docwizz-");
     try
     {
@@ -1267,6 +1278,7 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
         // Read only changed blobs from Git's object database. A blob is immutable and may be
         // reused across commits; do not cache a whole semantic model by blob alone.
         var selective = changedFiles is { Count: > 0 } && config.Scope is null;
+        if (profile) Console.Error.WriteLine($"docwizz requirements profile: {sha} mode={(selective ? "selective" : config.Scope is not null ? "scoped-full" : "full")} changedFiles={changedFiles?.Count ?? 0}");
         if (selective)
         {
             var success = true;
@@ -1299,7 +1311,13 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
                 File.WriteAllBytes(targetFile, bytes);
             }
             if (success)
-                return BuildModel(dir, config, historical: true).Model with { Commit = sha };
+            {
+                Mark("read changed Git blobs");
+                var selectiveModel = BuildModel(dir, config, historical: true).Model with { Commit = sha };
+                Mark("scan model");
+                return selectiveModel;
+            }
+            Mark("selective fallback");
             Directory.Delete(dir, recursive: true);
             Directory.CreateDirectory(dir);
         }
@@ -1307,8 +1325,12 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
         var tar = Path.Combine(tmp.FullName, "tree.tar");
         var tree = prefix.Length == 0 ? gitRef : $"{gitRef}:{prefix}";
         if (Git(top, $"archive --format=tar -o \"{tar}\" {tree}") is null) return null;
+        Mark("git archive");
         TarFile.ExtractToDirectory(tar, dir, overwriteFiles: true);
-        return BuildModel(dir, config, historical: historical).Model with { Commit = sha };
+        Mark("extract archive");
+        var model = BuildModel(dir, config, historical: historical).Model with { Commit = sha };
+        Mark("scan model");
+        return model;
     }
     finally
     {
