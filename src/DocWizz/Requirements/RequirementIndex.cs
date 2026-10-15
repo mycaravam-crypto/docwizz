@@ -304,7 +304,7 @@ static partial class RequirementIndex
     // `progress` hears (mapped, commits to map, the commit and its file count) before each commit is scanned.
     public static Index Build(byte[] history, List<(JsonElement Item, string Digest, string Name)> workItems, string? scope,
         string prefix, Func<string, CodeModel?> modelAt, Func<string, bool> scanned, Index? previous = null,
-        Action<int, int, string?>? progress = null)
+        Action<int, int, string?>? progress = null, Action<Index>? checkpoint = null)
     {
         var raw = Parse(history);
         var provider = OneOf(Text(raw, "provider", "history"), Providers, "history.provider");
@@ -339,6 +339,11 @@ static partial class RequirementIndex
         var pending = exported.Select(c => (Commit: c, Changes: Changes(c, prefix).Where(x => scanned(x.Path)).ToList())).ToList();
         var toMap = pending.Count(p => p.Commit.Kind != "merge" && p.Changes.Count > 0 && !reuse.ContainsKey(p.Commit.Sha));
         var mapped = 0;
+        var inputs = new Inputs(HistorySchema, Digest(history), provider, repository, since, sinceSha, untilSha, truncated, shallow, scope,
+            [.. items.Select(w => new WorkItemInput(w.Id, w.Revision, w.Digest))]);
+        var fingerprint = Fingerprint(inputs);
+        void SaveCheckpoint() => checkpoint?.Invoke(new(IndexSchema(inputs), fingerprint, inputs,
+            [.. commits], pullRequests, items, [.. warnings.Distinct()]));
         progress?.Invoke(0, toMap, null);
         foreach (var (c, changes) in pending)
         {
@@ -361,15 +366,13 @@ static partial class RequirementIndex
             }
             var (touches, fileOnly) = Map(model, changes);
             commits.Add(new(c.Sha, c.Linkage, c.WorkItems, c.Mentions, c.PullRequests, "mapped", touches, fileOnly));
+            if (mapped % 5 == 0) SaveCheckpoint();
         }
 
         // Nothing verified anywhere: an empty answer would read as "no requirements" when nobody could say.
         if (commits.Count > 0 && commits.All(c => c.Linkage != "verified") && pullRequests.All(p => p.Linkage != "verified" || p.Status != "confirmed"))
             warnings.Add($"no provider link was verified ({provider} history): a symbol without requirements is unknown, not unlinked");
 
-        var inputs = new Inputs(HistorySchema, Digest(history), provider, repository, since, sinceSha, untilSha, truncated, shallow, scope,
-            [.. items.Select(w => new WorkItemInput(w.Id, w.Revision, w.Digest))]);
-        var fingerprint = Fingerprint(inputs);
         return new(IndexSchema(inputs), fingerprint, inputs, commits, pullRequests, items, [.. warnings.Distinct()]);
     }
 
