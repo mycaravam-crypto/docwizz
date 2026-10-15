@@ -25,6 +25,29 @@ public class ProjectScopeTests
     }
 
     [Fact]
+    public void Historical_import_prefilter_skips_clearly_unrelated_projects()
+    {
+        var scope = new ScopeConfig
+        {
+            Projects = new ScopeProjectsConfig
+            {
+                Include = ["Backend/Cargo-Core/Cargo-Core.csproj", "Frontend/logdbvue/package.json"],
+                References = "metadata",
+                TestLinks = true
+            },
+            UnassignedSources = "exclude"
+        };
+        Assert.True(ProjectScope.MightBelongToScope(scope, "Backend/Cargo-Core/Service.cs"));
+        Assert.True(ProjectScope.MightBelongToScope(scope, "Frontend/logdbvue/src/App.vue"));
+        Assert.True(ProjectScope.MightBelongToScope(scope, "Backend/Cargo-Core.Tests/ServiceTests.cs"));
+        Assert.False(ProjectScope.MightBelongToScope(scope, "BZUe/Other.cs"));
+        Assert.False(ProjectScope.MightBelongToScope(scope, "Backend/OtherService/Other.cs"));
+        Assert.True(ProjectScope.MightBelongToScope(null, "BZUe/Other.cs"));
+        scope.UnassignedSources = "include";
+        Assert.True(ProjectScope.MightBelongToScope(scope, "BZUe/Other.cs"));
+    }
+
+    [Fact]
     public void Absence_of_scope_preserves_all_candidate_files()
     {
         using var repo = new Sources(("A/A.csproj", """<Project Sdk="Microsoft.NET.Sdk" />"""),
