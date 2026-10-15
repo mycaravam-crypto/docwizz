@@ -8,6 +8,13 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 static class CSharpScanner
 {
     static readonly SymbolDisplayFormat IdFormat = SymbolDisplayFormat.CSharpErrorMessageFormat;
+    // Roslyn reference assemblies are immutable and identical across historical scans.
+    // Load them once per process; compilations and semantic models remain commit-local.
+    static readonly Lazy<IReadOnlyList<MetadataReference>> SharedReferences = new(() =>
+        ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+            .Split(Path.PathSeparator)
+            .Select(p => MetadataReference.CreateFromFile(p)).ToArray());
+
     static readonly string[] HttpVerbs = ["HttpGet", "HttpPost", "HttpPut", "HttpDelete", "HttpPatch"];
     static readonly string[] MapVerbs = ["MapGet", "MapPost", "MapPut", "MapDelete", "MapPatch", "MapMethods"];
 
@@ -27,8 +34,7 @@ static class CSharpScanner
         }).ToList();
 
         // ponytail: BCL refs only; ASP.NET/EF/NuGet types stay unresolved, detected by name. Add package refs if resolution matters.
-        var refs = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
-            .Split(Path.PathSeparator).Select(p => MetadataReference.CreateFromFile(p));
+        var refs = SharedReferences.Value;
         // SDK ImplicitUsings live in obj/, which we don't read; supply the common set.
         var implicitUsings = CSharpSyntaxTree.ParseText(string.Join("\n", new[] {
             "System", "System.Collections.Generic", "System.IO", "System.Linq", "System.Net.Http",
