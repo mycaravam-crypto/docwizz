@@ -267,27 +267,42 @@ static int RequirementsImport(string root, string? history, string? workItems, C
     try
     {
         if (!File.Exists(historyFile)) throw new ArgumentException($"{history}: no such file");
-        var bytes = File.ReadAllBytes(historyFile);
-        var items = RequirementIndex.ReadWorkItems(workItems is null ? null : Resolve(workItems));
-        var scope = ProjectScope.Fingerprint(config.Scope);
-        RequirementIndex.Index? previous = null;
-        if (File.Exists(target))
+        RequirementIndex.Index index;
+        // Mapping scans the code as of every new commit, so it is nearly all of the time.
+        using (var bar = CliProgress.ForConsole([new("read", 1, "Reading inputs"), new("map", 20, "Mapping commits"), new("write", 1, "Writing index")],
+            opts.ContainsKey("progress")))
         {
-            try { previous = RequirementIndex.Load(target); }
-            catch (ArgumentException) { }   // an older or broken index is rebuilt from scratch
+            bar.Begin("read");
+            var bytes = File.ReadAllBytes(historyFile);
+            var items = RequirementIndex.ReadWorkItems(workItems is null ? null : Resolve(workItems));
+            var scope = ProjectScope.Fingerprint(config.Scope);
+            // The configured projects must exist now; at older commits they may not yet (ModelAt historical).
+            if (config.Scope is not null) ProjectScope.Resolve(root, config.Scope, RepoFilesUnscoped(root, config));
+            RequirementIndex.Index? previous = null;
+            if (File.Exists(target))
+            {
+                try { previous = RequirementIndex.Load(target); }
+                catch (ArgumentException) { }   // an older or broken index is rebuilt from scratch
+            }
+            if (previous?.Fingerprint == RequirementIndex.Fingerprint(bytes, items, scope))
+            {
+                bar.Dispose();
+                Console.WriteLine($"unchanged: {RequirementIndex.DefaultFile} ({previous.Commits.Count} commits, {previous.WorkItems.Count} work items)");
+                return 0;
+            }
+            bar.Advance("read", Plural(items.Count, "work item"));
+            bar.Begin("map");
+            var prefix = Git(root, "rev-parse --show-prefix")?.Trim() ?? "";
+            string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java", ".php"];
+            index = RequirementIndex.Build(bytes, items, scope, prefix, sha => ModelAt(root, sha, config, historical: true),
+                p => exts.Contains(Path.GetExtension(p)), previous, AiProgress(bar, "commits"));
+            bar.Advance("map", Plural(index.Commits.Count(c => c.Mapping == "mapped"), "commit") + " mapped");
+            bar.Begin("write");
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.WriteAllText(target + ".tmp", RequirementIndex.Serialize(index));
+            File.Move(target + ".tmp", target, overwrite: true);
+            bar.Advance("write");
         }
-        if (previous?.Fingerprint == RequirementIndex.Fingerprint(bytes, items, scope))
-        {
-            Console.WriteLine($"unchanged: {RequirementIndex.DefaultFile} ({previous.Commits.Count} commits, {previous.WorkItems.Count} work items)");
-            return 0;
-        }
-        var prefix = Git(root, "rev-parse --show-prefix")?.Trim() ?? "";
-        string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java", ".php"];
-        var index = RequirementIndex.Build(bytes, items, scope, prefix, sha => ModelAt(root, sha, config),
-            p => exts.Contains(Path.GetExtension(p)), previous, m => Console.Error.WriteLine($"docwizz: {m}"));
-        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-        File.WriteAllText(target + ".tmp", RequirementIndex.Serialize(index));
-        File.Move(target + ".tmp", target, overwrite: true);
         var touched = index.Commits.SelectMany(c => c.Touches).Select(t => t.Symbol).Distinct().Count();
         Console.WriteLine($"→ {RequirementIndex.DefaultFile}: {index.Commits.Count} commits, {touched} symbols touched, {index.PullRequests.Count} PRs, {index.WorkItems.Count} work items");
         foreach (var w in index.Warnings) Console.Error.WriteLine($"docwizz: ⚠ {w}");
@@ -729,6 +744,7 @@ static string Reference() => $"""
       docwizz trace <dir> <evidence.yaml>  explicit requirement-architecture-test gaps
         [--format json]                 machine-readable instead of Markdown
       docwizz requirements import <dir> <history.json> [<work-items>]  index exported commit/PR/work-item history
+        [--progress]                    progress bar on stderr also when redirected (commits mapped, time left)
       docwizz requirements show <dir> --for <symbol>  work items a symbol was changed for (confirmed/candidate)
       docwizz requirements query <dir> <query.json>   answer gitwizz's requirement query (gitwizz.requirement-input/v1)
         [--work-item <id>] [--format json]  one work item's symbols (123 or github#123); machine-readable
@@ -787,12 +803,13 @@ static List<string> RepoFiles(string root, Config config, string[]? dotDirs = nu
 
 // progress, when given, hears about every step from the first file listing on: a large repository spends most of a
 // generate here, and a bar that only moves once the scan is over looks hung.
-static (CodeModel Model, List<string> Files) BuildModel(string root, Config config, CliProgress? progress = null)
+// historical: root is a tree as of an older commit (ProjectScope.Resolve).
+static (CodeModel Model, List<string> Files) BuildModel(string root, Config config, CliProgress? progress = null, bool historical = false)
 {
     string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java", ".php"];
     progress?.Report(0, 1, "listing files");
     var raw = Timings.Measure("files", () => RepoFilesUnscoped(root, config));
-    var plan = ProjectScope.Resolve(root, config.Scope, raw);
+    var plan = ProjectScope.Resolve(root, config.Scope, raw, historical);
     var candidates = plan.Files;
     var scanned = candidates.Where(f => exts.Contains(Path.GetExtension(f)) && !f.EndsWith(".d.ts") && !f.EndsWith(".min.js")
         && !f.Replace('\\', '/').Contains("/wwwroot/lib/")).ToList(); // ponytail: libman/bower vendor dir only; other vendored JS needs exclude:
@@ -1177,7 +1194,9 @@ static object DiffJson(DiffResult d, string baseline, object? check)
 }
 
 // Scans the tree as it was at <ref>, extracted from git into a temp dir.
-static CodeModel? ModelAt(string root, string gitRef, Config config)
+// historical: a selected project that doesn't exist yet at gitRef is left out instead of failing (requirements import
+// maps every exported commit, most of them older than some of today's projects).
+static CodeModel? ModelAt(string root, string gitRef, Config config, bool historical = false)
 {
     var prefixRun = GitRun(root, "rev-parse --show-prefix");
     var shaRun = prefixRun.Exit == 0 ? GitRun(root, $"rev-parse --short {gitRef}") : prefixRun;
@@ -1200,7 +1219,7 @@ static CodeModel? ModelAt(string root, string gitRef, Config config)
         if (Git(top, $"archive --format=tar -o \"{tar}\" {tree}") is null) return null;
         var dir = Directory.CreateDirectory(Path.Combine(tmp.FullName, "tree")).FullName;
         TarFile.ExtractToDirectory(tar, dir, overwriteFiles: true);
-        return BuildModel(dir, config).Model with { Commit = sha };
+        return BuildModel(dir, config, historical: historical).Model with { Commit = sha };
     }
     finally
     {
