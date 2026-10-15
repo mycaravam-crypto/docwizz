@@ -123,8 +123,14 @@ $ python3 bench/agents.py --agent command --runs 3 \
     --cmd 'opencode run -m local/qwen3-coder "$(cat {prompt_file})"'
 ```
 
-`--agent aider` runs [Aider](https://aider.chat) headless against an OpenAI-compatible endpoint and reads its token
-counts. `--agent command` runs any harness: `{prompt_file}` is the prompt, and the command may write steps and token
+`--agent aider` runs [Aider](https://aider.chat) headless against an OpenAI-compatible endpoint (or natively against
+Ollama with `ollama_chat/<model>`) and reads its token counts. **Headless Aider is one-shot, not an agent loop:**
+`--message-file` sends the prompt, applies the reply's edits and exits. It doesn't run commands (so it never calls
+`docwizz context`), reads only files it asks for in that one reply, and stops after announcing what it would do. That
+measures single-reply editing, not the question: the `context` variant can't work, and question tasks mostly end
+without an `ANSWER.md`. For the `docs`/`context` comparison use a harness that loops over tool calls (`--agent command`
+with OpenCode or similar). First measurement, 2026-10-15 (Aider 0.86.2, qwen2.5-coder:7b, 1 run): none 1/10, docs
+2/10, context 2/10, 0 files read in every run; details in #104. `--agent command` runs any harness: `{prompt_file}` is the prompt, and the command may write steps and token
 counts to `{metrics_file}` as JSON. In the `docs` and `context` variants a `docwizz` command is on the agent's `PATH`,
 and `DOCWIZZ_MCP_COMMAND` holds the command line of the MCP server for harness configs. Results go to
 `bench/agents-results.json` and a Markdown report to stdout.
