@@ -364,7 +364,8 @@ static partial class RequirementIndex
                 commits.Add(known with { Linkage = c.Linkage, WorkItems = c.WorkItems, Mentions = c.Mentions, PullRequests = c.PullRequests });
                 continue;
             }
-            progress?.Invoke(mapped++, toMap, $"{c.Sha[..7]} ({changes.Count} source file{(changes.Count == 1 ? "" : "s")})");
+            progress?.Invoke(mapped, toMap, $"{c.Sha[..7]} ({changes.Count} source file{(changes.Count == 1 ? "" : "s")})");
+            mapped++;
             if (modelAt(c.Sha, [.. changes.Select(x => x.Path).Distinct(StringComparer.Ordinal)]) is not { } model)
             {
                 warnings.Add($"commit {c.Sha[..7]} is not in the local repository: what it changed is unknown");
