@@ -290,17 +290,47 @@ static int RequirementsImport(string root, string? history, string? workItems, C
                 Console.WriteLine($"unchanged: {RequirementIndex.DefaultFile} ({previous.Commits.Count} commits, {previous.WorkItems.Count} work items)");
                 return 0;
             }
+            // Resume only checkpoints produced from exactly the same history, work items and scan scope.
+            var checkpointFile = target + ".checkpoint";
+            if (File.Exists(checkpointFile))
+            {
+                try
+                {
+                    var saved = RequirementIndex.Load(checkpointFile);
+                    if (saved.Fingerprint == RequirementIndex.Fingerprint(bytes, items, scope))
+                    {
+                        if (previous is not null && previous.Inputs.Scope == scope)
+                        {
+                            var seen = saved.Commits.Select(c => c.Sha).ToHashSet();
+                            saved = saved with { Commits = [.. previous.Commits.Where(c => seen.Add(c.Sha)), .. saved.Commits] };
+                        }
+                        previous = saved;
+                        Console.Error.WriteLine($"docwizz: resuming from {saved.Commits.Count} checkpointed/previous commits");
+                    }
+                }
+                catch (Exception e) when (e is ArgumentException or IOException or System.Text.Json.JsonException)
+                {
+                    Console.Error.WriteLine($"docwizz: ignoring invalid requirements checkpoint: {e.Message}");
+                }
+            }
             bar.Advance("read", Plural(items.Count, "work item"));
             bar.Begin("map");
             var prefix = Git(root, "rev-parse --show-prefix")?.Trim() ?? "";
             string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java", ".php"];
             index = RequirementIndex.Build(bytes, items, scope, prefix, sha => ModelAt(root, sha, config, historical: true),
-                p => exts.Contains(Path.GetExtension(p)), previous, AiProgress(bar, "commits"));
+                p => exts.Contains(Path.GetExtension(p)), previous, AiProgress(bar, "commits"), partial =>
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(checkpointFile)!);
+                    var tmp = checkpointFile + ".tmp";
+                    File.WriteAllText(tmp, RequirementIndex.Serialize(partial));
+                    File.Move(tmp, checkpointFile, overwrite: true);
+                });
             bar.Advance("map", Plural(index.Commits.Count(c => c.Mapping == "mapped"), "commit") + " mapped");
             bar.Begin("write");
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.WriteAllText(target + ".tmp", RequirementIndex.Serialize(index));
             File.Move(target + ".tmp", target, overwrite: true);
+            if (File.Exists(checkpointFile)) File.Delete(checkpointFile);
             bar.Advance("write");
         }
         var touched = index.Commits.SelectMany(c => c.Touches).Select(t => t.Symbol).Distinct().Count();
