@@ -302,7 +302,8 @@ static partial class RequirementIndex
     // `prefix` is the scanned directory's path inside the repository (history paths are repository-relative);
     // `previous` lends the touches of commits it already mapped under the same scope, so a refresh only scans new commits.
     public static Index Build(byte[] history, List<(JsonElement Item, string Digest, string Name)> workItems, string? scope,
-        string prefix, Func<string, CodeModel?> modelAt, Func<string, bool> scanned, Index? previous = null, Action<string>? log = null)
+        string prefix, Func<string, CodeModel?> modelAt, Func<string, bool> scanned, Index? previous = null,
+        Action<int, int, string?>? progress = null)
     {
         var raw = Parse(history);
         var provider = OneOf(Text(raw, "provider", "history"), Providers, "history.provider");
@@ -334,9 +335,12 @@ static partial class RequirementIndex
         var reuse = previous is not null && previous.Inputs.Scope == scope
             ? previous.Commits.Where(c => c.Mapping != "missing").ToDictionary(c => c.Sha) : [];
         var commits = new List<Commit>();
-        foreach (var c in exported)
+        var pending = exported.Select(c => (Commit: c, Changes: Changes(c, prefix).Where(x => scanned(x.Path)).ToList())).ToList();
+        var toMap = pending.Count(p => p.Commit.Kind != "merge" && p.Changes.Count > 0 && !reuse.ContainsKey(p.Commit.Sha));
+        var mapped = 0;
+        progress?.Invoke(0, toMap, null);
+        foreach (var (c, changes) in pending)
         {
-            var changes = Changes(c, prefix).Where(x => scanned(x.Path)).ToList();
             if (c.Kind == "merge" || changes.Count == 0)
             {
                 commits.Add(new(c.Sha, c.Linkage, c.WorkItems, c.Mentions, c.PullRequests, "no-source", [], []));
@@ -347,7 +351,7 @@ static partial class RequirementIndex
                 commits.Add(known with { Linkage = c.Linkage, WorkItems = c.WorkItems, Mentions = c.Mentions, PullRequests = c.PullRequests });
                 continue;
             }
-            log?.Invoke($"mapping {c.Sha[..7]} ({changes.Count} source file{(changes.Count == 1 ? "" : "s")})");
+            progress?.Invoke(mapped++, toMap, $"{c.Sha[..7]} ({changes.Count} source file{(changes.Count == 1 ? "" : "s")})");
             if (modelAt(c.Sha) is not { } model)
             {
                 warnings.Add($"commit {c.Sha[..7]} is not in the local repository: what it changed is unknown");

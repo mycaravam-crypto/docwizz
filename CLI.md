@@ -611,6 +611,11 @@ file and lines, and `changedSince` when the symbol changed after that commit. Th
 none), `unavailable`, `not-in-history` and `not-current` apart. Files only, no network; the same inputs give the same
 bytes. Input shapes and rules: [docs/requirement-context.md](docs/requirement-context.md).
 
+`import` shows the progress bar `generate` does (commits mapped, time left); `--progress` forces it into redirected
+output and CI logs. It maps each commit under the configured `scope:`. A selected project that doesn't exist yet at an
+older commit is left out of that commit rather than failing the import, but every selected project must exist in the
+working tree.
+
 For GitHub, export history with `--provider github` and export issue details separately:
 
 ```bash
@@ -659,7 +664,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `evidence-diff` | `docwizz evidence-diff <dir> <before.yaml> <after.yaml> [--format json]` | explicit evidence changes and affected tests | product documents |
 | `trace` | `docwizz trace <dir> <evidence.yaml> [--format json]` | explicit traceability and missing links | product documents |
 | `load` | `docwizz load import <dir> <report.json>...` | store powerwizz reports; `generate` adds measured numbers per endpoint to `api.md` | performance |
-| `requirements` | `docwizz requirements import <dir> <history.json> [<work-items>]`, `docwizz requirements show <dir> (--for <symbol> \| --work-item <id>) [--format json]`, `docwizz requirements query <dir> <query.json>` | index exported history; one symbol's requirements, or one work item's symbols; gitwizz's requirement query | coding agents, reviews |
+| `requirements` | `docwizz requirements import <dir> <history.json> [<work-items>] [--progress]`, `docwizz requirements show <dir> (--for <symbol> \| --work-item <id>) [--format json]`, `docwizz requirements query <dir> <query.json>` | index exported history; one symbol's requirements, or one work item's symbols; gitwizz's requirement query | coding agents, reviews |
 | `product` | `docwizz product [check] <dir> <template.yaml> [out.md] [--context file.yaml] [--ai] [--format f]` | product draft from evidence; `check`: references and freshness | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
@@ -676,7 +681,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `--profile <name\|file.yaml>` | `profile:` in `docwizz.yaml`, else `default` | setup, generate, check, analyze, architecture, diff | overrides `profile:` and the file's own `patterns:` | normal |
 | `--format console\|json` | `console` | discover, analyze, check, architecture, context, domain, diff, trace, evidence-diff, product, remediate, requirements | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
 | `--html` | off | generate, setup | adds HTML pages; the Markdown is written either way | normal |
-| `--progress` | interactive terminals | generate, setup | forces progress bars on stderr when output is redirected | normal |
+| `--progress` | interactive terminals | generate, setup, requirements | forces progress bars on stderr when output is redirected | normal |
 | `--refresh-html-on-version-change` | off | generate, setup | implies `--html`; rewrites all HTML when the docwizz version changed | normal |
 | `--screenshots --base-url <url>` | off | generate | captures detected static routes from a running frontend; anonymous isolated contexts by default; HTTP errors and redirects are skipped | opt-in |
 | `--storage-state <file>` | off | generate | with `--screenshots`, starts each route's context from a saved Playwright login state; path relative to the scanned directory; keep it out of Git | opt-in |

@@ -45,8 +45,10 @@ static class ProjectScope
             System.Text.Encoding.UTF8.GetBytes(text)))[..16].ToLowerInvariant();
     }
 
-    /// <summary>Resolves selected manifests, referenced projects and test links, then filters files before source scanning.</summary>
-    public static Plan Resolve(string root, ScopeConfig? scope, List<string> candidates)
+    /// <summary>Resolves selected manifests, referenced projects and test links, then filters files before source scanning.
+    /// <paramref name="historical"/>: a tree as of an older commit, where a selected project may not exist yet; it is
+    /// then simply not there instead of an error (the working tree is what validates the configuration).</summary>
+    public static Plan Resolve(string root, ScopeConfig? scope, List<string> candidates, bool historical = false)
     {
         if (scope is null) return new(candidates, [], 0);
         Validate(scope);
@@ -58,7 +60,10 @@ static class ProjectScope
         {
             var id = $"proj:{manifest}";
             if (!projects.ContainsKey(id))
+            {
+                if (historical) continue;
                 throw new ScopeException($"scope.projects.include: '{manifest}' was not discovered below the scan root (check .gitignore, exclude: and paths)");
+            }
             selected.Add(id);
         }
 

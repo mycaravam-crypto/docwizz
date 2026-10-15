@@ -394,4 +394,42 @@ public class RequirementsJourneyTests
         Assert.Equal(1, Run(repo.Root, "requirements", "query", ".").Exit);
         Assert.Equal(status, repo.Git("status", "--porcelain"));   // read-only
     }
+
+    // A scope selects a project that a later commit added: the commits before it map without that project instead of
+    // failing the import, and --progress puts the commit count into a redirected log.
+    [Fact]
+    public void Import_maps_commits_older_than_a_scoped_project()
+    {
+        using var repo = new FakeHistory();
+        repo.Write("Shop/Shop.csproj", """<Project Sdk="Microsoft.NET.Sdk" />""");
+        repo.Write("Shop/OrderService.cs", V1);
+        repo.Commit("orders", FakeHistory.Verified(100));
+        repo.Write("Billing/Billing.csproj", """<Project Sdk="Microsoft.NET.Sdk" />""");
+        repo.Write("Billing/Invoice.cs", "namespace Billing;\n\npublic class Invoice\n{\n    public int Total() => 0;\n}\n");
+        repo.Write("Shop/OrderService.cs", V2);
+        repo.Commit("billing", FakeHistory.Verified(101));
+        repo.Write("docwizz.yaml", "scope:\n  projects:\n    include: [\"Shop/Shop.csproj\", \"Billing/Billing.csproj\"]\n");
+        repo.Commit("scope", FakeHistory.Status("unavailable"));
+        var history = Path.Combine(repo.Root, "..", $"docwizz-history-{Guid.NewGuid():N}.json");
+        File.WriteAllText(history, repo.History());
+        try
+        {
+            var import = Run(repo.Root, "requirements", "import", ".", history, "--progress");
+            Assert.True(import.Exit == 0, import.ToString());
+            Assert.Contains("→ docs/.docwizz/requirements.json: 3 commits", import.Out);
+            Assert.DoesNotContain("was not discovered", import.Err);
+            Assert.Contains("Mapping commits", import.Err);
+            Assert.Contains("2 commits mapped", import.Err);
+
+            var show = JsonDocument.Parse(Run(repo.Root, "requirements", "show", ".", "--for", "Billing.Invoice.Total", "--format", "json").Out).RootElement;
+            Assert.Equal([101], show.GetProperty("requirements").EnumerateArray().Select(r => r.GetProperty("id").GetInt32()));
+
+            // A selected project missing from the working tree is still a configuration error.
+            File.WriteAllText(Path.Combine(repo.Root, "docwizz.yaml"), "scope:\n  projects:\n    include: [\"Gone/Gone.csproj\"]\n");
+            var broken = Run(repo.Root, "requirements", "import", ".", history);
+            Assert.Equal(1, broken.Exit);
+            Assert.Contains("'Gone/Gone.csproj' was not discovered", broken.Err);
+        }
+        finally { File.Delete(history); }
+    }
 }
