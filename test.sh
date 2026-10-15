@@ -826,6 +826,9 @@ assert [x["text"] for x in b["sentences"]] == ["Delegates to the service.", "Tak
 assert b["sentences"][1]["from"] == [i["id"]] and b["sentences"][2]["from"] == b["sentences"][0]["from"], b
 assert "exception" not in i["sections"] and "summary" in i["missing"], i
 PY2
+# --ai drafts only; written docs are rated only when explicitly requested, without drafting again.
+[ ! -e "$docs/.docwizz/ai-assessments.json" ] || { echo "--ai unexpectedly rated written docs"; exit 1; }
+OLLAMA_HOST="127.0.0.1:$(cat "$port_file")" DOCWIZZ_MODEL=local:7b dw generate fixture "$docs" --ai-ratings >/dev/null
 # assessments of written docs: listed in quality.md (unknown gaps dropped), cached, never part of doc quality
 grep -q '| \[`Fixture.Api.MaterialController.Rename(int, Fixture.Api.RenameMaterialRequest)`\](.*) | 2 | purpose, side effects | Says what, not why. |' "$docs/quality.md" \
     || { grep -A5 "Usefulness" "$docs/quality.md"; exit 1; }
@@ -833,7 +836,7 @@ grep -q "AI-assessed and advisory: not part of doc quality" "$docs/quality.md"
 grep -q '"score": 2' "$docs/.docwizz/ai-assessments.json"
 # a second --ai run sends nothing: every answer is cached, the unusable one (backend/Domain) too
 sent=$(wc -c <"$port_file.requests")
-OLLAMA_HOST="127.0.0.1:$(cat "$port_file")" DOCWIZZ_MODEL=local:7b dw generate fixture "$docs" --ai >/dev/null 2>&1
+OLLAMA_HOST="127.0.0.1:$(cat "$port_file")" DOCWIZZ_MODEL=local:7b dw generate fixture "$docs" --ai --ai-ratings >/dev/null 2>&1
 [ "$(wc -c <"$port_file.requests")" = "$sent" ] || { echo "second --ai run re-sent $(( $(wc -c <"$port_file.requests") - sent )) requests"; exit 1; }
 if grep -q "^## Overview 🤖" "$docs/modules/backend-Domain.md"; then echo "unusable overview shown"; exit 1; fi
 public=$(OLLAMA_HOST=8.8.8.8 dw generate fixture "$(mktemp -d)" --ai 2>&1 >/dev/null)

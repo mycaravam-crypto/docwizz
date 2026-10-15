@@ -80,7 +80,7 @@ the repository apart from problems running docwizz:
 | `SUCCESS_WITH_FINDINGS` | every stage ran; the check fails or there are findings. On a new repository this is the starting point, not an error | 0 |
 | `FAILED` | a stage could not run (invalid `docwizz.yaml`, unreadable files, a scanner error); its error is listed | 1 |
 
-**What `setup` never does:** contact an AI endpoint without `--ai`; run the repository's build, tests or package tools
+**What `setup` never does:** contact an AI endpoint without `--ai` or `--ai-ratings`; run the repository's build, tests or package tools
 (`dotnet`, `npm`, `mvn`, `docker`, …); copy configuration values into `docwizz.yaml`.
 
 **The `docwizz.yaml` it writes** starts from the defaults (the same as `docwizz init`) and changes only what the
@@ -202,14 +202,23 @@ To bootstrap a repository from a script, run `docwizz setup .` and commit the `d
 ```bash
 docwizz generate . --ai
 docwizz setup . --ai
+docwizz generate . --ai-ratings        # rate written docs without drafting
+docwizz generate . --ai --ai-ratings   # explicitly request both
 ```
 
 `--ai` drafts missing summaries and module overviews to start writing from. It is off unless passed, including in
 `setup`. The model must be **self-hosted** on a loopback or private address: Ollama (default) or any OpenAI-compatible
 server (vLLM, NVIDIA NIM, Nutanix Enterprise AI, a LiteLLM gateway). Cloud models and public hosts are refused and
 proxies are bypassed. Drafts are marked 🤖, cite their facts, fill only empty sections and **never** close a gap, raise
-coverage or pass a check. Drafts are cached by code hash; without `--ai`, nothing is sent. More:
+coverage or pass a check. Drafts are cached by code hash; without `--ai`, no new drafts are requested. More:
 [README: AI drafts](README.md#draft-missing-docs-with-a-local-ai).
+
+`--ai-ratings` independently enables advisory 1–5 usefulness ratings of written docs in `quality.md` for `generate`
+and `setup`. Ratings never affect coverage, doc quality or `check`. They can dominate a cold run, so `--ai` alone
+no longer requests them. Cached ratings are displayed without either flag; new ratings are requested only for
+missing entries keyed by symbol, documentation/code hash, provider and model. Each result is saved atomically as
+it completes, so interruption preserves completed ratings. `--progress` reports the item count and estimates time
+remaining from completed-request throughput.
 
 ```yaml
 ai:
@@ -623,8 +632,8 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | Command | Syntax | Purpose | Use |
 |---|---|---|---|
 | `discover` | `docwizz discover [dir] [--format console\|json]` | read-only inventory of solutions, projects and references | everyday |
-| `setup` | `docwizz setup [dir] [--select-projects] [--all-projects] [--yes] [--force] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--profile p]` | detect the stack, write `docwizz.yaml`, analyze, architecture, generate, check | start here |
-| `generate` | `docwizz generate <dir> [out] [--html] [--screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>]] [--progress] [--refresh-html-on-version-change] [--ai] [--requirements] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
+| `setup` | `docwizz setup [dir] [--select-projects] [--all-projects] [--yes] [--force] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--ai-ratings] [--profile p]` | detect the stack, write `docwizz.yaml`, analyze, architecture, generate, check | start here |
+| `generate` | `docwizz generate <dir> [out] [--html] [--screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>]] [--progress] [--refresh-html-on-version-change] [--ai] [--ai-ratings] [--requirements] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
 | `check` | `docwizz check <dir> [--since ref] [--format f] [--profile p]` | quality gate; exit 1 when thresholds fail | CI |
 | `analyze` | `docwizz analyze <dir> [--format f] [--profile p]` | documentation and architecture report, no gate | everyday |
 | `architecture` | `docwizz architecture <dir> [--format f] [--profile p]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
@@ -657,7 +666,8 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `--screenshots --base-url <url>` | off | generate | captures detected static routes from a running frontend; anonymous isolated contexts by default; HTTP errors and redirects are skipped | opt-in |
 | `--storage-state <file>` | off | generate | with `--screenshots`, starts each route's context from a saved Playwright login state; path relative to the scanned directory; keep it out of Git | opt-in |
 | `--screenshot-delay <ms>` | 0 | generate | with `--screenshots`, extra wait (0 to 60000 ms) after the page settles, for slow pages | opt-in |
-| `--ai` | off | generate, product, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it, nothing new is sent | opt-in |
+| `--ai` | off | generate, product, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it; does not enable ratings | opt-in |
+| `--ai-ratings` | off | generate, setup | independently rates written docs; cached ratings are used without it; combine with `--ai` for drafts too | opt-in |
 | `--since <ref>` | — | check, remediate | check: only problems introduced since `<ref>` fail; remediate: says whether each update touches only what changed since `<ref>` | CI |
 | `--for <target>` | — | context, requirements | required for context; a symbol id or qualified name, a file, a folder, or `VERB /route`; ambiguous or unknown exits 1 with candidates. `requirements show` takes a symbol, or an id the index knows from history | coding agents |
 | `--work-item <id>` | — | requirements, domain | `requirements show`: reverse lookup; `domain discover`: traverse the current linked code symbols instead of `--seed` | architects, reviews |

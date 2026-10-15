@@ -188,8 +188,13 @@ effects, errors and usage for undocumented items, plus an overview for each modu
 - **Grounded.** Every sentence cites the facts it rests on; sentences that cite nothing are dropped.
 - **Never authoritative.** Drafts are marked 🤖, fill only empty sections and never close a gap.
 - **Sent once.** Drafts are cached in `docs/.docwizz/ai-cache.json` by code hash, answers the model got wrong too,
-  so a later `--ai` run sends only changed code. Without `--ai`, cached drafts are reused and nothing is sent.
-- **Rates written docs.** Each written doc gets an advisory 1–5 usefulness score in `quality.md`; `check` ignores it.
+  so a later `--ai` run sends only changed code. Without `--ai`, cached drafts are reused and no new drafts are requested.
+- **Optional ratings.** `docwizz generate . --ai-ratings` rates written docs with advisory 1–5 usefulness scores in
+  `quality.md`; `check` ignores them. `--ai` drafts only; combine the flags to do both. `setup` accepts them too.
+  Ratings can dominate a cold run with a local model, so they are off unless requested. Existing ratings are reused
+  without either flag. The cache (`docs/.docwizz/ai-assessments.json`) is keyed by symbol, documentation/code hash,
+  provider and model; unchanged items are not rated again. Each result is saved as it arrives, so interrupted runs
+  retain completed work. `--progress` shows the item count and estimates remaining time from measured throughput.
 
 Configure the server under [AI](#ai).
 

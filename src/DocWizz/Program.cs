@@ -83,7 +83,7 @@ static async Task<int> Dispatch(string[] args)
         return await SetupCommand(path, opts.GetValueOrDefault("profile"), opts.ContainsKey("force"), opts.ContainsKey("ai"),
             opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"),
             opts.ContainsKey("refresh-html-on-version-change"), opts.ContainsKey("progress"),
-            opts.ContainsKey("select-projects"), opts.ContainsKey("all-projects"), opts.ContainsKey("yes"));
+            opts.ContainsKey("select-projects"), opts.ContainsKey("all-projects"), opts.ContainsKey("yes"), opts.ContainsKey("ai-ratings"));
     }
     Config config;
     try { config = Config.Load(path, opts.GetValueOrDefault("profile")); }
@@ -151,7 +151,7 @@ static async Task<int> Dispatch(string[] args)
             }
             var requirements = opts.ContainsKey("requirements") ? LoadRequirements(path) : null;
             if (opts.ContainsKey("requirements") && requirements is null) return 1;
-            var report = await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"), refreshHtmlOnVersionChange: opts.ContainsKey("refresh-html-on-version-change"), progress: opts.ContainsKey("progress"), screenshotBaseUrl: opts.GetValueOrDefault("base-url"), screenshotStorageState: stateFile, screenshotDelayMs: int.Parse(opts.GetValueOrDefault("screenshot-delay") ?? "0"), requirements: requirements);
+            var report = await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"), refreshHtmlOnVersionChange: opts.ContainsKey("refresh-html-on-version-change"), progress: opts.ContainsKey("progress"), screenshotBaseUrl: opts.GetValueOrDefault("base-url"), screenshotStorageState: stateFile, screenshotDelayMs: int.Parse(opts.GetValueOrDefault("screenshot-delay") ?? "0"), requirements: requirements, aiRatings: opts.ContainsKey("ai-ratings"));
             // The first line stays the stable one-line result scripts match; the report follows it.
             Console.WriteLine(report.Line);
             Console.WriteLine();
@@ -684,7 +684,7 @@ static string Reference() => $"""
         [--select-projects]             choose projects interactively (TTY required)
         [--all-projects]                clear a saved project scope, preserving other config
         [--yes]                         no prompt for scripts and CI
-        [--html] [--progress] [--refresh-html-on-version-change] [--ai]  as for generate
+        [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--ai-ratings]  as for generate
 
     everyday:
       docwizz discover [dir]            read-only project and solution inventory [--format json]
@@ -696,6 +696,7 @@ static string Reference() => $"""
         [--refresh-html-on-version-change]  rewrite HTML when the docwizz version changes
         [--progress]                    print progress to stderr (including redirected output)
         [--ai]                          draft missing summaries with a self-hosted model (Ollama or OpenAI-compatible)
+        [--ai-ratings]                  rate written docs with a self-hosted model (advisory; independent of --ai)
         [--requirements]                drafts also get each symbol's linked work items (requirements import first)
       docwizz analyze <dir>             documentation report
       docwizz check <dir>               report + exit 1 if thresholds fail (CI)
@@ -918,7 +919,7 @@ static object DocumentationJson(CodeModel model, Config config, List<Documentati
 
 // Writes the docs; returns the one-line result (setup shows it as the stage detail) and the full report `generate`
 // prints below it.
-static async Task<GenerateReport> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null, bool refreshHtmlOnVersionChange = false, bool progress = false, string? screenshotBaseUrl = null, string? screenshotStorageState = null, int screenshotDelayMs = 0, RequirementIndex.Index? requirements = null)
+static async Task<GenerateReport> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null, bool refreshHtmlOnVersionChange = false, bool progress = false, string? screenshotBaseUrl = null, string? screenshotStorageState = null, int screenshotDelayMs = 0, RequirementIndex.Index? requirements = null, bool aiRatings = false)
 {
     // Weights: each stage's usual share of the wall time (bench/baseline.json); the scan dominates, AI calls when on.
     List<CliProgress.Stage> stages =
@@ -927,7 +928,7 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
         new("analyze", 3, "Analyzing docs"),
         new("architecture", 2, "Architecture"),
         new("AI summaries", ai ? 40 : 1, "AI summaries"),
-        new("AI assessments", ai ? 20 : 1, "AI assessments"),
+        new("AI assessments", aiRatings ? 20 : 1, "AI assessments"),
     ];
     if (screenshotBaseUrl is not null) stages.Add(new("screenshots", 15, "Screenshots"));
     stages.AddRange([new("write pages", 12, "Writing pages"), new("metadata", 2, "Metadata")]);
@@ -976,10 +977,10 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
     bar.Advance("AI summaries", drafts.Count == 0 ? (ai ? "none" : "off (--ai)") : $"{Plural(summaries.Count, "summary", "summaries")}, {Plural(overviews.Count, "overview")}");
 
     // Advisory ratings of written docs: shown in quality.md, never part of doc quality % or check.
-    bar.Begin("AI assessments", ai ? "rating written docs" : "from cache");
-    var assessments = await AiProse.Assessments(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-assessments.json"), ai, config.Ai,
+    bar.Begin("AI assessments", aiRatings ? "rating written docs" : "from cache");
+    var assessments = await AiProse.Assessments(root, model, findings, Path.Combine(outDir, ".docwizz", "ai-assessments.json"), aiRatings, config.Ai,
         AiProgress(bar, "rated"));
-    bar.Advance("AI assessments", assessments.Count == 0 ? (ai ? "none" : "off (--ai)") : Plural(assessments.Count, "rating"));
+    bar.Advance("AI assessments", assessments.Count == 0 ? (aiRatings ? "none" : "off (--ai-ratings)") : Plural(assessments.Count, "rating"));
 
     var screenshots = new Dictionary<string, string>();
     if (screenshotBaseUrl is not null)
@@ -1040,9 +1041,9 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
             (config.Security.Enabled ? $", {Plural(security, "security finding")}" : "") +
             (arch.Violations.Count + arch.Cycles.Count > 0 ? $" → {page("architecture.md")}" : ""),
     };
-    if (ai || drafts.Count + assessments.Count > 0)
+    if (ai || aiRatings || drafts.Count + assessments.Count > 0)
         details.Add($"AI            {Plural(summaries.Count, "summary", "summaries")}, {Plural(overviews.Count, "module overview")}, {Plural(assessments.Count, "rating")}" +
-            (ai ? "" : " (cached; --ai drafts more)"));
+            (ai || aiRatings ? "" : " (cached; --ai drafts more, --ai-ratings rates written docs)"));
     if (screenshotBaseUrl is not null) details.Add($"Screenshots   {Plural(screenshots.Count, "route")} from {screenshotBaseUrl}");
     else if (screenshots.Count > 0) details.Add($"Screenshots   {Plural(screenshots.Count, "route")} kept from the last capture (--screenshots to refresh)");
     details.Add($"Pages         {pages.Count:N0} {(html ? "Markdown + HTML" : "Markdown")}: {changed.Count:N0} changed, {pages.Count - changed.Count:N0} unchanged");
@@ -1262,7 +1263,7 @@ static (List<string> Failures, List<string> MissingSections) CheckFailures(strin
 // Inferred layer/test config is written after scan so existing setup output remains stable.
 // Exit 1 only when a stage fails: a failing check is the baseline to improve on, reported with what to do next.
 static async Task<int> SetupCommand(string root, string? profile, bool force, bool ai, bool html, bool refreshHtmlOnVersionChange = false, bool progress = false,
-    bool selectProjects = false, bool allProjects = false, bool yes = false)
+    bool selectProjects = false, bool allProjects = false, bool yes = false, bool aiRatings = false)
 {
     var file = Path.Combine(root, "docwizz.yaml");
     var outDir = Path.Combine(root, "docs");
@@ -1366,7 +1367,7 @@ static async Task<int> SetupCommand(string root, string? profile, bool force, bo
             return $"{arch.Violations.Count - security} violations ({Architecture.Failing(arch.Violations, config.Check).Count - security} failing), {arch.Cycles.Count} cycles" +
                 (config.Security.Enabled ? $", {security} security findings" : ", security rules off");
         }),
-        new("generate", () => Generate(root, outDir, config, ai, html, model, refreshHtmlOnVersionChange: refreshHtmlOnVersionChange).GetAwaiter().GetResult().Line),
+        new("generate", () => Generate(root, outDir, config, ai, html, model, refreshHtmlOnVersionChange: refreshHtmlOnVersionChange, aiRatings: aiRatings).GetAwaiter().GetResult().Line),
         new("check", () =>
         {
             findings ??= Analyzer.Analyze(model, config);
