@@ -40,6 +40,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     {
         Directory.CreateDirectory(Path.Combine(outDir, "modules"));
         Directory.CreateDirectory(Path.Combine(outDir, "views"));
+        if (model.Nodes.Any(n => n.Kind == "route")) Directory.CreateDirectory(Path.Combine(outDir, "routes"));
         var pages = new Dictionary<string, string>();
         void Write(string rel, string body) => pages[rel] = $"{Marker}\n{body}";
 
@@ -55,6 +56,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         Write("architecture.md", ArchitecturePage(modules.Select(m => m.Key).ToList()));
         Write("api.md", Api());
         Write("frontend.md", FrontendPage());
+        foreach (var (page, body) in RoutePages()) Write(page, body);
         Write("quality.md", Quality());
         foreach (var (page, _, body) in Views()) Write($"views/{page}.md", body());
         Write("architecture-description.md", DescriptionPage());
@@ -92,7 +94,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             Entry(n.Name, n.Kind, $"modules/{Naming.Slug(Naming.Folder(n.File))}.md#{Anchor(n.Id)}", WrittenSummary(n));
         foreach (var n in model.Nodes.Where(n => n.Tags?.Contains("endpoint") == true))
             Entry(Naming.EndpointLabel(n), "endpoint", "api.md", WrittenSummary(n));
-        foreach (var n in model.Nodes.Where(n => n.Kind == "route")) Entry(n.Route ?? n.Name, "route", "frontend.md", null);
+        foreach (var n in model.Nodes.Where(n => n.Kind == "route")) Entry(RoutePath(n), "route", RoutePage(RoutePath(n)), null);
         if (hierarchy is not null)
         {
             foreach (var solution in hierarchy.Solutions)
@@ -498,7 +500,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         {
             sb.AppendLine("## Routes\n\n| Path | Component |\n|---|---|");
             foreach (var r in routes)
-                sb.AppendLine($"| `{r.Route}` | {string.Join(", ", routesTo[r.Id].Where(nodes.ContainsKey).Select(c => ModuleLink(nodes[c])))} |");
+                sb.AppendLine($"| [`{RoutePath(r)}`]({RoutePage(RoutePath(r))}) | {string.Join(", ", routesTo[r.Id].Where(nodes.ContainsKey).Select(c => ModuleLink(nodes[c])))} |");
             sb.AppendLine();
             var captured = routes.Where(r => r.Route is not null &&
                 Screenshots.TryGetValue(r.Route, out var image) && File.Exists(Path.Combine(outDir, image))).ToList();
@@ -524,7 +526,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         {
             // Route → page → children → stores/composables → API client → backend endpoint (followed further in api.md).
             var lines = routes.Select(r => (r, flowGraph.Trace(r.Id, stop: n => n.Tags?.Contains("endpoint") == true))).Where(x => x.Item2.Layers.Count > 0)
-                .Select(x => $"- `{x.r.Route}` → {Esc(flowGraph.Chain(x.Item2))}").ToList();
+                .Select(x => $"- [`{RoutePath(x.r)}`]({RoutePage(RoutePath(x.r))}) → {Esc(flowGraph.Chain(x.Item2))}").ToList();
             if (lines.Count > 0)
                 sb.AppendLine("\n## Flows\n\nFrom each route to the backend endpoints it can reach, hop by hop; see [API](api.md) for what the endpoints do.\n\n" +
                     string.Join("\n", lines));

@@ -165,7 +165,7 @@ npx playwright codegen --save-storage=.auth/docwizz-state.json http://localhost:
 docwizz generate . --html --screenshots --base-url http://localhost:5173 --storage-state .auth/docwizz-state.json
 ```
 
-Screenshots land in `docs/screenshots/` and are linked from the frontend page. Without `--storage-state` routes are
+Screenshots land in `docs/screenshots/` and are linked from the frontend page and from each route's page (`docs/routes/`), which also shows the route's components, its flow down to the backend endpoints and what could not be resolved. Without `--storage-state` routes are
 captured anonymously; with it, each route continues the previous route's session, so rotating refresh tokens keep
 working. Slow pages: add `--screenshot-delay <ms>`. Hash routers are opened as `/#/route`. Dynamic routes, `/logout`, HTTP
 errors, redirects, expired sessions and pages whose API calls answer 401/403 are skipped with a warning.

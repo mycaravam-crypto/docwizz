@@ -186,11 +186,15 @@ public class ScreenshotCaptureTests
         var markdown = File.ReadAllText(Path.Combine(outDir, "frontend.md"));
         var html = File.ReadAllText(Path.Combine(outDir, "frontend.html"));
         Assert.Contains("![Screenshot of /materials](screenshots/materials.png)", markdown);
-        Assert.Contains("| `/materials` |", markdown);
-        Assert.Contains("| `/missing` |", markdown);
+        Assert.Contains("| [`/materials`](" + Generator.RoutePage("/materials") + ") |", markdown);
+        Assert.Contains("| [`/missing`](" + Generator.RoutePage("/missing") + ") |", markdown);
         Assert.Contains("src=\"screenshots/materials.png\"", html);
         Assert.DoesNotContain("not-created.png", markdown);
         Assert.DoesNotContain("not-created.png", html);
+        // Each route page shows its own screenshot, one folder down; a failed capture leaves the page without one.
+        Assert.Contains("![Screenshot of /materials](../screenshots/materials.png)",
+            File.ReadAllText(Path.Combine(outDir, Generator.RoutePage("/materials"))));
+        Assert.DoesNotContain("Screenshot", File.ReadAllText(Path.Combine(outDir, Generator.RoutePage("/missing"))));
 
         Make(new Dictionary<string, string>()).Run();
         Assert.DoesNotContain("## Screenshots", File.ReadAllText(Path.Combine(outDir, "frontend.md")));

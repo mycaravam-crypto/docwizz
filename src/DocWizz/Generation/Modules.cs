@@ -101,7 +101,7 @@ partial class Generator
             foreach (var (n, t) in flows.Take(MaxListed))
             {
                 var handler = parent.TryGetValue(n.Id, out var h) ? nodes[h].Name : null;
-                var head = n.Kind == "route" ? $"`{n.Route}`" : $"`{Naming.EndpointLabel(n)}`:" + (handler is null ? "" : $" {handler}");
+                var head = n.Kind == "route" ? $"[`{RoutePath(n)}`](../{RoutePage(RoutePath(n))})" : $"`{Naming.EndpointLabel(n)}`:" + (handler is null ? "" : $" {handler}");
                 var sep = n.Kind == "route" || handler is not null ? " → " : " ";
                 sb.AppendLine($"- {head}{sep}{Esc(flowGraph.Chain(t))}");
             }
@@ -188,7 +188,7 @@ partial class Generator
         var starts = reachedBy[t.Id].Where(s => s.Id != t.Id && Top(s.Id) != t.Id).OrderBy(s => s.Kind == "route").ThenBy(s => s.Route?.TrimStart('/')).ToList();
         if (starts.Count > 0)
             parts.Add("_Reached from:_ " + string.Join(", ", starts.Take(MaxListed).Select(s => s.Kind == "route"
-                ? $"[`{s.Route}`](../frontend.md#flows)" : $"[`{Naming.EndpointLabel(s)}`](../api.md#flows)")) + (starts.Count > MaxListed ? $", +{starts.Count - MaxListed} more" : ""));
+                ? $"[`{RoutePath(s)}`](../{RoutePage(RoutePath(s))})" : $"[`{Naming.EndpointLabel(s)}`](../api.md#flows)")) + (starts.Count > MaxListed ? $", +{starts.Count - MaxListed} more" : ""));
         var keys = model.Edges.Where(e => e.Kind is "reads" or "binds" && (e.From == t.Id || Top(e.From) == t.Id) && nodes.ContainsKey(e.To))
             .Select(e => nodes[e.To].Name).Distinct().Order(StringComparer.OrdinalIgnoreCase).ToList();
         if (keys.Count > 0) parts.Add("_Configuration:_ " + string.Join(", ", keys.Select(k => $"[`{k}`](../views/deployment.md#configuration)")));
