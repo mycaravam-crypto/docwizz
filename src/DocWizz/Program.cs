@@ -269,6 +269,7 @@ static int RequirementsImport(string root, string? history, string? workItems, C
         if (!File.Exists(historyFile)) throw new ArgumentException($"{history}: no such file");
         RequirementIndex.Index index;
         // Mapping scans the code as of every new commit, so it is nearly all of the time.
+        int initialReused = 0;
         using (var bar = CliProgress.ForConsole([new("read", 1, "Reading inputs"), new("map", 20, "Mapping commits"), new("write", 1, "Writing index")],
             opts.ContainsKey("progress")))
         {
@@ -327,14 +328,19 @@ static int RequirementsImport(string root, string? history, string? workItems, C
                 if (!progressStarted)
                 {
                     credited = done;
+                    var reusedMatch = System.Text.RegularExpressions.Regex.Match(detail ?? "", @"^(\d+) reused");
+                    if (reusedMatch.Success) initialReused = int.Parse(reusedMatch.Groups[1].Value);
                     scanClock.Restart();
                     progressStarted = true;
                 }
+                // Only newly attempted scans determine throughput. No-source and reused commits
+                // are credited immediately; they must not inflate or dilute the ETA.
                 var scannedNow = Math.Max(0, done - credited);
-                var remaining = Math.Max(0, total - done);
-                var eta = scannedNow > 0 && remaining > 0
-                    ? $" · ~{CliProgress.Duration(scanClock.Elapsed / scannedNow * remaining)} left"
-                    : "";
+                var remainingMatch = System.Text.RegularExpressions.Regex.Match(detail ?? "", @"(\d+) remaining");
+                var scansRemaining = remainingMatch.Success ? int.Parse(remainingMatch.Groups[1].Value) : 0;
+                var eta = scannedNow >= 5 && scansRemaining > 0
+                    ? $" · ~{CliProgress.Duration(scanClock.Elapsed / scannedNow * scansRemaining)} left"
+                    : scannedNow > 0 && scansRemaining > 0 ? " · estimating after 5 scans" : "";
                 bar.Report(done, total, $"{done:N0}/{total:N0} commits{eta}{(detail is null ? "" : $" · {detail}")}");
             };
             index = RequirementIndex.Build(bytes, items, scope, prefix, (sha, paths) => ModelAt(root, sha, config, historical: true, changedFiles: paths),
@@ -354,7 +360,7 @@ static int RequirementsImport(string root, string? history, string? workItems, C
             bar.Advance("write");
         }
         var touched = index.Commits.SelectMany(c => c.Touches).Select(t => t.Symbol).Distinct().Count();
-        Console.WriteLine($"→ {RequirementIndex.DefaultFile}: {index.Commits.Count} commits, {touched} symbols touched, {index.PullRequests.Count} PRs, {index.WorkItems.Count} work items");
+        Console.WriteLine($"→ {RequirementIndex.DefaultFile}: {index.Commits.Count} commits ({initialReused} reused, {index.Commits.Count(c => c.Mapping == "no-source")} no-source, {index.Commits.Count(c => c.Mapping == "mapped") - initialReused} newly mapped, {index.Commits.Count(c => c.Mapping == "missing")} missing), {touched} symbols touched, {index.PullRequests.Count} PRs, {index.WorkItems.Count} work items");
         foreach (var w in index.Warnings) Console.Error.WriteLine($"docwizz: ⚠ {w}");
         return 0;
     }

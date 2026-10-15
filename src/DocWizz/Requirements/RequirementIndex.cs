@@ -350,6 +350,7 @@ static partial class RequirementIndex
         var withoutSource = pending.Count - reused - toMap;
         var credited = reused + withoutSource;
         var mapped = 0;
+        var successful = 0;
         var inputs = new Inputs(HistorySchema, Digest(history), provider, repository, since, sinceSha, untilSha, truncated, shallow, scope,
             [.. items.Select(w => new WorkItemInput(w.Id, w.Revision, w.Digest))]);
         var fingerprint = Fingerprint(inputs);
@@ -368,19 +369,20 @@ static partial class RequirementIndex
                 commits.Add(known with { Linkage = c.Linkage, WorkItems = c.WorkItems, Mentions = c.Mentions, PullRequests = c.PullRequests });
                 continue;
             }
-            progress?.Invoke(credited + mapped, pending.Count, $"{reused} reused · {mapped} newly mapped · {toMap - mapped} remaining · {c.Sha[..7]} ({changes.Count} source file{(changes.Count == 1 ? "" : "s")})");
+            progress?.Invoke(credited + mapped, pending.Count, $"{reused} reused · {withoutSource} no-source · {successful} newly mapped · {toMap - mapped} remaining · {c.Sha[..7]} ({changes.Count} source file{(changes.Count == 1 ? "" : "s")})");
             mapped++;
             if (modelAt(c.Sha, [.. changes.Select(x => x.Path).Distinct(StringComparer.Ordinal)]) is not { } model)
             {
                 warnings.Add($"commit {c.Sha[..7]} is not in the local repository: what it changed is unknown");
                 commits.Add(new(c.Sha, c.Linkage, c.WorkItems, c.Mentions, c.PullRequests, "missing", [], []));
-                progress?.Invoke(credited + mapped, pending.Count, $"{reused} reused · {mapped} attempted · {toMap - mapped} remaining");
+                progress?.Invoke(credited + mapped, pending.Count, $"{reused} reused · {withoutSource} no-source · {successful} newly mapped · {mapped - successful} missing · {toMap - mapped} remaining");
                 continue;
             }
             var (touches, fileOnly) = Map(model, changes);
             commits.Add(new(c.Sha, c.Linkage, c.WorkItems, c.Mentions, c.PullRequests, "mapped", touches, fileOnly));
+            successful++;
             if (mapped % 5 == 0) SaveCheckpoint();
-            progress?.Invoke(credited + mapped, pending.Count, $"{reused} reused · {mapped} newly mapped · {toMap - mapped} remaining");
+            progress?.Invoke(credited + mapped, pending.Count, $"{reused} reused · {withoutSource} no-source · {successful} newly mapped · {mapped - successful} missing · {toMap - mapped} remaining");
         }
 
         // Nothing verified anywhere: an empty answer would read as "no requirements" when nobody could say.
