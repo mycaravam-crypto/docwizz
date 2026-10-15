@@ -588,7 +588,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         sb.AppendLine("\n## Most complex\n\n| Complexity | Item |\n|---|---|");
         foreach (var n in model.Nodes.Where(n => n.Complexity > 1 && n.Kind != "component").OrderByDescending(n => n.Complexity).Take(20))
             sb.AppendLine($"| {n.Complexity} | {SourceLink(n.File, n.Line, $"{Code(Naming.Display(n))}")} |");
-        return sb.ToString();
+        return sb.Append(TraceabilityGaps()).ToString();
     }
 
     IEnumerable<Edge> Dependencies() => model.Edges.Where(e => CodeModel.DependencyKinds.Contains(e.Kind))

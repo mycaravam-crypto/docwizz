@@ -9,6 +9,33 @@ partial class Generator
     // The page of a path; named like its screenshot, so /a-b and /a/b stay apart.
     internal static string RoutePage(string path) => $"routes/{Path.GetFileNameWithoutExtension(ScreenshotCapture.FileName(path))}.md";
 
+    // Each path's gaps, as its page lists them: for the quality page.
+    readonly Dictionary<string, List<string>> routeGaps = new(StringComparer.Ordinal);
+
+    // Where route, requirement and verification links are missing, each with its page: the quality page's last section.
+    string TraceabilityGaps()
+    {
+        if (routeGaps.Count == 0) foreach (var _ in RoutePages()) { }
+        var sb = new StringBuilder("\n## Traceability gaps\n\n");
+        var open = routeGaps.Where(g => g.Value.Count > 0).OrderBy(g => g.Key, StringComparer.Ordinal).ToList();
+        sb.AppendLine(routeGaps.Count == 0 ? "No frontend routes.\n" : open.Count == 0 ? "Every route resolves to code, endpoints and work items.\n"
+            : $"| Route | Gap |\n|---|---|\n" + string.Join("\n", open.SelectMany(g => g.Value.Select(x => $"| [`{g.Key}`]({RoutePage(g.Key)}) | {x} |"))) + "\n");
+        if (Requirements is not { } index)
+        {
+            sb.AppendLine("No requirement history imported (`docwizz requirements import`): work items and acceptance criteria are unknown.");
+            return sb.ToString();
+        }
+        foreach (var w in RequirementResolver.Coverage(index, Head)) sb.AppendLine($"⚠ {Esc(w)}\n");
+        var linked = RequirementLinks().Select(l => l.Requirement.Id).ToHashSet();
+        var unlinked = index.WorkItems.Where(w => !linked.Contains(w.Id)).OrderBy(w => w.Id).ToList();
+        if (unlinked.Count > 0)
+            sb.AppendLine($"Work items linked to no current code ({unlinked.Count}): " + string.Join(", ", unlinked.Select(w => WorkItemLink(w.Id, ""))) + "\n");
+        var criteria = index.WorkItems.Sum(w => w.Criteria.Count);
+        if (criteria > 0)
+            sb.AppendLine($"Acceptance criteria: {criteria} in {index.WorkItems.Count(w => w.Criteria.Count > 0)} work items, all **unverified**: no test results are imported for them.");
+        return sb.ToString();
+    }
+
     IEnumerable<(string Page, string Body)> RoutePages() =>
         model.Nodes.Where(n => n.Kind == "route").GroupBy(RoutePath).OrderBy(g => g.Key, StringComparer.Ordinal)
             .Select(g => (RoutePage(g.Key), RoutePageBody(g.Key, g.ToList())));
@@ -48,6 +75,7 @@ partial class Generator
             gaps.Add($"Calls `{Esc(u[5..])}`, but no backend endpoint matches it.");
 
         sb.AppendLine(RouteRequirements(path, gaps));
+        routeGaps[path] = gaps;
         sb.AppendLine("## Gaps\n");
         sb.AppendLine(gaps.Count == 0 ? "None found.\n" : string.Join("\n", gaps.Select(g => $"- {g}")) + "\n");
         return sb.ToString();

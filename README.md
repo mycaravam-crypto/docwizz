@@ -139,8 +139,9 @@ $ docwizz generate fixture docs --html
 
 The first line is the stable one-line result for scripts; the report below it says what was found and where to look.
 
-You get `index`, `architecture`, `api`, `frontend` and `quality` pages, one page per module, and `views/` for context,
-containers, components, data and deployment. `api.md` traces every endpoint to where it ends up:
+You get `index`, `architecture`, `api`, `frontend` and `quality` pages, one page per module, one page per frontend route
+(`routes/`), and `views/` for context, containers, components, data and deployment. With an imported requirement index,
+also one page per work item (`requirements/`), linked both ways with the routes and code. `api.md` traces every endpoint to where it ends up:
 
 ```markdown
 - `GET /api/stock/{sku}`: StockController → ErpClient → erp.example.com
@@ -335,6 +336,10 @@ For projects that keep requirements as YAML evidence:
   mention), with commit, file and lines. It reads `gitwizz history export` (`gitwizz.history/v2`) directly.
   `generate --ai --requirements` and `context --requirements` hand that bounded, cited context to a local model or
   agent. See [requirement context](docs/requirement-context.md).
+- Once that history is imported, a plain `generate` adds `requirements/` pages (criteria, linked routes and code, commits,
+  PRs), a Requirements section on each route page, work-item backlinks on module pages, and a "Traceability gaps"
+  section in `quality.md`: routes without work items or endpoints, work items without current code, and acceptance
+  criteria, which stay **unverified** because no test results are imported.
 - `docwizz product` drafts a work product from a template, code and evidence; `product check` verifies references and
   freshness. Illustrative V-Modell XT 2.4 templates are in [templates/vmodell-xt/](templates/vmodell-xt/) (not
   official templates or a conformity claim).

@@ -340,6 +340,7 @@ grep -qF 'Component: [MaterialTable](../modules/frontend-src-components.md#mater
 grep -qF '5. [GET /api/materials/{id}](../modules/backend-Api.md#materialcontroller), [POST /api/materials](../modules/backend-Api.md#materialcontroller)' "$R"
 grep -qF -- '- Calls `GET /api/materials`, but no backend endpoint matches it.' "$R"
 grep -qF -- '- Reaches no backend endpoint.' "$docs/routes/stock-63c12802c7.md"
+grep -qF '| [`/materials`](routes/materials-11379a77f4.md) | Calls `GET /api/materials`, but no backend endpoint matches it. |' "$docs/quality.md"
 grep -qF '_Reached from:_ [`/materials`](../routes/materials-11379a77f4.md)' "$docs/modules/frontend-src-components.md"
 grep "\[MaterialTable\]" "$docs/frontend.md" | grep -q "| MaterialForm @created |"
 grep "\[MaterialTable\]" "$docs/frontend.md" | grep -q "| onMounted | MaterialForm |"

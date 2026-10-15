@@ -177,7 +177,10 @@ Whenever the index exists, `docwizz generate` also writes `requirements/index.md
 type, state, revision, description and acceptance criteria (numbered AC1… in export order), the routes and current
 symbols it is linked to, with confirmed/candidate, "code changed since", commits and PRs. Route pages get a
 Requirements section, and module pages a `_Work items:_` backlink. A route with no linked work item is listed as a gap.
-Exported text is rendered as plain text: no HTML, links or images. No index: the route pages say none was imported.
+`quality.md` ends with "Traceability gaps": every route gap with its page, work items linked to no current code, the
+history-coverage warnings, and the number of acceptance criteria, all unverified because no test results are imported.
+Exported text is rendered as plain text: no HTML, links or images. No index: the route pages and `quality.md` say none
+was imported. The work-item text lands in the static docs, so treat them as being as confidential as the work items.
 
 ## Answering gitwizz
 

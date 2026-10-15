@@ -759,11 +759,11 @@ change the limit. A scanner that fails shows the last lines it wrote to stderr i
 | Path | Who owns it |
 |---|---|
 | `docwizz.yaml` | **you**. `setup`/`init` create it once and then leave it alone (`setup --force` replaces it). |
-| `docs/*.md`, `docs/solutions/`, `docs/projects/`, `docs/modules/`, `docs/views/`, `*.html` | docwizz. Regenerated, so don't edit them. |
+| `docs/*.md`, `docs/solutions/`, `docs/projects/`, `docs/modules/`, `docs/views/`, `docs/routes/`, `docs/requirements/`, `*.html` | docwizz. Regenerated, so don't edit them. `requirements/` exists only with an imported requirement index. |
 | `docs/products/*.md`, `*.evidence.json` | docwizz `product`: the draft and its evidence report; untouched by `generate`. |
 | `docs/architecture/*.md` | **you**. Linked from the generated pages and never overwritten. |
 | `docs/.docwizz/model.json`, `documentation.json` | docwizz: the baseline `diff` compares against, and the documentation model as data. |
-| `docs/.docwizz/requirements.json` | docwizz `requirements import`: the requirement index. Contains work-item titles and criteria. |
+| `docs/.docwizz/requirements.json` | docwizz `requirements import`: the requirement index. Contains work-item titles and criteria, which `generate` publishes in `docs/requirements/`: don't host the docs where those texts must not be seen. |
 | `docs/.docwizz/ai-cache.json`, `ai-assessments.json` | docwizz: AI drafts and ratings, cached by code hash. Commit them to avoid re-sending code. |
 
 ## Versioning
