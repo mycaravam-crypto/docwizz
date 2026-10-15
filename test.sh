@@ -333,7 +333,14 @@ grep -q "^- Vue (^3.5.0)" "$docs/index.md"
 grep -q "| Repositories | 1 |" "$docs/index.md" && grep -q "| Background services | 1 |" "$docs/index.md"
 grep "MaterialService.CreateAsync" "$docs/quality.md" | grep -q "| ✓ |"  # tested
 grep "MaterialController.Create(" "$docs/quality.md" | grep -q "| — |"  # untested
-grep -q "/materials\` | \[MaterialTable\]" "$docs/frontend.md"
+# route pages: component, flow down to the endpoints, unresolved calls as gaps; linked from frontend.md and module backlinks
+R="$docs/routes/materials-11379a77f4.md"
+grep -qF '| [`/materials`](routes/materials-11379a77f4.md) | [MaterialTable]' "$docs/frontend.md"
+grep -qF 'Component: [MaterialTable](../modules/frontend-src-components.md#materialtable)' "$R"
+grep -qF '5. [GET /api/materials/{id}](../modules/backend-Api.md#materialcontroller), [POST /api/materials](../modules/backend-Api.md#materialcontroller)' "$R"
+grep -qF -- '- Calls `GET /api/materials`, but no backend endpoint matches it.' "$R"
+grep -qF -- '- Reaches no backend endpoint.' "$docs/routes/stock-63c12802c7.md"
+grep -qF '_Reached from:_ [`/materials`](../routes/materials-11379a77f4.md)' "$docs/modules/frontend-src-components.md"
 grep "\[MaterialTable\]" "$docs/frontend.md" | grep -q "| MaterialForm @created |"
 grep "\[MaterialTable\]" "$docs/frontend.md" | grep -q "| onMounted | MaterialForm |"
 grep -q "n0 --> n1" "$docs/modules/backend-Application.md"
@@ -351,7 +358,7 @@ import json, sys
 idx = {(e["name"], e["kind"]): e for e in json.load(open(sys.argv[1]))}
 assert idx[("MaterialService", "class")]["page"] == "modules/backend-Application.md#materialservice", idx[("MaterialService", "class")]
 assert idx[("GET /api/materials/{id}", "endpoint")]["page"] == "api.md"
-assert idx[("/materials", "route")]["page"] == "frontend.md"
+assert idx[("/materials", "route")]["page"] == "routes/materials-11379a77f4.md"
 assert idx[("Warehouse:BaseUrl", "config")]["page"] == "views/deployment.md#configuration"
 assert idx[("backend/Application", "module")]["page"] == "modules/backend-Application.md"
 assert idx[("StockLevel", "interface")]["summary"] == "Stock of one article, as the ERP reports it."
@@ -366,7 +373,7 @@ grep -qF '_Linked tests:_ `MaterialServiceTests.CreateAsync_Creates` (via `Mater
 grep -qF '_Linked tests:_ `MaterialTable.test.ts` — test code that uses it, not coverage' "$M/frontend-src-components.md"
 grep -qF '| `PUT /api/materials/{id}` | Renames a material. | required |' "$M/backend-Api.md"
 grep -q '^4 items need documentation (4 critical)' "$M/backend-Api.md"
-grep -qF -- '- `/materials` → MaterialTable →' "$M/frontend-src-components.md"
+grep -qF -- '- [`/materials`](../routes/materials-11379a77f4.md) → MaterialTable →' "$M/frontend-src-components.md"
 grep -q '^- ARCH-002 (medium): ui → http' "$M/frontend-src-components.md"
 if grep -q '^## API' "$M/backend-Domain.md"; then echo "empty section rendered"; exit 1; fi
 if grep -q '`GET /health`:$' "$M/backend.md"; then echo "empty flow listed"; exit 1; fi
@@ -413,7 +420,7 @@ grep -q '\["createMaterial"\]' "$docs/api.md"                                  #
 grep -qF -- '- `POST /api/materials`: MaterialController → MaterialService → IEventPublisher, SqlMaterialRepository → AppDbContext → SQL Server (inferred)' "$docs/api.md"
 grep -qF -- '- `GET /api/stock/{sku}`: StockController → ErpClient → erp.example.com' "$docs/api.md"
 grep -qF -- '- `POST /orders`: AppDbContext → SQL Server (inferred)' "$docs/api.md"
-grep -qF -- '- `/materials` → MaterialTable → GET /api/materials (no endpoint found), MaterialForm → useMaterialStore → createMaterial, getMaterial → GET /api/materials/{id}, POST /api/materials' "$docs/frontend.md"
+grep -qF -- '- [`/materials`](routes/materials-11379a77f4.md) → MaterialTable → GET /api/materials (no endpoint found), MaterialForm → useMaterialStore → createMaterial, getMaterial → GET /api/materials/{id}, POST /api/materials' "$docs/frontend.md"
 if grep -q "rates.example.org" "$docs/api.md"; then echo "external URL listed as missing endpoint"; exit 1; fi
 grep -q '| stakeholders | missing |' "$docs/architecture-description.md"
 grep -q 'Endpoints without declared authorization: .*`GET /health`' "$docs/architecture-description.md"

@@ -47,7 +47,7 @@ static class Html
         var side = Sidebar(pages, Link, hierarchy);
         var toc = TableOfContents(body);
         var category = rel.StartsWith("modules/") ? "Module" : rel.StartsWith("views/") ? "Architecture view"
-            : rel.StartsWith("projects/") ? "Project" : rel.StartsWith("solutions/") ? "Solution" : "Documentation";
+            : rel.StartsWith("routes/") ? "Route" : rel.StartsWith("projects/") ? "Project" : rel.StartsWith("solutions/") ? "Solution" : "Documentation";
         // Docs / the solution and project (or Architecture) above this page / this page.
         List<string> trail = rel.StartsWith("views/") ? [Link("architecture.md", "Architecture")] : hierarchy?.Breadcrumbs(rel, Link) ?? [];
         var breadcrumbs = string.Join("<span aria-hidden=\"true\">/</span>", [$"<a href=\"{up}index.html\">Docs</a>", .. trail, $"<span aria-current=\"page\">{Enc(title)}</span>"]);
