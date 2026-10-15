@@ -303,7 +303,7 @@ static partial class RequirementIndex
     // `previous` lends the touches of commits it already mapped under the same scope, so a refresh only scans new commits;
     // `progress` hears (mapped, commits to map, the commit and its file count) before each commit is scanned.
     public static Index Build(byte[] history, List<(JsonElement Item, string Digest, string Name)> workItems, string? scope,
-        string prefix, Func<string, CodeModel?> modelAt, Func<string, bool> scanned, Index? previous = null,
+        string prefix, Func<string, List<string>, CodeModel?> modelAt, Func<string, bool> scanned, Index? previous = null,
         Action<int, int, string?>? progress = null, Action<Index>? checkpoint = null)
     {
         var raw = Parse(history);
@@ -358,7 +358,7 @@ static partial class RequirementIndex
                 continue;
             }
             progress?.Invoke(mapped++, toMap, $"{c.Sha[..7]} ({changes.Count} source file{(changes.Count == 1 ? "" : "s")})");
-            if (modelAt(c.Sha) is not { } model)
+            if (modelAt(c.Sha, [.. changes.Select(x => x.Path).Distinct(StringComparer.Ordinal)]) is not { } model)
             {
                 warnings.Add($"commit {c.Sha[..7]} is not in the local repository: what it changed is unknown");
                 commits.Add(new(c.Sha, c.Linkage, c.WorkItems, c.Mentions, c.PullRequests, "missing", [], []));
