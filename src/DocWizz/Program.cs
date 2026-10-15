@@ -1226,6 +1226,28 @@ static object DiffJson(DiffResult d, string baseline, object? check)
 // Scans the tree as it was at <ref>, extracted from git into a temp dir.
 // historical: a selected project that doesn't exist yet at gitRef is left out instead of failing (requirements import
 // maps every exported commit, most of them older than some of today's projects).
+// Cache raw immutable blobs only; symbol resolution still runs for the historical context.
+static readonly Dictionary<string, byte[]> HistoricalBlobCache = new(StringComparer.Ordinal);
+
+static byte[]? GitBlob(string top, string blobId)
+{
+    try
+    {
+        using var process = Process.Start(new ProcessStartInfo("git", ["cat-file", "blob", blobId])
+        {
+            WorkingDirectory = top, RedirectStandardOutput = true, RedirectStandardError = true
+        })!;
+        using var stream = new MemoryStream();
+        var errors = process.StandardError.ReadToEndAsync();
+        process.StandardOutput.BaseStream.CopyTo(stream);
+        process.WaitForExit();
+        _ = errors.Result;
+        return process.ExitCode == 0 ? stream.ToArray() : null;
+    }
+    catch (IOException) { return null; }
+    catch (System.ComponentModel.Win32Exception) { return null; }
+}
+
 static CodeModel? ModelAt(string root, string gitRef, Config config, bool historical = false, List<string>? changedFiles = null)
 {
     var prefixRun = GitRun(root, "rev-parse --show-prefix");
@@ -1242,20 +1264,51 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
     var tmp = Directory.CreateTempSubdirectory("docwizz-");
     try
     {
+        var top = Git(root, "rev-parse --show-toplevel")!.Trim();
+        var dir = Directory.CreateDirectory(Path.Combine(tmp.FullName, "tree")).FullName;
+        // Read only changed blobs from Git's object database. A blob is immutable and may be
+        // reused across commits; do not cache a whole semantic model by blob alone.
+        var selective = changedFiles is { Count: > 0 } && config.Scope is null;
+        if (selective)
+        {
+            var success = true;
+            foreach (var path in changedFiles!)
+            {
+                if (Path.IsPathRooted(path) || path.Split('/', '\\').Any(p => p is ".." or "." or ""))
+                {
+                    success = false;
+                    break;
+                }
+                var gitPath = prefix.Replace('\\', '/') + path.Replace('\\', '/');
+                var blobId = Git(top, $"rev-parse {gitRef}:{gitPath}")?.Trim();
+                if (blobId is null || !System.Text.RegularExpressions.Regex.IsMatch(blobId, "^[0-9a-f]{40,64}$"))
+                {
+                    success = false;
+                    break;
+                }
+                var targetFile = Path.Combine(dir, path);
+                Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
+                // A bounded in-process cache avoids redundant Git reads without persisting
+                // sensitive historical content or leaking scanner semantics across versions.
+                if (!HistoricalBlobCache.TryGetValue(blobId, out var bytes))
+                {
+                    var blob = GitBlob(top, blobId);
+                    if (blob is null) { success = false; break; }
+                    bytes = blob;
+                    if (HistoricalBlobCache.Count >= 256) HistoricalBlobCache.Clear();
+                    HistoricalBlobCache[blobId] = bytes;
+                }
+                File.WriteAllBytes(targetFile, bytes);
+            }
+            if (success)
+                return BuildModel(dir, config, historical: true).Model with { Commit = sha };
+            Directory.Delete(dir, recursive: true);
+            Directory.CreateDirectory(dir);
+        }
+        // Preserve the existing full-scan fallback for missing blobs or scoped projects.
         var tar = Path.Combine(tmp.FullName, "tree.tar");
         var tree = prefix.Length == 0 ? gitRef : $"{gitRef}:{prefix}";
-        // From a subdirectory git archive narrows to that subdirectory *within* <tree>; run it from the top.
-        var top = Git(root, "rev-parse --show-toplevel")!.Trim();
-        // Requirement history needs declarations from changed files, not an entire historical tree.
-        // The full archive remains the safe fallback for scoped projects or paths absent at this revision.
-        var selective = changedFiles is { Count: > 0 } && config.Scope is null;
-        var paths = selective ? " " + string.Join(" ", changedFiles!.Select(p =>
-            "\"" + p.Replace("\\", "/").Replace("\"", "\\\"") + "\"")) : "";
-        if (Git(top, $"archive --format=tar -o \"{tar}\" {tree}{paths}") is null)
-        {
-            if (!selective || Git(top, $"archive --format=tar -o \"{tar}\" {tree}") is null) return null;
-        }
-        var dir = Directory.CreateDirectory(Path.Combine(tmp.FullName, "tree")).FullName;
+        if (Git(top, $"archive --format=tar -o \"{tar}\" {tree}") is null) return null;
         TarFile.ExtractToDirectory(tar, dir, overwriteFiles: true);
         return BuildModel(dir, config, historical: historical).Model with { Commit = sha };
     }
