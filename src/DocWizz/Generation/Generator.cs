@@ -57,6 +57,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         Write("api.md", Api());
         Write("frontend.md", FrontendPage());
         foreach (var (page, body) in RoutePages()) Write(page, body);
+        if (Requirements is not null) Directory.CreateDirectory(Path.Combine(outDir, "requirements"));
+        foreach (var (page, body) in RequirementPages()) Write(page, body);
         Write("quality.md", Quality());
         foreach (var (page, _, body) in Views()) Write($"views/{page}.md", body());
         Write("architecture-description.md", DescriptionPage());
@@ -103,6 +105,9 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
                 Entry(project.Name + " (" + project.Path + ")", project.MetadataOnly ? "dependency-only project" : "project",
                     project.Page, project.MetadataOnly ? "Metadata-only dependency, not source-scanned" : "Project overview, modules and components");
         }
+        foreach (var (id, item) in RequirementLinks().Select(l => (l.Requirement.Id, l.Requirement.WorkItem))
+            .Concat((Requirements?.WorkItems ?? []).Select(w => (w.Id, (RequirementIndex.WorkItem?)w))).DistinctBy(x => x.Item1))
+            Entry(id.Display, "work item", RequirementPage(id), item?.Title);
         foreach (var n in model.Nodes.Where(n => n.Kind == "config")) Entry(n.Name, "config", "views/deployment.md#configuration", null);
         foreach (var f in model.Nodes.Where(n => n.Kind is not ("route" or "project" or "package" or "external" or "config")).Select(n => Naming.Folder(n.File)).Distinct())
             Entry(f, "module", $"modules/{Naming.Slug(f)}.md", null);
@@ -176,7 +181,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         if (drafts.Count > 0)
             sb.AppendLine($"🤖 marks {drafts.Count} AI-drafted summaries for code that has no docs yet — review them, then move them into the code.\n");
         sb.AppendLine("- [Architecture description](architecture-description.md)\n- [Architecture](architecture.md)\n- [API endpoints](api.md)\n" +
-            "- [Frontend](frontend.md)\n- [Quality](quality.md)\n");
+            "- [Frontend](frontend.md)\n" + (Requirements is null ? "" : "- [Requirements](requirements/index.md)\n") + "- [Quality](quality.md)\n");
         if (hierarchy is not null) sb.Append(hierarchy.Index());
         if (Technology().ToList() is { Count: > 0 } tech)
             sb.AppendLine("## Technology\n\n" + string.Join("\n", tech.Select(t => $"- {t}")) + "\n");
@@ -583,7 +588,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         sb.AppendLine("\n## Most complex\n\n| Complexity | Item |\n|---|---|");
         foreach (var n in model.Nodes.Where(n => n.Complexity > 1 && n.Kind != "component").OrderByDescending(n => n.Complexity).Take(20))
             sb.AppendLine($"| {n.Complexity} | {SourceLink(n.File, n.Line, $"{Code(Naming.Display(n))}")} |");
-        return sb.ToString();
+        return sb.Append(TraceabilityGaps()).ToString();
     }
 
     IEnumerable<Edge> Dependencies() => model.Edges.Where(e => CodeModel.DependencyKinds.Contains(e.Kind))

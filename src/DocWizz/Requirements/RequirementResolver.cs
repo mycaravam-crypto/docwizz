@@ -152,7 +152,7 @@ static class RequirementResolver
     static bool Covers(RequirementIndex.Index index, string? head) =>
         head is null || index.Inputs.HeadSha is not { } h || h.StartsWith(head, StringComparison.Ordinal) || head.StartsWith(h, StringComparison.Ordinal);
 
-    static IEnumerable<string> Coverage(RequirementIndex.Index index, string? head)
+    internal static IEnumerable<string> Coverage(RequirementIndex.Index index, string? head)
     {
         if (!Covers(index, head) && index.Inputs.HeadSha is { } end && head is not null)
             yield return $"the history ends at {end[..Math.Min(7, end.Length)]}, HEAD is {head[..Math.Min(7, head.Length)]}: later commits are not covered";

@@ -192,6 +192,7 @@ partial class Generator
         var keys = model.Edges.Where(e => e.Kind is "reads" or "binds" && (e.From == t.Id || Top(e.From) == t.Id) && nodes.ContainsKey(e.To))
             .Select(e => nodes[e.To].Name).Distinct().Order(StringComparer.OrdinalIgnoreCase).ToList();
         if (keys.Count > 0) parts.Add("_Configuration:_ " + string.Join(", ", keys.Select(k => $"[`{k}`](../views/deployment.md#configuration)")));
+        if (WorkItemBacklinks(t) is { } workItems) parts.Add(workItems);
         if (testLinks.Of(t.Id) is { Count: > 0 } tests)
             parts.Add("_Linked tests:_ " + string.Join(", ", tests.Take(MaxListed).Select(l => $"`{TestLinks.Short(l.Test)}`" +
                 (l.Via is { } via && nodes.TryGetValue(via, out var v) ? $" (via {Code(ShortName(v))})" : ""))) +
