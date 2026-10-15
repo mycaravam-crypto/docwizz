@@ -300,7 +300,8 @@ static partial class RequirementIndex
 
     // Builds the index. `modelAt` scans the code as of a commit (null when the commit isn't in the local repository);
     // `prefix` is the scanned directory's path inside the repository (history paths are repository-relative);
-    // `previous` lends the touches of commits it already mapped under the same scope, so a refresh only scans new commits.
+    // `previous` lends the touches of commits it already mapped under the same scope, so a refresh only scans new commits;
+    // `progress` hears (mapped, commits to map, the commit and its file count) before each commit is scanned.
     public static Index Build(byte[] history, List<(JsonElement Item, string Digest, string Name)> workItems, string? scope,
         string prefix, Func<string, CodeModel?> modelAt, Func<string, bool> scanned, Index? previous = null,
         Action<int, int, string?>? progress = null)
