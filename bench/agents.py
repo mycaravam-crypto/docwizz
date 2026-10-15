@@ -5,6 +5,7 @@
     python3 bench/agents.py --agent noop                         # self-test: no task passes when nothing is done
     python3 bench/agents.py --agent aider --model openai/qwen3-coder --endpoint http://127.0.0.1:8000/v1 --runs 3
     OLLAMA_API_BASE=http://127.0.0.1:11434 python3 bench/agents.py --agent aider --model ollama_chat/qwen2.5-coder:7b --runs 3
+                                                                 # Aider is one-shot: it measures single-reply edits only
     python3 bench/agents.py --agent command --cmd 'opencode run -m local/qwen3-coder "$(cat {prompt_file})"'
     python3 bench/run.py agents ...                              # the same, through the benchmark entry point
 
@@ -112,7 +113,10 @@ def agent_noop(task, repo, prompt, env, args):
 
 
 def agent_aider(task, repo, prompt, env, args):
-    """Aider, headless, against an OpenAI-compatible endpoint (--endpoint, key from OPENAI_API_KEY or 'local')."""
+    """Aider, headless, against an OpenAI-compatible endpoint (--endpoint, key from OPENAI_API_KEY or 'local').
+
+    One-shot, not an agent loop: --message-file sends the prompt once, applies the reply's edits and exits. Aider never
+    runs a command here (no `docwizz context`), so it can't answer the docs/context question; see bench/README.md."""
     prompt_file = os.path.join(repo, "..", "prompt.txt")
     open(prompt_file, "w").write(prompt)
     # Aider has no --temperature: it goes into a model settings file. `ollama_chat/<model>` talks to Ollama natively
