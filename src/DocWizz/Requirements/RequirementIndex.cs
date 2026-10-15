@@ -308,6 +308,7 @@ static partial class RequirementIndex
         Action<int, int, string?>? progress = null) =>
         Build(history, workItems, scope, prefix, (sha, _) => modelAt(sha), scanned, previous, progress);
 
+    /// <summary>Maps historical changed source files to their code symbols and requirement evidence; optionally checkpoints completed commits for restart.</summary>
     public static Index Build(byte[] history, List<(JsonElement Item, string Digest, string Name)> workItems, string? scope,
         string prefix, Func<string, List<string>, CodeModel?> modelAt, Func<string, bool> scanned, Index? previous = null,
         Action<int, int, string?>? progress = null, Action<Index>? checkpoint = null)
