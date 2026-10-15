@@ -317,7 +317,7 @@ static int RequirementsImport(string root, string? history, string? workItems, C
             bar.Begin("map");
             var prefix = Git(root, "rev-parse --show-prefix")?.Trim() ?? "";
             string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java", ".php"];
-            index = RequirementIndex.Build(bytes, items, scope, prefix, sha => ModelAt(root, sha, config, historical: true),
+            index = RequirementIndex.Build(bytes, items, scope, prefix, (sha, paths) => ModelAt(root, sha, config, historical: true, changedFiles: paths),
                 p => exts.Contains(Path.GetExtension(p)), previous, AiProgress(bar, "commits"), partial =>
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(checkpointFile)!);
@@ -1226,7 +1226,7 @@ static object DiffJson(DiffResult d, string baseline, object? check)
 // Scans the tree as it was at <ref>, extracted from git into a temp dir.
 // historical: a selected project that doesn't exist yet at gitRef is left out instead of failing (requirements import
 // maps every exported commit, most of them older than some of today's projects).
-static CodeModel? ModelAt(string root, string gitRef, Config config, bool historical = false)
+static CodeModel? ModelAt(string root, string gitRef, Config config, bool historical = false, List<string>? changedFiles = null)
 {
     var prefixRun = GitRun(root, "rev-parse --show-prefix");
     var shaRun = prefixRun.Exit == 0 ? GitRun(root, $"rev-parse --short {gitRef}") : prefixRun;
@@ -1246,7 +1246,15 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
         var tree = prefix.Length == 0 ? gitRef : $"{gitRef}:{prefix}";
         // From a subdirectory git archive narrows to that subdirectory *within* <tree>; run it from the top.
         var top = Git(root, "rev-parse --show-toplevel")!.Trim();
-        if (Git(top, $"archive --format=tar -o \"{tar}\" {tree}") is null) return null;
+        // Requirement history needs declarations from changed files, not an entire historical tree.
+        // The full archive remains the safe fallback for scoped projects or paths absent at this revision.
+        var selective = changedFiles is { Count: > 0 } && config.Scope is null;
+        var paths = selective ? " " + string.Join(" ", changedFiles!.Select(p =>
+            "\"" + p.Replace("\\", "/").Replace("\"", "\\\"") + "\"")) : "";
+        if (Git(top, $"archive --format=tar -o \"{tar}\" {tree}{paths}") is null)
+        {
+            if (!selective || Git(top, $"archive --format=tar -o \"{tar}\" {tree}") is null) return null;
+        }
         var dir = Directory.CreateDirectory(Path.Combine(tmp.FullName, "tree")).FullName;
         TarFile.ExtractToDirectory(tar, dir, overwriteFiles: true);
         return BuildModel(dir, config, historical: historical).Model with { Commit = sha };
