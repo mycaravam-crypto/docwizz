@@ -319,6 +319,11 @@ The second form requires `docwizz requirements import`. Without an index, the fi
 works with technical evidence only. Both are offline; no LLM and no repository changes.
 See [domain discovery](docs/domain-discovery.md) for the evidence contract and limitations.
 
+For GitHub issue context, import a GitWizz `--provider github` history plus issue JSON exported with
+`gh issue view --json number,url,title,body,labels,state,updatedAt`, then use `--work-item github#123`.
+Issue links remain historical candidates; the importer and queries make no network calls.
+See the [GitHub export/import workflow](docs/requirement-context.md#github-issue-exports).
+
 ### Requirements and traceability
 
 For projects that keep requirements as YAML evidence:

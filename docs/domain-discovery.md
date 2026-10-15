@@ -36,7 +36,12 @@ docwizz domain discover . --seed "Shop.OrderService.Place" --depth 3
 
 When no requirements index exists, **code-seeded discovery works** but returns
 `requirementsIndex.status = unavailable`; work-item seeding requires an imported index.
-All queries are offline; only the separate GitWizz/ADO export commands contact Azure DevOps.
+All queries are offline; only the separate GitWizz/ADO/`gh` export commands contact remote providers.
+For GitHub, import a `--provider github` history plus issue details exported with
+`gh issue view --json number,url,title,body,labels,state,updatedAt`. Use `--work-item github#123` to seed discovery.
+Issue identities include the repository; unrelated repositories cannot supply same-number issue details. GitHub PR
+links and message mentions remain candidates, shown under **Unclear** rather than promoted to **As-intended**.
+See [requirement context](requirement-context.md#github-issue-exports) for the complete export/import workflow.
 The crawler writes to stdout, or to the file named after `<dir>` (`domain discover . orders.md --format md`).
 In a file, the Markdown links every location relative to the file, with GitHub line anchors (`#L12-L20`).
 An existing file that is not a DocWizz domain report is never overwritten.
@@ -66,7 +71,7 @@ An existing file that is not a DocWizz domain report is never overwritten.
 - `candidateTerms[]` contains only **historical Work Item titles** and their associated
   current code symbols. The classification is explicitly `historical-requirement-title`:
   titles are *not* automatically validated capabilities or bounded contexts.
-- The output is stably ordered JSON (`docwizz.domain-discovery/v1`), Markdown (`--format md`), or a
+- The output is stably ordered JSON (`docwizz.domain-discovery/v1` for ADO/no index, `/v2` for GitHub indexes), Markdown (`--format md`), or a
   human-readable console summary. The Markdown has three parts:
   - **As-is**: the scanner's code facts, as a Mermaid graph (up to 80 symbols) and a symbol table.
   - **As-intended**: confirmed links (a commit that changed the symbol names the work item) whose code has not

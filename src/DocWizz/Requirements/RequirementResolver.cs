@@ -21,7 +21,7 @@ static class RequirementResolver
     public record Context(string Schema, Symbol Symbol, string Outcome, bool Complete, List<Requirement> Requirements,
         List<CommitTouch> Commits, List<string> FileLevel, IndexInfo Index, List<string> Warnings);
     public record Symbol(string Id, string? Location, string? Hash);
-    public record Requirement(int Id, string Status, bool ChangedSince, string Availability, RequirementIndex.WorkItem? WorkItem,
+    public record Requirement(RequirementId Id, string Status, bool ChangedSince, string Availability, RequirementIndex.WorkItem? WorkItem,
         List<Evidence> Evidence);
     // Symbol: for `renamed-from`, the old id whose evidence this is.
     public record Evidence(string Relation, string Commit, int? PullRequest, string? Confidence, string File, string Lines, string SymbolLines,
@@ -29,7 +29,7 @@ static class RequirementResolver
     public record CommitTouch(string Commit, string Linkage, string Lines, List<int> PullRequests);
     public record IndexInfo(string Fingerprint, string? HistoryHead, string? Head, bool CoversHead);
 
-    public record Reverse(string Schema, int WorkItem, string Availability, RequirementIndex.WorkItem? Item, List<ReverseSymbol> Symbols,
+    public record Reverse(string Schema, RequirementId WorkItem, string Availability, RequirementIndex.WorkItem? Item, List<ReverseSymbol> Symbols,
         IndexInfo Index, List<string> Warnings);
     public record ReverseSymbol(string Id, string Status, bool Current, string? Location, bool ChangedSince, List<Evidence> Evidence);
 
@@ -40,7 +40,7 @@ static class RequirementResolver
         var warnings = new List<string>(Coverage(index, head));
         var touched = index.Commits.Where(c => c.Touches.Any(t => t.Symbol == id)).ToList();
         var prs = index.PullRequests.ToDictionary(p => p.Id);
-        var evidence = new List<(int WorkItem, Evidence Evidence, RequirementIndex.Touch Touch, int Order)>();
+        var evidence = new List<(RequirementId WorkItem, Evidence Evidence, RequirementIndex.Touch Touch, int Order)>();
         var incomplete = false;
         foreach (var (c, order) in index.Commits.Select((c, i) => (c, i)).Where(x => touched.Contains(x.c)))
         {
@@ -88,7 +88,7 @@ static class RequirementResolver
                     .ThenBy(e => e.PullRequest).ThenBy(e => e.Lines, StringComparer.Ordinal)]);
         }).OrderBy(r => r.Status == "confirmed" ? 0 : 1).ThenBy(r => r.Id).ToList();
         foreach (var r in requirements.Where(r => r.Availability == "unavailable"))
-            warnings.Add($"WI-{r.Id} is linked but was not exported: its content is unavailable");
+            warnings.Add($"{r.Id.Display} is linked but was not exported: its content is unavailable");
 
         var outcome = node is null ? "not-current"
             : requirements.Count > 0 ? "linked"
@@ -97,7 +97,7 @@ static class RequirementResolver
         var file = node?.File ?? touched.SelectMany(c => c.Touches).FirstOrDefault(t => t.Symbol == id)?.File;
         var fileLevel = file is null ? [] : index.Commits.Where(c => c.FileOnly.Any(f => f.File == file) && !touched.Contains(c))
             .Select(c => c.Sha).ToList();
-        return new(Schema, new(id, node is null ? null : CodeModel.Location(node), node?.Hash), outcome, !incomplete, requirements,
+        return new(index.Schema == RequirementIndex.GithubSchema ? "docwizz.requirement-context/v2" : Schema, new(id, node is null ? null : CodeModel.Location(node), node?.Hash), outcome, !incomplete, requirements,
             [.. touched.SelectMany(c => c.Touches.Where(t => t.Symbol == id).Select(t => new CommitTouch(c.Sha, c.Linkage, t.Lines, [.. c.PullRequests.Select(p => p.Id)])))],
             fileLevel, Info(index, head), [.. warnings.Distinct()]);
     }
@@ -133,7 +133,7 @@ static class RequirementResolver
     }
 
     // The symbols one work item is linked to, current ones first.
-    public static Reverse Symbols(RequirementIndex.Index index, int workItem, CodeModel model, string? head)
+    public static Reverse Symbols(RequirementIndex.Index index, RequirementId workItem, CodeModel model, string? head)
     {
         var nodes = model.Nodes.GroupBy(n => n.Id).ToDictionary(g => g.Key, g => g.First());
         var ids = index.Commits.SelectMany(c => c.Touches).Select(t => t.Symbol).Distinct().Order(StringComparer.Ordinal);
@@ -143,7 +143,7 @@ static class RequirementResolver
             .Select(x => new ReverseSymbol(x.Id, x.Link!.Status, nodes.ContainsKey(x.Id), x.Context.Symbol.Location, x.Link.ChangedSince, x.Link.Evidence))
             .OrderBy(s => s.Current ? 0 : 1).ThenBy(s => s.Status == "confirmed" ? 0 : 1).ThenBy(s => s.Id, StringComparer.Ordinal).ToList();
         var item = index.WorkItems.FirstOrDefault(w => w.Id == workItem);
-        return new(Schema, workItem, item is null ? "unavailable" : "available", item, symbols, Info(index, head), [.. Coverage(index, head)]);
+        return new(index.Schema == RequirementIndex.GithubSchema ? "docwizz.requirement-context/v2" : Schema, workItem, item is null ? "unavailable" : "available", item, symbols, Info(index, head), [.. Coverage(index, head)]);
     }
 
     static IndexInfo Info(RequirementIndex.Index index, string? head) =>
@@ -170,8 +170,10 @@ static class RequirementResolver
         sb.Append($"outcome: {c.Outcome}{(c.Complete ? "" : " (linkage incomplete)")}\n");
         foreach (var r in c.Requirements)
         {
-            sb.Append($"\nWI-{r.Id} [{r.Status}{(r.ChangedSince ? ", code changed since" : "")}]");
-            sb.Append(r.WorkItem is { } w ? $" {w.Type} {w.State}: {w.Title} (revision {w.Revision}{(w.IsCurrent == false ? $", current {w.CurrentRevision}" : "")})\n" : " content unavailable\n");
+            sb.Append($"\n{r.Id.Display} [{r.Status}{(r.ChangedSince ? ", code changed since" : "")}]");
+            sb.Append(r.WorkItem is { } w ? w.Id.IsGithub ? $" {w.Type} {w.State}: {w.Title} (exported update {w.ChangedDate}; current freshness unknown)\n"
+                : $" {w.Type} {w.State}: {w.Title} (revision {w.Revision}{(w.IsCurrent == false ? $", current {w.CurrentRevision}" : "")})\n" : " content unavailable\n");
+            if (r.WorkItem is { Id.IsGithub: true, Description: { } body }) sb.Append($"  {body.Replace("\n", " ")}\n");
             foreach (var crit in r.WorkItem?.Criteria ?? []) sb.Append($"  - {crit.Replace("\n", " ")}\n");
             foreach (var e in r.Evidence)
                 sb.Append($"  {e.Relation}{(e.Symbol is { } old ? $" {old}" : "")} via {e.Commit[..7]}{(e.PullRequest is { } p ? $" (PR {p}{(e.Confidence is "ambiguous" or "inferred" ? $", {e.Confidence}" : "")})" : "")}: {e.File}:{e.Lines}\n");

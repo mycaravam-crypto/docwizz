@@ -206,19 +206,11 @@ static int DomainCommand(string root, Config config, Dictionary<string, string> 
     if (!int.TryParse(opts.GetValueOrDefault("limit") ?? $"{DomainCrawler.DefaultLimit}", out var limit)
         || limit is < 1 or > DomainCrawler.MaxLimit)
         return Usage($"--limit must be 1 to {DomainCrawler.MaxLimit}", "domain");
-    int? workItemId = null;
-    if (workItem is not null)
-    {
-        if (!int.TryParse(workItem.TrimStart('#').Replace("WI-", "", StringComparison.OrdinalIgnoreCase), out var id)
-            || id <= 0)
-            return Usage("--work-item must be a positive work item number", "domain");
-        workItemId = id;
-    }
-
     try
     {
         var file = Path.Combine(root, RequirementIndex.DefaultFile);
         var index = File.Exists(file) ? RequirementIndex.Load(file) : null;
+        RequirementId? workItemId = workItem is null ? null : RequirementId.Parse(workItem, index?.Inputs.Repository);
         var (model, _, _) = LoadModel(root, config);
         var report = DomainCrawler.Discover(model, seed, workItemId, depth, limit, index,
             Git(root, "rev-parse HEAD")?.Trim(), root);
@@ -349,13 +341,14 @@ static int RequirementsShow(string root, Config config, Dictionary<string, strin
     var head = Git(root, "rev-parse HEAD")?.Trim();
     if (workItem is not null)
     {
-        if (!int.TryParse(workItem.TrimStart('#').Replace("WI-", "", StringComparison.OrdinalIgnoreCase), out var id) || id <= 0)
-            return Usage("--work-item must be a work item id, e.g. 1234", "requirements");
+        RequirementId id;
+        try { id = RequirementId.Parse(workItem, index.Inputs.Repository); }
+        catch (ArgumentException e) { return Usage(e.Message, "requirements"); }
         var reverse = RequirementResolver.Symbols(index, id, model, head);
         if (json) Console.Write(RequirementResolver.Json(reverse));
         else
         {
-            Console.WriteLine($"WI-{id}{(reverse.Item is { } w ? $" {w.Type}: {w.Title}" : " (content unavailable)")}");
+            Console.WriteLine($"{id.Display}{(reverse.Item is { } w ? $" {w.Type}: {w.Title}" : " (content unavailable)")}");
             foreach (var s in reverse.Symbols)
                 Console.WriteLine($"  {s.Id} [{s.Status}{(s.Current ? "" : ", not in the current code")}{(s.ChangedSince ? ", code changed since" : "")}]{(s.Location is { } l ? $" — {l}" : "")}");
             if (reverse.Symbols.Count == 0) Console.WriteLine("  no symbol in the index is linked to it");
@@ -729,7 +722,7 @@ static string Reference() => $"""
       docwizz requirements import <dir> <history.json> [<work-items>]  index exported commit/PR/work-item history
       docwizz requirements show <dir> --for <symbol>  work items a symbol was changed for (confirmed/candidate)
       docwizz requirements query <dir> <query.json>   answer gitwizz's requirement query (gitwizz.requirement-input/v1)
-        [--work-item <id>] [--format json]  the symbols of one work item instead; machine-readable
+        [--work-item <id>] [--format json]  one work item's symbols (123 or github#123); machine-readable
       docwizz product <dir> <template.yaml> [out.md]  product draft from code and project evidence
         [--context <file.yaml>]         load sourced project facts
         [--ai]                          a self-hosted model words sections, citing evidence ids

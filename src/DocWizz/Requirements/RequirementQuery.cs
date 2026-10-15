@@ -62,7 +62,7 @@ static class RequirementQuery
                 if (context.Requirements.Count == 0 && !context.Complete)
                     unavailable.Add(("history", $"{s.Id}: the work-item links of some commits that changed it are unknown"));
                 foreach (var r in context.Requirements.Where(r => r.Availability == "unavailable"))
-                    unavailable.Add(("work-items", $"AB#{r.Id} is linked to {s.Id} but was not exported"));
+                    unavailable.Add(("work-items", $"{r.Id.Reference} is linked to {s.Id} but was not exported"));
                 foreach (var r in context.Requirements.Take(MaxLinks))
                     links.Add(Link(s.Id, id, r, current is null));
                 if (context.Requirements.Count > MaxLinks)
@@ -98,10 +98,15 @@ static class RequirementQuery
             "commit-message" => "commit message names it",
             _ => $"commit of linked PR {e.PullRequest}{(e.Confidence is "exact" or null ? "" : $" ({e.Confidence})")}",
         } + $" {e.Commit[..7]} changed {e.File}:{e.Lines}" + (historyId != symbol ? $" (as {historyId})" : ""))).ToList();
+        if (r.Id.IsGithub)
+        {
+            evidence.Insert(0, JsonValue.Create($"GitHub issue {r.Id}" + (r.WorkItem?.Url is { } url ? $" ({url})" : ""))!);
+            evidence = [.. evidence.Take(MaxEvidence)];
+        }
         var link = new JsonObject
         {
             ["symbol"] = symbol,
-            ["requirement"] = $"AB#{r.Id}",
+            ["requirement"] = $"{r.Id.Reference}",
             ["type"] = r.Status == "confirmed" ? "verified" : "candidate",
             ["source"] = r.Evidence.Any(e => e.Relation == "commit-workitem") ? "commit-link"
                 : r.Evidence.Any(e => e.Relation == "pr-workitem") ? "pr-link" : "commit-message",
@@ -109,6 +114,7 @@ static class RequirementQuery
             ["freshness"] = notCurrent ? "unknown" : r.ChangedSince ? "stale" : "current",
             ["evidence"] = new JsonArray([.. evidence]),
         };
+        if (r.Id.IsGithub) link["repository"] = r.Id.Repository;
         if (r.WorkItem?.Title is { } title) link["title"] = OneLine(title, MaxTitle);
         if (r.WorkItem?.Revision is { } revision) link["revision"] = revision;
         return link;
