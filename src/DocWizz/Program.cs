@@ -317,14 +317,34 @@ static int RequirementsImport(string root, string? history, string? workItems, C
             bar.Begin("map");
             var prefix = Git(root, "rev-parse --show-prefix")?.Trim() ?? "";
             string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java", ".php"];
+            // The bar includes reused commits and no-source commits from the outset, while
+            // ETA uses only newly scanned commits (a resumed import must not skew the rate).
+            var scanClock = Stopwatch.StartNew();
+            int credited = 0;
+            bool progressStarted = false;
+            Action<int, int, string?> importProgress = (done, total, detail) =>
+            {
+                if (!progressStarted)
+                {
+                    credited = done;
+                    scanClock.Restart();
+                    progressStarted = true;
+                }
+                var scannedNow = Math.Max(0, done - credited);
+                var remaining = Math.Max(0, total - done);
+                var eta = scannedNow > 0 && remaining > 0
+                    ? $" · ~{CliProgress.Duration(scanClock.Elapsed / scannedNow * remaining)} left"
+                    : "";
+                bar.Report(done, total, $"{done:N0}/{total:N0} commits{eta}{(detail is null ? "" : $" · {detail}")}");
+            };
             index = RequirementIndex.Build(bytes, items, scope, prefix, (sha, paths) => ModelAt(root, sha, config, historical: true, changedFiles: paths),
-                p => exts.Contains(Path.GetExtension(p)), previous, AiProgress(bar, "commits"), partial =>
+                p => exts.Contains(Path.GetExtension(p)), previous, importProgress, partial =>
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(checkpointFile)!);
                     var tmp = checkpointFile + ".tmp";
                     File.WriteAllText(tmp, RequirementIndex.Serialize(partial));
                     File.Move(tmp, checkpointFile, overwrite: true);
-                });
+                }, (_, changedPath) => ProjectScope.MightBelongToScope(config.Scope, changedPath));
             bar.Advance("map", Plural(index.Commits.Count(c => c.Mapping == "mapped"), "commit") + " mapped");
             bar.Begin("write");
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);

@@ -41,7 +41,13 @@ public class RequirementCheckpointTests
         var file = Path.Combine(repo.Root, "checkpoint.json");
         File.WriteAllText(file, RequirementIndex.Serialize(saved));
         var loaded = RequirementIndex.Load(file);
-        var final = RequirementIndex.Build(history, items, null, "", Model, _ => true, loaded);
+        var updates = new List<(int Done, int Total, string? Detail)>();
+        var final = RequirementIndex.Build(history, items, null, "", Model, _ => true, loaded,
+            (done, total, detail) => updates.Add((done, total, detail)));
+        Assert.Equal((5, 7), (updates[0].Done, updates[0].Total));
+        Assert.Contains("5 reused", updates[0].Detail);
+        Assert.Equal((7, 7), (updates[^1].Done, updates[^1].Total));
+        Assert.Contains("2 newly mapped", updates[^1].Detail);
 
         Assert.Equal(7, scanned);
         Assert.Equal(7, final.Commits.Count);

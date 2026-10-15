@@ -311,7 +311,8 @@ static partial class RequirementIndex
     /// <summary>Maps historical changed source files to their code symbols and requirement evidence; optionally checkpoints completed commits for restart.</summary>
     public static Index Build(byte[] history, List<(JsonElement Item, string Digest, string Name)> workItems, string? scope,
         string prefix, Func<string, List<string>, CodeModel?> modelAt, Func<string, bool> scanned, Index? previous = null,
-        Action<int, int, string?>? progress = null, Action<Index>? checkpoint = null)
+        Action<int, int, string?>? progress = null, Action<Index>? checkpoint = null,
+        Func<string, string, bool>? inScope = null)
     {
         var raw = Parse(history);
         var provider = OneOf(Text(raw, "provider", "history"), Providers, "history.provider");
@@ -343,15 +344,18 @@ static partial class RequirementIndex
         var reuse = previous is not null && previous.Inputs.Scope == scope
             ? previous.Commits.Where(c => c.Mapping != "missing").ToDictionary(c => c.Sha) : [];
         var commits = new List<Commit>();
-        var pending = exported.Select(c => (Commit: c, Changes: Changes(c, prefix).Where(x => scanned(x.Path)).ToList())).ToList();
+        var pending = exported.Select(c => (Commit: c, Changes: Changes(c, prefix).Where(x => scanned(x.Path) && (inScope?.Invoke(c.Sha, x.Path) ?? true)).ToList())).ToList();
         var toMap = pending.Count(p => p.Commit.Kind != "merge" && p.Changes.Count > 0 && !reuse.ContainsKey(p.Commit.Sha));
+        var reused = pending.Count(p => p.Commit.Kind != "merge" && p.Changes.Count > 0 && reuse.ContainsKey(p.Commit.Sha));
+        var withoutSource = pending.Count - reused - toMap;
+        var credited = reused + withoutSource;
         var mapped = 0;
         var inputs = new Inputs(HistorySchema, Digest(history), provider, repository, since, sinceSha, untilSha, truncated, shallow, scope,
             [.. items.Select(w => new WorkItemInput(w.Id, w.Revision, w.Digest))]);
         var fingerprint = Fingerprint(inputs);
         void SaveCheckpoint() => checkpoint?.Invoke(new(IndexSchema(inputs), fingerprint, inputs,
             [.. commits], pullRequests, items, [.. warnings.Distinct()]));
-        progress?.Invoke(0, toMap, null);
+        progress?.Invoke(credited, pending.Count, $"{reused} reused · {withoutSource} no-source · {toMap} remaining");
         foreach (var (c, changes) in pending)
         {
             if (c.Kind == "merge" || changes.Count == 0)
@@ -364,17 +368,19 @@ static partial class RequirementIndex
                 commits.Add(known with { Linkage = c.Linkage, WorkItems = c.WorkItems, Mentions = c.Mentions, PullRequests = c.PullRequests });
                 continue;
             }
-            progress?.Invoke(mapped, toMap, $"{c.Sha[..7]} ({changes.Count} source file{(changes.Count == 1 ? "" : "s")})");
+            progress?.Invoke(credited + mapped, pending.Count, $"{reused} reused · {mapped} newly mapped · {toMap - mapped} remaining · {c.Sha[..7]} ({changes.Count} source file{(changes.Count == 1 ? "" : "s")})");
             mapped++;
             if (modelAt(c.Sha, [.. changes.Select(x => x.Path).Distinct(StringComparer.Ordinal)]) is not { } model)
             {
                 warnings.Add($"commit {c.Sha[..7]} is not in the local repository: what it changed is unknown");
                 commits.Add(new(c.Sha, c.Linkage, c.WorkItems, c.Mentions, c.PullRequests, "missing", [], []));
+                progress?.Invoke(credited + mapped, pending.Count, $"{reused} reused · {mapped} attempted · {toMap - mapped} remaining");
                 continue;
             }
             var (touches, fileOnly) = Map(model, changes);
             commits.Add(new(c.Sha, c.Linkage, c.WorkItems, c.Mentions, c.PullRequests, "mapped", touches, fileOnly));
             if (mapped % 5 == 0) SaveCheckpoint();
+            progress?.Invoke(credited + mapped, pending.Count, $"{reused} reused · {mapped} newly mapped · {toMap - mapped} remaining");
         }
 
         // Nothing verified anywhere: an empty answer would read as "no requirements" when nobody could say.
