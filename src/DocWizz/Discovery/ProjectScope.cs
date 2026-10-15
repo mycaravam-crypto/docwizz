@@ -39,7 +39,8 @@ static class ProjectScope
     /// selected project directories. Potential test sources are retained when test links are enabled.</summary>
     public static bool MightBelongToScope(ScopeConfig? scope, string path)
     {
-        if (scope is null || scope.UnassignedSources == "include") return true;
+        // Included referenced projects can live anywhere; a path-only filter cannot safely exclude them.
+        if (scope is null || scope.UnassignedSources == "include" || scope.Projects?.References == "include") return true;
         var relative = path.Replace('\\', '/').TrimStart('/');
         foreach (var manifest in scope.Projects!.Include)
         {
