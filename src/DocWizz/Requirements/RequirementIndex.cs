@@ -311,7 +311,8 @@ static partial class RequirementIndex
     /// <summary>Maps historical changed source files to their code symbols and requirement evidence; optionally checkpoints completed commits for restart.</summary>
     public static Index Build(byte[] history, List<(JsonElement Item, string Digest, string Name)> workItems, string? scope,
         string prefix, Func<string, List<string>, CodeModel?> modelAt, Func<string, bool> scanned, Index? previous = null,
-        Action<int, int, string?>? progress = null, Action<Index>? checkpoint = null)
+        Action<int, int, string?>? progress = null, Action<Index>? checkpoint = null,
+        Func<string, string, bool>? inScope = null)
     {
         var raw = Parse(history);
         var provider = OneOf(Text(raw, "provider", "history"), Providers, "history.provider");
@@ -343,7 +344,7 @@ static partial class RequirementIndex
         var reuse = previous is not null && previous.Inputs.Scope == scope
             ? previous.Commits.Where(c => c.Mapping != "missing").ToDictionary(c => c.Sha) : [];
         var commits = new List<Commit>();
-        var pending = exported.Select(c => (Commit: c, Changes: Changes(c, prefix).Where(x => scanned(x.Path)).ToList())).ToList();
+        var pending = exported.Select(c => (Commit: c, Changes: Changes(c, prefix).Where(x => scanned(x.Path) && (inScope?.Invoke(c.Sha, x.Path) ?? true)).ToList())).ToList();
         var toMap = pending.Count(p => p.Commit.Kind != "merge" && p.Changes.Count > 0 && !reuse.ContainsKey(p.Commit.Sha));
         var reused = pending.Count(p => p.Commit.Kind != "merge" && p.Changes.Count > 0 && reuse.ContainsKey(p.Commit.Sha));
         var withoutSource = pending.Count - reused - toMap;
