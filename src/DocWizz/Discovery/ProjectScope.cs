@@ -34,6 +34,29 @@ static class ProjectScope
             throw new ScopeException("scope.projects.include: duplicate project manifest path");
     }
 
+    /// <summary>Conservative early filter for historical source files. The historical symbol scan
+    /// still resolves the exact project graph; this filter only rejects files clearly outside
+    /// selected project directories. Potential test sources are retained when test links are enabled.</summary>
+    public static bool MightBelongToScope(ScopeConfig? scope, string path)
+    {
+        if (scope is null || scope.UnassignedSources == "include") return true;
+        var relative = path.Replace('\\', '/').TrimStart('/');
+        foreach (var manifest in scope.Projects!.Include)
+        {
+            var dir = manifest.Contains('/') ? manifest[..manifest.LastIndexOf('/')] : "";
+            if (dir.Length == 0 || relative.StartsWith(dir + "/", StringComparison.Ordinal)) return true;
+        }
+        if (scope.Projects.TestLinks)
+        {
+            // Test projects can be located outside selected project directories. A path-only
+            // filter cannot resolve arbitrary ProjectReferences at an old commit.
+            var segments = relative.Split('/');
+            if (segments.Any(part => part.Contains("test", StringComparison.OrdinalIgnoreCase)
+                || part.Contains("spec", StringComparison.OrdinalIgnoreCase))) return true;
+        }
+        return false;
+    }
+
     /// <summary>Stable identifier for the scope configuration, used to invalidate a model generated under a different selection.</summary>
     public static string? Fingerprint(ScopeConfig? scope)
     {
