@@ -290,17 +290,47 @@ static int RequirementsImport(string root, string? history, string? workItems, C
                 Console.WriteLine($"unchanged: {RequirementIndex.DefaultFile} ({previous.Commits.Count} commits, {previous.WorkItems.Count} work items)");
                 return 0;
             }
+            // Resume only checkpoints produced from exactly the same history, work items and scan scope.
+            var checkpointFile = target + ".checkpoint";
+            if (File.Exists(checkpointFile))
+            {
+                try
+                {
+                    var saved = RequirementIndex.Load(checkpointFile);
+                    if (saved.Fingerprint == RequirementIndex.Fingerprint(bytes, items, scope))
+                    {
+                        if (previous is not null && previous.Inputs.Scope == scope)
+                        {
+                            var seen = saved.Commits.Select(c => c.Sha).ToHashSet();
+                            saved = saved with { Commits = [.. previous.Commits.Where(c => seen.Add(c.Sha)), .. saved.Commits] };
+                        }
+                        previous = saved;
+                        Console.Error.WriteLine($"docwizz: resuming from {saved.Commits.Count} checkpointed/previous commits");
+                    }
+                }
+                catch (Exception e) when (e is ArgumentException or IOException or System.Text.Json.JsonException)
+                {
+                    Console.Error.WriteLine($"docwizz: ignoring invalid requirements checkpoint: {e.Message}");
+                }
+            }
             bar.Advance("read", Plural(items.Count, "work item"));
             bar.Begin("map");
             var prefix = Git(root, "rev-parse --show-prefix")?.Trim() ?? "";
             string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java", ".php"];
-            index = RequirementIndex.Build(bytes, items, scope, prefix, sha => ModelAt(root, sha, config, historical: true),
-                p => exts.Contains(Path.GetExtension(p)), previous, AiProgress(bar, "commits"));
+            index = RequirementIndex.Build(bytes, items, scope, prefix, (sha, paths) => ModelAt(root, sha, config, historical: true, changedFiles: paths),
+                p => exts.Contains(Path.GetExtension(p)), previous, AiProgress(bar, "commits"), partial =>
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(checkpointFile)!);
+                    var tmp = checkpointFile + ".tmp";
+                    File.WriteAllText(tmp, RequirementIndex.Serialize(partial));
+                    File.Move(tmp, checkpointFile, overwrite: true);
+                });
             bar.Advance("map", Plural(index.Commits.Count(c => c.Mapping == "mapped"), "commit") + " mapped");
             bar.Begin("write");
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.WriteAllText(target + ".tmp", RequirementIndex.Serialize(index));
             File.Move(target + ".tmp", target, overwrite: true);
+            if (File.Exists(checkpointFile)) File.Delete(checkpointFile);
             bar.Advance("write");
         }
         var touched = index.Commits.SelectMany(c => c.Touches).Select(t => t.Symbol).Distinct().Count();
@@ -1196,7 +1226,27 @@ static object DiffJson(DiffResult d, string baseline, object? check)
 // Scans the tree as it was at <ref>, extracted from git into a temp dir.
 // historical: a selected project that doesn't exist yet at gitRef is left out instead of failing (requirements import
 // maps every exported commit, most of them older than some of today's projects).
-static CodeModel? ModelAt(string root, string gitRef, Config config, bool historical = false)
+// Cache raw immutable blobs only; symbol resolution still runs for the historical context.
+static byte[]? GitBlob(string top, string blobId)
+{
+    try
+    {
+        using var process = Process.Start(new ProcessStartInfo("git", ["cat-file", "blob", blobId])
+        {
+            WorkingDirectory = top, RedirectStandardOutput = true, RedirectStandardError = true
+        })!;
+        using var stream = new MemoryStream();
+        var errors = process.StandardError.ReadToEndAsync();
+        process.StandardOutput.BaseStream.CopyTo(stream);
+        process.WaitForExit();
+        _ = errors.Result;
+        return process.ExitCode == 0 ? stream.ToArray() : null;
+    }
+    catch (IOException) { return null; }
+    catch (System.ComponentModel.Win32Exception) { return null; }
+}
+
+static CodeModel? ModelAt(string root, string gitRef, Config config, bool historical = false, List<string>? changedFiles = null)
 {
     var prefixRun = GitRun(root, "rev-parse --show-prefix");
     var shaRun = prefixRun.Exit == 0 ? GitRun(root, $"rev-parse --short {gitRef}") : prefixRun;
@@ -1212,12 +1262,51 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
     var tmp = Directory.CreateTempSubdirectory("docwizz-");
     try
     {
+        var top = Git(root, "rev-parse --show-toplevel")!.Trim();
+        var dir = Directory.CreateDirectory(Path.Combine(tmp.FullName, "tree")).FullName;
+        // Read only changed blobs from Git's object database. A blob is immutable and may be
+        // reused across commits; do not cache a whole semantic model by blob alone.
+        var selective = changedFiles is { Count: > 0 } && config.Scope is null;
+        if (selective)
+        {
+            var success = true;
+            foreach (var path in changedFiles!)
+            {
+                if (Path.IsPathRooted(path) || path.Split('/', '\\').Any(p => p is ".." or "." or ""))
+                {
+                    success = false;
+                    break;
+                }
+                var gitPath = prefix.Replace('\\', '/') + path.Replace('\\', '/');
+                var blobId = Git(top, $"rev-parse {gitRef}:{gitPath}")?.Trim();
+                if (blobId is null || !System.Text.RegularExpressions.Regex.IsMatch(blobId, "^[0-9a-f]{40,64}$"))
+                {
+                    success = false;
+                    break;
+                }
+                var targetFile = Path.Combine(dir, path);
+                Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
+                // A bounded in-process cache avoids redundant Git reads without persisting
+                // sensitive historical content or leaking scanner semantics across versions.
+                if (!HistoricalBlobCache.Data.TryGetValue(blobId, out var bytes))
+                {
+                    var blob = GitBlob(top, blobId);
+                    if (blob is null) { success = false; break; }
+                    bytes = blob;
+                    if (HistoricalBlobCache.Data.Count >= 256) HistoricalBlobCache.Data.Clear();
+                    HistoricalBlobCache.Data[blobId] = bytes;
+                }
+                File.WriteAllBytes(targetFile, bytes);
+            }
+            if (success)
+                return BuildModel(dir, config, historical: true).Model with { Commit = sha };
+            Directory.Delete(dir, recursive: true);
+            Directory.CreateDirectory(dir);
+        }
+        // Preserve the existing full-scan fallback for missing blobs or scoped projects.
         var tar = Path.Combine(tmp.FullName, "tree.tar");
         var tree = prefix.Length == 0 ? gitRef : $"{gitRef}:{prefix}";
-        // From a subdirectory git archive narrows to that subdirectory *within* <tree>; run it from the top.
-        var top = Git(root, "rev-parse --show-toplevel")!.Trim();
         if (Git(top, $"archive --format=tar -o \"{tar}\" {tree}") is null) return null;
-        var dir = Directory.CreateDirectory(Path.Combine(tmp.FullName, "tree")).FullName;
         TarFile.ExtractToDirectory(tar, dir, overwriteFiles: true);
         return BuildModel(dir, config, historical: historical).Model with { Commit = sha };
     }
