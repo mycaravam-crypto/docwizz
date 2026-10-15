@@ -213,10 +213,11 @@ public class RequirementsJourneyTests
         Assert.All(server.Requests, r => Assert.DoesNotContain("businessContext", r));
 
         Assert.Equal(0, Run(repo.Root, "requirements", "import", ".", history, workItems).Exit);
-        // Imported but not asked for: the same pages, no new request.
+        // Imported but not asked for: requirement pages appear, the drafts don't change and no new request is made.
         Assert.Equal(0, Docwizz.Run(repo.Root, Model(server), "generate", ".", "--ai").Exit);
-        Assert.Equal(plain, Pages(repo.Root));
         Assert.Equal(plainRequests, server.Requests.Count);
+        Assert.DoesNotContain("must be rejected", Pages(repo.Root));
+        Assert.True(File.Exists(Path.Combine(repo.Root, "docs", "requirements", "wi-101.md")));
 
         var withReq = Docwizz.Run(repo.Root, Model(server), "generate", ".", "--ai", "--requirements");
         Assert.True(withReq.Exit == 0, withReq.ToString());
@@ -228,7 +229,46 @@ public class RequirementsJourneyTests
 
         // Back without the flag: the requirement drafts aren't shown.
         Assert.Equal(0, Run(repo.Root, "generate", ".").Exit);
-        Assert.DoesNotContain("WI-101", Pages(repo.Root));
+        Assert.DoesNotContain("must be rejected", Pages(repo.Root));
+    }
+
+    // #226: an imported index enriches the ordinary generate output: a requirements index, a page per work item with its
+    // criteria and linked code, and the way back from the module page; without an index the pages say none.
+    [Fact]
+    public void Generate_writes_requirement_pages_from_an_imported_index()
+    {
+        using var repo = Repository(out var history, out var workItems);
+        Assert.Equal(0, Run(repo.Root, "generate", ".", "--html").Exit);
+        var docs = Path.Combine(repo.Root, "docs");
+        Assert.False(Directory.Exists(Path.Combine(docs, "requirements")));
+        Assert.DoesNotContain("requirements/index.md", File.ReadAllText(Path.Combine(docs, "index.md")));
+
+        Assert.Equal(0, Run(repo.Root, "requirements", "import", ".", history, workItems).Exit);
+        var run = Run(repo.Root, "generate", ".", "--html");
+        Assert.True(run.Exit == 0, run.ToString());
+        Assert.Contains("- [Requirements](requirements/index.md)", File.ReadAllText(Path.Combine(docs, "index.md")));
+        var index = File.ReadAllText(Path.Combine(docs, "requirements", "index.md"));
+        Assert.Contains("| [WI-101](requirements/wi-101.md) | User Story | Closed | Credit limit | 1 | 1 | 0 |", index);
+        Assert.Contains("| [WI-102](requirements/wi-102.md) | — | — | content unavailable | 0 | 1 | 0 |", index);
+
+        var credit = File.ReadAllText(Path.Combine(docs, "requirements", "wi-101.md"));
+        Assert.Contains("# WI-101: Credit limit", credit);
+        Assert.Contains("User Story · Closed · revision 4", credit);
+        Assert.Contains("- **AC1** Orders above 1000 are rejected", credit);
+        Assert.Contains("`Shop.OrderService.Place(int)`", credit);
+        Assert.Contains("| confirmed | — |", credit);
+        Assert.Contains("Neither proves the code fulfils the work item.", credit);
+        Assert.Contains("Linked in the history, but its content was not exported.", File.ReadAllText(Path.Combine(docs, "requirements", "wi-102.md")));
+        Assert.True(File.Exists(Path.Combine(docs, "requirements", "wi-101.html")));
+
+        var module = string.Concat(Directory.EnumerateFiles(Path.Combine(docs, "modules"), "*.md").Select(File.ReadAllText));
+        Assert.Contains("_Work items:_ [WI-100](../requirements/wi-100.md) (confirmed), [WI-101](../requirements/wi-101.md) (confirmed), " +
+            "[WI-102](../requirements/wi-102.md) (candidate) — history, not proof", module);
+
+        // The index gone: its pages go with it.
+        File.Delete(Path.Combine(docs, ".docwizz", "requirements.json"));
+        Assert.Equal(0, Run(repo.Root, "generate", ".", "--html").Exit);
+        Assert.Empty(Directory.EnumerateFiles(Path.Combine(docs, "requirements")));
     }
 
     [Fact]

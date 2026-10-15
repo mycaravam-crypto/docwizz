@@ -47,6 +47,7 @@ partial class Generator
         foreach (var u in units.Where(u => u.StartsWith("http:")).Order(StringComparer.Ordinal))
             gaps.Add($"Calls `{Esc(u[5..])}`, but no backend endpoint matches it.");
 
+        sb.AppendLine(RouteRequirements(path, gaps));
         sb.AppendLine("## Gaps\n");
         sb.AppendLine(gaps.Count == 0 ? "None found.\n" : string.Join("\n", gaps.Select(g => $"- {g}")) + "\n");
         return sb.ToString();

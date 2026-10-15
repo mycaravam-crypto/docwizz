@@ -169,7 +169,15 @@ enumeration value (with its path), a short SHA or a duplicate commit;
 `docwizz generate . --ai --requirements`, `docwizz context . --for <symbol> --requirements` and the MCP tools
 `requirements_for_symbol`, `symbols_for_requirement` and `context(requirements: true)` read this index; none of them
 fetches anything. The rules (bounded selection, untrusted data, `intent`/`deviation` sections, labels, cache keys) are
-in [CLI.md](../CLI.md#requirements-in-drafts). Without `--requirements` nothing changes.
+in [CLI.md](../CLI.md#requirements-in-drafts). Without `--requirements` the drafts and context don't change.
+
+## In the generated docs
+
+Whenever the index exists, `docwizz generate` also writes `requirements/index.md` and one page per work item: its
+type, state, revision, description and acceptance criteria (numbered AC1… in export order), the routes and current
+symbols it is linked to, with confirmed/candidate, "code changed since", commits and PRs. Route pages get a
+Requirements section, and module pages a `_Work items:_` backlink. A route with no linked work item is listed as a gap.
+Exported text is rendered as plain text: no HTML, links or images. No index: the route pages say none was imported.
 
 ## Answering gitwizz
 

@@ -222,6 +222,7 @@ Sbom and Remediation live in `Analysis/`; the packages view is part of `Generato
 | [Generator.cs](src/DocWizz/Generation/Generator.cs) | `index.md`, `architecture.md`, `api.md`, `frontend.md`, `quality.md`, shared helpers |
 | [Modules.cs](src/DocWizz/Generation/Modules.cs) | `modules/<folder>.md`: role, key components, API, data, external systems, configuration, flows, gaps, observations, component reference |
 | [RoutePages.cs](src/DocWizz/Generation/RoutePages.cs) | `routes/<path>.md`: screenshot, components, flow to the backend endpoints, unresolved calls as gaps |
+| [RequirementPages.cs](src/DocWizz/Generation/RequirementPages.cs) | `requirements/index.md`, `requirements/<work item>.md` from the imported requirement index; route and module backlinks |
 | [ProjectPages.cs](src/DocWizz/Generation/ProjectPages.cs) | `solutions/*.md`, `projects/*.md`, from [ProjectHierarchy](src/DocWizz/Discovery/ProjectHierarchy.cs) |
 | [Views.cs](src/DocWizz/Generation/Views.cs) | `views/context.md`, `containers.md`, `components.md`, `data.md`; the configuration table |
 | [Deployment.cs](src/DocWizz/Generation/Deployment.cs) | `views/deployment.md`: compose, Kubernetes, Dockerfiles, IaC |

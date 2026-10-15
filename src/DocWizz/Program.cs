@@ -419,6 +419,15 @@ static RequirementIndex.Index? LoadRequirements(string root)
     catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return null; }
 }
 
+// The imported index for the requirement pages, or null: none imported, or unreadable (said so; the pages then say none).
+static RequirementIndex.Index? ImportedRequirements(string root)
+{
+    var file = Path.Combine(root, RequirementIndex.DefaultFile);
+    if (!File.Exists(file)) return null;
+    try { return RequirementIndex.Load(file); }
+    catch (ArgumentException e) { Console.Error.WriteLine($"docwizz: requirement pages skipped: {e.Message}"); return null; }
+}
+
 // A context package for a coding agent, from the model the docs were generated from (docs/.docwizz/model.json), or from a
 // fresh scan when there is none. No network, no build, no AI: only what is in the model and the AI cache.
 static int ContextCommand(string root, Config config, Dictionary<string, string> opts)
@@ -984,6 +993,8 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
     }
     else screenshots = ScreenshotCapture.Existing(model, outDir);
 
+    // Requirement pages come from an imported index whenever there is one; --requirements only adds it to AI prompts.
+    var pageRequirements = requirements ?? ImportedRequirements(root);
     bar.Begin("write pages", html ? "Markdown and HTML" : "Markdown");
     var rebuildHtml = html && refreshHtmlOnVersionChange && HtmlVersion.NeedsRefresh(outDir, AppVersion.Number);
     var (pages, changed) = Timings.Measure("generate", () => new Generator(root, outDir, model, findings, arch, config, summaries, overviews, assessments)
@@ -992,6 +1003,8 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
         RebuildHtml = rebuildHtml,
         Screenshots = screenshots,
         Load = LoadAttached(root, model),
+        Requirements = pageRequirements,
+        Head = pageRequirements is null ? null : head ?? Git(root, "rev-parse HEAD")?.Trim(),
         Files = [.. RepoFiles(root, config, [".github", ".circleci"]).Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))],
     }.Run());
     bar.Advance("write pages", $"{Plural(pages.Count, "page")}, {changed.Count} changed");
