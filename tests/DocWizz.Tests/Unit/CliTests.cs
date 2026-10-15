@@ -34,6 +34,10 @@ public class CliTests
     [InlineData("generate . --refresh-html-on-version-change", null)]
     [InlineData("setup . --refresh-html-on-version-change --progress", null)]
     [InlineData("generate . --ai", null)]
+    [InlineData("generate . --ai-ratings", null)]
+    [InlineData("generate . --ai --ai-ratings", null)]
+    [InlineData("setup . --ai-ratings", null)]
+    [InlineData("setup . --ai --ai-ratings", null)]
     [InlineData("generate . --ai --html", null)]
     [InlineData("generate . --html --screenshots --base-url http://localhost:5173", null)]
     [InlineData("generate . --html --screenshots --base-url http://localhost:5173 --storage-state .auth/state.json", null)]
@@ -67,6 +71,7 @@ public class CliTests
     [InlineData("version", null)]
     [InlineData("check . --version", null)]
     // options a command doesn't use
+    [InlineData("product . --ai-ratings", "--ai-ratings doesn't apply to product; it applies to setup, generate")]
     [InlineData("analyze . --html", "--html doesn't apply to analyze; it applies to setup, generate")]
     [InlineData("scan . --ai", "--ai doesn't apply to scan; it applies to setup, generate, product")]
     [InlineData("generate . --format json", "--format doesn't apply to generate; it applies to discover, check, analyze, architecture, diff, context, domain, trace, evidence-diff, product, requirements, remediate")]

@@ -8,7 +8,7 @@ static class Cli
 
     public record Request(string? Command, Dictionary<string, string> Options, List<string> Positional, string? Error);
 
-    public static readonly string[] Flags = ["ai", "html", "screenshots", "progress", "refresh-html-on-version-change", "timings", "validate", "force", "include-ai", "auto-rescan", "select-projects", "all-projects", "yes", "requirements", "help", "version"];
+    public static readonly string[] Flags = ["ai", "ai-ratings", "html", "screenshots", "progress", "refresh-html-on-version-change", "timings", "validate", "force", "include-ai", "auto-rescan", "select-projects", "all-projects", "yes", "requirements", "help", "version"];
 
     // Valued option → what its value is, for the error when it is missing.
     public static readonly Dictionary<string, string> Valued = new()
@@ -31,9 +31,9 @@ static class Cli
         ["discover"] = new("discover [dir]", "read-only inventory of solutions, projects and references", "everyday",
             "docwizz discover . --format json", "--format console|json", ["format"]),
         ["setup"] = new("setup [dir]", "first run: detect the stack, write docwizz.yaml, analyze, generate docs, check", "start here",
-            "docwizz setup . --select-projects", "--select-projects (TTY wizard), --all-projects (clear scope), --yes (no prompts), --force (overwrite docwizz.yaml), --html, --progress, --refresh-html-on-version-change, --ai, --profile <name|file>", ["select-projects", "all-projects", "yes", "force", "html", "progress", "refresh-html-on-version-change", "ai", "profile"]),
+            "docwizz setup . --select-projects", "--select-projects (TTY wizard), --all-projects (clear scope), --yes (no prompts), --force (overwrite docwizz.yaml), --html, --progress, --refresh-html-on-version-change, --ai, --ai-ratings (advisory ratings of written docs), --profile <name|file>", ["select-projects", "all-projects", "yes", "force", "html", "progress", "refresh-html-on-version-change", "ai", "ai-ratings", "profile"]),
         ["generate"] = new("generate <dir> [out]", "write Markdown docs (default <dir>/docs)", "everyday",
-            "docwizz generate . --html", "--html (HTML next to every page), --screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>] (Playwright captures detected routes), --progress, --refresh-html-on-version-change, --ai (local Ollama drafts), --requirements (drafts also get each symbol's linked work items), --profile", ["html", "screenshots", "base-url", "storage-state", "screenshot-delay", "progress", "refresh-html-on-version-change", "ai", "requirements", "profile"]),
+            "docwizz generate . --html", "--html (HTML next to every page), --screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>] (Playwright captures detected routes), --progress, --refresh-html-on-version-change, --ai (self-hosted model drafts), --ai-ratings (advisory ratings of written docs), --requirements (drafts also get each symbol's linked work items), --profile", ["html", "screenshots", "base-url", "storage-state", "screenshot-delay", "progress", "refresh-html-on-version-change", "ai", "ai-ratings", "requirements", "profile"]),
         ["check"] = new("check <dir> [--since <ref>]", "quality gate: exit 1 when thresholds fail (only new problems with --since)", "CI",
             "docwizz check . --since origin/main", "--since <ref>, --format json, --profile", ["since", "format", "profile"]),
         ["analyze"] = new("analyze <dir>", "documentation report: gaps, coverage, quality, architecture", "everyday",

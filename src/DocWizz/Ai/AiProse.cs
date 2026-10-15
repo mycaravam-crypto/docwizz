@@ -208,15 +208,16 @@ static class AiProse
         using var _ = ai;
         Console.Error.WriteLine($"docwizz: assessing {misses.Count} written docs with {ai.Model} at {ai.Endpoint} ({result.Count} cached)");
         var facts = new ContextBuilder(root, model);
-        var answers = await Ask(misses, async f => ParseAssessment(await ai.Complete(AssessInstructions, facts.For(f.Node, f).Json)) ?? NoAssessment,
-            "assessments", f => Label(f.Node), f => $"assessment failed for {f.Node.Id}", new(), Steps(misses.Count, progress));
+        var answers = await Ask(misses, async f =>
+        {
+            var assessment = ParseAssessment(await ai.Complete(AssessInstructions, facts.For(f.Node, f).Json)) ?? NoAssessment;
+            Keep(cacheFile, cache, $"{Key(f.Node)}@{tag}", assessment);
+            return assessment;
+        }, "assessments", f => Label(f.Node), f => $"assessment failed for {f.Node.Id}", new(), Steps(misses.Count, progress));
         foreach (var (f, a) in misses.Zip(answers).Where(x => x.Second is not null))
         {
-            cache[$"{Key(f.Node)}@{tag}"] = a!;
             if (a!.Score > 0) result[f.Node.Id] = a;
         }
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(cacheFile))!);
-        File.WriteAllText(cacheFile, JsonSerializer.Serialize(new SortedDictionary<string, Assessment>(cache), new JsonSerializerOptions(Web) { WriteIndented = true }));
         return result;
     }
 
@@ -427,22 +428,22 @@ static class AiProse
         catch (JsonException) { return []; }
     }
 
-    // Each draft is saved as it arrives: an interrupted hour-long run keeps what it already paid for.
-    static void Keep(string file, Dictionary<string, Draft> cache, string key, Draft draft)
+    // Each AI result is saved as it arrives: an interrupted hour-long run keeps what it already paid for.
+    static void Keep<T>(string file, Dictionary<string, T> cache, string key, T result)
     {
         lock (cache)
         {
-            cache[key] = draft;
+            cache[key] = result;
             Save(file, cache);
         }
     }
 
     // Written to a temp file and moved over, so a kill mid-write never leaves a truncated cache.
-    static void Save(string file, Dictionary<string, Draft> cache)
+    static void Save<T>(string file, Dictionary<string, T> cache)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
         var temp = file + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(new SortedDictionary<string, Draft>(cache),
+        File.WriteAllText(temp, JsonSerializer.Serialize(new SortedDictionary<string, T>(cache),
             new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
         File.Move(temp, file, overwrite: true);
     }

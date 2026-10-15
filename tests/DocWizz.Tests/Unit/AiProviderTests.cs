@@ -285,4 +285,69 @@ public class AiProviderTests
         Assert.Contains("Places an order.", File.ReadAllText(cacheFile));
         Assert.False(File.Exists(cacheFile + ".tmp"));
     }
+
+    [Fact]
+    public async Task Ratings_are_saved_before_completion_is_reported_and_reused_without_a_server()
+    {
+        using var server = new FakeServer(200, """{"message":{"content":"{\"score\":2,\"missing\":[\"purpose\"],\"note\":\"Explain why.\"}"}}""");
+        using var dir = new Sources();
+        var cacheFile = Path.Combine(dir.Root, "ai-assessments.json");
+        var model = Models.Model([
+            Models.N("cs:A.Orders", "a/Orders.cs", doc: Models.Doc("Places orders."), hash: "h1", tags: ["controller"]),
+            Models.N("cs:B.Refunds", "b/Refunds.cs", doc: Models.Doc("Refunds orders."), hash: "h2", tags: ["controller"]),
+        ]);
+        var findings = Analyzer.Analyze(model, Models.Config());
+        var config = new AiConfig { Endpoint = server.Uri.ToString(), Model = "local:7b" };
+        var reported = 0;
+        var ratings = await AiProse.Assessments(dir.Root, model, findings, cacheFile, call: true, config,
+            (done, _, _) =>
+            {
+                if (done == 0) return;
+                // This callback runs before Ask returns the whole batch. The old batch-only save fails here.
+                var saved = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, AiProse.Assessment>>(
+                    File.ReadAllText(cacheFile), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+                Assert.True(saved.Count >= done);
+                Interlocked.Increment(ref reported);
+            });
+        Assert.Equal(2, ratings.Count);
+        Assert.True(reported >= 2);
+        Assert.False(File.Exists(cacheFile + ".tmp"));
+        server.Dispose();
+
+        var cached = await AiProse.Assessments(dir.Root, model, findings, cacheFile, call: false, config);
+        Assert.Equal(ratings.Keys.Order(), cached.Keys.Order());
+        foreach (var (id, rating) in ratings)
+        {
+            Assert.Equal(rating.Score, cached[id].Score);
+            Assert.Equal(rating.Missing, cached[id].Missing);
+            Assert.Equal(rating.Note, cached[id].Note);
+        }
+        var unchanged = await AiProse.Assessments(dir.Root, model, findings, cacheFile, call: true, config);
+        Assert.Equal(cached.Keys.Order(), unchanged.Keys.Order());
+        Assert.Equal(2, server.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Ratings_are_invalidated_by_documentation_code_or_model_changes()
+    {
+        using var server = new FakeServer(200, """{"message":{"content":"{\"score\":3}"}}""");
+        using var dir = new Sources();
+        var cacheFile = Path.Combine(dir.Root, "ai-assessments.json");
+        var node = Models.N("cs:Orders", "Orders.cs", doc: Models.Doc("Places orders."), hash: "h1", tags: ["controller"]);
+        var config = new AiConfig { Endpoint = server.Uri.ToString(), Model = "local:7b" };
+        async Task Rate(Node n, AiConfig c)
+        {
+            var model = Models.Model([n]);
+            Assert.Single(await AiProse.Assessments(dir.Root, model, Analyzer.Analyze(model, Models.Config()), cacheFile, call: true, c));
+        }
+        await Rate(node, config);
+        await Rate(node, config);
+        Assert.Single(server.Requests);
+        await Rate(node with { Doc = Models.Doc("Creates an order.") }, config);
+        Assert.Equal(2, server.Requests.Count);
+        await Rate(node with { Hash = "h2" }, config);
+        Assert.Equal(3, server.Requests.Count);
+        await Rate(node, new AiConfig { Endpoint = server.Uri.ToString(), Model = "other:7b" });
+        Assert.Equal(4, server.Requests.Count);
+    }
 }
