@@ -344,7 +344,7 @@ static int RequirementsImport(string root, string? history, string? workItems, C
                     var tmp = checkpointFile + ".tmp";
                     File.WriteAllText(tmp, RequirementIndex.Serialize(partial));
                     File.Move(tmp, checkpointFile, overwrite: true);
-                });
+                }, (_, changedPath) => ProjectScope.MightBelongToScope(config.Scope, changedPath));
             bar.Advance("map", Plural(index.Commits.Count(c => c.Mapping == "mapped"), "commit") + " mapped");
             bar.Begin("write");
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
