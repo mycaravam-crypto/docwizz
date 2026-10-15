@@ -1313,9 +1313,9 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
             if (success)
             {
                 Mark("read changed Git blobs");
-                var model = BuildModel(dir, config, historical: true).Model with { Commit = sha };
+                var selectiveModel = BuildModel(dir, config, historical: true).Model with { Commit = sha };
                 Mark("scan model");
-                return model;
+                return selectiveModel;
             }
             Mark("selective fallback");
             Directory.Delete(dir, recursive: true);
