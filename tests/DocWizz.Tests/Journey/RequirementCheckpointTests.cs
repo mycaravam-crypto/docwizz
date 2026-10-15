@@ -54,4 +54,24 @@ public class RequirementCheckpointTests
         Assert.All(final.Commits, c => Assert.Equal("mapped", c.Mapping));
         Assert.Equal(RequirementIndex.Fingerprint(history, items, null), final.Fingerprint);
     }
+    [Fact]
+    public void Scope_filtered_commits_are_credited_as_no_source_without_scanning()
+    {
+        using var repo = new FakeHistory();
+        repo.Write("Other/Service.cs", "public class Service { }");
+        repo.Commit("outside selected scope", FakeHistory.Verified(100));
+        var history = Encoding.UTF8.GetBytes(repo.History());
+        var updates = new List<(int Done, int Total, string? Detail)>();
+        var index = RequirementIndex.Build(history, RequirementIndex.ReadWorkItems(null), null, "",
+            (_, _) => throw new Exception("out-of-scope commit must not start scanner"),
+            _ => true, progress: (done, total, detail) => updates.Add((done, total, detail)),
+            inScope: (_, path) => path.StartsWith("Selected/", StringComparison.Ordinal));
+
+        Assert.Single(index.Commits);
+        Assert.Equal("no-source", index.Commits[0].Mapping);
+        Assert.Equal((1, 1), (updates[0].Done, updates[0].Total));
+        Assert.Contains("1 no-source", updates[0].Detail);
+        Assert.Contains("0 remaining", updates[0].Detail);
+    }
+
 }
