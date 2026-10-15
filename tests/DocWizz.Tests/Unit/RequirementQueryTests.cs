@@ -11,7 +11,7 @@ public class RequirementQueryTests
     static string Sha(int n) => n.ToString("x").PadLeft(40, '0');
 
     static RequirementIndex.Commit Commit(int n, List<int>? workItems = null, string linkage = "verified", params RequirementIndex.PullRequestRef[] prs) =>
-        new(Sha(n), linkage, workItems ?? [], [], [.. prs], "mapped", [new(Place, "method", "h", "OrderService.cs", $"{n}", "1-9")], []);
+        new(Sha(n), linkage, [.. (workItems ?? []).Select(i => (RequirementId)i)], [], [.. prs], "mapped", [new(Place, "method", "h", "OrderService.cs", $"{n}", "1-9")], []);
 
     static RequirementIndex.WorkItem Item(int id, string title = "Credit limit") =>
         new(id, 1, 1, true, "User Story", "Done", title, null, null, null, null, null, [], "d", []);

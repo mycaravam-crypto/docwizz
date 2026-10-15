@@ -392,7 +392,7 @@ docwizz domain areas . --format json   # candidate business areas, inferred
 Work-item seeding requires `docwizz requirements import` first. Without an index, code-seeded discovery
 still runs, but marks requirement evidence as unavailable. The crawler uses a deterministic directed
 BFS and never sends code or work items to AI or a network service. The JSON schema is
-`docwizz.domain-discovery/v1`; `candidateTerms` are Work Item titles, not verified domain names. `--format md` renders the same report
+`docwizz.domain-discovery/v1` (ADO/no index) or `/v2` (GitHub index); `candidateTerms` are Work Item titles, not verified domain names. `--format md` renders the same report
 as reviewable Markdown in three parts: As-is (Mermaid graph and symbol table), As-intended (confirmed links on unchanged
 code that no cross-check questions, with criteria) and Unclear (every other link with its reason, and methods without one).
 `domain areas` groups every production method by folder, then moves a method of an outer folder (controllers, jobs:
@@ -596,11 +596,26 @@ docwizz requirements query . query.json                                   # gitw
 `import` reads what `gitwizz history export` writes (`gitwizz.history/v2`, no adapter), maps every exported commit's
 changed lines onto the symbols as they were at that commit and writes `docs/.docwizz/requirements.json`; identical
 inputs write nothing, and known commits aren't scanned again. `show` answers from that index and the current model
-(`docwizz.requirement-context/v1`): each work item is `confirmed` (a commit the provider links to it changed the
+(`docwizz.requirement-context/v1` for ADO indexes, `/v2` for GitHub indexes): each work item is `confirmed` (a commit the provider links to it changed the
 symbol) or `candidate` (only a confirmed pull request's link, or a mention in a commit message), with the commit, PR,
 file and lines, and `changedSince` when the symbol changed after that commit. The `outcome` tells `linked`, `no-link` (verified
 none), `unavailable`, `not-in-history` and `not-current` apart. Files only, no network; the same inputs give the same
 bytes. Input shapes and rules: [docs/requirement-context.md](docs/requirement-context.md).
+
+For GitHub, export history with `--provider github` and export issue details separately:
+
+```bash
+mkdir -p issues
+gh issue view 123 --repo owner/repo --json number,url,title,body,labels,state,updatedAt > issues/123.json
+docwizz requirements import . history.json issues/
+docwizz requirements show . --work-item github#123
+docwizz domain discover . --work-item github#123 --format json
+```
+
+The history must preserve provider issue URLs. Issue details must match its repository; cross-repository imports
+and PR detail objects are rejected. Numeric IDs and ADO aliases keep their old meaning; GitHub selectors are
+explicitly prefixed. GitHub titles, bodies and labels are bounded historical evidence. PR links and message mentions
+remain `candidate`, and an export timestamp does not establish current freshness. Import and all queries stay offline.
 
 `query` answers gitwizz (`gitwizz context <PR> --system`, `guide`, `evidence`) from the same index: it reads a
 `gitwizz.requirement-query/v1` file and prints `gitwizz.requirement-input/v1` for the requested symbols only. Set it in
@@ -660,7 +675,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `--ai` | off | generate, product, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it, nothing new is sent | opt-in |
 | `--since <ref>` | — | check, remediate | check: only problems introduced since `<ref>` fail; remediate: says whether each update touches only what changed since `<ref>` | CI |
 | `--for <target>` | — | context, requirements | required for context; a symbol id or qualified name, a file, a folder, or `VERB /route`; ambiguous or unknown exits 1 with candidates. `requirements show` takes a symbol, or an id the index knows from history | coding agents |
-| `--work-item <id>` | — | requirements, domain | `requirements show`: reverse lookup; `domain discover`: traverse the current linked code symbols instead of `--seed` | architects, reviews |
+| `--work-item <id>` | — | requirements, domain | `requirements show`: reverse lookup; `domain discover`: traverse linked symbols instead of `--seed`; `github#123` selects an issue, numeric/ADO aliases retain their meaning | architects, reviews |
 | `--seed <symbol\|endpoint>` | — | domain | a single exact/qualified symbol or `VERB /route`; incompatible with `--work-item` | architects |
 | `--depth <n>` | 3 | domain | traversal hops, 0–8; 0 means only the start symbols | architects |
 | `--limit <n>` | 100 | domain | maximum reached symbols, 1–500; truncation is explicit | architects |

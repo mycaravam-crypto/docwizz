@@ -5,7 +5,7 @@ namespace DocWizz.Tests.Unit;
 
 // The requirement index (#166): exported history + work items → which commit touched which symbol, and the resolver's
 // confirmed/candidate/no-link/unavailable decisions. Models per commit are built in memory: no git, no scan.
-public class RequirementIndexTests
+public partial class RequirementIndexTests
 {
     const string Svc = "cs:Shop.OrderService";
     const string Place = "cs:Shop.OrderService.Place(int)";
@@ -58,10 +58,10 @@ public class RequirementIndexTests
     };
 
     static byte[] History(object[] commits, object[]? prs = null, string schema = RequirementIndex.HistorySchema, bool truncated = false, bool shallow = false,
-        string provider = "azure-devops") =>
+        string provider = "azure-devops", string repository = "https://ado.example/shop") =>
         JsonSerializer.SerializeToUtf8Bytes(new
         {
-            schema, provider, repository = "https://ado.example/shop",
+            schema, provider, repository,
             range = new { since = "v1", sinceSha = Sha(98), until = "main", untilSha = Sha(99), limit = 200, commits = commits.Length, truncated, shallow },
             sources = new { commitMessages = "complete", providerCommitLinks = "ado", pullRequests = "ado", pullRequestWorkItems = "ado" },
             commits = commits.Reverse(), pullRequests = prs ?? [], warnings = Array.Empty<string>(),
@@ -302,15 +302,16 @@ public class RequirementIndexTests
     }
 
     [Fact]
-    public void Github_issues_are_not_work_items_and_an_unverified_history_is_not_an_empty_answer()
+    public void Github_mentions_are_candidates_and_unverified_history_is_not_an_empty_answer()
     {
-        var index = Build(History([Commit(1, Status("unknown"), null, [Link("#12", "commit-message", "closes")], (7, 1))], provider: "github", truncated: true, shallow: true));
-        Assert.Empty(index.Commits.Single().Mentions);
-        Assert.Contains(index.Warnings, w => w.StartsWith("#12") && w.Contains("not an Azure Boards work item"));
+        var index = Build(History([Commit(1, Status("unknown"), null, [Link("#12", "commit-message", "closes")], (7, 1))], provider: "github", repository: "https://github.com/acme/shop", truncated: true, shallow: true));
+        Assert.Equal(new RequirementId(12, "acme/shop"), Assert.Single(index.Commits.Single().Mentions));
         Assert.Contains(index.Warnings, w => w.Contains("no provider link was verified (github history)"));
         Assert.Contains(index.Warnings, w => w.Contains("shallow clone"));
         var c = RequirementResolver.For(index, Place, Current(Place), null);
-        Assert.Equal("unavailable", c.Outcome);
+        Assert.Equal("linked", c.Outcome);
+        Assert.Equal("candidate", Assert.Single(c.Requirements).Status);
+        Assert.False(c.Complete);
         Assert.Contains(c.Warnings, w => w.Contains("truncated"));
         Assert.Contains(c.Warnings, w => w.Contains("shallow clone"));
         Assert.Equal(("github", true), (index.Inputs.Provider, index.Inputs.Shallow));

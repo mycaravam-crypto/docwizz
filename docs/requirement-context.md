@@ -1,8 +1,8 @@
 # Requirement context
 
-DocWizz can show which historical requirements (Azure DevOps work items) a code symbol was changed for, with the exact
+DocWizz can show which historical requirements (Azure DevOps work items or GitHub issues) a code symbol was changed for, with the exact
 commit, pull request, file and lines behind each link. It reads files that other tools exported; it never contacts
-Azure DevOps or a Git server itself.
+Azure DevOps, GitHub or a Git server itself.
 
 ```bash
 gitwizz history export --since <ref> --provider azure-devops -o history.json   # gitwizz.history/v2
@@ -84,8 +84,14 @@ How DocWizz reads it:
 | `kind: merge` | no changes of its own |
 | `range.untilSha`, `truncated`, `shallow`, `provider`, `repository` | coverage and identity in the index's `inputs` |
 
-Work items are Azure Boards ids (`AB#123`). A `#123` names a GitHub issue (from a GitHub or local history): it is
-listed in a warning and not indexed, as DocWizz holds only Azure DevOps work items.
+Azure Boards references (`AB#123`) retain their existing meaning. In a `github` history, `#123` is a GitHub issue
+reference scoped to the history's repository. Commit-message mentions remain candidates; verified links through
+confirmed PRs also remain candidates. Issue details never upgrade either to `confirmed`.
+
+GitHub provider links must include the issue's `uri` (`https://github.com/owner/repo/issues/123`). Use a GitWizz
+version that preserves closing-issue URLs; old exports without those URLs are skipped with an actionable warning,
+because a closing reference might belong to another repository. Plain `#123` from `local` histories remains ambiguous
+and is not indexed. PR-number markers stripped by GitWizz are never recovered from commit subjects by DocWizz.
 
 `tests/DocWizz.Tests/Golden/gitwizz/history-v2-example.json` is gitwizz's own example export, unchanged;
 `GitwizzExampleJourneyTests` rebuilds the repository it was exported from and imports it end to end.
@@ -102,9 +108,47 @@ Work-item text is untrusted data: control characters are removed, whitespace is 
 (title 300, description 2000, each criterion 500 characters, at most 50 criteria). Cuts are listed in the item's
 `warnings`.
 
+### GitHub issue exports
+
+Export issue details separately with `gh`; import itself stays offline:
+
+```bash
+mkdir -p issues
+gitwizz history export --since <ref> --provider github -o history.json
+gh issue view 123 --repo owner/repo --json number,url,title,body,labels,state,updatedAt > issues/123.json
+docwizz requirements import . history.json issues/
+docwizz requirements show . --for Shop.OrderService.Place --format json
+docwizz requirements show . --work-item github#123
+docwizz domain discover . --work-item github#123 --format json
+```
+
+An input file can contain one object or an array. The URL must identify an issue in the history's GitHub repository;
+pull-request URLs, mismatched numbers and other repositories are rejected. This first version supports one GitHub
+repository per index. GitHub CLI must support `gh pr view --json closingIssuesReferences` for history export
+(validated with CLI 2.102.0); the issue-detail command is separate from that requirement.
+
+The issue's bounded body is stored as `description`, with source `body`; labels are sorted and bounded to 20 names.
+Only bullet/numbered items under an explicit Markdown `Acceptance criteria` or `Acceptance` heading become criteria;
+code fences and unrelated prose/checklists do not. Body text is also available to bounded AI/agent context as
+untrusted historical evidence. `bodyCut` reports when the AI budget truncates that text. Labels do not imply domain
+concepts or requirements.
+
+`updatedAt` identifies the exported snapshot. It is **not** an ADO revision or proof that the issue is current:
+GitHub revision/current-revision/currentness fields are absent. When several exports name the same issue, the newest
+exported `updatedAt` wins, then the content digest breaks ties deterministically. Editing an export changes the index
+fingerprint; selected prompt text changes its AI cache key.
+
+Identities are distinct: Azure Boards 123 stays numeric `123` in ADO JSON; GitHub 123 is
+`github:owner/repo#123` internally and in versioned JSON. Human output and selectors use `github#123` relative to the
+imported repository; the full identity is accepted too. Existing numeric, `WI-123`, `#123` and `AB#123` selectors mean
+Azure Boards, including in a mixed index. GitWizz query output keeps its existing protocol, with requirement
+`github#123`, a `repository` field and repository-qualified evidence.
+
 ## The index
 
-`docs/.docwizz/requirements.json` (`docwizz.requirement-index/v2`) holds facts only: per commit its provider
+`docs/.docwizz/requirements.json` holds facts only. ADO-only imports retain `docwizz.requirement-index/v2` and
+numeric IDs; GitHub imports use `docwizz.requirement-index/v3`. Both versions can be read, so existing ADO indexes
+need no migration. Reimport an old GitHub history with issue exports to rebuild its index. The contents are: per commit its provider
 linkage and links, message mentions, PR attribution and touches (symbol id at that commit, its body hash then, changed
 lines, symbol lines); per PR its status and linkage; per work item its cleaned fields and the SHA-256 of its export. Its `fingerprint` covers the history file,
 every work item's digest, the scan scope and the index schema.

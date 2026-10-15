@@ -6,14 +6,15 @@ using System.Text.RegularExpressions;
 // `docwizz requirements import`: a local, versioned index of which historical commits changed which code symbols, and
 // which work items those commits and their pull requests were linked to. Inputs are files other tools exported:
 // `gitwizz.history/v2` (gitwizz history export: commits, line ranges, PR attribution, links with their source; the
-// producer's contract is gitwizz docs/history/README.md) and `ado.requirement-context/v1` (normalized work items).
+// producer's contract is gitwizz docs/history/README.md), `ado.requirement-context/v1` work items, and gh issue JSON.
 // The index holds facts only (what each commit touched, what each link source said); whether a requirement is
 // `confirmed` or a `candidate` for a symbol is decided at query time (RequirementResolver). It is separate from the
 // CodeModel (no external text mixed into static facts) and from ProjectEvidenceCatalog (explicit, human-maintained links:
 // nothing here is ever written there). No network: every input is a file.
-static class RequirementIndex
+static partial class RequirementIndex
 {
     public const string Schema = "docwizz.requirement-index/v2";
+    public const string GithubSchema = "docwizz.requirement-index/v3";
     public const string HistorySchema = "gitwizz.history/v2";
     public const string WorkItemSchema = "ado.requirement-context/v1";
     public const string DefaultFile = "docs/.docwizz/requirements.json";
@@ -42,13 +43,13 @@ static class RequirementIndex
     // range as the export states them; Shallow: the clone had a boundary, so older commits may be missing.
     public record Inputs(string HistorySchema, string HistoryDigest, string? Provider, string? Repository, string? Base, string? BaseSha,
         string? HeadSha, bool Truncated, bool Shallow, string? Scope, List<WorkItemInput> WorkItems);
-    public record WorkItemInput(int Id, int? Revision, string Digest);
+    public record WorkItemInput(RequirementId Id, int? Revision, string Digest);
 
     // One exported commit: its linkage, its PR associations and what it touched. Linkage and WorkItems: what the provider
     // links to the commit itself (only `verified` is an answer). Mentions: work items its message names, which nobody
     // verified (candidates at most). Mapping: `mapped` (scanned as of the commit), `missing` (not in the local
     // repository: its touches are unknown), `no-source` (changed no scanned file, or a merge, whose changes are its parents').
-    public record Commit(string Sha, string Linkage, List<int> WorkItems, List<int> Mentions, List<PullRequestRef> PullRequests,
+    public record Commit(string Sha, string Linkage, List<RequirementId> WorkItems, List<RequirementId> Mentions, List<PullRequestRef> PullRequests,
         string Mapping, List<Touch> Touches, List<FileTouch> FileOnly);
     // Confidence: the export's resolution of the commit's PR: exact (the provider confirms it), inferred (only messages
     // say so), ambiguous (one of several candidates).
@@ -62,13 +63,19 @@ static class RequirementIndex
 
     // Status: confirmed (the provider says it completed with this merge commit), unconfirmed or local. Only a confirmed
     // PR's work items are used; Linkage is the export's workItemsStatus.
-    public record PullRequest(int Id, string? Title, string? MergeStrategy, string Status, string Linkage, List<int> WorkItems);
+    public record PullRequest(int Id, string? Title, string? MergeStrategy, string Status, string Linkage, List<RequirementId> WorkItems);
 
-    // A work item as ado-devops normalized it, cleaned and bounded. Revision is the one exported; IsCurrent false means
-    // a historical revision. Digest is over the exported file, so a changed revision changes the index fingerprint.
-    public record WorkItem(int Id, int? Revision, int? CurrentRevision, bool? IsCurrent, string? Type, string? State,
+    // Cleaned, bounded exported text. ADO revisions retain their meaning; GitHub uses ChangedDate (updatedAt) and
+    // leaves revisions/currentness unknown. The exported content digest participates in the index fingerprint.
+    public record WorkItem(RequirementId Id, int? Revision, int? CurrentRevision, bool? IsCurrent, string? Type, string? State,
         string? Title, string? Url, string? ChangedDate, string? DescriptionField, string? Description, string? CriteriaField,
-        List<string> Criteria, string Digest, List<string> Warnings);
+        List<string> Criteria, string Digest, List<string> Warnings,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        List<string>? Labels = null)
+    {
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? Provider => Id.IsGithub ? "github" : null;
+    }
 
     // ---- inputs ----
 
@@ -79,7 +86,7 @@ static class RequirementIndex
 
     // A commit of the export, read and checked: what Build needs from it.
     record HistoryCommit(string Sha, string Kind, List<(string Path, string Status, string Granularity, List<Hunk> Ranges)> Files,
-        string Linkage, List<int> WorkItems, List<int> Mentions, List<PullRequestRef> PullRequests);
+        string Linkage, List<RequirementId> WorkItems, List<RequirementId> Mentions, List<PullRequestRef> PullRequests);
 
     static readonly JsonSerializerOptions Read = new(JsonSerializerDefaults.Web) { AllowTrailingCommas = false };
 
@@ -110,8 +117,8 @@ static class RequirementIndex
             var list = root.ValueKind == JsonValueKind.Array ? root.EnumerateArray().ToList() : [root];
             foreach (var (item, i) in list.Select((x, i) => (x, i)))
             {
-                if (SchemaOf(item) != WorkItemSchema)
-                    throw new ArgumentException($"{file}: unknown schema {SchemaOf(item)}; expected {WorkItemSchema}");
+                if (SchemaOf(item) != WorkItemSchema && !IsGithubIssue(item))
+                    throw new ArgumentException($"{file}: unknown schema {SchemaOf(item)}; expected {WorkItemSchema} or a gh issue view JSON export");
                 // An item's own digest: its canonical JSON, so an array file changing one item changes only that one.
                 items.Add((item, Digest(Encoding.UTF8.GetBytes(item.GetRawText())), list.Count == 1 ? Path.GetFileName(file) : $"{Path.GetFileName(file)}[{i}]"));
             }
@@ -154,11 +161,11 @@ static class RequirementIndex
     static int PullRequestId(string id, string where) =>
         PrId.Match(id) is { Success: true } m && int.TryParse(m.Groups[1].Value, out var n) ? n : throw new ArgumentException($"history: {where}: pull request id '{id}' is not #<number>");
 
-    // Links of one kind: their work items as Azure Boards ids. `#123` names a GitHub issue (or, from a GitHub or local
-    // history, possibly a PR): not a work item DocWizz can hold, so it is skipped with a warning, never renumbered.
-    static List<int> Links(List<JsonElement> links, string source, string[] kinds, string where, List<string> warnings)
+    // Links retain provider identity. GitHub message references are local to the history repository; provider links
+    // additionally need the issue URL, since a PR can close an issue in another repository. Local #n is ambiguous.
+    static List<RequirementId> Links(List<JsonElement> links, string source, string[] kinds, string where, List<string> warnings, string? githubRepository, Action? unresolved = null)
     {
-        var ids = new List<int>();
+        var ids = new List<RequirementId>();
         foreach (var (l, i) in links.Select((l, i) => (l, i)))
         {
             var at = $"{where}[{i}]";
@@ -168,13 +175,36 @@ static class RequirementIndex
             OneOf(Text(l, "kind", at), kinds, $"{at}.kind");
             Text(l, "evidence", at);
             if (AzureBoards.Match(item) is { Success: true } m && int.TryParse(m.Groups[1].Value, out var id)) ids.Add(id);
-            else if (PrId.IsMatch(item)) warnings.Add($"{item} ({where}): a GitHub issue, not an Azure Boards work item; not indexed");
+            else if (PrId.Match(item) is { Success: true } github && int.TryParse(github.Groups[1].Value, out id))
+            {
+                if (githubRepository is null)
+                {
+                    warnings.Add($"{item} ({where}): no GitHub repository scope; not indexed");
+                    unresolved?.Invoke();
+                    continue;
+                }
+                var identity = new RequirementId(id, githubRepository);
+                if (l.TryGetProperty("uri", out var uri) && uri.ValueKind == JsonValueKind.String)
+                {
+                    var resolved = RequirementId.FromIssueUrl(uri.GetString()!);
+                    if (resolved.Number != id || resolved.Repository != githubRepository)
+                        throw new ArgumentException($"history: {at}: issue URL does not match {githubRepository}#{id}; cross-repository links are not supported");
+                    identity = resolved;
+                }
+                else if (source == "provider")
+                {
+                    warnings.Add($"{item} ({where}): provider issue link has no repository-qualified URL; export again with a GitWizz version that preserves issue URLs; not indexed");
+                    unresolved?.Invoke();
+                    continue;
+                }
+                ids.Add(identity);
+            }
             else throw new ArgumentException($"history: {at}.workItem: '{item}' is neither AB#<number> nor #<number>");
         }
         return [.. ids.Distinct().Order()];
     }
 
-    static List<HistoryCommit> Commits(JsonElement root, List<string> warnings)
+    static List<HistoryCommit> Commits(JsonElement root, List<string> warnings, string? githubRepository)
     {
         var commits = new List<HistoryCommit>();
         var seen = new HashSet<string>();
@@ -200,20 +230,22 @@ static class RequirementIndex
                 files.Add((path, status, granularity, ranges));
             }
 
-            var mentions = Links(List(c, "workItems", where), "commit-message", MessageKinds, $"{where}.workItems", warnings);
+            var mentions = Links(List(c, "workItems", where), "commit-message", MessageKinds, $"{where}.workItems", warnings, githubRepository);
 
             var provider = Prop(c, "providerLinks", where);
             var linkage = OneOf(Text(provider, "status", $"{where}.providerLinks"), Linkages, $"{where}.providerLinks.status");
             var items = Prop(provider, "items", $"{where}.providerLinks");
-            List<int> linked = [];
+            List<RequirementId> linked = [];
+            var unresolvedLinks = false;
             if (linkage == "verified")
             {
                 if (items.ValueKind != JsonValueKind.Array) throw new ArgumentException($"history: {where}.providerLinks: verified without a list of items");
-                linked = Links([.. items.EnumerateArray()], "provider", ["commit-link"], $"{where}.providerLinks.items", warnings);
+                linked = Links([.. items.EnumerateArray()], "provider", ["commit-link"], $"{where}.providerLinks.items", warnings, githubRepository, () => unresolvedLinks = true);
             }
             else if (items.ValueKind != JsonValueKind.Null)
                 throw new ArgumentException($"history: {where}.providerLinks: items must be null when the status is {linkage} (only verified is an answer)");
 
+            if (unresolvedLinks) linkage = "unknown"; // unresolved identity is never a verified empty answer
             var pr = Prop(c, "pullRequest", where);
             var resolution = OneOf(Text(pr, "resolution", $"{where}.pullRequest"), Resolutions, $"{where}.pullRequest.resolution");
             var prId = TextOrNull(pr, "id", $"{where}.pullRequest");
@@ -230,7 +262,7 @@ static class RequirementIndex
         return commits;
     }
 
-    static List<PullRequest> PullRequests(JsonElement root, List<string> warnings)
+    static List<PullRequest> PullRequests(JsonElement root, List<string> warnings, string? githubRepository)
     {
         var prs = new List<PullRequest>();
         foreach (var (p, i) in List(root, "pullRequests", "history").Select((p, i) => (p, i)))
@@ -241,8 +273,10 @@ static class RequirementIndex
             var status = OneOf(Text(p, "status", where), PrStatuses, $"{where}.status");
             var strategy = OneOf(Text(p, "strategy", where), Strategies, $"{where}.strategy");
             var linkage = OneOf(Text(p, "workItemsStatus", where), Linkages, $"{where}.workItemsStatus");
-            var items = Links(List(p, "workItems", where), "provider", ["pr-link"], $"{where}.workItems", warnings);
+            var unresolvedLinks = false;
+            var items = Links(List(p, "workItems", where), "provider", ["pr-link"], $"{where}.workItems", warnings, githubRepository, () => unresolvedLinks = true);
             if (linkage != "verified" && items.Count > 0) throw new ArgumentException($"history: {where}: work items listed although workItemsStatus is {linkage}");
+            if (unresolvedLinks) linkage = "unknown";
             if (status != "confirmed") warnings.Add($"PR #{id} is {status}{(TextOrNull(p, "problem", where) is { } why ? $" ({why})" : "")}: its work items are not used");
             prs.Add(new(id, Clean(TextOrNull(p, "title", where), MaxTitle, null), strategy, status, linkage, items));
         }
@@ -281,14 +315,20 @@ static class RequirementIndex
         if (shallow) warnings.Add("the history was exported from a shallow clone: commits beyond its boundary are not covered");
 
         var items = workItems.Select(w => Normalize(w.Item, w.Digest, w.Name)).ToList();
+        var githubScope = RequirementId.GithubRepository(repository);
+        if (items.Any(w => w.Id.IsGithub) && provider != "github")
+            throw new ArgumentException("GitHub issue details require a github history export with its repository identity");
+        if (items.Any(w => w.Id.IsGithub && w.Id.Repository != githubScope))
+            throw new ArgumentException("GitHub issue details do not match the history repository; cross-repository imports are not supported");
         foreach (var dup in items.GroupBy(w => w.Id).Where(g => g.Count() > 1))
-            warnings.Add($"WI-{dup.Key}: {dup.Count()} exports; using revision {dup.Max(w => w.Revision ?? -1)}");
+            warnings.Add(dup.Key.IsGithub ? $"{dup.Key.Display}: {dup.Count()} exports; using newest exported updatedAt"
+                : $"WI-{dup.Key}: {dup.Count()} exports; using revision {dup.Max(w => w.Revision ?? -1)}");
         // Several exports of one item: the highest revision wins, then the digest, so the choice is stable.
-        items = [.. items.GroupBy(w => w.Id).Select(g => g.OrderByDescending(w => w.Revision ?? -1).ThenBy(w => w.Digest, StringComparer.Ordinal).First()).OrderBy(w => w.Id)];
+        items = [.. items.GroupBy(w => w.Id).Select(g => g.OrderByDescending(w => w.Revision ?? -1).ThenByDescending(w => w.Id.IsGithub ? w.ChangedDate : null, StringComparer.Ordinal).ThenBy(w => w.Digest, StringComparer.Ordinal).First()).OrderBy(w => w.Id)];
 
-        var pullRequests = PullRequests(raw, warnings);
+        var pullRequests = PullRequests(raw, warnings, provider == "github" ? RequirementId.GithubRepository(repository) : null);
         // The export lists commits newest first; the index keeps them oldest first, so later evidence is newer.
-        var exported = Commits(raw, warnings);
+        var exported = Commits(raw, warnings, provider == "github" ? RequirementId.GithubRepository(repository) : null);
         exported.Reverse();
 
         var reuse = previous is not null && previous.Inputs.Scope == scope
@@ -325,19 +365,21 @@ static class RequirementIndex
         var inputs = new Inputs(HistorySchema, Digest(history), provider, repository, since, sinceSha, untilSha, truncated, shallow, scope,
             [.. items.Select(w => new WorkItemInput(w.Id, w.Revision, w.Digest))]);
         var fingerprint = Fingerprint(inputs);
-        return new(Schema, fingerprint, inputs, commits, pullRequests, items, [.. warnings.Distinct()]);
+        return new(IndexSchema(inputs), fingerprint, inputs, commits, pullRequests, items, [.. warnings.Distinct()]);
     }
 
     // Over everything the index is derived from: the history, each work item, the scan scope and this schema.
+    static string IndexSchema(Inputs inputs) => inputs.Provider == "github" || inputs.WorkItems.Any(w => w.Id.IsGithub) ? GithubSchema : Schema;
+
     public static string Fingerprint(Inputs inputs) => Digest(Encoding.UTF8.GetBytes(string.Join("\n",
-        [Schema, inputs.HistorySchema, inputs.HistoryDigest, inputs.Scope ?? "", .. inputs.WorkItems.Select(w => $"{w.Id}:{w.Revision}:{w.Digest}")])))[..16];
+        [IndexSchema(inputs), inputs.HistorySchema, inputs.HistoryDigest, inputs.Scope ?? "", .. inputs.WorkItems.Select(w => $"{w.Id}:{w.Revision}:{w.Digest}")])))[..16];
 
     // The fingerprint the given inputs would produce, without scanning anything: equal to a saved index's means unchanged.
     public static string Fingerprint(byte[] history, List<(JsonElement Item, string Digest, string Name)> workItems, string? scope)
     {
         var items = workItems.Select(w => Normalize(w.Item, w.Digest, w.Name))
-            .GroupBy(w => w.Id).Select(g => g.OrderByDescending(w => w.Revision ?? -1).ThenBy(w => w.Digest, StringComparer.Ordinal).First()).OrderBy(w => w.Id);
-        return Fingerprint(new Inputs(HistorySchema, Digest(history), null, null, null, null, null, false, false, scope,
+            .GroupBy(w => w.Id).Select(g => g.OrderByDescending(w => w.Revision ?? -1).ThenByDescending(w => w.Id.IsGithub ? w.ChangedDate : null, StringComparer.Ordinal).ThenBy(w => w.Digest, StringComparer.Ordinal).First()).OrderBy(w => w.Id);
+        return Fingerprint(new Inputs(HistorySchema, Digest(history), Text(Parse(history), "provider", "history"), null, null, null, null, false, false, scope,
             [.. items.Select(w => new WorkItemInput(w.Id, w.Revision, w.Digest))]));
     }
 
@@ -399,6 +441,7 @@ static class RequirementIndex
 
     static WorkItem Normalize(JsonElement e, string digest, string name)
     {
+        if (IsGithubIssue(e)) return NormalizeGithub(e, digest, name);
         var warnings = new List<string>();
         string? Str(JsonElement o, string p) => o.ValueKind == JsonValueKind.Object && o.TryGetProperty(p, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
         int? Int(JsonElement o, string p) => o.ValueKind == JsonValueKind.Object && o.TryGetProperty(p, out var v) && v.TryGetInt32(out var i) ? i : null;
@@ -447,7 +490,8 @@ static class RequirementIndex
         JsonElement raw;
         try { raw = JsonDocument.Parse(File.ReadAllBytes(file)).RootElement.Clone(); }
         catch (JsonException e) { throw new ArgumentException($"{file}: not JSON ({e.Message})"); }
-        if (SchemaOf(raw) != Schema) throw new ArgumentException($"{file}: unknown schema {SchemaOf(raw)}; expected {Schema} (run docwizz requirements import again)");
-        return raw.Deserialize<Index>(Read) ?? throw new ArgumentException($"{file}: empty index");
+        if (SchemaOf(raw) != Schema && SchemaOf(raw) != GithubSchema) throw new ArgumentException($"{file}: unknown schema {SchemaOf(raw)}; expected {Schema} (run docwizz requirements import again)");
+        try { return raw.Deserialize<Index>(Read) ?? throw new ArgumentException($"{file}: empty index"); }
+        catch (JsonException e) { throw new ArgumentException($"{file}: invalid requirement index ({e.Message})"); }
     }
 }

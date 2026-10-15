@@ -16,7 +16,7 @@ static class Cli
         ["format"] = "console or json", ["profile"] = $"a profile ({string.Join(", ", Profiles.Names)}) or a .yaml file",
         ["context"] = "a project context YAML file", ["since"] = "a git ref, e.g. origin/main", ["package"] = "a package name", ["to"] = "a version",
         ["for"] = "a symbol, file, folder or endpoint (\"POST /api/orders\")", ["hops"] = $"a number of hops, 1 to {AgentContext.MaxHops}",
-        ["budget"] = "a number of tokens", ["work-item"] = "a work item id, e.g. 1234",
+        ["budget"] = "a number of tokens", ["work-item"] = "a work item id, e.g. 1234 or github#1234",
         ["seed"] = "a symbol id, qualified method name or endpoint (POST /api/orders)", ["depth"] = "the traversal depth (0 to 8)",
         ["limit"] = "the maximum number of technical symbols (1 to 500)", ["base-url"] = "a running application URL (http or https)",
         ["storage-state"] = "a Playwright storageState JSON file", ["screenshot-delay"] = "a number of milliseconds, 0 to 60000",

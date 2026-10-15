@@ -335,7 +335,7 @@ static class AiProse
 
     // A sentence that claims the code fulfils a requirement, or that something is approved or certified: the model can't
     // verify either (and work-item text that asks for such a claim is an injection), so it is never kept.
-    static readonly Regex Fulfils = new(@"\b(satisf(y|ies|ied)|fulfil+s?|fulfil+ed|meets|met|compl(y|ies|ied) with|implements|implemented)\b.*\b(requirement|WI-\d+|acceptance criteri)" +
+    static readonly Regex Fulfils = new(@"\b(satisf(y|ies|ied)|fulfil+s?|fulfil+ed|meets|met|compl(y|ies|ied) with|implements|implemented)\b.*\b(requirement|WI-\d+|github(?:#[0-9]+|:[^\s]+#[0-9]+)|acceptance criteri)" +
         @"|\b(approved|certified|compliant|conformant|signed off|freigegeben|zertifiziert|genehmigt)\b", RegexOptions.IgnoreCase);
 
     // `code` in a sentence: what a deviation quotes from the source.
@@ -376,7 +376,7 @@ static class AiProse
                 Sentence? k;
                 if (BusinessSectionNames.Contains(name))
                 {
-                    var ids = s.From.Where(Wi).Select(id => int.Parse(id["workitem:".Length..])).Distinct().Order().ToList();
+                    var ids = s.From.Where(Wi).Select(id => RequirementId.Parse(id["workitem:".Length..])).Distinct().Order().ToList();
                     k = ids.Count == 0 ? null : new(s.Text.TrimEnd() + $" [{string.Join("; ", ids.Select(business.Label))}]", s.From);
                 }
                 else k = s.From.Where(id => !Wi(id)).ToList() is { Count: > 0 } code ? s with { From = code } : null;

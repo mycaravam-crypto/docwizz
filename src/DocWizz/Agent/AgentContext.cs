@@ -241,12 +241,13 @@ static class AgentContext
         static string Flat(string s) => Regex.Replace(s, @"\s+", " ").Trim();
         var lines = new List<Line>();
         foreach (var e in selection?.Entries ?? [])
-            lines.Add(new($"{e.Ref} {e.Status}{(e.ChangedSince ? ", code changed since" : "")}: {Flat(e.Title ?? "(no title)")} ({e.Type}, {e.State}, revision {e.Revision}{(e.IsCurrent == false ? ", not current" : "")})" +
+            lines.Add(new($"{e.Ref} {e.Status}{(e.ChangedSince ? ", code changed since" : "")}: {Flat(e.Title ?? "(no title)")} ({e.Type}, {e.State}{(e.Id.IsGithub ? ", exported snapshot; current freshness unknown" : $", revision {e.Revision}{(e.IsCurrent == false ? ", not current" : "")}")})" +
+                (e.Description is { } body ? $"; issue body: {Flat(body)}" : "") +
                 (e.Criteria.Count > 0 ? $"; criteria: {string.Join("; ", e.Criteria.Select(Flat))}" : "") + $"; {e.Evidence}", "history"));
         var shown = selection?.Entries.Select(e => e.Id).ToHashSet() ?? [];
         var rest = context.Requirements.Where(r => !shown.Contains(r.Id)).ToList();
         if (rest.Count > 0)
-            lines.Add(new($"not shown: {string.Join(", ", rest.Select(r => $"WI-{r.Id} {r.Status}{(r.Availability == "unavailable" ? " (not exported)" : "")}"))}", "history"));
+            lines.Add(new($"not shown: {string.Join(", ", rest.Select(r => $"{r.Id.Display} {r.Status}{(r.Availability == "unavailable" ? " (not exported)" : "")}"))}", "history"));
         if (context.Requirements.Count == 0) lines.Add(new($"no linked requirement: {context.Outcome}{(context.Complete ? "" : ", linkage incomplete")}", "history"));
         foreach (var w in context.Warnings) lines.Add(new($"⚠ {w}", "history"));
         return lines;
