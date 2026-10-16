@@ -371,7 +371,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             var owner = parent.TryGetValue(n.Id, out var ownerId) && nodes.TryGetValue(ownerId, out var symbol) ? symbol : null;
             var implementation = owner is null ? "— (unresolved)" : ModuleLink(owner);
             sb.AppendLine($"| {n.Tags![1]} | `/{n.Route?.TrimStart('/')}` | {Esc(Summary(n) ?? "—")} | {(input == "" ? "—" : input)} | " +
-                $"{Response(n)} | {auth} | {SourceLink(n.File, n.Line, $"{Path.GetFileName(n.File)}:{n.Line}")} | {string.Join(", ", from)} |");
+                $"{Response(n)} | {auth} | {implementation} | {SourceLink(n.File, n.Line, $"{Path.GetFileName(n.File)}:{n.Line}")} | {string.Join(", ", from)} |");
         }
         if (Load is { } load) sb.Append(LoadSection(load));
         // Middleware in registration order, per place that configures it (a project's top-level code, Startup.Configure).
