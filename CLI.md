@@ -503,6 +503,10 @@ Gradle **manifests only**.
 
 `generate` writes the same inventory to `views/packages.md`, listing packages declared at several versions first.
 
+### Offline Azure DevOps test snapshots
+
+`docwizz tests import . alpha-tests.json` validates `ado.test-traceability/v1` exported by `ado testplan trace-export` and saves a normalized snapshot under `docs/.docwizz/ado-tests-<planId>.json`. The command reports explicit requirement-to-test-case associations. It does not infer relationships to code tests or assert test execution. This first integration is an offline import and summary; generated report-page integration is not yet implemented.
+
 ## Project evidence
 
 These commands work on requirement and project evidence kept as YAML, CSV or Markdown, in the format described in
