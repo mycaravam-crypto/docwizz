@@ -40,7 +40,7 @@ static class Html
         body = Regex.Replace(body, @"<div class=""table-wrap"">(?=<table)", _ =>
         {
             var id = $"table-filter-{++tableIndex}";
-            return $"<div class=\"table-tools\"><label for=\"{id}\">Filter table</label><input id=\"{id}\" type=\"search\" data-table-filter placeholder=\"Search rows…\" autocomplete=\"off\"><span class=\"table-count\" aria-live=\"polite\"></span></div><div class=\"table-wrap\">";
+            return $"<div class=\"table-tools\"><label for=\"{id}\">Filter table</label><input id=\"{id}\" type=\"search\" data-table-filter placeholder=\"Search rows…\" autocomplete=\"off\"><span class=\"table-count\" aria-live=\"polite\"></span><span class=\"table-pages\" hidden><label>Rows <select data-table-size><option>25</option><option>50</option><option>100</option></select></label><button type=\"button\" data-table-prev>Previous</button><span data-table-page></span><button type=\"button\" data-table-next>Next</button></span></div><div class=\"table-wrap\">";
         });
         var up = string.Concat(Enumerable.Repeat("../", rel.Count(c => c == '/')));
         string Link(string page, string label) =>
@@ -85,20 +85,53 @@ static class Html
             </div>
             <script>
             document.querySelectorAll('[data-table-filter]').forEach(input => {
-              const wrap = input.parentElement.nextElementSibling;
-              const rows = [...(wrap?.querySelector('tbody')?.rows || [])];
-              const count = input.parentElement.querySelector('.table-count');
-              const update = () => {
-                const query = input.value.trim().toLocaleLowerCase();
-                let visible = 0;
-                rows.forEach(row => {
-                  const match = row.textContent.toLocaleLowerCase().includes(query);
-                  row.hidden = !match;
-                  if (match) visible++;
+              const tools = input.parentElement, wrap = tools.nextElementSibling;
+              const table = wrap?.querySelector('table'), tbody = table?.tBodies[0];
+              if (!tbody) return;
+              const rows = [...tbody.rows], count = tools.querySelector('.table-count');
+              const pager = tools.querySelector('.table-pages'), size = tools.querySelector('[data-table-size]');
+              const previous = tools.querySelector('[data-table-prev]'), next = tools.querySelector('[data-table-next]');
+              const pageLabel = tools.querySelector('[data-table-page]');
+              let page = 0, sortColumn = -1, descending = false;
+              const headings = [...(table.tHead?.rows[0]?.cells || [])];
+              headings.forEach((th, column) => {
+                const button = document.createElement('button');
+                button.type = 'button'; button.className = 'table-sort';
+                button.textContent = th.textContent.trim() + ' ↕';
+                th.replaceChildren(button);
+                button.addEventListener('click', () => {
+                  descending = sortColumn === column && !descending;
+                  sortColumn = column; page = 0; update();
                 });
-                count.textContent = visible + ' / ' + rows.length + ' rows';
-              };
-              input.addEventListener('input', update);
+              });
+              function update() {
+                const query = input.value.trim().toLocaleLowerCase();
+                const filtered = rows.filter(row => row.textContent.toLocaleLowerCase().includes(query));
+                if (sortColumn >= 0) {
+                  const column = sortColumn;
+                  const value = row => row.cells[column]?.textContent.trim() ?? '';
+                  filtered.sort((a,b) => {
+                    const result = value(a).localeCompare(value(b), undefined, {numeric:true, sensitivity:'base'});
+                    return descending ? -result : result;
+                  });
+                }
+                const perPage = Number(size.value), pages = Math.max(1, Math.ceil(filtered.length / perPage));
+                page = Math.min(page, pages - 1);
+                const shown = filtered.slice(page * perPage, (page + 1) * perPage);
+                rows.forEach(row => { row.hidden = true; });
+                shown.forEach(row => { row.hidden = false; tbody.appendChild(row); });
+                count.textContent = filtered.length + ' / ' + rows.length + ' rows';
+                pager.hidden = rows.length <= 25;
+                wrap.classList.toggle("table-long", rows.length > 25);
+                pageLabel.textContent = (page + 1) + ' / ' + pages;
+                previous.disabled = page === 0; next.disabled = page + 1 >= pages;
+                headings.forEach((th, i) => th.setAttribute('aria-sort',
+                  i === sortColumn ? (descending ? 'descending' : 'ascending') : 'none'));
+              }
+              input.addEventListener('input', () => {page = 0; update();});
+              size.addEventListener('change', () => {page = 0; update();});
+              previous.addEventListener('click', () => {page--; update();});
+              next.addEventListener('click', () => {page++; update();});
               update();
             });
             </script>

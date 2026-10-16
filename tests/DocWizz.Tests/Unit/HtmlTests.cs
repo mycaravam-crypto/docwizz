@@ -28,7 +28,23 @@ public class HtmlTests
         Assert.Contains("id=\"table-filter-2\"", html);
         Assert.Contains("data-table-filter", html);
         Assert.Contains("aria-live=\"polite\"", html);
-        Assert.Contains("row.hidden = !match", html);
+        Assert.Contains("rows.forEach(row => { row.hidden = true; });", html);
+    }
+
+    [Fact]
+    public void Data_tables_have_shared_sorting_pagination_and_scroll_controls()
+    {
+        var html = Html.Page("index.md",
+            "# Report\n\n| ID | Name |\n|---|---|\n| 10 | Alpha |\n| 2 | Beta |\n", Pages);
+        Assert.Contains("data-table-filter", html);
+        Assert.Contains("data-table-size", html);
+        Assert.Contains("data-table-prev", html);
+        Assert.Contains("data-table-next", html);
+        Assert.Contains("aria-sort", html);
+        Assert.Contains("table-long", html);
+        Assert.Contains("localeCompare", html);
+        Assert.Contains("tbody.appendChild(row)", html);
+        Assert.Contains("rows.length <= 25", html);
     }
 
     [Fact]

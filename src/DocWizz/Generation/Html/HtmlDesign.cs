@@ -9,6 +9,15 @@ static class HtmlDesign
 .table-tools input:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .table-count { font-variant-numeric:tabular-nums; }
 .table-wrap tbody tr[hidden] { display:none; }
+.table-wrap.table-long { max-height: min(70vh, 680px); overflow: auto; overscroll-behavior: contain; }
+.table-wrap.table-long thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); box-shadow: 0 1px 0 var(--line); }
+.table-pages { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.table-pages[hidden] { display: none; }
+.table-pages select, .table-pages button { font: inherit; padding: 5px 8px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+.table-pages button:disabled { opacity: .5; cursor: default; }
+.table-pages button:focus-visible, .table-pages select:focus-visible, .table-sort:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.table-sort { color: inherit; background: transparent; border: 0; padding: 0; font: inherit; font-weight: inherit; cursor: pointer; text-align: left; }
+
 
 :root {
   color-scheme: light;
