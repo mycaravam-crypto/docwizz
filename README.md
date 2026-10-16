@@ -546,6 +546,10 @@ commit. [CLI.md](CLI.md) is the full reference: every flag, default, precedence 
 
 **Evidence status during generation:** `docwizz generate .` reports whether the local Requirements index and ADO test snapshots are present and valid. Imported ADO data is explicit test-case traceability, not proof of executed tests; missing imports are reported but do not fail generation.
 
+### Evidence-driven documentation
+
+`generate` aims to combine code, architecture, historical requirements and explicit test evidence into a navigable, provenance-aware system description. With an imported ADO test snapshot, it now generates `tests.md` and links it from the project index. Test case links are not execution or coverage proof. See [evidence-driven generation](docs/evidence-driven-generation.md) for the intended behavior and evidence boundaries.
+
 ## Development
 
 ```bash
