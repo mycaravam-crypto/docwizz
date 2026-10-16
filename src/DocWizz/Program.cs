@@ -72,6 +72,19 @@ static async Task<int> Dispatch(string[] args)
         Console.Error.WriteLine($"not a directory: {path}");
         return 1;
     }
+    if (cmd == "tests")
+    {
+        if (pos.ElementAtOrDefault(1) != "import" || pos.ElementAtOrDefault(3) is not { } source)
+            return Usage("tests requires import: docwizz tests import <dir> <snapshot.json>", "tests");
+        var snapshot = AdoTestSnapshot.Read(Path.GetFullPath(source));
+        var folder = Path.Combine(path, "docs", ".docwizz");
+        Directory.CreateDirectory(folder);
+        var target = Path.Combine(folder, $"ado-tests-{snapshot.PlanId}.json");
+        File.WriteAllText(target, JsonSerializer.Serialize(snapshot, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }) + "\\n");
+        Console.WriteLine(AdoTestSnapshot.Summary(snapshot));
+        Console.WriteLine($"Imported to {target}");
+        return 0;
+    }
     if (cmd == "init") return Init(path);
     if (cmd == "setup")
     {
