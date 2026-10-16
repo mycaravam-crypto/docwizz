@@ -122,6 +122,7 @@ static class Html
                 shown.forEach(row => { row.hidden = false; tbody.appendChild(row); });
                 count.textContent = filtered.length + ' / ' + rows.length + ' rows';
                 pager.hidden = rows.length <= 25;
+                wrap.classList.toggle("table-long", rows.length > 25);
                 pageLabel.textContent = (page + 1) + ' / ' + pages;
                 previous.disabled = page === 0; next.disabled = page + 1 >= pages;
                 headings.forEach((th, i) => th.setAttribute('aria-sort',
