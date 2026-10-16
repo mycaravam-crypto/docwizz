@@ -80,6 +80,20 @@ public class HtmlTests
     }
 
     [Fact]
+    public void Test_page_is_nested_under_quality_in_both_navigation_regions()
+    {
+        var pages = new Dictionary<string, string>(Pages)
+        {
+            ["quality.md"] = "Quality", ["tests.md"] = "Test traceability"
+        };
+        var html = Html.Page("tests.md", "# Test traceability\\n", pages);
+        Assert.Contains("<details open><summary>Quality</summary>", html);
+        Assert.Contains("href=\\\"tests.html\\\" aria-current=\\\"page\\\"", html);
+        Assert.Contains("href=\\\"quality.html\\\" aria-current=\\\"true\\\"", html);
+        Assert.Contains("href=\\\"quality.html\\\">Quality</a>", html);
+    }
+
+    [Fact]
     public void Lists_the_sections_of_pages_with_three_or_more()
     {
         var many = Html.Page("api.md", "# API endpoints\n\n## Orders\n\n## Two `words`\n\n## Users\n", Pages);
