@@ -28,7 +28,7 @@ public class HtmlTests
         Assert.Contains("id=\"table-filter-2\"", html);
         Assert.Contains("data-table-filter", html);
         Assert.Contains("aria-live=\"polite\"", html);
-        Assert.Contains("row.hidden = !match", html);
+        Assert.Contains("rows.forEach(row => { row.hidden = true; });", html);
     }
 
     [Fact]
