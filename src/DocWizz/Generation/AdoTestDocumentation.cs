@@ -42,6 +42,6 @@ static class AdoTestDocumentation
         return sb.ToString();
     }
 
-    static string E(string? text) => (text ?? "").Replace("\\", "\\\\").Replace("`", "\\`")
-        .Replace("[", "\\[").Replace("]", "\\]").Replace("|", "\\|").Replace("<", "&lt;").Replace(">", "&gt;");
+    static string E(string? text) => (text ?? "").Replace("`", "'")
+        .Replace("[", "(").Replace("]", ")").Replace("|", "/").Replace("<", "&lt;").Replace(">", "&gt;");
 }
