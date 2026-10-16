@@ -81,11 +81,11 @@ static async Task<int> Dispatch(string[] args)
     {
         if (pos.ElementAtOrDefault(2) is not { } source)
             return Usage("tests requires import: docwizz tests import <dir> <snapshot.json>", "tests");
-        var snapshot = AdoTestSnapshot.Read(Path.GetFullPath(source));
+        var snapshot = AdoTestSnapshot.Load(Path.GetFullPath(source));
         var folder = Path.Combine(path, "docs", ".docwizz");
         Directory.CreateDirectory(folder);
-        var target = Path.Combine(folder, $"ado-tests-{snapshot.PlanId}.json");
-        File.WriteAllText(target, JsonSerializer.Serialize(snapshot, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }) + "\n");
+        var target = Path.Combine(folder, $"ado-tests-{(snapshot.PlanIds.Length == 1 ? snapshot.PlanIds[0].ToString() : "all")}.json");
+        File.WriteAllText(target, snapshot.Content.TrimEnd() + "\n");
         Console.WriteLine(AdoTestSnapshot.Summary(snapshot));
         Console.WriteLine($"Imported to {target}");
         return 0;
