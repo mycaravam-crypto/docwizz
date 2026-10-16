@@ -35,7 +35,14 @@ static class Html
             return pages.ContainsKey(target) ? $"href=\"{m.Groups[1].Value}.html{m.Groups[2].Value}\"" : m.Value;
         });
         // Wide tables scroll inside a wrapper; a table made display: block to scroll shrinks to its content instead.
-        body = Regex.Replace(body, @"<table\b[^>]*>", "<div class=\"table-wrap\">$0").Replace("</table>", "</table></div>");
+        body = Regex.Replace(body, @"<table\\b[^>]*>", "<div class=\\"table-wrap\\">$0").Replace("</table>", "</table></div>");
+        // One local filter per data table; static Markdown remains readable without JavaScript.
+        var tableIndex = 0;
+        body = Regex.Replace(body, @"<div class=""table-wrap"">(?=<table)", _ =>
+        {
+            var id = $"table-filter-{++tableIndex}";
+            return $"<div class=\\"table-tools\\"><label for=\\"{id}\\">Filter table</label><input id=\\"{id}\\" type=\\"search\\" data-table-filter placeholder=\\"Search rows…\\" autocomplete=\\"off\\"><span class=\\"table-count\\" aria-live=\\"polite\\"></span></div><div class=\\"table-wrap\\">";
+        });
         var up = string.Concat(Enumerable.Repeat("../", rel.Count(c => c == '/')));
         string Link(string page, string label) =>
             $"<a href=\"{up}{Path.ChangeExtension(page, ".html")}\"{(page == rel ? " aria-current=\"page\"" : "")}>{Enc(label)}</a>";
@@ -77,6 +84,25 @@ static class Html
             </main>
             <aside class="toc" aria-label="On this page">{{toc}}</aside>
             </div>
+            <script>
+            document.querySelectorAll('[data-table-filter]').forEach(input => {
+              const wrap = input.parentElement.nextElementSibling;
+              const rows = [...(wrap?.querySelector('tbody')?.rows || [])];
+              const count = input.parentElement.querySelector('.table-count');
+              const update = () => {
+                const query = input.value.trim().toLocaleLowerCase();
+                let visible = 0;
+                rows.forEach(row => {
+                  const match = row.textContent.toLocaleLowerCase().includes(query);
+                  row.hidden = !match;
+                  if (match) visible++;
+                });
+                count.textContent = visible + ' / ' + rows.length + ' rows';
+              };
+              input.addEventListener('input', update);
+              update();
+            });
+            </script>
             <script src="{{up}}search.js"></script>
             <script>{{HtmlDesign.Script}}</script>
             <script>
