@@ -1333,14 +1333,14 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
             && scope.Projects.References == "exclude"
             && !scope.Projects.TestLinks
             && scope.UnassignedSources == "exclude"
-            && scopedManifests is { Count: > 0 }
+            && scopedManifests is { Count: 1 }
             && changedFiles is { Count: > 0 }
             && changedFiles.All(path => scopedManifests.Any(manifest =>
             {
                 var slash = manifest.LastIndexOf('/');
                 var directory = slash < 0 ? "" : manifest[..(slash + 1)];
                 return path.StartsWith(directory, StringComparison.Ordinal)
-                    && (directory.Length > 0 || scopedManifests.Count == 1);
+                    && directory.Length > 0;
             }));
         var selective = changedFiles is { Count: > 0 } && (scope is null || safeScoped);
         if (profile) Console.Error.WriteLine($"docwizz requirements profile: {sha} mode={(selective ? "selective" : config.Scope is not null ? "scoped-full" : "full")} changedFiles={changedFiles?.Count ?? 0}");
