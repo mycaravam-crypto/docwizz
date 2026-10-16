@@ -544,6 +544,8 @@ Common options: `--profile <name|file.yaml>`, `--format json` (for `analyze`, `c
 `remediate`, …), `--timings`. `docwizz help <command>` explains one command; `docwizz --version` prints version and
 commit. [CLI.md](CLI.md) is the full reference: every flag, default, precedence rule and exit code.
 
+**Evidence status during generation:** `docwizz generate .` reports whether the local Requirements index and ADO test snapshots are present and valid. Imported ADO data is explicit test-case traceability, not proof of executed tests; missing imports are reported but do not fail generation.
+
 ## Development
 
 ```bash
