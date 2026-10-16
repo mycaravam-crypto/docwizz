@@ -44,6 +44,11 @@ static async Task<int> Dispatch(string[] args)
         requirementsAction = pos[1];
         pos.RemoveAt(1);
     }
+    if (cmd == "tests")
+    {
+        if (pos.ElementAtOrDefault(1) != "import") return Usage("tests needs import", "tests");
+        pos.RemoveAt(1);
+    }
     if (cmd == "load")
     {
         if (pos.ElementAtOrDefault(1) != "import") return Usage("load needs import: docwizz load import <dir> <report.json>...", "load");
@@ -71,6 +76,19 @@ static async Task<int> Dispatch(string[] args)
     {
         Console.Error.WriteLine($"not a directory: {path}");
         return 1;
+    }
+    if (cmd == "tests")
+    {
+        if (pos.ElementAtOrDefault(2) is not { } source)
+            return Usage("tests requires import: docwizz tests import <dir> <snapshot.json>", "tests");
+        var snapshot = AdoTestSnapshot.Load(Path.GetFullPath(source));
+        var folder = Path.Combine(path, "docs", ".docwizz");
+        Directory.CreateDirectory(folder);
+        var target = Path.Combine(folder, $"ado-tests-{(snapshot.PlanIds.Length == 1 ? snapshot.PlanIds[0].ToString() : "all")}.json");
+        File.WriteAllText(target, snapshot.Content.TrimEnd() + "\n");
+        Console.WriteLine(AdoTestSnapshot.Summary(snapshot));
+        Console.WriteLine($"Imported to {target}");
+        return 0;
     }
     if (cmd == "init") return Init(path);
     if (cmd == "setup")
@@ -797,6 +815,7 @@ static string Reference() => $"""
       docwizz scan <dir> [model.json]   write the raw code model
       docwizz evidence-diff <dir> <before.yaml> <after.yaml>  compare explicit evidence changes
         [--format json]                 machine-readable change report
+      docwizz tests import <dir> <snapshot.json>  validate and store an offline Azure DevOps test snapshot
       docwizz trace <dir> <evidence.yaml>  explicit requirement-architecture-test gaps
         [--format json]                 machine-readable instead of Markdown
       docwizz requirements import <dir> <history.json> [<work-items>]  index exported commit/PR/work-item history

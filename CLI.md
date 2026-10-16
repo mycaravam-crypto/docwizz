@@ -43,6 +43,7 @@ prerequisite.
 | `sbom` | CycloneDX manifest SBOM | supply-chain inventory | optional |
 | `remediate` | package update suggestions | maintainers | optional |
 | `trace` | explicit traceability gaps from a YAML catalog | product documents | optional |
+| `tests` | import offline Azure DevOps test-case traceability | product documents | optional |
 | `evidence-diff` | compare two evidence snapshots and explicit test impact | product documents | optional |
 | `requirements` | historical work items behind a code symbol, from exported history | coding agents, reviews | optional |
 | `load` | measured load-test numbers per endpoint, from powerwizz reports | performance | optional |
@@ -503,6 +504,12 @@ Gradle **manifests only**.
 
 `generate` writes the same inventory to `views/packages.md`, listing packages declared at several versions first.
 
+### Offline Azure DevOps test snapshots
+
+`docwizz tests import . alpha-tests.json` accepts both single-plan `ado.test-traceability/v1` and multi-plan `ado.test-traceability/v2` snapshots; v2 preserves explicit plan/suite/testcase assignments. It validates these references and stores the snapshot offline.
+
+`docwizz tests import . alpha-tests.json` validates `ado.test-traceability/v1` exported by `ado testplan trace-export` and saves a normalized snapshot under `docs/.docwizz/ado-tests-<planId>.json`. The command reports explicit requirement-to-test-case associations. It does not infer relationships to code tests or assert test execution. This first integration is an offline import and summary; generated report-page integration is not yet implemented.
+
 ## Project evidence
 
 These commands work on requirement and project evidence kept as YAML, CSV or Markdown, in the format described in
@@ -663,6 +670,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `mcp` | `docwizz mcp <dir> [--auto-rescan]` | read-only MCP server on stdio: find_symbol, context, callers, impact, check, … | coding agents |
 | `evidence-diff` | `docwizz evidence-diff <dir> <before.yaml> <after.yaml> [--format json]` | explicit evidence changes and affected tests | product documents |
 | `trace` | `docwizz trace <dir> <evidence.yaml> [--format json]` | explicit traceability and missing links | product documents |
+| `tests` | `docwizz tests import <dir> <snapshot.json>` | validate and store offline ADO test traceability | product documents |
 | `load` | `docwizz load import <dir> <report.json>...` | store powerwizz reports; `generate` adds measured numbers per endpoint to `api.md` | performance |
 | `requirements` | `docwizz requirements import <dir> <history.json> [<work-items>] [--progress]`, `docwizz requirements show <dir> (--for <symbol> \| --work-item <id>) [--format json]`, `docwizz requirements query <dir> <query.json>` | index exported history; one symbol's requirements, or one work item's symbols; gitwizz's requirement query | coding agents, reviews |
 | `product` | `docwizz product [check] <dir> <template.yaml> [out.md] [--context file.yaml] [--ai] [--format f]` | product draft from evidence; `check`: references and freshness | architects |
@@ -743,6 +751,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `domain` | JSON or text summary written, even with missing optional requirements index | missing/ambiguous seed, invalid options or missing index for Work Item seed |
 | `remediate` | done (suggestions alone never fail) | a `--validate` run failed, or bad arguments |
 | `trace` | report on stdout | invalid/missing YAML; no data written |
+| `tests` | snapshot validated, saved and summarized | missing or invalid snapshot or unsupported version |
 | `evidence-diff` | report on stdout | invalid/missing evidence catalogs; no data written |
 | `requirements` | `import`: index written or unchanged; `show`: answer on stdout (any outcome, `no-link` included); `query`: answer on stdout (a missing index included) | missing or invalid input, unknown schema, no index (`show`), unknown target, an unreadable query, bad arguments |
 | `load` | reports stored (unmatched or ambiguous steps are listed on stderr) | no report, a file that isn't `powerwizz.report/v1` (wrong or missing `schema`), invalid JSON, a missing or mistyped field, a broken `load.json` |

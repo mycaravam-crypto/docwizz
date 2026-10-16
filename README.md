@@ -532,6 +532,7 @@ them (`UseNpgsql`, `fetch('https://…')`), *inferred* when only a package point
 | `docwizz sbom [dir] [out]` | CycloneDX 1.6 from direct manifest dependencies |
 | `docwizz remediate <dir>` | package update suggestions, optionally validated |
 | `docwizz trace <dir> <evidence.yaml>` | requirement → architecture → test gaps |
+| `docwizz tests import <dir> <snapshot.json>` | import offline ADO test-case traceability (v1/v2) |
 | `docwizz evidence-diff <dir> <before.yaml> <after.yaml>` | changed evidence and affected tests |
 | `docwizz requirements import\|show\|query <dir> ...` | work items behind a symbol, from exported history; `query` answers gitwizz's PR context |
 | `docwizz load import <dir> <report.json>...` | powerwizz load-test results, shown per endpoint in `api.md` |

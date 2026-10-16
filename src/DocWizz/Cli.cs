@@ -28,6 +28,8 @@ static class Cli
     // One line per command, in the order a new user meets them; `Use` says who it's for (CLI.md has the full matrix).
     public static readonly Dictionary<string, Command> Commands = new()
     {
+        ["tests"] = new("tests import <dir> <snapshot.json>", "offline ADO test traceability import", "evidence",
+            "docwizz tests import . alpha-tests.json", "", []),
         ["discover"] = new("discover [dir]", "read-only inventory of solutions, projects and references", "everyday",
             "docwizz discover . --format json", "--format console|json", ["format"]),
         ["setup"] = new("setup [dir]", "first run: detect the stack, write docwizz.yaml, analyze, generate docs, check", "start here",
