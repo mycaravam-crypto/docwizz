@@ -1,17 +1,25 @@
 using System.Text.Json;
 
 // Offline-only import of ADO test case traceability. Never infers code links or test success.
+/// <summary>Validates and imports offline Azure DevOps test-traceability snapshots.</summary>
 static class AdoTestSnapshot
 {
+    /// <summary>Test case metadata and suite identifiers.</summary>
     public sealed record Case(int Id, string Title, string Area, int[] SuiteIds);
+    /// <summary>Requirement with explicit ADO test case links.</summary>
     public sealed record Requirement(int Id, string Title, int[] TestCaseIds);
+    /// <summary>Test plan identifier and display name.</summary>
     public sealed record Plan(int Id, string Name);
+    /// <summary>Specific plan, suite and test case membership.</summary>
     public sealed record Assignment(int PlanId, int SuiteId, int TestCaseId);
+    /// <summary>Version two multi-plan snapshot payload.</summary>
     public sealed record MultiData(string Format, string Project, string Area, DateTimeOffset GeneratedAt,
         Plan[] Plans, Case[] TestCases, Assignment[] Assignments, Requirement[] Requirements);
+    /// <summary>Validated snapshot metadata plus original JSON for offline storage.</summary>
     public sealed record ImportData(string Format, string Project, string Area, DateTimeOffset GeneratedAt,
         int[] PlanIds, int CaseCount, int RequirementCount, int LinkedCount, string Content);
 
+    /// <summary>Loads and validates a version one or version two test snapshot.</summary>
     public static ImportData Load(string file)
     {
         var json = File.ReadAllText(file);
@@ -43,9 +51,11 @@ static class AdoTestSnapshot
             cases.Count, data.Requirements.Length, data.Requirements.Count(r => r.TestCaseIds.Length > 0), json);
     }
 
+    /// <summary>Version one single-plan snapshot payload.</summary>
     public sealed record Data(string Format, string Project, string Area, DateTimeOffset GeneratedAt,
         int PlanId, string PlanName, Case[] TestCases, Requirement[] Requirements);
 
+    /// <summary>Reads and validates legacy version one test snapshots.</summary>
     public static Data Read(string file)
     {
         var data = JsonSerializer.Deserialize<Data>(File.ReadAllText(file),
@@ -66,11 +76,13 @@ static class AdoTestSnapshot
         return data;
     }
 
+    /// <summary>Summarizes validated single- or multi-plan traceability without inferring coverage.</summary>
     public static string Summary(ImportData data) =>
         $"ADO test snapshot: {data.Project} / {data.Area}; {data.PlanIds.Length} plans, " +
         $"{data.RequirementCount} requirements, {data.CaseCount} cases, {data.LinkedCount} linked requirements. " +
         "Explicit links only; not proof of execution or code coverage.";
 
+    /// <summary>Summarizes a version one test snapshot.</summary>
     public static string Summary(Data data) =>
         $"ADO test snapshot: {data.Project} / {data.Area}; plan #{data.PlanId} {data.PlanName}; " +
         $"{data.Requirements.Length} requirements, {data.TestCases.Length} cases, " +
