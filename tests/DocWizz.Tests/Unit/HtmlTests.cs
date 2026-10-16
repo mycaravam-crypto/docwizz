@@ -32,6 +32,22 @@ public class HtmlTests
     }
 
     [Fact]
+    public void Data_tables_have_shared_sorting_pagination_and_scroll_controls()
+    {
+        var html = Html.Page("index.md",
+            "# Report\n\n| ID | Name |\n|---|---|\n| 10 | Alpha |\n| 2 | Beta |\n", Pages);
+        Assert.Contains("data-table-filter", html);
+        Assert.Contains("data-table-size", html);
+        Assert.Contains("data-table-prev", html);
+        Assert.Contains("data-table-next", html);
+        Assert.Contains("aria-sort", html);
+        Assert.Contains("table-long", html);
+        Assert.Contains("localeCompare", html);
+        Assert.Contains("tbody.appendChild(row)", html);
+        Assert.Contains("rows.length <= 25", html);
+    }
+
+    [Fact]
     public void Tables_scroll_inside_a_wrapper()
     {
         var html = Html.Page("index.md", "# demo\n\n| A | B |\n|---|---|\n| 1 | 2 |\n", Pages);
