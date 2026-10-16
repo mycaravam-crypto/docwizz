@@ -1,6 +1,19 @@
 // Report only local, validated evidence availability; no implied test execution or coverage.
 static class GenerateEvidenceFeedback
 {
+    public static IReadOnlyList<AdoTestSnapshot.ImportData> ValidSnapshots(string root)
+    {
+        var folder = Path.Combine(root, "docs", ".docwizz");
+        if (!Directory.Exists(folder)) return [];
+        var values = new List<AdoTestSnapshot.ImportData>();
+        foreach (var file in Directory.GetFiles(folder, "ado-tests-*.json").Order(StringComparer.Ordinal))
+        {
+            try { values.Add(AdoTestSnapshot.Load(file)); }
+            catch (Exception e) when (e is ArgumentException or System.Text.Json.JsonException or KeyNotFoundException) { }
+        }
+        return values;
+    }
+
     public static string[] Lines(string root)
     {
         var lines = new List<string>();
