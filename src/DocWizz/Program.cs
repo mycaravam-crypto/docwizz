@@ -815,6 +815,7 @@ static string Reference() => $"""
       docwizz scan <dir> [model.json]   write the raw code model
       docwizz evidence-diff <dir> <before.yaml> <after.yaml>  compare explicit evidence changes
         [--format json]                 machine-readable change report
+      docwizz tests import <dir> <snapshot.json>  validate and store an offline Azure DevOps test snapshot
       docwizz trace <dir> <evidence.yaml>  explicit requirement-architecture-test gaps
         [--format json]                 machine-readable instead of Markdown
       docwizz requirements import <dir> <history.json> [<work-items>]  index exported commit/PR/work-item history
