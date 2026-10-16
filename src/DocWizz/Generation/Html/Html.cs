@@ -34,14 +34,13 @@ static class Html
             var target = Path.GetRelativePath(".", Path.Combine(dir, m.Groups[1].Value + ".md")).Replace('\\', '/');
             return pages.ContainsKey(target) ? $"href=\"{m.Groups[1].Value}.html{m.Groups[2].Value}\"" : m.Value;
         });
-        // Wide tables scroll inside a wrapper; a table made display: block to scroll shrinks to its content instead.
-        body = Regex.Replace(body, @"<table\\b[^>]*>", "<div class=\\"table-wrap\\">$0").Replace("</table>", "</table></div>");
-        // One local filter per data table; static Markdown remains readable without JavaScript.
+        // Wide tables scroll without narrowing the content.
+        body = Regex.Replace(body, @"<table\b[^>]*>", "<div class=\"table-wrap\">$0").Replace("</table>", "</table></div>");
         var tableIndex = 0;
         body = Regex.Replace(body, @"<div class=""table-wrap"">(?=<table)", _ =>
         {
             var id = $"table-filter-{++tableIndex}";
-            return $"<div class=\\"table-tools\\"><label for=\\"{id}\\">Filter table</label><input id=\\"{id}\\" type=\\"search\\" data-table-filter placeholder=\\"Search rows…\\" autocomplete=\\"off\\"><span class=\\"table-count\\" aria-live=\\"polite\\"></span></div><div class=\\"table-wrap\\">";
+            return $"<div class=\"table-tools\"><label for=\"{id}\">Filter table</label><input id=\"{id}\" type=\"search\" data-table-filter placeholder=\"Search rows…\" autocomplete=\"off\"><span class=\"table-count\" aria-live=\"polite\"></span></div><div class=\"table-wrap\">";
         });
         var up = string.Concat(Enumerable.Repeat("../", rel.Count(c => c == '/')));
         string Link(string page, string label) =>
