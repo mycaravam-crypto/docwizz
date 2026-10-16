@@ -3,6 +3,16 @@ namespace DocWizz.Tests.Component;
 // Scanner → CodeModel: C# snippets in, nodes and edges out.
 public class CSharpScannerTests
 {
+    [Fact]
+    public void Runtime_assembly_paths_ignore_empty_and_missing_entries()
+    {
+        var existing = typeof(object).Assembly.Location;
+        var paths = string.Join(Path.PathSeparator, ["", existing, "", existing, Path.Combine(Path.GetTempPath(), "docwizz-missing-runtime.dll"), ""]);
+        Assert.Equal([existing], CSharpScanner.ReferencePaths(paths));
+        Assert.Empty(CSharpScanner.ReferencePaths(null));
+        Assert.Empty(CSharpScanner.ReferencePaths(""));
+    }
+
     static (Dictionary<string, Node> Nodes, HashSet<(string, string, string)> Edges) Scan(params (string, string)[] files)
     {
         using var src = new Sources(files);
