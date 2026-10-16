@@ -11,11 +11,14 @@ static class CSharpScanner
     // Roslyn reference assemblies are immutable and identical across historical scans.
     // Load them once per process; compilations and semantic models remain commit-local.
     static readonly Lazy<IReadOnlyList<MetadataReference>> SharedReferences = new(() =>
-        ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(File.Exists)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+        ReferencePaths((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
             .Select(p => MetadataReference.CreateFromFile(p)).ToArray());
+
+    internal static string[] ReferencePaths(string? value) => (value ?? "")
+        .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Where(File.Exists)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
 
     static readonly string[] HttpVerbs = ["HttpGet", "HttpPost", "HttpPut", "HttpDelete", "HttpPatch"];
     static readonly string[] MapVerbs = ["MapGet", "MapPost", "MapPut", "MapDelete", "MapPatch", "MapMethods"];
