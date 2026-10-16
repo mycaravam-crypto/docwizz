@@ -12,7 +12,9 @@ static class CSharpScanner
     // Load them once per process; compilations and semantic models remain commit-local.
     static readonly Lazy<IReadOnlyList<MetadataReference>> SharedReferences = new(() =>
         ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
-            .Split(Path.PathSeparator)
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(File.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(p => MetadataReference.CreateFromFile(p)).ToArray());
 
     static readonly string[] HttpVerbs = ["HttpGet", "HttpPost", "HttpPut", "HttpDelete", "HttpPatch"];
