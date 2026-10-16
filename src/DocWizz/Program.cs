@@ -1324,12 +1324,34 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
         var dir = Directory.CreateDirectory(Path.Combine(tmp.FullName, "tree")).FullName;
         // Read only changed blobs from Git's object database. A blob is immutable and may be
         // reused across commits; do not cache a whole semantic model by blob alone.
-        var selective = changedFiles is { Count: > 0 } && config.Scope is null;
+        // Scoped, isolated project scans can remain selective when no cross-project files,
+        // test projects or unassigned sources can affect symbol ownership.
+        // More complex scopes retain the proven full historical scan.
+        var scope = config.Scope;
+        var scopedManifests = scope?.Projects?.Include;
+        var safeScoped = scope is not null
+            && scope.Projects.References == "exclude"
+            && !scope.Projects.TestLinks
+            && scope.UnassignedSources == "exclude"
+            && scopedManifests is { Count: 1 }
+            && changedFiles is { Count: > 0 }
+            && changedFiles.All(path => scopedManifests.Any(manifest =>
+            {
+                var slash = manifest.LastIndexOf('/');
+                var directory = slash < 0 ? "" : manifest[..(slash + 1)];
+                return path.StartsWith(directory, StringComparison.Ordinal)
+                    && directory.Length > 0;
+            }));
+        var selective = changedFiles is { Count: > 0 } && (scope is null || safeScoped);
         if (profile) Console.Error.WriteLine($"docwizz requirements profile: {sha} mode={(selective ? "selective" : config.Scope is not null ? "scoped-full" : "full")} changedFiles={changedFiles?.Count ?? 0}");
         if (selective)
         {
             var success = true;
-            foreach (var path in changedFiles!)
+            // A scoped scan needs the selected project manifests to resolve ownership.
+            // Fetch those exact historical blobs; never copy current manifests into old commits.
+            var requested = changedFiles!.Concat(safeScoped ? scopedManifests! : [])
+                .Distinct(StringComparer.Ordinal).ToArray();
+            foreach (var path in requested)
             {
                 if (Path.IsPathRooted(path) || path.Split('/', '\\').Any(p => p is ".." or "." or ""))
                 {
@@ -1360,12 +1382,24 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
             if (success)
             {
                 Mark("read changed Git blobs");
-                var selectiveModel = BuildModel(dir, config, historical: true).Model with { Commit = sha };
-                Mark("scan model");
-                return selectiveModel;
+                try
+                {
+                    var selectiveModel = BuildModel(dir, config, historical: true).Model with { Commit = sha };
+                    Mark("scan model");
+                    return selectiveModel;
+                }
+                catch (ScopeException) when (safeScoped)
+                {
+                    // An incomplete historical project layout must not produce false evidence.
+                    Mark("scoped selective fallback");
+                    Directory.Delete(dir, recursive: true);
+                    Directory.CreateDirectory(dir);
+                    success = false;
+                }
             }
+            if (success) throw new InvalidOperationException("selective mapping did not return a model");
             Mark("selective fallback");
-            Directory.Delete(dir, recursive: true);
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
             Directory.CreateDirectory(dir);
         }
         // Preserve the existing full-scan fallback for missing blobs or scoped projects.
