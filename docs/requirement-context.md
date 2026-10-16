@@ -200,3 +200,9 @@ was imported. The work-item text lands in the static docs, so treat them as bein
 Only requested symbol ids are answered (at most 10 links each). A symbol whose id isn't in the history is looked up by
 its `previousId` (a changed signature). The PR's own commits are usually not in the export yet: an answer never says
 they were indexed. A query that isn't valid JSON or `gitwizz.requirement-query/v1` exits 1 with the reason on stderr.
+
+## Historical scan performance (issue #232)
+
+Historical requirement import already reads changed Git blobs instead of archiving a full tree when no project scope is configured. With a **single isolated selected project**, `references: exclude`, `test_links: false` and `unassigned_sources: exclude`, it now also materializes the changed source blobs plus the selected historical project manifest. More complex scoped projects continue to use the complete historical scan to preserve symbol ownership and project dependencies; missing/deleted blobs fall back to that scan as well. This deliberately prioritizes correct evidence over speed.
+
+Set `DOCWIZZ_REQUIREMENTS_PROFILE=1` to inspect per-commit scan mode, changed file count and phase durations. This optimization does not change the stored index schema or the resume/checkpoint mechanism. The original 170-commit performance case still needs a controlled benchmark.
