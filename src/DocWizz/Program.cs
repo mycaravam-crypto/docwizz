@@ -174,6 +174,7 @@ static async Task<int> Dispatch(string[] args)
             Console.WriteLine(report.Line);
             Console.WriteLine();
             foreach (var l in report.Details) Console.WriteLine(l.Length == 0 ? "" : "  " + l);
+            foreach (var l in GenerateEvidenceFeedback.Lines(path)) Console.WriteLine("  " + l);
             return 0;
         default:
             return Usage($"unknown command {cmd}");
