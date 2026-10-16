@@ -40,7 +40,8 @@ static class Html
         string Link(string page, string label) =>
             $"<a href=\"{up}{Path.ChangeExtension(page, ".html")}\"{(page == rel ? " aria-current=\"page\"" : "")}>{Enc(label)}</a>";
         // A view or the description marks Architecture in the header as the section it belongs to.
-        var section = rel.StartsWith("views/") || rel == "architecture-description.md" ? "architecture.md" : rel;
+        var section = rel.StartsWith("views/") || rel == "architecture-description.md" ? "architecture.md"
+            : rel == "tests.md" ? "quality.md" : rel;
         var nav = string.Concat(Top.Select(n => n.Page != rel && n.Page == section
             ? $"<a href=\"{up}{Path.ChangeExtension(n.Page, ".html")}\" aria-current=\"true\">{Enc(n.Label)}</a>" : Link(n.Page, n.Label)));
         var title = Title(rel, markdown);
@@ -49,7 +50,9 @@ static class Html
         var category = rel.StartsWith("modules/") ? "Module" : rel.StartsWith("views/") ? "Architecture view"
             : rel.StartsWith("routes/") ? "Route" : rel.StartsWith("requirements/") ? "Requirement" : rel.StartsWith("projects/") ? "Project" : rel.StartsWith("solutions/") ? "Solution" : "Documentation";
         // Docs / the solution and project (or Architecture) above this page / this page.
-        List<string> trail = rel.StartsWith("views/") ? [Link("architecture.md", "Architecture")] : hierarchy?.Breadcrumbs(rel, Link) ?? [];
+        List<string> trail = rel.StartsWith("views/") ? [Link("architecture.md", "Architecture")]
+            : rel == "tests.md" ? [Link("quality.md", "Quality")]
+            : hierarchy?.Breadcrumbs(rel, Link) ?? [];
         var breadcrumbs = string.Join("<span aria-hidden=\"true\">/</span>", [$"<a href=\"{up}index.html\">Docs</a>", .. trail, $"<span aria-current=\"page\">{Enc(title)}</span>"]);
         return $$"""
             <!doctype html>
@@ -152,8 +155,12 @@ static class Html
         // Views keep the order the generator wrote them in (context first), not their titles' order.
         var architecture = new[] { ("architecture.md", "Overview"), ("architecture-description.md", "Description") }
             .Where(p => pages.ContainsKey(p.Item1)).Concat(pages.Where(p => p.Key.StartsWith("views/")).Select(p => (p.Key, p.Value)));
-        var top = Top.Select(t => t.Page == "architecture.md" ? Folder("Architecture", Items(architecture)) : pages.ContainsKey(t.Page) ? Items([t]) : "");
-        var other = pages.Where(p => !p.Key.Contains('/') && p.Key != "architecture-description.md" && Top.All(t => t.Page != p.Key))
+        var quality = new[] { ("quality.md", "Overview"), ("tests.md", "Tests & requirements") }
+            .Where(p => pages.ContainsKey(p.Item1));
+        var top = Top.Select(t => t.Page == "architecture.md" ? Folder("Architecture", Items(architecture))
+            : t.Page == "quality.md" ? Folder("Quality", Items(quality))
+            : pages.ContainsKey(t.Page) ? Items([t]) : "");
+        var other = pages.Where(p => !p.Key.Contains('/') && p.Key != "architecture-description.md" && p.Key != "tests.md" && Top.All(t => t.Page != p.Key))
             .OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => (p.Key, p.Value));
         var modules = pages.Where(p => p.Key.StartsWith("modules/")).OrderBy(p => p.Value, StringComparer.Ordinal).Select(p => (p.Key, p.Value));
         var code = hierarchy?.Sidebar(link) is { Length: > 0 } tree ? tree : Items(modules);
