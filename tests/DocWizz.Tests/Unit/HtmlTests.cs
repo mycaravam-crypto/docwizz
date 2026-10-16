@@ -20,6 +20,18 @@ public class HtmlTests
     }
 
     [Fact]
+    public void Tables_have_independent_filter_inputs_and_row_counts()
+    {
+        var html = Html.Page("index.md",
+            "# Report\n\n| A | B |\n|---|---|\n| one | two |\n\n| C |\n|---|\n| three |\n", Pages);
+        Assert.Contains("id=\"table-filter-1\"", html);
+        Assert.Contains("id=\"table-filter-2\"", html);
+        Assert.Contains("data-table-filter", html);
+        Assert.Contains("aria-live=\"polite\"", html);
+        Assert.Contains("row.hidden = !match", html);
+    }
+
+    [Fact]
     public void Tables_scroll_inside_a_wrapper()
     {
         var html = Html.Page("index.md", "# demo\n\n| A | B |\n|---|---|\n| 1 | 2 |\n", Pages);

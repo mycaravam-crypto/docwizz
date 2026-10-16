@@ -3,6 +3,13 @@
 static class HtmlDesign
 {
     public const string Css = """
+/* Compact filters belong to each table, not to the global docs search. */
+.table-tools { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:20px 0 8px; font-size:14px; color:var(--muted); }
+.table-tools input { flex:1 1 180px; min-width:0; max-width:360px; padding:8px 12px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--ink); font:inherit; }
+.table-tools input:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.table-count { font-variant-numeric:tabular-nums; }
+.table-wrap tbody tr[hidden] { display:none; }
+
 :root {
   color-scheme: light;
   --canvas: #f3f5f8; --surface: #ffffff; --surface-soft: #f8fafc;
