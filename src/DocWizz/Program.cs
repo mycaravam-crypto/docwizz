@@ -1096,6 +1096,7 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
         RebuildHtml = rebuildHtml,
         Screenshots = screenshots,
         Load = LoadAttached(root, model),
+        AdoTests = GenerateEvidenceFeedback.ValidSnapshots(root),
         Requirements = pageRequirements,
         Head = pageRequirements is null ? null : head ?? Git(root, "rev-parse HEAD")?.Trim(),
         Files = [.. RepoFiles(root, config, [".github", ".circleci"]).Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))],
