@@ -69,7 +69,12 @@ static class AdoTestDocumentation
     // Newer snapshots contain optional ADO fields; legacy imports remain readable.
     static string Optional(JsonElement item, string property) =>
         item.TryGetProperty(property, out var field) && field.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)
-            && !string.IsNullOrWhiteSpace(field.ToString()) ? E(field.ToString()) : "—";
+            && !string.IsNullOrWhiteSpace(field.ToString()) ? E(Plain(field.ToString())) : "—";
+
+    // ADO descriptions and acceptance criteria are usually HTML. Show readable plain text
+    // in the Markdown/HTML table without embedding untrusted work-item markup.
+    static string Plain(string value) => System.Net.WebUtility.HtmlDecode(
+        System.Text.RegularExpressions.Regex.Replace(value, "<[^>]*>", " "));
 
     static string E(string? text) => (text ?? "").Replace("`", "'")
         .Replace("[", "(").Replace("]", ")").Replace("|", "&#124;")
