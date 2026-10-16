@@ -86,11 +86,11 @@ public class HtmlTests
         {
             ["quality.md"] = "Quality", ["tests.md"] = "Test traceability"
         };
-        var html = Html.Page("tests.md", "# Test traceability\\n", pages);
+        var html = Html.Page("tests.md", "# Test traceability\n", pages);
         Assert.Contains("<details open><summary>Quality</summary>", html);
-        Assert.Contains("href=\\\"tests.html\\\" aria-current=\\\"page\\\"", html);
-        Assert.Contains("href=\\\"quality.html\\\" aria-current=\\\"true\\\"", html);
-        Assert.Contains("href=\\\"quality.html\\\">Quality</a>", html);
+        Assert.Contains("href=\"tests.html\" aria-current=\"page\"", html);
+        Assert.Contains("href=\"quality.html\" aria-current=\"true\"", html);
+        Assert.Contains("href=\"quality.html\">Quality</a>", html);
     }
 
     [Fact]
