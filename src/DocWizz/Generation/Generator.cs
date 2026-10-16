@@ -15,6 +15,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     public IReadOnlyDictionary<string, string> Screenshots { get; init; } = new Dictionary<string, string>();
     // Measured load-test results per endpoint (docwizz load import); null when none were imported.
     public LoadReports.Attached? Load { get; init; }
+    // Explicit offline ADO test evidence; never treated as proof of execution or code coverage.
+    public IReadOnlyList<AdoTestSnapshot.ImportData> AdoTests { get; init; } = [];
     public Action<int, int>? OnPageProcessed { get; init; }
     // Repository files (relative, `/`-separated) after exclude:/.gitignore; the deployment view picks its descriptors from them.
     public List<string> Files { get; init; } = [];
@@ -53,6 +55,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         foreach (var solution in hierarchy.Solutions) Write(solution.Page, RenderSolution(solution));
         foreach (var m in modules) Write($"modules/{Naming.Slug(m.Key)}.md", Module(m.Key, m.ToList()));
         Write("index.md", Index(modules.Select(m => m.Key).ToList()));
+        if (AdoTests.Count > 0) Write("tests.md", AdoTestDocumentation.Render(AdoTests));
         Write("architecture.md", ArchitecturePage(modules.Select(m => m.Key).ToList()));
         Write("api.md", Api());
         Write("frontend.md", FrontendPage());
@@ -124,6 +127,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         var kinds = model.Nodes.GroupBy(n => n.Kind).ToDictionary(g => g.Key, g => g.Count());
         sb.AppendLine($"# {Path.GetFileName(Path.GetFullPath(root))}\n");
         sb.AppendLine($"Generated from commit `{model.Commit ?? "unknown"}`.\n");
+        if (AdoTests.Count > 0) sb.AppendLine("## Imported test evidence\n\nSee [Azure DevOps test traceability](tests.md) for imported plans, requirements and test cases. Explicit links are not execution or coverage proof.\n");
         if (config.Scope is { } active)
         {
             sb.AppendLine("## Documentation scope\n");
