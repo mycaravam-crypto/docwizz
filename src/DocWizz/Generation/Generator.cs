@@ -127,7 +127,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         var kinds = model.Nodes.GroupBy(n => n.Kind).ToDictionary(g => g.Key, g => g.Count());
         sb.AppendLine($"# {Path.GetFileName(Path.GetFullPath(root))}\n");
         sb.AppendLine($"Generated from commit `{model.Commit ?? "unknown"}`.\n");
-        if (AdoTests.Count > 0) sb.AppendLine("## Imported test evidence\n\nSee [Azure DevOps test traceability](tests.md) for imported plans, requirements and test cases. Explicit links are not execution or coverage proof.\n");
+        if (AdoTests.Count > 0) sb.AppendLine("## Imported test evidence\n\nSee [Quality → Tests & requirements](tests.md) for imported plans, requirements and test cases. Explicit links are not execution or coverage proof.\n");
         if (config.Scope is { } active)
         {
             sb.AppendLine("## Documentation scope\n");

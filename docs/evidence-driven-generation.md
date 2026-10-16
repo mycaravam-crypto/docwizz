@@ -30,3 +30,7 @@ Requirements pages continue to use the existing requirement history index; this 
 4. Introduce execution statuses only after an outcome-bearing, timestamped interchange contract exists.
 
 The generator stays offline, deterministic for identical inputs, and does not query Azure DevOps or execute tests.
+
+## Navigation and presentation
+
+Imported ADO test traceability is part of **Quality**, not a top-level documentation category. The HTML top navigation highlights Quality for the test page; the sidebar groups Quality overview and Tests & requirements under the same heading. Test plans and explicit requirement-to-test links render as Markdown tables that remain available in both Markdown and HTML output. Case counts are distinct within each plan and snapshot; an unlinked requirement is not a failed test. Technical test links and historical requirement context retain their separate provenance.
