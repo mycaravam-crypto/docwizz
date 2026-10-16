@@ -360,14 +360,18 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         var endpoints = model.Nodes.Where(n => n.Tags?.Contains("endpoint") == true)
             .OrderBy(n => n.Route?.TrimStart('/')).ThenBy(n => n.Tags![1]).ToList();
         sb.AppendLine(endpoints.Count == 0 ? "No endpoints found.\n"
-            : "| Method | Route | Summary | Input | Response | Authorization | Handler | Called from |\n|---|---|---|---|---|---|---|---|");
+            : "| Method | Route | Summary | Input | Response | Authorization | Implementation | Source | Called from |\n|---|---|---|---|---|---|---|---|---|");
         foreach (var n in endpoints)
         {
             var from = callers[n.Id].Select(c => nodes.TryGetValue(c, out var cn) ? $"`{cn.Name}`" : c).Distinct();
             var input = string.Join("<br>", (n.Parameters ?? []).Select(p => $"{Code(p)}"));
             var auth = n.Tags!.Contains("anonymous") ? "anonymous" : n.Tags.Contains("authorize") ? "required" : "—";
+            // Endpoint nodes may be synthetic; the containing source symbol is the actual handler.
+            // Never infer a controller or service name from a route string.
+            var owner = parent.TryGetValue(n.Id, out var ownerId) && nodes.TryGetValue(ownerId, out var symbol) ? symbol : null;
+            var implementation = owner is null ? "— (unresolved)" : ModuleLink(owner);
             sb.AppendLine($"| {n.Tags![1]} | `/{n.Route?.TrimStart('/')}` | {Esc(Summary(n) ?? "—")} | {(input == "" ? "—" : input)} | " +
-                $"{Response(n)} | {auth} | {SourceLink(n.File, n.Line, $"{Path.GetFileName(n.File)}:{n.Line}")} | {string.Join(", ", from)} |");
+                $"{Response(n)} | {auth} | {implementation} | {SourceLink(n.File, n.Line, $"{Path.GetFileName(n.File)}:{n.Line}")} | {string.Join(", ", from)} |");
         }
         if (Load is { } load) sb.Append(LoadSection(load));
         // Middleware in registration order, per place that configures it (a project's top-level code, Startup.Configure).
