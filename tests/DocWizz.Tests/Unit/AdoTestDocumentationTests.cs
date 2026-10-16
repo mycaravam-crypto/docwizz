@@ -16,9 +16,9 @@ public class AdoTestDocumentationTests
         var imported = new AdoTestSnapshot.ImportData("ado.test-traceability/v2", "Demo", "Area",
             DateTimeOffset.Parse("2026-10-16T06:00:00+00:00"), [7], 1, 1, 1, json);
         var page = AdoTestDocumentation.Render([imported]);
-        Assert.Contains("Requirement #21", page);
-        Assert.Contains("Test case #11", page);
+        Assert.Contains("| #21 | Requirement | 1 | #11 Case |", page);
+        Assert.Contains("| 7 | Plan | 1 |", page);
         Assert.Contains("not", page);
-        Assert.Contains("Plans: **1**", page);
+        Assert.Contains("| **1** | **1** | **1** | **1** | **0** |", page);
     }
 }
