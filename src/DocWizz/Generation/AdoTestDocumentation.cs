@@ -44,8 +44,8 @@ static class AdoTestDocumentation
             sb.AppendLine();
 
             sb.AppendLine("### Requirements and test cases\n");
-            sb.AppendLine("| Requirement | Description | Linked cases | Test cases |");
-            sb.AppendLine("| --- | --- | ---: | --- |");
+            sb.AppendLine("| Requirement | Title | Description | Acceptance criteria | Story points / effort | Priority | Linked cases | Test cases |");
+            sb.AppendLine("| --- | --- | --- | --- | ---: | ---: | ---: | --- |");
             foreach (var requirement in root.GetProperty("requirements").EnumerateArray().OrderBy(r => r.GetProperty("id").GetInt32()))
             {
                 var ids = requirement.GetProperty("testCaseIds").EnumerateArray().Select(v => v.GetInt32()).ToArray();
@@ -53,6 +53,10 @@ static class AdoTestDocumentation
                     ? $"#{id} {E(testCase.GetProperty("title").GetString())}" : $"#{id} (not in snapshot)");
                 sb.Append("| #").Append(requirement.GetProperty("id").GetInt32()).Append(" | ")
                     .Append(E(requirement.GetProperty("title").GetString())).Append(" | ")
+                    .Append(Optional(requirement, "description")).Append(" | ")
+                    .Append(Optional(requirement, "acceptanceCriteria")).Append(" | ")
+                    .Append(Optional(requirement, "storyPoints")).Append(" | ")
+                    .Append(Optional(requirement, "priority")).Append(" | ")
                     .Append(ids.Length).Append(" | ")
                     .Append(ids.Length == 0 ? "No linked case in this snapshot" : string.Join("<br>", titles))
                     .AppendLine(" |");
@@ -61,6 +65,11 @@ static class AdoTestDocumentation
         }
         return sb.ToString();
     }
+
+    // Newer snapshots contain optional ADO fields; legacy imports remain readable.
+    static string Optional(JsonElement item, string property) =>
+        item.TryGetProperty(property, out var field) && field.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)
+            && !string.IsNullOrWhiteSpace(field.ToString()) ? E(field.ToString()) : "—";
 
     static string E(string? text) => (text ?? "").Replace("`", "'")
         .Replace("[", "(").Replace("]", ")").Replace("|", "&#124;")
