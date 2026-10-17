@@ -197,6 +197,33 @@ public class McpJourneyTests
     }
 
     [Fact]
+    public void A_ref_cannot_pass_options_to_git()
+    {
+        Docwizz.RequireFrontendScanner();
+        using var repo = new Repo();
+        using var server = new Server(repo.Dir);
+        // #251: the ref reached git inside one command line, so spaces split it into options: `git archive --remote=.
+        // --exec=..` ran a command and `--output=..` wrote the archive anywhere.
+        var outside = Path.GetDirectoryName(repo.Dir)!;
+        var (marker, archive) = (Path.Combine(outside, "ran"), Path.Combine(outside, "written.tar"));
+        foreach (var (tool, argument, value) in new[]
+        {
+            ("impact", "ref", $"HEAD --remote=. \"--exec=touch {marker}\""),
+            ("impact", "ref", $"HEAD --output={archive}"),
+            ("check", "since", $"--output={archive}"),
+        })
+        {
+            var (body, isError) = server.Call(tool, new() { [argument] = value });
+            Assert.True(isError, $"{tool} {value}: {body}");
+            Assert.Contains("unknown ref", body["error"]!.GetValue<string>());
+        }
+        Assert.False(File.Exists(marker), "an injected --exec ran");
+        Assert.False(File.Exists(archive), "an injected --output wrote a file");
+        Assert.False(server.Call("impact", new() { ["ref"] = "HEAD" }).Error);
+        Assert.Equal(0, server.Stop());
+    }
+
+    [Fact]
     public void Auto_rescan_answers_from_fresh_code()
     {
         Docwizz.RequireFrontendScanner();

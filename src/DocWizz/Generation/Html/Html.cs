@@ -21,14 +21,17 @@ static class Html
 
     static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
         .UseAutoIdentifiers(Markdig.Extensions.AutoIdentifiers.AutoIdentifierOptions.GitHub) // same anchors as the Markdown links
-        .UseAdvancedExtensions().Build();
+        .UseAdvancedExtensions()
+        // Raw HTML in the Markdown comes out as text: names, doc comments and imported work items are not trusted (#251).
+        // The one tag DocWizz writes itself, <br> for line breaks in table cells, is put back after rendering.
+        .DisableHtml().Build();
 
     // `pages`: every generated Markdown page (relative, `/`-separated) and its title. `hierarchy`, when the model has
     // projects, adds the solution → project → module breadcrumb and sidebar group.
     public static string Page(string rel, string markdown, IReadOnlyDictionary<string, string> pages, ProjectHierarchy? hierarchy = null)
     {
         var dir = Path.GetDirectoryName(rel)?.Replace('\\', '/') ?? "";
-        var body = Markdown.ToHtml(markdown.Replace(Generator.Marker, ""), Pipeline);
+        var body = Markdown.ToHtml(markdown.Replace(Generator.Marker, ""), Pipeline).Replace("&lt;br&gt;", "<br>");
         body = Regex.Replace(body, @"href=""([^""#:?]+)\.md(#[^""]*)?""", m =>
         {
             var target = Path.GetRelativePath(".", Path.Combine(dir, m.Groups[1].Value + ".md")).Replace('\\', '/');

@@ -88,7 +88,27 @@ public class GitRefRegressionJourneyTests
         Git(repo.Root, "-c", "user.name=DocWizz", "-c", "user.email=docwizz@example.invalid", "-c", "commit.gpgsign=false", "commit", "-qm", "base");
         var diff = RunFrom(repo.Root, "diff", "no-such-ref", "HEAD");
         Assert.Equal(1, diff.Exit);
-        Assert.Contains("not a git repo or unknown ref: no-such-ref (git rev-parse --short no-such-ref: exit 128: fatal:", diff.Err);
+        Assert.Contains("not a git repo or unknown ref: no-such-ref (git rev-parse --verify no-such-ref^{commit}: exit 128: fatal:", diff.Err);
         Docwizz.NoStackTrace(diff);
+    }
+
+    [Fact]
+    public void A_ref_that_looks_like_an_option_is_refused_not_passed_to_git()
+    {
+        using var repo = new Sources(("Shop.cs", "namespace Shop; public class A { }"));
+        Git(repo.Root, "init", "-q");
+        Git(repo.Root, "add", "-A");
+        Git(repo.Root, "-c", "user.name=DocWizz", "-c", "user.email=docwizz@example.invalid", "-c", "commit.gpgsign=false", "commit", "-qm", "base");
+        // #251: `HEAD --output=<file>` used to reach git archive as two arguments and write the archive there.
+        var written = Path.Combine(repo.Root, "..", Path.GetFileName(repo.Root) + "-written.tar");
+        var spaced = RunFrom(repo.Root, "diff", $"HEAD --output={written}", "HEAD");
+        Assert.Equal(1, spaced.Exit);
+        Assert.Contains($"not a git repo or unknown ref: HEAD --output={written}", spaced.Err);
+        Assert.False(File.Exists(written), "an injected --output wrote a file");
+        // The CLI parser already refuses option-shaped positionals; MCP refs are covered in McpJourneyTests.
+        var option = RunFrom(repo.Root, "diff", $"--output={written}", "HEAD");
+        Assert.NotEqual(0, option.Exit);
+        Assert.False(File.Exists(written), "an option-shaped ref reached git");
+        Docwizz.NoStackTrace(spaced);
     }
 }
