@@ -6,7 +6,7 @@
   "dependencies": {
     "@vue/compiler-sfc": "^3.5.43",
     "tree-sitter-java": "0.23.5",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "web-tree-sitter": "0.25.10"
   }
 }
