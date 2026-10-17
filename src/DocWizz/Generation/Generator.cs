@@ -664,8 +664,9 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     // Prose for a table cell or list item: pipes escaped, one line, and `<` escaped as in Text.
     internal static string Esc(string s) => Text(s.Replace("|", "\\|").Replace("\n", " "));
     // Names and doc text in Markdown: `<` outside code spans escaped, else Markdown passes Array<Row>, Foo<T> or <slot>
-    // through as an HTML tag the browser hides. Code spans stay as written.
-    internal static string Text(string s) => Regex.Replace(s, @"(`+)[^`].*?\1(?!`)|<", m => m.Value == "<" ? "\\<" : m.Value);
+    // through as an HTML tag the browser hides. Code spans stay as written. As in CommonMark, a backslash-escaped backtick
+    // opens no code span and a span's backticks are a whole run, so `<` the renderer sees as text is always escaped (#251).
+    internal static string Text(string s) => Regex.Replace(s, @"\\[\\`<]|(?<!`)(`+)[^`].*?(?<!`)\1(?!`)|<", m => m.Value == "<" ? "\\<" : m.Value);
     // A code span for a table cell: pipes escaped, one line; a value with a backtick is fenced with two.
     internal static string Code(string s)
     {

@@ -370,7 +370,7 @@ static class Remediations
     static void Copy(string root, string to)
     {
         string[] skip = ["bin", "obj", "node_modules", ".git", ".vs"];
-        var files = Git(root, "ls-files --cached --others --exclude-standard")?.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+        var files = Git(root, "ls-files", "--cached", "--others", "--exclude-standard")?.Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .Select(f => Path.Combine(root, f))
             ?? Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
                 .Where(f => !Path.GetRelativePath(root, f).Split(Path.DirectorySeparatorChar).SkipLast(1).Any(skip.Contains));
@@ -382,7 +382,7 @@ static class Remediations
         }
     }
 
-    static string? Git(string dir, string args)
+    static string? Git(string dir, params string[] args)
     {
         try
         {

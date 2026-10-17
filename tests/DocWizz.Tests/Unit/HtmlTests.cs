@@ -82,6 +82,29 @@ public class HtmlTests
     public void Code_spans_keep_their_angle_brackets_unescaped() =>
         Assert.Equal("returns `List<T>` or Map\\<K>", Generator.Text("returns `List<T>` or Map<K>"));
 
+    // #251: Text's idea of a code span must match CommonMark's, or a `<` it leaves alone reaches the page as a tag.
+    [Theory]
+    [InlineData("\\`<img src=x onerror=alert(1)>\\`")]
+    [InlineData("`<img src=x onerror=alert(1)>``")]
+    [InlineData("``<img src=x onerror=alert(1)>`")]
+    public void Backticks_that_open_no_code_span_leave_angle_brackets_escaped(string text)
+    {
+        Assert.Contains("\\<img", Generator.Text(text));
+        var html = Html.Page("modules/src-Core.md", $"# src/Core\n\n{Generator.Text(text)}\n", Pages);
+        Assert.DoesNotContain("<img", html);
+        Assert.Contains("&lt;img", html);
+    }
+
+    [Fact]
+    public void Raw_html_in_markdown_renders_as_text_but_table_line_breaks_stay()
+    {
+        var html = Html.Page("index.md", "# demo\n\n<script>alert(1)</script>\n\n| A |\n|---|\n| one<br>two <img src=x onerror=alert(1)> |\n", Pages);
+        Assert.Contains("&lt;script&gt;alert(1)&lt;/script&gt;", html);
+        Assert.DoesNotContain("<script>alert(1)", html);
+        Assert.DoesNotContain("<img", html);
+        Assert.Contains("one<br>two", html);
+    }
+
     [Theory]
     [InlineData("Prüfung/Übersicht", "Pruefung-Uebersicht")]
     [InlineData("src/Größe", "src-Groesse")]

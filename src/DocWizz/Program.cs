@@ -232,7 +232,7 @@ static int DomainCommand(string root, Config config, Dictionary<string, string> 
         RequirementId? workItemId = workItem is null ? null : RequirementId.Parse(workItem, index?.Inputs.Repository);
         var (model, _, _) = LoadModel(root, config);
         var report = DomainCrawler.Discover(model, seed, workItemId, depth, limit, index,
-            Git(root, "rev-parse HEAD")?.Trim(), root);
+            Git(root, "rev-parse", "HEAD")?.Trim(), root);
         if (index is not null && index.Inputs.Scope != ProjectScope.Fingerprint(config.Scope))
             report = report with { Warnings = [.. report.Warnings, "the imported requirement scope differs from the current project scope; reimport requirements"] };
         var md = opts.GetValueOrDefault("format") == "md";
@@ -335,7 +335,7 @@ static int RequirementsImport(string root, string? history, string? workItems, C
             }
             bar.Advance("read", Plural(items.Count, "work item"));
             bar.Begin("map");
-            var prefix = Git(root, "rev-parse --show-prefix")?.Trim() ?? "";
+            var prefix = Git(root, "rev-parse", "--show-prefix")?.Trim() ?? "";
             string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java", ".php"];
             // The bar includes reused commits and no-source commits from the outset, while
             // ETA uses only newly scanned commits (a resumed import must not skew the rate).
@@ -428,7 +428,7 @@ static int RequirementsShow(string root, Config config, Dictionary<string, strin
     if (index.Inputs.Scope != ProjectScope.Fingerprint(config.Scope))
         Console.Error.WriteLine("docwizz: the project scope changed since the index was imported; symbol ids may differ (run requirements import again)");
     var (model, _, _) = LoadModel(root, config);
-    var head = Git(root, "rev-parse HEAD")?.Trim();
+    var head = Git(root, "rev-parse", "HEAD")?.Trim();
     if (workItem is not null)
     {
         RequirementId id;
@@ -481,7 +481,7 @@ static int RequirementsQuery(string root, string? queryFile, Config config)
         catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
     }
     var nodes = index is null ? [] : LoadModel(root, config).Model.Nodes.GroupBy(n => n.Id).ToDictionary(g => g.Key, g => g.First());
-    var answer = RequirementQuery.Answer(index, symbols, id => nodes.GetValueOrDefault(id), Git(root, "rev-parse HEAD")?.Trim(),
+    var answer = RequirementQuery.Answer(index, symbols, id => nodes.GetValueOrDefault(id), Git(root, "rev-parse", "HEAD")?.Trim(),
         index is not null && index.Inputs.Scope != ProjectScope.Fingerprint(config.Scope));
     Console.Write(answer.ToJsonString() + "\n");
     return 0;
@@ -549,12 +549,12 @@ static int ContextCommand(string root, Config config, Dictionary<string, string>
     if (opts.ContainsKey("requirements"))
     {
         if (LoadRequirements(root) is not { } index) return 1;
-        requirements = RequirementLinesFor(index, t, Git(root, "rev-parse HEAD")?.Trim(), config, model);
+        requirements = RequirementLinesFor(index, t, Git(root, "rev-parse", "HEAD")?.Trim(), config, model);
     }
     var blocks = AgentContext.Blocks(graph, config, t, hops, includeAi, findings, arch, drafts, requirements);
     var aiLeftOut = includeAi ? 0 : t.Scope.Count(n => drafts.ContainsKey(n.Id));
     var package = new AgentContext.Package(Path.GetFileName(Path.GetFullPath(root).TrimEnd('/', '\\')), model.Commit,
-        new(source, Git(root, "rev-parse --short HEAD")?.Trim(), changed), t, budget, includeAi, aiLeftOut, blocks, [], requirements is not null);
+        new(source, Git(root, "rev-parse", "--short", "HEAD")?.Trim(), changed), t, budget, includeAi, aiLeftOut, blocks, [], requirements is not null);
     if (package.Stale) Console.Error.WriteLine("docwizz: the model is stale; run docwizz generate . to refresh it (the package says why)");
     Console.Write(AgentContext.Render(package, opts.GetValueOrDefault("format") == "json"));
     return 0;
@@ -580,10 +580,10 @@ static async Task<int> McpCommand(string root, Config config, bool autoRescan)
     var refs = new McpRefModelCache();
     var scope = ProjectScope.Fingerprint(config.Scope);
     CodeModel? RefModel(string gitRef) => refs.Get(gitRef, scope,
-        r => GitRun(root, $"rev-parse --verify {r}^{{commit}}") is { Exit: 0 } ok ? ok.Out.Trim() : null,
+        r => ResolveCommit(root, r) is { Exit: 0 } ok ? ok.Out.Trim() : null,
         sha => ModelAt(root, sha, config))
         ?? ModelAt(root, gitRef, config); // Preserve git failure diagnostics for unresolved refs.
-    string? Head() => Git(root, "rev-parse --short HEAD")?.Trim();
+    string? Head() => Git(root, "rev-parse", "--short", "HEAD")?.Trim();
     int ChangedSince(DateTime time) => BuildFiles(root, config).Count(f => File.GetLastWriteTimeUtc(f) > time);
     // Fingerprints the same file list BuildModel reads (RepoFiles), not just source extensions.
     var working = new McpWorkingModelCache(Head, () => McpWorkingModelCache.Fingerprint(root, RepoFiles(root, config)),
@@ -855,7 +855,7 @@ static List<string> RepoFilesUnscoped(string root, Config config, string[]? dotD
             if (IsOutput(dir)) return true;
         return false;
     }
-    return (Git(root, "ls-files --cached --others --exclude-standard")?
+    return (Git(root, "ls-files", "--cached", "--others", "--exclude-standard")?
         .Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(f => Path.Combine(root, f)).Where(File.Exists)
         ?? Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
         .Where(f => !Path.GetRelativePath(root, f).Split(Path.DirectorySeparatorChar).SkipLast(1)
@@ -951,7 +951,7 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     link.Dispose();
 
     var files = scanned.Where(f => !testFiles.Contains(Path.GetRelativePath(root, f).Replace('\\', '/'))).ToList();
-    return (new CodeModel(Git(root, "rev-parse --short HEAD")?.Trim(), nodes, edges,
+    return (new CodeModel(Git(root, "rev-parse", "--short", "HEAD")?.Trim(), nodes, edges,
         ProjectScope.Fingerprint(config.Scope), plan.Inventory), files);
 }
 
@@ -1051,7 +1051,7 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
     // Cached drafts are always used; new ones are only requested with --ai.
     bar.Begin("AI summaries", ai ? "drafting" : "from cache");
     // --requirements: each symbol's bounded requirement selection goes into its prompt (and its cache key).
-    var head = requirements is null ? null : Git(root, "rev-parse HEAD")?.Trim();
+    var head = requirements is null ? null : Git(root, "rev-parse", "HEAD")?.Trim();
     var current = model.Nodes.Select(n => n.Id).ToHashSet(StringComparer.Ordinal);
     Func<Node, BusinessContext.Selection?>? business = requirements is null ? null
         : n => BusinessContext.Select(RequirementResolver.For(requirements, n.Id, n, head, current.Contains), config.Ai.Requirements);
@@ -1098,7 +1098,7 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
         Load = LoadAttached(root, model),
         AdoTests = GenerateEvidenceFeedback.ValidSnapshots(root),
         Requirements = pageRequirements,
-        Head = pageRequirements is null ? null : head ?? Git(root, "rev-parse HEAD")?.Trim(),
+        Head = pageRequirements is null ? null : head ?? Git(root, "rev-parse", "HEAD")?.Trim(),
         Files = [.. RepoFiles(root, config, [".github", ".circleci"]).Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))],
     }.Run());
     bar.Advance("write pages", $"{Plural(pages.Count, "page")}, {changed.Count} changed");
@@ -1305,22 +1305,24 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
         Console.Error.WriteLine($"docwizz requirements profile: {gitRef[..Math.Min(7, gitRef.Length)]} {stage} +{(elapsed - last).TotalSeconds:0.000}s total={elapsed.TotalSeconds:0.000}s");
         last = elapsed;
     }
-    var prefixRun = GitRun(root, "rev-parse --show-prefix");
-    var shaRun = prefixRun.Exit == 0 ? GitRun(root, $"rev-parse --short {gitRef}") : prefixRun;
-    if (prefixRun.Exit != 0 || shaRun.Exit != 0)
+    var prefixRun = GitRun(root, "rev-parse", "--show-prefix");
+    var commitRun = prefixRun.Exit == 0 ? ResolveCommit(root, gitRef) : prefixRun;
+    if (prefixRun.Exit != 0 || commitRun.Exit != 0)
     {
         // git's own reason: a missing repository and an unknown ref read alike otherwise, and a transient failure
         // (#133) leaves nothing to go on.
         Console.Error.WriteLine($"not a git repo or unknown ref: {gitRef} ({(prefixRun.Exit != 0
-            ? GitFailure("rev-parse --show-prefix", prefixRun) : GitFailure($"rev-parse --short {gitRef}", shaRun))})");
+            ? GitFailure(["rev-parse", "--show-prefix"], prefixRun) : GitFailure(ResolveCommitArgs(gitRef), commitRun))})");
         return null;
     }
-    var (prefix, sha) = (prefixRun.Out.Trim(), shaRun.Out.Trim());
+    // Only the resolved commit id reaches the git commands below, never the ref as given (#251).
+    var (prefix, commit) = (prefixRun.Out.Trim(), commitRun.Out.Trim());
+    var sha = Git(root, "rev-parse", "--short", commit)?.Trim() ?? commit;
     Mark("git ref resolution");
     var tmp = Directory.CreateTempSubdirectory("docwizz-");
     try
     {
-        var top = Git(root, "rev-parse --show-toplevel")!.Trim();
+        var top = Git(root, "rev-parse", "--show-toplevel")!.Trim();
         var dir = Directory.CreateDirectory(Path.Combine(tmp.FullName, "tree")).FullName;
         // Read only changed blobs from Git's object database. A blob is immutable and may be
         // reused across commits; do not cache a whole semantic model by blob alone.
@@ -1359,7 +1361,7 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
                     break;
                 }
                 var gitPath = prefix.Replace('\\', '/') + path.Replace('\\', '/');
-                var blobId = Git(top, $"rev-parse {gitRef}:{gitPath}")?.Trim();
+                var blobId = Git(top, "rev-parse", $"{commit}:{gitPath}")?.Trim();
                 if (blobId is null || !System.Text.RegularExpressions.Regex.IsMatch(blobId, "^[0-9a-f]{40,64}$"))
                 {
                     success = false;
@@ -1404,8 +1406,8 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
         }
         // Preserve the existing full-scan fallback for missing blobs or scoped projects.
         var tar = Path.Combine(tmp.FullName, "tree.tar");
-        var tree = prefix.Length == 0 ? gitRef : $"{gitRef}:{prefix}";
-        if (Git(top, $"archive --format=tar -o \"{tar}\" {tree}") is null) return null;
+        var tree = prefix.Length == 0 ? commit : $"{commit}:{prefix}";
+        if (Git(top, "archive", "--format=tar", "-o", tar, tree) is null) return null;
         Mark("git archive");
         TarFile.ExtractToDirectory(tar, dir, overwriteFiles: true);
         Mark("extract archive");
@@ -1693,7 +1695,7 @@ static LoadReports.Attached? LoadAttached(string root, CodeModel model)
     try
     {
         return LoadReports.Attach(model, LoadReports.Load(file),
-            n => DateTimeOffset.TryParse(Git(root, $"log -1 --format=%cI -- \"{n.File}\"")?.Trim(), out var at) ? at : null);
+            n => DateTimeOffset.TryParse(Git(root, "log", "-1", "--format=%cI", "--", n.File)?.Trim(), out var at) ? at : null);
     }
     catch (Exception e) when (e is ArgumentException or JsonException)
     {
@@ -1702,12 +1704,20 @@ static LoadReports.Attached? LoadAttached(string root, CodeModel model)
     }
 }
 
-static string? Git(string dir, string args) => GitRun(dir, args) is { Exit: 0 } r ? r.Out : null;
+static string? Git(string dir, params string[] args) => GitRun(dir, args) is { Exit: 0 } r ? r.Out : null;
+
+// A ref from the command line or an MCP client as the full commit id it names, or why it names none. Git gets it as one
+// argument and never one starting with '-', so a ref can't smuggle in options (#251: `git archive --exec=..` ran commands).
+static (int Exit, string Out, string Err) ResolveCommit(string dir, string gitRef) =>
+    gitRef.StartsWith('-') ? (128, "", $"fatal: '{gitRef}' is an option, not a git ref") : GitRun(dir, ResolveCommitArgs(gitRef));
+
+static string[] ResolveCommitArgs(string gitRef) => ["rev-parse", "--verify", gitRef + "^{commit}"];
 
 // A git command with its exit code and what it said on stderr, for errors that need to say why git failed (#133: a
 // bare "unknown ref" left an intermittent CI failure undiagnosable). Exit -1: git couldn't be started. Both streams are
-// drained concurrently, so a chatty stderr can't fill its pipe and hang the command.
-static (int Exit, string Out, string Err) GitRun(string dir, string args)
+// drained concurrently, so a chatty stderr can't fill its pipe and hang the command. Arguments go to git one by one,
+// never through a command line that could split a value into several.
+static (int Exit, string Out, string Err) GitRun(string dir, params string[] args)
 {
     try
     {
@@ -1725,8 +1735,8 @@ static (int Exit, string Out, string Err) GitRun(string dir, string args)
 }
 
 // Why a git command failed, in one line: its exit code and the first line it wrote to stderr.
-static string GitFailure(string args, (int Exit, string Out, string Err) r) =>
-    $"git {args}: " + (r.Exit == -1 ? r.Err : $"exit {r.Exit}" +
+static string GitFailure(string[] args, (int Exit, string Out, string Err) r) =>
+    $"git {string.Join(' ', args)}: " + (r.Exit == -1 ? r.Err : $"exit {r.Exit}" +
         (r.Err.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() is { } line ? $": {line}" : ""));
 
 // `generate`: the stable one-line result, and the report printed below it.
