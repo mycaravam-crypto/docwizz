@@ -17,6 +17,11 @@ updates:
     cooldown: { default-days: 7 }
     groups:
       npm: { patterns: ['*'], update-types: [minor, patch] }
+    ignore:
+      # TypeScript 7 drops the JavaScript compiler API (ts.SyntaxKind, ts.createSourceFile) that index.mjs parses with;
+      # moving to it means rewriting the scanner, not bumping a version.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
   # Actions are pinned by commit SHA; Dependabot bumps the SHA and its version comment together.
   - package-ecosystem: github-actions
     directory: /
