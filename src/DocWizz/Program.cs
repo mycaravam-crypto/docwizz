@@ -880,7 +880,9 @@ static List<string> RepoFiles(string root, Config config, string[]? dotDirs = nu
 // progress, when given, hears about every step from the first file listing on: a large repository spends most of a
 // generate here, and a bar that only moves once the scan is over looks hung.
 // historical: root is a tree as of an older commit (ProjectScope.Resolve).
-static (CodeModel Model, List<string> Files) BuildModel(string root, Config config, CliProgress? progress = null, bool historical = false)
+// focus: C# files (root-relative, '/') to emit symbols for; the others only resolve types (requirements import).
+static (CodeModel Model, List<string> Files) BuildModel(string root, Config config, CliProgress? progress = null, bool historical = false,
+    IReadOnlySet<string>? focus = null)
 {
     string[] exts = [".cs", ".vue", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".java", ".php"];
     progress?.Report(0, 1, "listing files");
@@ -904,7 +906,7 @@ static (CodeModel Model, List<string> Files) BuildModel(string root, Config conf
     progress?.Report(done, total, $"found {scanned.Count:N0} source files");
 
     // The scanner counts parsing as the first half, the semantic pass as the second; reference loading sits between.
-    var (nodes, edges) = Timings.Measure("scan:csharp", () => CSharpScanner.Scan(root, csFiles, config.CommentDocs, (i, n) =>
+    var (nodes, edges) = Timings.Measure("scan:csharp", () => CSharpScanner.Scan(root, csFiles, config.CommentDocs, focus: focus, progress: (i, n) =>
         progress?.Report(done + (i < csFiles.Count ? i : i + 20), total, i < csFiles.Count ? $"C# parsing {i + 1:N0}/{csFiles.Count:N0}"
             : i == csFiles.Count ? "C# loading references" : $"C# symbols {i - csFiles.Count + 1:N0}/{csFiles.Count:N0}")));
     done += csUnits;
@@ -1379,12 +1381,23 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
                 }
                 File.WriteAllBytes(targetFile, bytes);
             }
+            // A C# file alone leaves types from other files unresolved, and the symbol id then reads Total(Order) instead
+            // of Total(Shop.Order). Every historical .cs file goes into the compilation; only changed files are walked.
+            if (success && changedFiles!.Any(p => p.EndsWith(".cs", StringComparison.Ordinal)))
+            {
+                var csTar = Path.Combine(tmp.FullName, "cs.tar");
+                var csTree = prefix.Length == 0 ? gitRef : $"{gitRef}:{prefix}";
+                if (Git(top, $"archive --format=tar -o \"{csTar}\" {csTree} -- \"*.cs\"") is null) success = false;
+                else TarFile.ExtractToDirectory(csTar, dir, overwriteFiles: true);
+                Mark("git archive C# context");
+            }
             if (success)
             {
                 Mark("read changed Git blobs");
                 try
                 {
-                    var selectiveModel = BuildModel(dir, config, historical: true).Model with { Commit = sha };
+                    var selectiveModel = BuildModel(dir, config, historical: true,
+                        focus: changedFiles!.Select(p => p.Replace('\\', '/')).ToHashSet(StringComparer.Ordinal)).Model with { Commit = sha };
                     Mark("scan model");
                     return selectiveModel;
                 }
