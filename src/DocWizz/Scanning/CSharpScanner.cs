@@ -27,7 +27,9 @@ static class CSharpScanner
     static bool commentDocs;
 
     // progress: (files done, of total) — parsing counts the first half, the semantic pass the second.
-    public static (List<Node>, List<Edge>) Scan(string root, IEnumerable<string> files, bool commentDocs = false, Action<int, int>? progress = null)
+    // focus: only these root-relative ('/') files get nodes and edges; the rest are compiled for type resolution only.
+    public static (List<Node>, List<Edge>) Scan(string root, IEnumerable<string> files, bool commentDocs = false, Action<int, int>? progress = null,
+        IReadOnlySet<string>? focus = null)
     {
         CSharpScanner.commentDocs = commentDocs;
         var parse = new CSharpParseOptions(documentationMode: DocumentationMode.Parse);
@@ -55,6 +57,7 @@ static class CSharpScanner
             progress?.Invoke(trees.Count + scanned++, 2 * trees.Count);
             var sm = comp.GetSemanticModel(tree);
             var rel = Path.GetRelativePath(root, tree.FilePath);
+            if (focus is not null && !focus.Contains(rel.Replace('\\', '/'))) continue;
             var syntaxRoot = tree.GetRoot();
 
             foreach (var decl in syntaxRoot.DescendantNodes().OfType<BaseTypeDeclarationSyntax>())
