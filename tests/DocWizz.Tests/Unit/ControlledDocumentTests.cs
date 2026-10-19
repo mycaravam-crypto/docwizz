@@ -138,11 +138,20 @@ public class ControlledDocumentTests
     }
 
     [Fact]
+    public void Missing_required_changes_are_reported_explicitly()
+    {
+        const string changeBlock = "changes:\\n  - version: \\"0.1\\"\\n    date: 2026-10-19\\n    author: Architekturteam\\n    description: Erstentwurf";
+        var withoutChanges = Metadata.Replace(changeBlock, "");
+        var error = Assert.Throws<ArgumentException>(() => ControlledDocument.Parse(withoutChanges));
+        Assert.Contains("changes must be a list", error.Message);
+    }
+
+    [Fact]
     public void Changes_must_be_a_list_with_current_version_and_known_fields()
     {
         var changed = Metadata.Replace("changes:\n  - version: \"0.1\"\n    date: 2026-10-19\n    author: Architekturteam\n    description: Erstentwurf", "changes: unknown");
         Assert.Contains("must be a list", Assert.Throws<ArgumentException>(() => ControlledDocument.Parse(changed)).Message);
-        Assert.Contains("must be a list", Assert.Throws<ArgumentException>(() => ControlledDocument.Parse(Metadata.Replace("changes:\n  - version: \"0.1\"\n    date: 2026-10-19\n    author: Architekturteam\n    description: Erstentwurf", ""))).Message);
+
         Assert.Contains("changes must contain current version",
             Assert.Throws<ArgumentException>(() => ControlledDocument.Parse(Metadata.Replace("  - version: \"0.1\"", "  - version: \"0.0\""))).Message);
         Assert.Contains("required", Assert.Throws<ArgumentException>(() => ControlledDocument.Parse(
