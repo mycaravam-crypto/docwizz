@@ -664,7 +664,7 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
         if (control is null || string.IsNullOrWhiteSpace(approvalName) || string.IsNullOrWhiteSpace(trustName))
             return Usage("product publish requires --control, --approval and --trust", "product");
         var original = Path.Combine(root, "docs", "products", template.ProductId + ".md");
-        var report = Path.ChangeExtension(original, ".evidence.json");
+        var releaseEvidencePath = Path.ChangeExtension(original, ".evidence.json");
         var findings = ProductCheck.Run(root, template, ProductModel(root, config, template), project, original, control);
         if (findings.Any(f => f.Severity == "error" || f.Rule is "PROD-001" or "DOC-003") ||
             !control.Approvals.Any(a => a.Kind == "review") ||
@@ -681,7 +681,7 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
             : Path.GetFullPath(outName);
         try
         {
-            ProductPublication.Publish(root, template, control, original, report, trust, signed, published);
+            ProductPublication.Publish(root, template, control, original, releaseEvidencePath, trust, signed, published);
             Console.WriteLine("→ " + Path.GetRelativePath(root, published));
             return 0;
         }
