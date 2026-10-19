@@ -32,22 +32,22 @@ public class EdmxCodeLinksTests
         Assert.Empty(facts.Findings);
         Assert.Equal("docwizz.edmx-code-links/v1", report.Schema);
         Assert.Equal("docwizz.edmx-graph/v1", report.GraphSchema);
-        Assert.Equal(5, report.Links.Count(x => x.Kind == "entity-class"));
-        Assert.Equal(4, report.Links.Count(x => x.Kind == "dbcontext-persists"));
+        Assert.Equal(5, report.Links.Count(x => x.Kind == EdmxCodeLinks.LinkKind.EntityClass));
+        Assert.Equal(4, report.Links.Count(x => x.Kind == EdmxCodeLinks.LinkKind.DbContextPersists));
         Assert.Contains(model.Nodes, n => n.Id == "cs:Legacy.LegacyContext" && n.Tags?.Contains("dbcontext") == true);
         Assert.Contains(report.Links, x => x.Entity == "Legacy.Customer" &&
-            x.CodeSymbol == "cs:Legacy.Customer" && x.Kind == "entity-class");
+            x.CodeSymbol == "cs:Legacy.Customer" && x.Kind == EdmxCodeLinks.LinkKind.EntityClass);
         Assert.All(report.Links, link =>
         {
             Assert.Equal(Edmx, link.EdmxSource.File);
             Assert.True(link.EdmxSource.Line > 0);
             Assert.Equal(CSharp, link.CodeSource.File.Replace('\\', '/'));
             Assert.True(link.CodeSource.Line > 0);
-            Assert.Equal("observed", link.Status);
+            Assert.Equal(EdmxCodeLinks.Status.Observed, link.Status);
         });
         Assert.DoesNotContain(report.Links, x => x.Entity == "Legacy.Tag");
-        Assert.Contains(report.Unknowns, x => x.Entity == "Legacy.Tag" && x.Kind == "csharp-type");
-        Assert.Contains(report.Unknowns, x => x.Entity == "Legacy.PremiumCustomer" && x.Kind == "dbcontext");
+        Assert.Contains(report.Unknowns, x => x.Entity == "Legacy.Tag" && x.Kind == EdmxCodeLinks.UnknownKind.CSharpType);
+        Assert.Contains(report.Unknowns, x => x.Entity == "Legacy.PremiumCustomer" && x.Kind == EdmxCodeLinks.UnknownKind.DbContext);
         using var doc = JsonDocument.Parse(EdmxCodeLinks.Json(report));
         Assert.Equal(EdmxCodeLinks.Schema, doc.RootElement.GetProperty("schema").GetString());
     }
@@ -58,9 +58,9 @@ public class EdmxCodeLinksTests
         var (_, _, report) = Fixture();
         Assert.NotEmpty(report.Traces);
         Assert.Contains(report.Traces, t => t.Action.Contains("OrdersController.Index", StringComparison.Ordinal) &&
-            t.Entity == "Legacy.Customer" && t.Route == "orders" && t.RouteStatus == "observed");
+            t.Entity == "Legacy.Customer" && t.Route == "orders" && t.RouteStatus == EdmxCodeLinks.Status.Observed);
         Assert.Contains(report.Traces, t => t.Action.Contains("PlainController.List", StringComparison.Ordinal) &&
-            t.Entity == "Legacy.Order" && t.Route is null && t.RouteStatus == "unknown");
+            t.Entity == "Legacy.Order" && t.Route is null && t.RouteStatus == EdmxCodeLinks.Status.Unknown);
         Assert.DoesNotContain(report.Traces, t => t.Action.Contains("Unrelated", StringComparison.Ordinal));
         Assert.All(report.Traces, t =>
         {
@@ -76,7 +76,7 @@ public class EdmxCodeLinksTests
         });
         Assert.All(report.DomainEvidence, hint =>
         {
-            Assert.Equal("inferred", hint.Status);
+            Assert.Equal(EdmxCodeLinks.Status.Inferred, hint.Status);
             Assert.True(hint.EdmxSource.Line > 0);
             Assert.True(hint.CodeSource.Line > 0);
         });
@@ -109,7 +109,7 @@ public class EdmxCodeLinksTests
         Assert.Empty(report.Links);
         Assert.Empty(report.Traces);
         Assert.Empty(report.DomainEvidence);
-        Assert.Equal(facts.Entities.Count, report.Unknowns.Count(x => x.Kind == "csharp-type"));
-        Assert.DoesNotContain(report.Unknowns, x => x.Status != "unknown");
+        Assert.Equal(facts.Entities.Count, report.Unknowns.Count(x => x.Kind == EdmxCodeLinks.UnknownKind.CSharpType));
+        Assert.DoesNotContain(report.Unknowns, x => x.Status != EdmxCodeLinks.Status.Unknown);
     }
 }

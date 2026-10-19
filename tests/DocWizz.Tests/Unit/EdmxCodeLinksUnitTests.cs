@@ -13,7 +13,7 @@ public class EdmxCodeLinksUnitTests
         var wrong = new Node("cs:Other.Customer", "class", "Customer", "Wrong.cs", 3);
         var report = EdmxCodeLinks.Build(source, new CodeModel(null, [wrong], []));
         Assert.Empty(report.Links);
-        Assert.Contains(report.Unknowns, x => x.Kind == "csharp-type");
+        Assert.Contains(report.Unknowns, x => x.Kind == EdmxCodeLinks.UnknownKind.CSharpType);
         var duplicate = new Node("cs:N.Customer", "class", "Customer", "One.cs", 1);
         report = EdmxCodeLinks.Build(source, new CodeModel(null, [duplicate, duplicate with { File = "Two.cs" }], []));
         Assert.Empty(report.Links);
@@ -33,7 +33,7 @@ public class EdmxCodeLinksUnitTests
         var result = EdmxCodeLinks.Build(facts, model);
         Assert.Equal(2, result.Links.Count);
         Assert.Empty(result.Traces);
-        Assert.Contains(result.Unknowns, x => x.Kind == "controller-path");
+        Assert.Contains(result.Unknowns, x => x.Kind == EdmxCodeLinks.UnknownKind.ControllerPath);
         Assert.Empty(result.DomainEvidence);
     }
 
@@ -51,9 +51,9 @@ public class EdmxCodeLinksUnitTests
         var graph = EdmxCodeLinks.Build(facts, code);
         var path = Assert.Single(graph.Traces);
         Assert.Null(path.Route);
-        Assert.Equal("unknown", path.RouteStatus);
+        Assert.Equal(EdmxCodeLinks.Status.Unknown, path.RouteStatus);
         Assert.Equal(["accesses", "persists"], path.Hops.Select(x => x.Kind));
-        Assert.All(graph.DomainEvidence, x => Assert.Equal("inferred", x.Status));
+        Assert.All(graph.DomainEvidence, x => Assert.Equal(EdmxCodeLinks.Status.Inferred, x.Status));
         Assert.NotEmpty(graph.DomainEvidence);
     }
 }
