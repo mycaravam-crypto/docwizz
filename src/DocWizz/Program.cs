@@ -118,6 +118,14 @@ static async Task<int> Dispatch(string[] args)
             if (pos.ElementAtOrDefault(2) is not { } edmxFile)
                 return Usage("edmx requires a repository-relative .edmx file", "edmx");
             var edmx = EdmxParser.Parse(path, edmxFile);
+            if (opts.ContainsKey("graph"))
+            {
+                if (!EdmxGraph.TryWeights(opts, out var weights, out var error))
+                    return Usage(error, "edmx");
+                var graph = EdmxGraph.Build(edmx, weights);
+                Console.Write(json ? EdmxGraph.Json(graph) : EdmxGraph.Text(graph));
+                return graph.Findings.Any(f => f.Severity == "error") ? 1 : 0;
+            }
             Console.Write(json ? EdmxParser.Json(edmx) : EdmxParser.Text(edmx));
             return edmx.Findings.Any(f => f.Severity == "error") ? 1 : 0;
         case "discover":
@@ -872,6 +880,8 @@ static string Reference() => $"""
     everyday:
       docwizz discover [dir]            read-only project and solution inventory [--format json]
       docwizz edmx <dir> <file.edmx>     read-only EF6 EDMX facts and findings [--format json]
+        [--graph]                       source-backed technical graph (edmx-graph/v1)
+        [--degree-weight n] [--fan-in-weight n] [--fan-out-weight n] [--inheritance-weight n]  0..100
       docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
         [--html]                        also write an HTML page next to every Markdown page
         [--screenshots --base-url <url>]  capture static routes from a running frontend (Playwright)

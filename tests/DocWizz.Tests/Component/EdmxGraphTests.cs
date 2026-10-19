@@ -81,7 +81,8 @@ public class EdmxGraphTests
         Assert.Equal(["Legacy.Customer", "Legacy.Order"], weighted.CentralEntities);
         Assert.Equal(standard.Associations, weighted.Associations);
         Assert.Equal(standard.Navigations, weighted.Navigations);
-        Assert.Equal(standard.Clusters, weighted.Clusters);
+        Assert.Equal(standard.Clusters.Select(c => c.Id + "|" + string.Join(",", c.Members)),
+            weighted.Clusters.Select(c => c.Id + "|" + string.Join(",", c.Members)));
         Assert.Throws<ArgumentOutOfRangeException>(() => EdmxGraph.Build(facts, new(0m, 0m, 0m, 0m)));
     }
 
