@@ -106,12 +106,28 @@ publish() {
     --trust "$root/policy.json" --approval "$1"
 }
 if publish "$root/bad-approval.json"; then echo "Invalid signature accepted" >&2; exit 1; fi
+# Two role IDs cannot share one actual public key, even if the IDs differ.
+python3 - <<'PY'
+import json
+p=json.load(open("policy.json"))
+p["keys"][1]["public_key"]=p["keys"][0]["public_key"]
+with open("duplicate-key-policy.json","w") as f: json.dump(p,f)
+PY
+if dotnet "$dll" product publish "$root" "$root/template.yaml" "$root/duplicate-key" \
+  --context "$root/context.yaml" --control "$root/control.yaml" \
+  --trust "$root/duplicate-key-policy.json" --approval "$root/signed-approval.json"; then
+  echo "Same public key accepted twice" >&2; exit 1
+fi
+test ! -e duplicate-key
 test ! -e output
 publish "$root/signed-approval.json"
 test -s output/CI-RELEASE-0.1.docx
 test -s output/CI-RELEASE-0.1.pdf
 test -s output/CI-RELEASE-0.1.publication.json
 pdfinfo output/CI-RELEASE-0.1.pdf | grep -q '^Pages:'
+pdftotext output/CI-RELEASE-0.1.pdf - | grep -q 'Fiktive'
+pdftoppm -f 1 -l 1 -scale-to 1000 -png -singlefile output/CI-RELEASE-0.1.pdf first-page >/dev/null 2>&1
+test -s first-page.png
 python3 - <<'PY'
 import json, zipfile
 with zipfile.ZipFile("output/CI-RELEASE-0.1.docx") as doc:
