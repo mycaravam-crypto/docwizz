@@ -63,6 +63,14 @@ approvals:
 YAML
 dotnet "$dll" product "$root" "$root/template.yaml" --context "$root/context.yaml" --control "$root/control.yaml"
 dotnet "$dll" product check "$root" "$root/template.yaml" --context "$root/context.yaml" --control "$root/control.yaml"
+
+# A context or control file outside the repository is rejected even for non-release operations.
+if dotnet "$dll" product "$root" "$root/template.yaml" --context "$root/../escape-context.yaml" --control "$root/control.yaml"; then
+  echo "Context traversal accepted" >&2; exit 1
+fi
+if dotnet "$dll" product check "$root" "$root/template.yaml" --context "$root/context.yaml" --control "$root/../escape-control.yaml"; then
+  echo "Control traversal accepted" >&2; exit 1
+fi
 for role in quality security; do
   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "keys/$role.private.pem" 2>/dev/null
   openssl pkey -in "keys/$role.private.pem" -pubout -out ".github/release-keys/$role.pem" 2>/dev/null

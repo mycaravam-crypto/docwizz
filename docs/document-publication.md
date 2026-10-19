@@ -83,3 +83,5 @@ Das PDF wird auf Dateisignatur geprüft, nicht auf PDF/A oder Barrierefreiheit.
 
 Nicht enthalten: Hardware-Schlüsselschutz, Widerrufsdienst, qualifizierte eIDAS-Signatur,
 PDF/A-Validierung, DMS-Aufbewahrung, PDF-Layoutfreigabe oder ISO-Zertifizierung.
+
+For security, project context and document-control YAML inputs must resolve inside the selected project repository. Reusable product templates may still be read from external paths in non-publishing draft mode; publishing is confined to the checkout.

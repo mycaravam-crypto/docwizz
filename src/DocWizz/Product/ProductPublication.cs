@@ -9,6 +9,9 @@ using System.Text.RegularExpressions;
 internal static class ProductPublication
 {
     static readonly string[] RequiredRoles = ["quality", "security"];
+    const int MaxSignedPayloadBytes = 16 * 1024;
+    const int MinGeneratedDocumentBytes = 512;
+    const int PdfSignatureBytes = 4;
     internal sealed record SigningKey(string Id, string Role, string PemPath);
     internal sealed record Approval(string Role, string KeyId, string SignatureBase64);
 
@@ -70,7 +73,7 @@ internal static class ProductPublication
                 throw new ArgumentException("unrecognized or duplicate trusted signer");
         }
         var payload = Convert.FromBase64String(Str(approval.RootElement, "payload_base64"));
-        if (payload.Length > 16384) throw new ArgumentException("signed publication payload too large");
+        if (payload.Length > MaxSignedPayloadBytes) throw new ArgumentException("signed publication payload too large");
         using var message = JsonDocument.Parse(payload);
         var subject = message.RootElement;
         if (Str(subject, "status") != "approved" ||
@@ -108,7 +111,7 @@ internal static class ProductPublication
             throw new ArgumentException("independent quality and security signatures required");
     }
 
-    static string Run(string executable, string workDir, params string[] arguments)
+    static async Task<string> RunAsync(string executable, string workDir, params string[] arguments)
     {
         using var process = new Process();
         process.StartInfo = new ProcessStartInfo(executable) {
@@ -117,12 +120,17 @@ internal static class ProductPublication
         };
         foreach (var arg in arguments) process.StartInfo.ArgumentList.Add(arg);
         if (!process.Start()) throw new IOException($"unable to launch {executable}");
-        // Drain both pipes concurrently; synchronous sequential reads can deadlock a noisy renderer.
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit(180000)) { process.Kill(entireProcessTree: true); throw new IOException($"{executable} timed out"); }
-        var stdout = stdoutTask.GetAwaiter().GetResult();
-        var stderr = stderrTask.GetAwaiter().GetResult();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        try { await process.WaitForExitAsync(timeout.Token); }
+        catch (OperationCanceledException)
+        {
+            process.Kill(entireProcessTree: true);
+            throw new IOException($"{executable} timed out");
+        }
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
         if (process.ExitCode != 0)
             throw new IOException($"{executable} failed ({process.ExitCode}): {stderr[..Math.Min(800, stderr.Length)]}");
         return stdout.Trim();
@@ -130,7 +138,7 @@ internal static class ProductPublication
 
     // This method intentionally accepts only paths and trusted role keys. It never interprets
     // the declared approval rows in the control YAML as a cryptographic authorization.
-    internal static void Publish(string root, ProductTemplate template, ControlledDocument control,
+    internal static async Task PublishAsync(string root, ProductTemplate template, ControlledDocument control,
         string draft, string evidence, string policy, string approval, string output)
     {
         // Defense in depth: the publishing API itself must not trust even its CLI caller.
@@ -153,7 +161,7 @@ internal static class ProductPublication
                 Property(Property(report, "required"), "open").GetArrayLength() != 0)
                 throw new ArgumentException("draft evidence is incomplete, stale or belongs to another document");
         }
-        var head = Run("git", root, "rev-parse", "HEAD");
+        var head = await RunAsync("git", root, "rev-parse", "HEAD");
         if (!Regex.IsMatch(head, "^[0-9a-f]{40}$"))
             throw new ArgumentException("publication requires a Git commit baseline");
         Verify(root, policy, approval, control, draft, evidence, head);
@@ -183,19 +191,19 @@ internal static class ProductPublication
             File.WriteAllText(source, markdown);
             var prefix = control.Id + "-" + control.Version;
             var docx = Path.Combine(staging, prefix + ".docx");
-            Run("pandoc", root, "--from=gfm", "--to=docx", "--standalone",
+            await RunAsync("pandoc", root, "--from=gfm", "--to=docx", "--standalone",
                 "--output", docx, source);
-            if (!File.Exists(docx) || new FileInfo(docx).Length < 512)
+            if (!File.Exists(docx) || new FileInfo(docx).Length < MinGeneratedDocumentBytes)
                 throw new IOException("DOCX conversion produced no document");
             PublicationLayout.Apply(docx); // cover page, physical page numbers and stable links
             // Isolated LO profile avoids shared-user locks on concurrent CI runners.
             var loProfile = new Uri(Path.Combine(staging, "libreoffice-profile")).AbsoluteUri;
-            Run("libreoffice", root, "-env:UserInstallation=" + loProfile, "--headless",
+            await RunAsync("libreoffice", root, "-env:UserInstallation=" + loProfile, "--headless",
                 "--convert-to", "pdf:writer_pdf_Export", "--outdir", staging, docx);
             var pdf = Path.ChangeExtension(docx, ".pdf");
-            if (!File.Exists(pdf) || new FileInfo(pdf).Length < 512)
+            if (!File.Exists(pdf) || new FileInfo(pdf).Length < MinGeneratedDocumentBytes)
                 throw new IOException("PDF conversion produced no document");
-            if (!File.ReadAllBytes(pdf).AsSpan(0, 4).SequenceEqual("%PDF"u8))
+            if (!File.ReadAllBytes(pdf).AsSpan(0, PdfSignatureBytes).SequenceEqual("%PDF"u8))
                 throw new IOException("PDF conversion produced invalid header");
             File.Delete(source);
             var manifest = new {

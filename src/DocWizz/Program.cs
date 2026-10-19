@@ -639,7 +639,7 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
         return Usage("product needs a template YAML path", "product");
     var templatePath = File.Exists(templateName) ? templateName : Path.Combine(root, templateName);
     ProductTemplate template;
-    try { template = ProductTemplate.Load(templatePath); }
+    try { template = ProductTemplate.Load(publish ? ProductPublication.ConfinedPath(root, templatePath) : templatePath); }
     catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
     catch (IOException e) { Console.Error.WriteLine($"{templatePath}: {e.Message}"); return 1; }
     ProjectContext? project = null;
@@ -648,7 +648,7 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
         var contextPath = File.Exists(contextName) ? contextName : Path.Combine(root, contextName);
         try
         {
-            if (publish) contextPath = ProductPublication.ConfinedPath(root, contextPath);
+            contextPath = ProductPublication.ConfinedPath(root, contextPath);
             project = ProjectContext.Load(contextPath); project.Validate(template);
         }
         catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
@@ -660,7 +660,7 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
         var controlPath = File.Exists(controlName) ? controlName : Path.Join(root, controlName);
         try
         {
-            if (publish) controlPath = ProductPublication.ConfinedPath(root, controlPath);
+            controlPath = ProductPublication.ConfinedPath(root, controlPath);
             control = ControlledDocument.Load(controlPath);
         }
         catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
@@ -674,9 +674,10 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
         var original = Path.Combine(root, "docs", "products", template.ProductId + ".md");
         var releaseEvidencePath = Path.ChangeExtension(original, ".evidence.json");
         var findings = ProductCheck.Run(root, template, ProductModel(root, config, template), project, original, control);
-        if (findings.Any(f => f.Severity == "error" || f.Rule is "PROD-001" or "DOC-003") ||
-            !control.Approvals.Any(a => a.Kind == "review") ||
-            !control.Approvals.Any(a => a.Kind == "approval"))
+        var hasBlockingFinding = findings.Any(f => f.Severity == "error" || f.Rule is "PROD-001" or "DOC-003");
+        var hasRecordedReview = control.Approvals.Any(a => a.Kind == "review");
+        var hasRecordedApproval = control.Approvals.Any(a => a.Kind == "approval");
+        if (hasBlockingFinding || !hasRecordedReview || !hasRecordedApproval)
         {
             ProductCheck.Report(template, findings, Console.Error);
             Console.Error.WriteLine("Publication blocked: every required section, review and approval must have recorded evidence.");
@@ -689,7 +690,7 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
             var published = ProductPublication.ConfinedPath(root, outName is null
                 ? Path.Combine(root, "docs", "published", control.Id + "-" + control.Version)
                 : outName);
-            ProductPublication.Publish(root, template, control, original, releaseEvidencePath, trust, signed, published);
+            await ProductPublication.PublishAsync(root, template, control, original, releaseEvidencePath, trust, signed, published);
             Console.WriteLine("→ " + Path.GetRelativePath(root, published));
             return 0;
         }
