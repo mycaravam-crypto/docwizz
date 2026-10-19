@@ -637,7 +637,7 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
 {
     if (string.IsNullOrWhiteSpace(templateName))
         return Usage("product needs a template YAML path", "product");
-    var templatePath = File.Exists(templateName) ? templateName : Path.Combine(root, templateName);
+    var templatePath = File.Exists(templateName) ? templateName : Path.Join(root, templateName);
     ProductTemplate template;
     // Only signed publication imposes repository confinement. Drafts/checks have always accepted
     // shared templates from another DocWizz checkout; retain that supported CLI contract.
@@ -647,7 +647,7 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
     ProjectContext? project = null;
     if (contextName is not null)
     {
-        var contextPath = File.Exists(contextName) ? contextName : Path.Combine(root, contextName);
+        var contextPath = File.Exists(contextName) ? contextName : Path.Join(root, contextName);
         try
         {
             if (publish) contextPath = ProductPublication.ConfinedPath(root, contextPath);
