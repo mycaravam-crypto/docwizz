@@ -42,4 +42,12 @@ class GateTests(unittest.TestCase):
   p.render(self.source.read_text(),out,"draft")
   from docx import Document
   self.assertIn("NICHT FREIGEGEBEN"," ".join(x.text for x in Document(out).paragraphs))
+ def test_draft_exports_real_docx_and_pdf(self):
+  import subprocess
+  output=self.source.parent/"published"
+  command=[sys.executable,str(pathlib.Path(p.__file__).resolve()),"--mode","draft","--source",str(self.source),"--control",str(self.control),"--evidence",str(self.evidence),"--output",str(output)]
+  result=subprocess.run(command,check=False,capture_output=True,text=True)
+  self.assertEqual(0,result.returncode,result.stderr)
+  self.assertTrue((output/"sw-architecture-draft.docx").is_file())
+  self.assertTrue((output/"sw-architecture-draft.pdf").read_bytes().startswith(b"%PDF"))
 if __name__=="__main__":unittest.main()
