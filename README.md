@@ -171,7 +171,7 @@ captured anonymously; with it, each route continues the previous route's session
 working. Slow pages: add `--screenshot-delay <ms>`. Hash routers are opened as `/#/route`. Dynamic routes, `/logout`, HTTP
 errors, redirects, expired sessions and pages whose API calls answer 401/403 are skipped with a warning.
 **The state file holds session tokens:** keep it out of Git, and use a low-privilege test account with sanitized data.
-Limits are listed in [CLI.md](CLI.md#options); for Windows installation errors, authenticated capture and diagnostics,
+Limits are listed in [CLI.md](docs/cli.md#options); for Windows installation errors, authenticated capture and diagnostics,
 see [Playwright screenshot troubleshooting](docs/PLAYWRIGHT_SCREENSHOTS.md).
 
 ### Draft missing docs with a local AI
@@ -263,18 +263,18 @@ jobs:
 - `docwizz mcp .` runs a read-only MCP server so agents query symbols, flows, impact and the gate instead of searching
   files.
 
-See [CLI.md](CLI.md#8-context-for-coding-agents) and the [AGENTS.md template](templates/AGENTS.md).
+See [CLI.md](docs/cli.md#8-context-for-coding-agents) and the [AGENTS.md template](templates/AGENTS.md).
 
 ### Load-test results
 
 `docwizz load import . shop-bericht.json` reads [powerwizz](https://github.com/mycaravam-crypto/powerwizz) load-test
 reports; `api.md` then shows the measured requests, error rate and p50/p95/p99 latency per endpoint, with the run as
-evidence ([details](CLI.md#load-test-results)).
+evidence ([details](docs/cli.md#load-test-results)).
 
 ### Dependencies
 
 - `docwizz sbom . sbom.json` exports a CycloneDX 1.6 inventory of the direct dependencies declared in NuGet, npm, Maven
-  and Gradle manifests. Nothing is installed or resolved ([details](CLI.md#sbom-inventory)).
+  and Gradle manifests. Nothing is installed or resolved ([details](docs/cli.md#sbom-inventory)).
 - `docwizz remediate` suggests package updates with evidence. It never touches your working tree:
 
 ```console
@@ -345,7 +345,9 @@ For projects that keep requirements as YAML evidence:
   official templates or a conformity claim).
   The [IT operations concept](docs/IT_OPERATIONS.md) template documents code facts, discovered deployment/CI descriptor files and explicit operational gaps (not deployed-state evidence).
 
-See [project evidence](docs/project-evidence.md) and [CLI.md](CLI.md#product-drafts).
+See [project evidence](docs/project-evidence.md) and [CLI.md](docs/cli.md#product-drafts).
+
+[Browse the documentation](docs/README.md) for CLI, architecture, guides and acceptance records.
 
 For expanded V-Modell XT example product structures (SW architecture, SW specification and system-element test specification), see [the template guide](docs/vmodell-xt-templates.md) and its section-level review aids.
 
@@ -375,7 +377,7 @@ exclude: ["legacy/*"]               # left out entirely
 comment_docs: true                  # count a // comment above a C# member as its summary
 ```
 
-Every option, its default and precedence: [CLI.md](CLI.md#options).
+Every option, its default and precedence: [CLI.md](docs/cli.md#options).
 
 ### Profiles
 
@@ -443,7 +445,7 @@ architecture:
 ```
 
 Selectors match `layer`, `path`, `kind`, `tag` and `name` (globs where it makes sense); `kind`, `tag` and `name` also
-match through the containing type. `edge` takes edge kinds from [the code model](ARCHITECTURE.md#the-code-model).
+match through the containing type. `edge` takes edge kinds from [the code model](docs/architecture.md#the-code-model).
 Custom findings count for `architecture` and `check` like built-in ones; an invalid rule stops docwizz with a message.
 
 ### Security rules
@@ -470,8 +472,8 @@ invisible, so each finding says "unless".
   clears it; `--yes` skips prompts in CI.
 - Generated docs then navigate index → solutions → projects → modules → components.
 
-The `scope:` schema is in [CLI.md](CLI.md#scope); limits and the acceptance baseline in
-[MULTI_PROJECT_ACCEPTANCE.md](MULTI_PROJECT_ACCEPTANCE.md). Classic non-SDK ASP.NET MVC projects are inventoried, but
+The `scope:` schema is in [CLI.md](docs/cli.md#scope); limits and the acceptance baseline in
+[MULTI_PROJECT_ACCEPTANCE.md](docs/quality/multi-project-acceptance.md). Classic non-SDK ASP.NET MVC projects are inventoried, but
 conventional MVC routing is not fully modelled as endpoints.
 
 ### Remediation
@@ -499,7 +501,7 @@ OpenAI-compatible server (vLLM, NVIDIA NIM, LiteLLM):
 ai: { provider: openai-compatible, endpoint: http://10.0.0.5:8000/v1, model: <name>, api_key_env: DOCWIZZ_AI_KEY }
 ```
 
-The key is read only from that environment variable. More in [CLI.md](CLI.md#5-ai-assisted-documentation).
+The key is read only from that environment variable. More in [CLI.md](docs/cli.md#5-ai-assisted-documentation).
 
 ## What it reads
 
@@ -545,7 +547,7 @@ them (`UseNpgsql`, `fetch('https://…')`), *inferred* when only a package point
 
 Common options: `--profile <name|file.yaml>`, `--format json` (for `analyze`, `check`, `architecture`, `diff`,
 `remediate`, …), `--timings`. `docwizz help <command>` explains one command; `docwizz --version` prints version and
-commit. [CLI.md](CLI.md) is the full reference: every flag, default, precedence rule and exit code.
+commit. [CLI.md](docs/cli.md) is the full reference: every flag, default, precedence rule and exit code.
 
 **Evidence status during generation:** `docwizz generate .` reports whether the local Requirements index and ADO test snapshots are present and valid. Imported ADO data is explicit test-case traceability, not proof of executed tests; missing imports are reported but do not fail generation.
 
@@ -560,7 +562,7 @@ dotnet test --project tests/DocWizz.Tests   # unit, component and journey tests 
 ./test.sh                                   # end-to-end tests against fixture/
 ```
 
-- How it works: [ARCHITECTURE.md](ARCHITECTURE.md) · what's next: [ROADMAP.md](ROADMAP.md)
+- How it works: [ARCHITECTURE.md](docs/architecture.md) · what's next: [ROADMAP.md](https://github.com/mycaravam-crypto/docwizz/issues)
 - Benchmarks and advice for large repositories: [bench/](bench/README.md)
 - Every merge to `main` is released automatically; label a PR `release:minor` or `release:major` for bigger bumps
-  ([versioning](CLI.md#versioning)).
+  ([versioning](docs/cli.md#versioning)).
