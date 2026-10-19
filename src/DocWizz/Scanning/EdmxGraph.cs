@@ -30,22 +30,23 @@ static class EdmxGraph
     public static bool TryWeights(IReadOnlyDictionary<string, string> options, out Weights weights, out string? error)
     {
         weights = new();
-        error = null;
+        string? failure = null;
         decimal Read(string option, decimal fallback)
         {
             if (!options.TryGetValue(option, out var text)) return fallback;
             if (!decimal.TryParse(text, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
                     CultureInfo.InvariantCulture, out var value) || value is < 0m or > 100m)
             {
-                error ??= "--" + option + " must be a decimal from 0 to 100 (use '.' as separator)";
+                failure ??= "--" + option + " must be a decimal from 0 to 100 (use '.' as separator)";
                 return fallback;
             }
             return value;
         }
         weights = new(Read("degree-weight", 1m), Read("fan-in-weight", 1m),
             Read("fan-out-weight", 1m), Read("inheritance-weight", 1m));
-        if (error is null && weights.Degree + weights.FanIn + weights.FanOut + weights.Inheritance == 0m)
-            error = "at least one EDMX graph weight must be greater than zero";
+        if (failure is null && weights.Degree + weights.FanIn + weights.FanOut + weights.Inheritance == 0m)
+            failure = "at least one EDMX graph weight must be greater than zero";
+        error = failure;
         return error is null;
     }
 
