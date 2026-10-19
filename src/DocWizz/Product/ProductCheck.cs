@@ -83,7 +83,9 @@ static class ProductCheck
     // The findings for a terminal, errors first, with the verdict and what the check does not cover.
     public static void Report(ProductTemplate template, List<Finding> findings, TextWriter o)
     {
-        o.WriteLine($"Product {template.ProductId} ({template.XtVariant} {template.XtVersion})");
+        o.WriteLine(template.IsVModel
+            ? $"Product {template.ProductId} ({template.XtVariant} {template.XtVersion})"
+            : $"Product {template.ProductId} ({template.DocumentType})");
         foreach (var f in findings.OrderBy(f => f.Severity == "error" ? 0 : 1).ThenBy(f => f.Rule, StringComparer.Ordinal))
             o.WriteLine($"  {f.Rule}  {f.Severity,-7}  {(f.Section is null ? "" : $"[{f.Section}] ")}{f.Message}");
         var errors = findings.Count(f => f.Severity == "error");
