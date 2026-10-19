@@ -10,18 +10,19 @@ DocWizz liefert drei **illustrative, projektbezogen anzupassende** Produktvorlag
 
 ## Verwendung
 
-Im zu dokumentierenden Software-Repository ausführen; `docwizz` muss installiert beziehungsweise als CLI-Alias verfügbar sein. Die Vorlagen liegen im ausgecheckten DocWizz-Repository, daher den Pfad zu diesem Checkout anpassen.
+Im zu dokumentierenden Software-Repository ausführen; `docwizz` muss installiert beziehungsweise als CLI-Alias verfügbar sein. Vorher `DOCWIZZ_ROOT` auf den **absoluten Pfad** des lokalen DocWizz-Checkouts setzen (beispielsweise `export DOCWIZZ_ROOT="$HOME/src/docwizz"`, wenn DocWizz dort ausgecheckt ist). Die `--context`- und Evidenz-Dateien sind projektspezifisch anzulegen.
 
 ```bash
+: "${DOCWIZZ_ROOT:?DOCWIZZ_ROOT auf den DocWizz-Checkout setzen}"
 docwizz setup .
 
-docwizz product . /pfad/zu/docwizz/templates/vmodell-xt/sw-specification.yaml --context sw-specification-context.yaml
-docwizz product . /pfad/zu/docwizz/templates/vmodell-xt/sw-architecture.yaml --context sw-architecture-context.yaml
-docwizz product . /pfad/zu/docwizz/templates/vmodell-xt/system-element-test-specification.yaml --context system-element-test-specification-context.yaml
+docwizz product . "$DOCWIZZ_ROOT/templates/vmodell-xt/sw-specification.yaml" --context sw-specification-context.yaml
+docwizz product . "$DOCWIZZ_ROOT/templates/vmodell-xt/sw-architecture.yaml" --context sw-architecture-context.yaml
+docwizz product . "$DOCWIZZ_ROOT/templates/vmodell-xt/system-element-test-specification.yaml" --context system-element-test-specification-context.yaml
 
-docwizz product check . /pfad/zu/docwizz/templates/vmodell-xt/sw-specification.yaml --context sw-specification-context.yaml
-docwizz product check . /pfad/zu/docwizz/templates/vmodell-xt/sw-architecture.yaml --context sw-architecture-context.yaml
-docwizz product check . /pfad/zu/docwizz/templates/vmodell-xt/system-element-test-specification.yaml --context system-element-test-specification-context.yaml
+docwizz product check . "$DOCWIZZ_ROOT/templates/vmodell-xt/sw-specification.yaml" --context sw-specification-context.yaml
+docwizz product check . "$DOCWIZZ_ROOT/templates/vmodell-xt/sw-architecture.yaml" --context sw-architecture-context.yaml
+docwizz product check . "$DOCWIZZ_ROOT/templates/vmodell-xt/system-element-test-specification.yaml" --context system-element-test-specification-context.yaml
 
 docwizz trace . project-evidence.yaml
 ```
