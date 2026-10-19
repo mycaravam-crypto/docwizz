@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<edmx:Edmx Version="3.0" xmlns:edmx="http://schemas.microsoft.com/ado/2009/11/edmx">
+ <edmx:Runtime>
+  <edmx:StorageModels>
+   <Schema Namespace="Store" xmlns="http://schemas.microsoft.com/ado/2009/11/edm/ssdl">
+    <EntityType Name="Customers"><Key><PropertyRef Name="Id"/></Key><Property Name="Id" Type="int" Nullable="false"/><Property Name="Name" Type="nvarchar"/></EntityType>
+    <EntityType Name="Orders"><Key><PropertyRef Name="Id"/></Key><Property Name="Id" Type="int" Nullable="false"/><Property Name="CustomerId" Type="int"/></EntityType>
+    <EntityContainer Name="StoreContainer">
+     <EntitySet Name="Customers" EntityType="Store.Customers" Schema="dbo" Table="tbl_customer"/>
+     <EntitySet Name="Orders" EntityType="Store.Orders" Schema="dbo" Table="tbl_order"/>
+    </EntityContainer>
+   </Schema>
+  </edmx:StorageModels>
+  <edmx:ConceptualModels>
+   <Schema Namespace="Legacy" xmlns="http://schemas.microsoft.com/ado/2009/11/edm">
+    <EntityType Name="Customer"><Key><PropertyRef Name="Id"/></Key><Property Name="Id" Type="Int32" Nullable="false"/><Property Name="Name" Type="String"/><NavigationProperty Name="Orders" Relationship="Legacy.CustomerOrders" FromRole="Customer" ToRole="Order"/></EntityType>
+    <EntityType Name="Order"><Key><PropertyRef Name="Id"/></Key><Property Name="Id" Type="Int32" Nullable="false"/><Property Name="CustomerId" Type="Int32"/></EntityType>
+    <Association Name="CustomerOrders"><End Role="Customer" Type="Legacy.Customer" Multiplicity="1"/><End Role="Order" Type="Legacy.Order" Multiplicity="*"/></Association>
+    <EntityContainer Name="LegacyContext">
+     <EntitySet Name="Customers" EntityType="Legacy.Customer"/><EntitySet Name="Orders" EntityType="Legacy.Order"/>
+     <AssociationSet Name="CustomerOrders" Association="Legacy.CustomerOrders"><End Role="Customer" EntitySet="Customers"/><End Role="Order" EntitySet="Orders"/></AssociationSet>
+     <FunctionImport Name="TopCustomers" ReturnType="Collection(Legacy.Customer)"/>
+    </EntityContainer>
+   </Schema>
+  </edmx:ConceptualModels>
+  <edmx:Mappings>
+   <Mapping Space="C-S" xmlns="http://schemas.microsoft.com/ado/2009/11/mapping/cs">
+    <EntityContainerMapping StorageEntityContainer="StoreContainer" CdmEntityContainer="LegacyContext">
+     <EntitySetMapping Name="Customers"><EntityTypeMapping TypeName="Legacy.Customer"><MappingFragment StoreEntitySet="Customers"><ScalarProperty Name="Id" ColumnName="Id"/><ScalarProperty Name="Name" ColumnName="Name"/></MappingFragment></EntityTypeMapping></EntitySetMapping>
+     <EntitySetMapping Name="Orders"><EntityTypeMapping TypeName="Legacy.Order"><MappingFragment StoreEntitySet="Orders"><ScalarProperty Name="Id" ColumnName="Id"/><ScalarProperty Name="CustomerId" ColumnName="CustomerId"/></MappingFragment></EntityTypeMapping></EntitySetMapping>
+     <FunctionImportMapping FunctionImportName="TopCustomers" FunctionName="Store.GetTopCustomers"/>
+    </EntityContainerMapping>
+   </Mapping>
+  </edmx:Mappings>
+ </edmx:Runtime>
+</edmx:Edmx>

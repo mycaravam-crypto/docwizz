@@ -31,6 +31,8 @@ static class Cli
     {
         ["tests"] = new("tests import <dir> <snapshot.json>", "offline ADO test traceability import", "evidence",
             "docwizz tests import . alpha-tests.json", "", []),
+        ["edmx"] = new("edmx <dir> <file.edmx>", "read-only EF6 EDMX facts and diagnostics (P0)", "architects",
+            "docwizz edmx . Models/Legacy.edmx --format json", "--format console|json", ["format"]),
         ["discover"] = new("discover [dir]", "read-only inventory of solutions, projects and references", "everyday",
             "docwizz discover . --format json", "--format console|json", ["format"]),
         ["setup"] = new("setup [dir]", "first run: detect the stack, write docwizz.yaml, analyze, generate docs, check", "start here",

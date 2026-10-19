@@ -31,6 +31,7 @@ prerequisite.
 | Command | Primary use | Typical user | Default path? |
 |---|---|---|---|
 | `setup` | first repository setup | all users | **yes, start here** |
+| `edmx` | inspect EF Designer CSDL/SSDL/MSL facts and findings without executing code | architects | optional |
 | `discover` | project and solution inventory | developers | optional |
 | `analyze` | documentation report | developers | yes |
 | `architecture` | architecture diagnostics | architects | optional |
@@ -668,6 +669,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 
 | Command | Syntax | Purpose | Use |
 |---|---|---|---|
+| `edmx` | `docwizz edmx <dir> <file.edmx> [--format console\|json]` | read-only, source-linked EF6 EDMX inventory; no code execution or domain inference | architects |
 | `discover` | `docwizz discover [dir] [--format console\|json]` | read-only inventory of solutions, projects and references | everyday |
 | `setup` | `docwizz setup [dir] [--select-projects] [--all-projects] [--yes] [--force] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--ai-ratings] [--profile p]` | detect the stack, write `docwizz.yaml`, analyze, architecture, generate, check | start here |
 | `generate` | `docwizz generate <dir> [out] [--html] [--screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>]] [--progress] [--refresh-html-on-version-change] [--ai] [--ai-ratings] [--requirements] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
@@ -697,7 +699,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | Option | Default | Applies to | Interaction | Use |
 |---|---|---|---|---|
 | `--profile <name\|file.yaml>` | `profile:` in `docwizz.yaml`, else `default` | setup, generate, check, analyze, architecture, diff | overrides `profile:` and the file's own `patterns:` | normal |
-| `--format console\|json` | `console` | discover, analyze, check, architecture, context, domain, diff, trace, evidence-diff, product, remediate, requirements | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
+| `--format console\|json` | `console` | discover, edmx, analyze, check, architecture, context, domain, diff, trace, evidence-diff, product, remediate, requirements | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
 | `--html` | off | generate, setup | adds HTML pages; the Markdown is written either way | normal |
 | `--progress` | interactive terminals | generate, setup, requirements | forces progress bars on stderr when output is redirected | normal |
 | `--refresh-html-on-version-change` | off | generate, setup | implies `--html`; rewrites all HTML when the docwizz version changed | normal |
@@ -759,6 +761,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `check` | thresholds pass | thresholds fail, or bad arguments/config |
 | `architecture` | within `max_violations`/`max_cycles` | above them |
 | `discover`, `analyze`, `generate`, `scan`, `sbom` | done | bad arguments or config |
+| `edmx` | facts and findings printed, no errors | invalid/missing input or an EDMX error finding |
 | `diff` | done | no baseline (`generate` first or pass a ref), unknown ref |
 | `context` | package written | no `--for`, an ambiguous or unknown target (candidates on stderr), or bad arguments |
 | `mcp` | stdin closed | bad arguments or config |
