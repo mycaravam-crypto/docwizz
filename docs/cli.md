@@ -669,7 +669,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 
 | Command | Syntax | Purpose | Use |
 |---|---|---|---|
-| `edmx` | `docwizz edmx <dir> <file.edmx> [--graph | --links] [--degree-weight n] [--fan-in-weight n] [--fan-out-weight n] [--inheritance-weight n] [--format console\|json]` | read-only EF6 EDMX facts or deterministic evidence-backed technical graph or code-link evidence (exact C#↔EDMX, inferred #187 areas) | architects |
+| `edmx` | `docwizz edmx <dir> <file.edmx> [--graph] [--links] [--degree-weight n] [--fan-in-weight n] [--fan-out-weight n] [--inheritance-weight n] [--format console\|json]` | read-only EF6 EDMX facts or deterministic evidence-backed technical graph or code-link evidence (exact C#↔EDMX, inferred #187 areas) | architects |
 | `discover` | `docwizz discover [dir] [--format console\|json]` | read-only inventory of solutions, projects and references | everyday |
 | `setup` | `docwizz setup [dir] [--select-projects] [--all-projects] [--yes] [--force] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--ai-ratings] [--profile p]` | detect the stack, write `docwizz.yaml`, analyze, architecture, generate, check | start here |
 | `generate` | `docwizz generate <dir> [out] [--html] [--screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>]] [--progress] [--refresh-html-on-version-change] [--ai] [--ai-ratings] [--requirements] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
