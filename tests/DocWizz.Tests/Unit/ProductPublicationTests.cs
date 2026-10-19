@@ -111,11 +111,11 @@ public class ProductPublicationTests
 
             // The trust policy and signed JSON must not be loaded from outside the chosen repository.
             Assert.Contains("escapes", Assert.Throws<ArgumentException>(() =>
-                ProductPublication.Verify(root, Path.Join(dir.Parent!.FullName, "outside-policy.json"),
+                ProductPublication.Verify(root, Path.Join(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar), "outside-policy.json"),
                     approvalFile, control, draft, evidence, commit)).Message);
             Assert.Contains("escapes", Assert.Throws<ArgumentException>(() =>
                 ProductPublication.Verify(root, policyFile, approvalFile, control,
-                    Path.Join(dir.Parent!.FullName, "outside-draft.md"), evidence, commit)).Message);
+                    Path.Join(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar), "outside-draft.md"), evidence, commit)).Message);
 
             var invalid = new { schema = 1, payload_base64 = "%%%invalid%%%", signatures = approved.signatures };
             File.WriteAllText(approvalFile, JsonSerializer.Serialize(invalid));
