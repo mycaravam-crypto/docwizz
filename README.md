@@ -526,7 +526,7 @@ them (`UseNpgsql`, `fetch('https://…')`), *inferred* when only a package point
 |---|---|
 | `docwizz setup [dir]` | first run: discover, configure, analyze, generate, check |
 | `docwizz discover [dir]` | read-only project and solution inventory |
-| `docwizz edmx <dir> <file.edmx>` | read-only EF6 EDMX facts, source locations and diagnostics (`--format json`); see [EDMX](docs/EDMX.md) |
+| `docwizz edmx <dir> <file.edmx>` | read-only EF6 EDMX facts or `--graph` for a deterministic technical graph, configurable weights and evidence (`--format json`); see [EDMX](docs/EDMX.md) |
 | `docwizz analyze <dir>` | documentation gaps and quality |
 | `docwizz architecture <dir>` | layers, violations, cycles, security findings |
 | `docwizz generate <dir> [out]` | write the docs (`--html`, `--screenshots`, `--ai`) |

@@ -8,11 +8,13 @@ static class Cli
 
     public record Request(string? Command, Dictionary<string, string> Options, List<string> Positional, string? Error);
 
-    public static readonly string[] Flags = ["ai", "ai-ratings", "html", "screenshots", "progress", "refresh-html-on-version-change", "timings", "validate", "force", "include-ai", "auto-rescan", "select-projects", "all-projects", "yes", "requirements", "help", "version"];
+    public static readonly string[] Flags = ["ai", "ai-ratings", "html", "screenshots", "progress", "refresh-html-on-version-change", "timings", "validate", "force", "include-ai", "auto-rescan", "select-projects", "all-projects", "yes", "requirements", "graph", "help", "version"];
 
     // Valued option → what its value is, for the error when it is missing.
     public static readonly Dictionary<string, string> Valued = new()
     {
+        ["degree-weight"] = "a decimal from 0 to 100", ["fan-in-weight"] = "a decimal from 0 to 100",
+        ["fan-out-weight"] = "a decimal from 0 to 100", ["inheritance-weight"] = "a decimal from 0 to 100",
         ["format"] = "console or json", ["profile"] = $"a profile ({string.Join(", ", Profiles.Names)}) or a .yaml file",
         ["approval"] = "signed approval JSON", ["trust"] = "reviewed publication key policy JSON", ["draft"] = "existing generated Markdown draft (publish only)",
         ["context"] = "a project context YAML file", ["control"] = "a document-control YAML file", ["since"] = "a git ref, e.g. origin/main", ["package"] = "a package name", ["to"] = "a version",
@@ -31,8 +33,10 @@ static class Cli
     {
         ["tests"] = new("tests import <dir> <snapshot.json>", "offline ADO test traceability import", "evidence",
             "docwizz tests import . alpha-tests.json", "", []),
-        ["edmx"] = new("edmx <dir> <file.edmx>", "read-only EF6 EDMX facts and diagnostics (P0)", "architects",
-            "docwizz edmx . Models/Legacy.edmx --format json", "--format console|json", ["format"]),
+        ["edmx"] = new("edmx <dir> <file.edmx>", "read-only EF6 EDMX facts or technical graph (--graph)", "architects",
+            "docwizz edmx . Models/Legacy.edmx --graph --format json",
+            "--graph (source-backed technical graph), --degree-weight <0..100>, --fan-in-weight <0..100>, --fan-out-weight <0..100>, --inheritance-weight <0..100>; --format console|json",
+            ["graph", "degree-weight", "fan-in-weight", "fan-out-weight", "inheritance-weight", "format"]),
         ["discover"] = new("discover [dir]", "read-only inventory of solutions, projects and references", "everyday",
             "docwizz discover . --format json", "--format console|json", ["format"]),
         ["setup"] = new("setup [dir]", "first run: detect the stack, write docwizz.yaml, analyze, generate docs, check", "start here",
@@ -112,6 +116,10 @@ static class Cli
                 error ??= "--select-projects cannot be combined with --all-projects or --yes";
             if (opts.ContainsKey("package") != opts.ContainsKey("to"))
                 error ??= "--package and --to go together: --package <name> --to <version>";
+            if (cmd == "edmx" && !opts.ContainsKey("graph") &&
+                new[] { "degree-weight", "fan-in-weight", "fan-out-weight", "inheritance-weight" }
+                    .Any(opts.ContainsKey))
+                error ??= "EDMX graph weight options require --graph";
             if (cmd == "generate")
             {
                 if (opts.ContainsKey("screenshots") && !opts.ContainsKey("base-url"))
