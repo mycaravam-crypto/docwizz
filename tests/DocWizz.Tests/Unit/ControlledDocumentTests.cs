@@ -111,6 +111,25 @@ public class ControlledDocumentTests
     }
 
     [Fact]
+    public void Identifier_length_and_evidence_extension_are_enforced()
+    {
+        var invalidId = Metadata.Replace("document_id: SWA-001", "document_id: " + new string('A', 81));
+        Assert.Contains("document_id", Assert.Throws<ArgumentException>(() => ControlledDocument.Parse(invalidId)).Message);
+
+        const string review = """
+            approvals:
+              - kind: approval
+                role: QS
+                person: Reviewer
+                date: 2026-10-19
+                evidence: docs/reviews/report.txt
+            """;
+        var invalidEvidence = Metadata.Replace("approvals: []", review);
+        Assert.Contains("safe docs/*.md path",
+            Assert.Throws<ArgumentException>(() => ControlledDocument.Parse(invalidEvidence)).Message);
+    }
+
+    [Fact]
     public void Quoted_schema_is_valid_and_malformed_yaml_is_rejected()
     {
         Assert.Equal(ControlledDocument.Parse(Metadata).Id, ControlledDocument.Parse(Metadata.Replace("schema: 1", "schema: \"1\"")).Id);
