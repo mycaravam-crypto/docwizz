@@ -11,7 +11,7 @@ public class ContextJourneyTests
     static string FindRoot()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-            if (Directory.Exists(Path.Combine(dir.FullName, "fixture")) && File.Exists(Path.Combine(dir.FullName, "CLI.md"))) return dir.FullName;
+            if (Directory.Exists(Path.Combine(dir.FullName, "fixture")) && File.Exists(Path.Combine(dir.FullName, "docs", "cli.md"))) return dir.FullName;
         throw new InvalidOperationException("repository root not found above the test binary");
     }
 

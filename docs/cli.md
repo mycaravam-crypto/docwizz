@@ -541,9 +541,11 @@ current.
 
 ### Product drafts
 
+Optional ISO-oriented document control: [cover, clickable contents and document history](document-control.md), activated with `--control document-control.yaml` for `product` and `product check`.
+
 ```bash
-docwizz product . templates/vmodell-xt/sw-architecture.yaml [out.md] [--context project.yaml] [--ai]
-docwizz product check . templates/vmodell-xt/sw-architecture.yaml --context project.yaml [--format json]
+docwizz product . templates/vmodell-xt/sw-architecture.yaml [out.md] [--context project.yaml] [--control document-control.yaml] [--ai]
+docwizz product check . templates/vmodell-xt/sw-architecture.yaml --context project.yaml [--control document-control.yaml] [--format json]
 ```
 
 Renders a work product from a template, filled from the code model; anything without evidence stays `OFFEN`. Output
@@ -681,7 +683,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `tests` | `docwizz tests import <dir> <snapshot.json>` | validate and store offline ADO test traceability | product documents |
 | `load` | `docwizz load import <dir> <report.json>...` | store powerwizz reports; `generate` adds measured numbers per endpoint to `api.md` | performance |
 | `requirements` | `docwizz requirements import <dir> <history.json> [<work-items>] [--progress]`, `docwizz requirements show <dir> (--for <symbol> \| --work-item <id>) [--format json]`, `docwizz requirements query <dir> <query.json>` | index exported history; one symbol's requirements, or one work item's symbols; gitwizz's requirement query | coding agents, reviews |
-| `product` | `docwizz product [check] <dir> <template.yaml> [out.md] [--context file.yaml] [--ai] [--format f]` | product draft from evidence; `check`: references and freshness | architects |
+| `product` | `docwizz product [check] <dir> <template.yaml> [out.md] [--context file.yaml] [--control document-control.yaml] [--ai] [--format f]` | product draft from evidence; `check`: references and freshness | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
 | `init` | `docwizz init [dir]` | write a `docwizz.yaml` with every default; refuses to overwrite | manual setup |
@@ -717,6 +719,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `--auto-rescan` | off | mcp | rescans when the model is stale instead of only reporting `stale: true` | coding agents |
 | `--package <name> --to <version>` | `remediation.targets` and version drift | remediate | given together or not at all | maintenance |
 | `--validate` | off | remediate | runs the configured restore/build/test commands in a temporary copy, never the working tree | maintenance |
+| `--control <file.yaml>` | off | product | adds declarative cover, revision history, review references and clickable contents; not an approval process | normal |
 | `--context <file.yaml>` | off | product | validates sourced project statements against the template before writing | product documents |
 | `--force` | off | setup | replaces an existing `docwizz.yaml`; any other command rejects it | setup only |
 | `--select-projects` | off | setup | terminal-only project selection after discovery; on an existing config replaces only `scope:` | setup only |

@@ -1,0 +1,24 @@
+# Original illustrative document-control record, not evidence of certification or approval.
+# Store one file per issued product and revision within the governed project repository.
+schema: 1
+document_id: SWA-001
+title: SW-Architektur Beispielprojekt
+version: "0.1"
+author: Systemarchitektur
+owner: Technische Projektleitung
+created: 2026-10-19
+classification: Intern
+distribution: Nur autorisierte Projektmitglieder; Umsetzung durch Repository-/DMS-Rechte
+retention: Gemäß festgelegter Aufbewahrungsregel QM-03 und Löschkonzept
+changes:
+  - version: "0.1"
+    date: 2026-10-19
+    author: Systemarchitektur
+    description: Erstentwurf
+# Externe Nachweise optional. Nur belegte Ereignisse eintragen; sie werden nicht authentifiziert.
+# - kind: review
+#   role: Qualitätsmanagement
+#   person: Beispielperson
+#   date: 2026-10-19
+#   evidence: docs/reviews/swa-001-review.md
+approvals: []
