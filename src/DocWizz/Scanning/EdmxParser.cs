@@ -63,6 +63,10 @@ static class EdmxParser
         return (full, rel);
     }
 
+    /// <summary>
+    /// Reads an EF Designer EDMX as source-located, deterministic CSDL/SSDL/MSL facts and findings.
+    /// Rejects unsafe paths and DTDs; never builds, restores, executes code or infers a domain model.
+    /// </summary>
     public static Report Parse(string root, string file)
     {
         var (full, rel) = CheckedFile(root, file);
