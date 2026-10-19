@@ -123,14 +123,15 @@ static class EdmxGraph
         }
 
         var inheritance = new List<InheritanceEdge>();
-        foreach (var entity in types.Values.OrderBy(e => e.Id, StringComparer.Ordinal))
-            if (entity.BaseType is { Length: > 0 } baseId)
-            {
-                if (types.ContainsKey(baseId))
-                    inheritance.Add(new(entity.Id, baseId, entity.Source));
-                else
-                    Warn("Unresolved base entity: " + entity.Id + " -> " + baseId, entity.Source);
-            }
+        foreach (var entity in types.Values.Where(e => e.BaseType is { Length: > 0 })
+            .OrderBy(e => e.Id, StringComparer.Ordinal))
+        {
+            var baseId = entity.BaseType!;
+            if (types.ContainsKey(baseId))
+                inheritance.Add(new(entity.Id, baseId, entity.Source));
+            else
+                Warn("Unresolved base entity: " + entity.Id + " -> " + baseId, entity.Source);
+        }
 
         // Components are WEAKLY connected through undirected association and inheritance links.
         var neighbours = types.Keys.ToDictionary(id => id, _ => new SortedSet<string>(StringComparer.Ordinal),
@@ -147,17 +148,20 @@ static class EdmxGraph
         }
         var components = new List<List<string>>();
         var visited = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var id in types.Keys.Order(StringComparer.Ordinal))
+        foreach (var id in types.Keys.Order(StringComparer.Ordinal).Where(id => !visited.Contains(id)))
         {
-            if (!visited.Add(id)) continue;
+            visited.Add(id);
             var stack = new Stack<string>();
             stack.Push(id);
             var members = new List<string>();
             while (stack.TryPop(out var current))
             {
                 members.Add(current);
-                foreach (var next in neighbours[current])
-                    if (visited.Add(next)) stack.Push(next);
+                foreach (var next in neighbours[current].Where(next => !visited.Contains(next)))
+                {
+                    visited.Add(next);
+                    stack.Push(next);
+                }
             }
             members.Sort(StringComparer.Ordinal);
             components.Add(members);
