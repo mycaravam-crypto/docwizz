@@ -15,7 +15,7 @@ static class ProductCheck
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     // Every finding for the draft at `draft` (its report sits next to it), errors and warnings, in rule order.
-    public static List<Finding> Run(string root, ProductTemplate template, CodeModel model, ProjectContext? project, string draft)
+    public static List<Finding> Run(string root, ProductTemplate template, CodeModel model, ProjectContext? project, string draft, ControlledDocument? control = null)
     {
         var findings = new List<Finding>();
         var catalog = ProductDraft.Catalog(template, model, project);
@@ -54,6 +54,9 @@ static class ProductCheck
             findings.Add(new("PROD-004", "error", null, $"{Path.GetRelativePath(root, report)} is missing or unreadable; run docwizz product again"));
             return findings;
         }
+        // A controlled draft must not silently pass when --control was forgotten.
+        if (control is null && written.TryGetProperty("document_control", out _))
+            findings.Add(new("DOC-004", "error", null, "controlled document requires --control to validate its metadata"));
         var sections = written.TryGetProperty("sections", out var list) && list.ValueKind == JsonValueKind.Array
             ? list.EnumerateArray().ToDictionary(x => x.GetProperty("id").GetString()!) : [];
         foreach (var (section, evidence) in catalog)
@@ -77,6 +80,8 @@ static class ProductCheck
                     if (!ids.GetValueOrDefault(current, []).Contains(cited))
                         findings.Add(new("PROD-006", "error", current, $"an AI sentence cites {cited}, which is not evidence of this section"));
         }
+        if (control is not null)
+            findings.AddRange(control.Check(root, report));
         return findings;
     }
 
