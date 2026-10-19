@@ -683,7 +683,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `tests` | `docwizz tests import <dir> <snapshot.json>` | validate and store offline ADO test traceability | product documents |
 | `load` | `docwizz load import <dir> <report.json>...` | store powerwizz reports; `generate` adds measured numbers per endpoint to `api.md` | performance |
 | `requirements` | `docwizz requirements import <dir> <history.json> [<work-items>] [--progress]`, `docwizz requirements show <dir> (--for <symbol> \| --work-item <id>) [--format json]`, `docwizz requirements query <dir> <query.json>` | index exported history; one symbol's requirements, or one work item's symbols; gitwizz's requirement query | coding agents, reviews |
-| `product` | `docwizz product [check or publish] <dir> <template.yaml> [out.md or out-dir] [--context file.yaml] [--control document-control.yaml] [--approval signed.json] [--trust policy.json] [--ai] [--format f]` | product draft from evidence; `check`: references and freshness | architects |
+| `product` | `docwizz product [check or publish] <dir> <template.yaml> [out.md or out-dir] [--context file.yaml] [--control document-control.yaml] [--approval signed.json] [--trust policy.json] [--draft existing.md] [--ai] [--format f]` | product draft from evidence; `check`: references and freshness | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
 | `init` | `docwizz init [dir]` | write a `docwizz.yaml` with every default; refuses to overwrite | manual setup |
@@ -722,6 +722,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `--control <file.yaml>` | off | product | adds declarative cover, revision history, review references and clickable contents; not an approval process | normal |
 | `--approval <signed.json>` | off | product | independently signed quality/security publication approvals; only publish |
 | `--trust <policy.json>` | off | product | reviewed public-key trust policy; only publish |
+| `--draft <existing.md>` | off | product publish only | repository-confined DocWizz-generated draft to publish (otherwise `docs/products/<id>.md`) |
 | `--context <file.yaml>` | off | product | validates sourced project statements against the template before writing | product documents |
 | `--force` | off | setup | replaces an existing `docwizz.yaml`; any other command rejects it | setup only |
 | `--select-projects` | off | setup | terminal-only project selection after discovery; on an existing config replaces only `scope:` | setup only |
@@ -837,4 +838,4 @@ GitHub release with generated notes. Nothing is committed to `main`.
 
 ### Signed DOCX/PDF publication
 
-After a controlled draft passes `product check`, use `docwizz product publish <dir> <template.yaml> [out-dir] --control document-control.yaml --context context.yaml --approval signed-approval.json --trust .github/document-release-policy.json`. Publication is separate from drafts and refuses overwrites. See [release policy and CI](document-publication.md).
+After a controlled draft passes `product check`, use `docwizz product publish <dir> <template.yaml> [out-dir] --control document-control.yaml --context context.yaml --approval signed-approval.json --trust .github/document-release-policy.json`. Publication is separate from drafts and refuses overwrites. A custom existing generated draft can be selected using `--draft docs/custom/architecture.md`; its adjacent `.evidence.json` is verified against the signatures. See [release policy and CI](document-publication.md).
