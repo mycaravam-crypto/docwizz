@@ -12,7 +12,6 @@ internal static class ProductPublication
     const int MaxSignedPayloadBytes = 16 * 1024;
     const int MinGeneratedDocumentBytes = 512;
     const int PdfSignatureBytes = 4;
-    const int MaxRendererErrorChars = 800;
     static readonly Regex ReleaseVersion = new("^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$", RegexOptions.CultureInvariant);
     internal sealed record SigningKey(string Id, string Role, string PemPath);
     internal sealed record Approval(string Role, string KeyId, string SignatureBase64);
@@ -147,9 +146,9 @@ internal static class ProductPublication
             throw new IOException($"{executable} timed out");
         }
         var stdout = await stdoutTask;
-        var stderr = await stderrTask;
+        _ = await stderrTask; // drain both streams, but do not disclose untrusted renderer output.
         if (process.ExitCode != 0)
-            throw new IOException($"{executable} failed ({process.ExitCode}): {stderr[..Math.Min(MaxRendererErrorChars, stderr.Length)]}");
+            throw new IOException($"{executable} failed with exit code {process.ExitCode}");
         return stdout.Trim();
     }
 
