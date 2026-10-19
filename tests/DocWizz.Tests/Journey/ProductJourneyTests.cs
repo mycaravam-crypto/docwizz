@@ -194,11 +194,11 @@ public class ProductJourneyTests
             approvals: []
             """;
         using var repo = new Sources(("template.yaml", Template), ("document-control.yaml", metadata), ("Example.cs", "public class Example {}"));
-        var template = Path.Combine(repo.Root, "template.yaml");
-        var file = Path.Combine(repo.Root, "document-control.yaml");
+        var template = Path.Join(repo.Root, "template.yaml");
+        var file = Path.Join(repo.Root, "document-control.yaml");
         var made = Docwizz.Run("product", repo.Root, template, "--control", file);
         Assert.Equal(0, made.Exit);
-        var doc = File.ReadAllText(Path.Combine(repo.Root, "docs", "products", "sw-architecture.md"));
+        var doc = File.ReadAllText(Path.Join(repo.Root, "docs", "products", "sw-architecture.md"));
         Assert.Contains("## Inhaltsverzeichnis", doc);
         Assert.Contains("## Deckblatt", doc);
         Assert.Contains("## Dokumentenlenkung", doc);
