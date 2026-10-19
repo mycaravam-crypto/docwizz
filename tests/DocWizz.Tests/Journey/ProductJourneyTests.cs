@@ -214,19 +214,27 @@ public class ProductJourneyTests
     }
 
     [Fact]
-    public void Product_publish_requires_signed_approval_and_rejects_external_templates()
+    public void Publication_requires_controls_but_regular_drafts_allow_external_shared_templates()
     {
         using var repo = new Sources(("template.yaml", Template), ("Example.cs", "public class Example {}"));
-        var template = Path.Combine(repo.Root, "template.yaml");
+        var template = Path.Join(repo.Root, "template.yaml");
         var blocked = Docwizz.Run("product", "publish", repo.Root, template);
         Assert.Equal(1, blocked.Exit);
         Assert.Contains("--control", blocked.Err);
-        Assert.False(Directory.Exists(Path.Combine(repo.Root, "docs", "published")));
+        Assert.False(Directory.Exists(Path.Join(repo.Root, "docs", "published")));
 
-        var external = Path.Combine(Path.GetTempPath(), "external-product-template.yaml");
-        var forbidden = Docwizz.Run("product", repo.Root, external);
-        Assert.Equal(1, forbidden.Exit);
-        Assert.Contains("escapes the project repository", forbidden.Err);
+        // Existing CLI contract: templates may reside in the separate DocWizz checkout.
+        var external = Path.Join(Path.GetTempPath(), "docwizz-shared-" + Guid.NewGuid().ToString("N") + ".yaml");
+        try
+        {
+            File.WriteAllText(external, Template);
+            var draft = Docwizz.Run("product", repo.Root, external);
+            Assert.Equal(0, draft.Exit);
+            var check = Docwizz.Run("product", "check", repo.Root, external);
+            Assert.Equal(0, check.Exit);
+            Assert.True(File.Exists(Path.Join(repo.Root, "docs", "products", "sw-architecture.md")));
+        }
+        finally { File.Delete(external); }
     }
 
 }
