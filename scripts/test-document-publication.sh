@@ -71,7 +71,8 @@ grep -q 'PROD-004' "$root/missing.stderr"
 dotnet "$dll" product "$root" "$root/template.yaml" --context "$root/context.yaml" --control "$root/control.yaml"
 dotnet "$dll" product check "$root" "$root/template.yaml" --context "$root/context.yaml" --control "$root/control.yaml"
 
-# A context or control file outside the repository is rejected even for non-release operations.
+# Missing external inputs must fail even for normal drafts/checks. Existing, explicitly supplied
+# external context/control files remain supported there; only publishing requires confinement.
 if dotnet "$dll" product "$root" "$root/template.yaml" --context "$root/../escape-context.yaml" --control "$root/control.yaml"; then
   echo "Context traversal accepted" >&2; exit 1
 fi
