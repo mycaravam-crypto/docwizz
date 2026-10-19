@@ -169,7 +169,7 @@ enumeration value (with its path), a short SHA or a duplicate commit;
 `docwizz generate . --ai --requirements`, `docwizz context . --for <symbol> --requirements` and the MCP tools
 `requirements_for_symbol`, `symbols_for_requirement` and `context(requirements: true)` read this index; none of them
 fetches anything. The rules (bounded selection, untrusted data, `intent`/`deviation` sections, labels, cache keys) are
-in [CLI.md](../CLI.md#requirements-in-drafts). Without `--requirements` the drafts and context don't change.
+in [CLI.md](cli.md#requirements-in-drafts). Without `--requirements` the drafts and context don't change.
 
 ## In the generated docs
 

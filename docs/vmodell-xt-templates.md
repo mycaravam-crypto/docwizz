@@ -52,7 +52,7 @@ Die referenzierten Dateien müssen im Software-Repository existieren; der Inhalt
 - Bewertbare Qualitätsziele können sich an ISO/IEC 25010 orientieren. Sicherheitsanforderungen (Vertraulichkeit, Integrität, Verfügbarkeit) benötigen projektspezifische Nachweise; ISO/IEC 27001 ersetzt keine Produktprüfung.
 - Die Testspezifikation hat die beispielhafte direkte Abhängigkeit `sw-specification`; andere Produktbeziehungen müssen im Projekt-Tailoring explizit entschieden werden.
 
-Weitere Details: [Product drafts](../CLI.md#product-drafts), [Project evidence](project-evidence.md), [Template contract](adr/0001-product-template-contract.md).
+Weitere Details: [Product drafts](cli.md#product-drafts), [Project evidence](project-evidence.md), [Template contract](adr/0001-product-template-contract.md).
 
 ## Fachliche Referenzen
 

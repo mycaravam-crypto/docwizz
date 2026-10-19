@@ -2,12 +2,12 @@ using System.Text.RegularExpressions;
 
 namespace DocWizz.Tests.Unit;
 
-// CLI.md and the README against the command table (Cli.Commands): a command or option added, removed or moved to another
+// docs/cli.md and the README against the command table (Cli.Commands): a command or option added, removed or moved to another
 // command without updating the docs fails here, so the reference can't drift from what the parser accepts.
 public class CliDocsTests
 {
     static readonly string Root = FindRoot();
-    static readonly string CliMd = File.ReadAllText(Path.Combine(Root, "CLI.md"));
+    static readonly string CliMd = File.ReadAllText(Path.Join(Root, "docs", "cli.md"));
     static readonly string Readme = File.ReadAllText(Path.Combine(Root, "README.md"));
 
     // Setup's stages as setup prints them (Journey/SetupJourneyTests checks the order on a real run).
@@ -19,8 +19,8 @@ public class CliDocsTests
     static string FindRoot()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-            if (File.Exists(Path.Combine(dir.FullName, "CLI.md"))) return dir.FullName;
-        throw new InvalidOperationException("CLI.md not found above the test binary");
+            if (File.Exists(Path.Join(dir.FullName, "docs", "cli.md"))) return dir.FullName;
+        throw new InvalidOperationException("docs/cli.md not found above the test binary");
     }
 
     // A `## heading` section, up to the next heading of the same level.
