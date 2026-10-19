@@ -146,6 +146,11 @@ internal static class ProductPublication
             markdown = Regex.Replace(markdown,
                 @"(?ms)^## Inhaltsverzeichnis\s*\n.*?^---\s*$", "", RegexOptions.CultureInvariant);
             markdown = markdown.Replace("Gelenkter **Entwurf**", "Gelenkte **Veröffentlichung**", StringComparison.Ordinal)
+                .Replace("Entwurf – Genehmigung nicht verifiziert", "Signierte Freigabe durch QM und ISMS geprüft", StringComparison.Ordinal)
+                .Replace("Entwurf – keine V-Modell-XT-Konformitäts- oder Freigabeaussage.",
+                    "Nach Signaturprüfung veröffentlicht – keine V-Modell-XT-Konformitätsaussage.", StringComparison.Ordinal)
+                .Replace("Entwurf – keine Aussage zur betrieblichen Einsatzbereitschaft oder Freigabe.",
+                    "Nach Signaturprüfung veröffentlicht – keine Aussage zur betrieblichen Einsatzbereitschaft.", StringComparison.Ordinal)
                 .Replace("DocWizz bestätigt keine Freigabe oder Normkonformität.",
                     "Signierte QM- und ISMS-Freigaben geprüft; keine ISO-Zertifizierungsaussage.", StringComparison.Ordinal);
             File.WriteAllText(source, markdown);
