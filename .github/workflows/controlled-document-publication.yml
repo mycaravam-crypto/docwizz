@@ -1,0 +1,67 @@
+name: controlled-document-publication
+on:
+  pull_request:
+    paths: ['tools/publish_product.py', 'tools/tests/test_publish_product.py', '.github/workflows/controlled-document-publication.yml']
+  push:
+    branches: [main]
+    paths: ['tools/publish_product.py', 'tools/tests/test_publish_product.py', '.github/workflows/controlled-document-publication.yml']
+  workflow_dispatch:
+    inputs:
+      source: {description: 'Generated controlled Markdown', required: true}
+      control: {description: 'Document control YAML', required: true}
+      template: {description: 'Product template YAML', required: true}
+      context: {description: 'Optional project context YAML', required: false}
+      attestation: {description: 'Signed approval JSON', required: true}
+permissions: {contents: read}
+jobs:
+  publication-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v6.0.0
+        with: {python-version: '3.12'}
+      - run: pip install python-docx==1.2.0
+      - run: python -m unittest discover -s tools/tests -p test_publish_product.py -v
+  approved-publication:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: publication-tests
+    runs-on: ubuntu-latest
+    environment: document-release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with: {dotnet-version: 10.0.x}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v6.0.0
+        with: {python-version: '3.12'}
+      - run: |
+          pip install python-docx==1.2.0
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libreoffice-writer
+      - name: Verify product and publish
+        env:
+          SOURCE: ${{ inputs.source }}
+          CONTROL: ${{ inputs.control }}
+          TEMPLATE: ${{ inputs.template }}
+          CONTEXT: ${{ inputs.context }}
+          ATTESTATION: ${{ inputs.attestation }}
+          DOCWIZZ_APPROVAL_KEY: ${{ secrets.DOCWIZZ_APPROVAL_KEY }}
+        run: |
+          set -euo pipefail
+          [[ -n "$DOCWIZZ_APPROVAL_KEY" ]]
+          for path in "$SOURCE" "$CONTROL" "$TEMPLATE" "$ATTESTATION"; do
+            [[ "$path" != /* && "$path" != *..* && -f "$path" ]] || exit 1
+          done
+          dotnet build src/DocWizz -c Release
+          if [[ -n "$CONTEXT" ]]; then
+            [[ "$CONTEXT" != /* && "$CONTEXT" != *..* && -f "$CONTEXT" ]] || exit 1
+            dotnet src/DocWizz/bin/Release/net10.0/DocWizz.dll product check . "$TEMPLATE" --control "$CONTROL" --context "$CONTEXT"
+          else
+            dotnet src/DocWizz/bin/Release/net10.0/DocWizz.dll product check . "$TEMPLATE" --control "$CONTROL"
+          fi
+          python tools/publish_product.py --mode release --source "$SOURCE" --control "$CONTROL" --evidence "${SOURCE%.md}.evidence.json" --attestation "$ATTESTATION" --check-passed --output published
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: approved-documents
+          path: published/*
+          if-no-files-found: error
+          retention-days: 30
