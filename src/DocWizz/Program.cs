@@ -143,7 +143,7 @@ static async Task<int> Dispatch(string[] args)
             return TraceCommand(path, pos.ElementAtOrDefault(2), json);
         case "product":
             return await ProductCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), opts.GetValueOrDefault("context"), config, opts.GetValueOrDefault("control"), opts.ContainsKey("ai"), productCheck, json,
-                productPublish, opts.GetValueOrDefault("approval"), opts.GetValueOrDefault("trust"));
+                productPublish, opts.GetValueOrDefault("approval"), opts.GetValueOrDefault("trust"), opts.GetValueOrDefault("draft"));
         case "sbom":
             return SbomCommand(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "sbom.cdx.json"), config);
         case "scan":
@@ -643,10 +643,12 @@ static string ProductInput(string root, string name, bool publish)
 // Product draft from evidence; with --ai, a local model words each section from it (validated, cached). Manual files are
 // never overwritten.
 static async Task<int> ProductCommand(string root, string? templateName, string? outName, string? contextName, Config config, string? controlName = null, bool ai = false, bool check = false, bool json = false,
-    bool publish = false, string? approvalName = null, string? trustName = null)
+    bool publish = false, string? approvalName = null, string? trustName = null, string? draftName = null)
 {
     if (string.IsNullOrWhiteSpace(templateName))
         return Usage("product needs a template YAML path", "product");
+    if (!publish && draftName is not null)
+        return Usage("--draft applies only to product publish", "product");
     var templatePath = templateName;
     ProductTemplate template;
     // Only signed publication imposes repository confinement. Drafts/checks have always accepted
@@ -686,7 +688,9 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
         // Validates filename safety before control.Version is interpolated into the release directory.
         try { ProductPublication.ValidateReleaseVersion(control.Version); }
         catch (ArgumentException e) { Console.Error.WriteLine("Publication blocked: " + e.Message); return 1; }
-        var original = Path.Join(root, "docs", "products", template.ProductId + ".md");
+        // Existing default remains supported; --draft selects a repository-confined custom generated draft.
+        var original = ProductPublication.ConfinedPath(root, draftName is null
+            ? Path.Join(root, "docs", "products", template.ProductId + ".md") : draftName);
         var releaseEvidencePath = Path.ChangeExtension(original, ".evidence.json");
         try
         {
@@ -912,6 +916,7 @@ static string Reference() => $"""
       docwizz product check <dir> <template.yaml> [draft.md]  references and freshness of a draft; exit 1 on errors
       docwizz product publish <dir> <template.yaml> [out-dir]  signed DOCX/PDF publication
         [--control <file.yaml>] [--approval <signed.json>] [--trust <policy.json>]  required for publish
+        [--draft <existing.md>]        optional generated Markdown draft (inside repository)
 
     options:
       --profile <name|file.yaml>        setup/generate/check/analyze/architecture/diff: documentation profile,
