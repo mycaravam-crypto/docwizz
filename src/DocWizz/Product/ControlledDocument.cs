@@ -15,6 +15,7 @@ internal sealed record ControlledDocument(
     string Classification, string Distribution, string Retention,
     IReadOnlyList<DocumentChange> Changes, IReadOnlyList<DocumentApproval> Approvals, string Hash)
 {
+    const int MaxMetadataFieldLength = 500; // bounded Markdown cover/table metadata, not full document prose
     static readonly HashSet<string> RootKeys =
         ["schema", "document_id", "title", "version", "author", "owner", "created",
          "classification", "distribution", "retention", "changes", "approvals"];
@@ -104,8 +105,8 @@ internal sealed record ControlledDocument(
         // Metadata is rendered in Markdown table cells and cover fields, never as free-form prose.
         // Bound cells to prevent oversized documents; require one line to preserve table integrity.
         // Detailed policies and decisions belong in versioned, cited docs rather than inline metadata.
-        if (value.Length > 500 || value.Contains('\r') || value.Contains('\n'))
-            throw new ArgumentException($"{key}.{name} must be one line (max. 500 chars)");
+        if (value.Length > MaxMetadataFieldLength || value.Contains('\r') || value.Contains('\n'))
+            throw new ArgumentException($"{key}.{name} must be one line (max. {MaxMetadataFieldLength} chars)");
         return value.Trim();
     }
 
