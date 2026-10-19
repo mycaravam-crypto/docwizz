@@ -346,7 +346,7 @@ For projects that keep requirements as YAML evidence:
   The [IT operations concept](docs/IT_OPERATIONS.md) template documents code facts, discovered deployment/CI descriptor files and explicit operational gaps (not deployed-state evidence).
 
 See [project evidence](docs/project-evidence.md) and [CLI.md](CLI.md#product-drafts).
-For ISO-oriented document control (cover, contents, revisions and declared review evidence), see [document control](docs/document-control.md).
+For ISO-oriented document control (cover, contents, revisions and declared review evidence), see [document control](docs/document-control.md). Signed DOCX/PDF release gates are explained in [publication guide](docs/document-publication.md).
 
 For expanded V-Modell XT example product structures (SW architecture, SW specification and system-element test specification), see [the template guide](docs/vmodell-xt-templates.md) and its section-level review aids.
 

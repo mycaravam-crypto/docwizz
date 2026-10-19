@@ -35,7 +35,8 @@ static async Task<int> Dispatch(string[] args)
     if (cmd == "diff" && pos.Count >= 2 && !Directory.Exists(pos[1])) pos.Insert(1, ".");
     // `docwizz product check <dir> <template.yaml>`: the subcommand comes before the directory (a folder named check: ./check).
     var productCheck = cmd == "product" && pos.ElementAtOrDefault(1) == "check";
-    if (productCheck) pos.RemoveAt(1);
+    var productPublish = cmd == "product" && pos.ElementAtOrDefault(1) == "publish";
+    if (productCheck || productPublish) pos.RemoveAt(1);
     // `docwizz requirements import|show|query <dir> ...`: the same, the subcommand first.
     string? requirementsAction = null;
     if (cmd == "requirements")
@@ -141,7 +142,8 @@ static async Task<int> Dispatch(string[] args)
         case "trace":
             return TraceCommand(path, pos.ElementAtOrDefault(2), json);
         case "product":
-            return await ProductCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), opts.GetValueOrDefault("context"), config, opts.GetValueOrDefault("control"), opts.ContainsKey("ai"), productCheck, json);
+            return await ProductCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), opts.GetValueOrDefault("context"), config, opts.GetValueOrDefault("control"), opts.ContainsKey("ai"), productCheck, json,
+                productPublish, opts.GetValueOrDefault("approval"), opts.GetValueOrDefault("trust"));
         case "sbom":
             return SbomCommand(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "sbom.cdx.json"), config);
         case "scan":
@@ -630,7 +632,8 @@ static CodeModel ProductModel(string root, Config config, ProductTemplate templa
 
 // Product draft from evidence; with --ai, a local model words each section from it (validated, cached). Manual files are
 // never overwritten.
-static async Task<int> ProductCommand(string root, string? templateName, string? outName, string? contextName, Config config, string? controlName = null, bool ai = false, bool check = false, bool json = false)
+static async Task<int> ProductCommand(string root, string? templateName, string? outName, string? contextName, Config config, string? controlName = null, bool ai = false, bool check = false, bool json = false,
+    bool publish = false, string? approvalName = null, string? trustName = null)
 {
     if (string.IsNullOrWhiteSpace(templateName))
         return Usage("product needs a template YAML path", "product");
@@ -654,6 +657,40 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
         try { control = ControlledDocument.Load(controlPath); }
         catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
         catch (IOException e) { Console.Error.WriteLine($"{controlPath}: {e.Message}"); return 1; }
+    }
+    if (publish)
+    {
+        if (ai || json) return Usage("product publish does not allow --ai or --format", "product");
+        if (control is null || string.IsNullOrWhiteSpace(approvalName) || string.IsNullOrWhiteSpace(trustName))
+            return Usage("product publish requires --control, --approval and --trust", "product");
+        var original = Path.Combine(root, "docs", "products", template.ProductId + ".md");
+        var report = Path.ChangeExtension(original, ".evidence.json");
+        var findings = ProductCheck.Run(root, template, ProductModel(root, config, template), project, original, control);
+        if (findings.Any(f => f.Severity == "error" || f.Rule is "PROD-001" or "DOC-003") ||
+            !control.Approvals.Any(a => a.Kind == "review") ||
+            !control.Approvals.Any(a => a.Kind == "approval"))
+        {
+            ProductCheck.Report(template, findings, Console.Error);
+            Console.Error.WriteLine("Publication blocked: every required section, review and approval must have recorded evidence.");
+            return 1;
+        }
+        var trust = File.Exists(trustName) ? trustName : Path.Combine(root, trustName);
+        var signed = File.Exists(approvalName) ? approvalName : Path.Combine(root, approvalName);
+        var published = outName is null
+            ? Path.Combine(root, "docs", "published", control.Id + "-" + control.Version)
+            : Path.GetFullPath(outName);
+        try
+        {
+            ProductPublication.Publish(root, template, control, original, report, trust, signed, published);
+            Console.WriteLine("→ " + Path.GetRelativePath(root, published));
+            return 0;
+        }
+        catch (Exception e) when (e is ArgumentException or IOException or JsonException or
+            System.Security.Cryptography.CryptographicException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            Console.Error.WriteLine("Publication blocked: " + e.Message);
+            return 1;
+        }
     }
     var output = outName is null ? Path.Combine(root, "docs", "products", template.ProductId + ".md")
         : outName;
@@ -848,6 +885,8 @@ static string Reference() => $"""
         [--control <file.yaml>]         cover, revision metadata, review evidence and linked contents
         [--ai]                          a self-hosted model words sections, citing evidence ids
       docwizz product check <dir> <template.yaml> [draft.md]  references and freshness of a draft; exit 1 on errors
+      docwizz product publish <dir> <template.yaml> [out-dir]  signed DOCX/PDF publication
+        [--control <file.yaml>] [--approval <signed.json>] [--trust <policy.json>]  required for publish
 
     options:
       --profile <name|file.yaml>        setup/generate/check/analyze/architecture/diff: documentation profile,

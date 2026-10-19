@@ -705,6 +705,8 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `--storage-state <file>` | off | generate | with `--screenshots`, starts each route's context from a saved Playwright login state; path relative to the scanned directory; keep it out of Git | opt-in |
 | `--screenshot-delay <ms>` | 0 | generate | with `--screenshots`, extra wait (0 to 60000 ms) after the page settles, for slow pages | opt-in |
 | `--control <file.yaml>` | off | product | adds declarative cover, revision history, review references and clickable contents; not an approval process | normal |
+| `--approval <signed.json>` | off | product | independently signed quality/security publication approvals; only publish |
+| `--trust <policy.json>` | off | product | reviewed public-key trust policy; only publish |
 | `--ai` | off | generate, product, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it; does not enable ratings | opt-in |
 | `--ai-ratings` | off | generate, setup | independently rates written docs; cached ratings are used without it; combine with `--ai` for drafts too | opt-in |
 | `--since <ref>` | — | check, remediate | check: only problems introduced since `<ref>` fail; remediate: says whether each update touches only what changed since `<ref>` | CI |
@@ -832,3 +834,8 @@ GitHub release with generated notes. Nothing is committed to `main`.
 - A commit already covered by a newer tag is not released again.
 - The bump rule is [semver-next.sh](.github/scripts/semver-next.sh), specified by
   [semver-next.test.sh](.github/scripts/semver-next.test.sh), which runs before every release.
+
+
+### Signed DOCX/PDF publication
+
+After a controlled draft passes `product check`, use `docwizz product publish <dir> <template.yaml> [out-dir] --control document-control.yaml --context context.yaml --approval signed-approval.json --trust .github/document-release-policy.json`. Publication is separate from drafts and refuses overwrites. See [release policy and CI](docs/document-publication.md).
