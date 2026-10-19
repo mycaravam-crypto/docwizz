@@ -1,0 +1,58 @@
+# Evidence-based draft only; neither operational approval nor conformity claim.
+schema: 1
+product_id: it-betriebskonzept
+document_type: it-operations
+sections:
+  - id: scope
+    title: Zweck, Geltungsbereich und Systemverantwortung
+    required: true
+    sources: [project]
+  - id: structure
+    title: Systembausteine und Architektur
+    required: true
+    sources: [code, project]
+  - id: runtime
+    title: Projekte, Laufzeitplattform und Voraussetzungen
+    required: true
+    sources: [code, project]
+  - id: interfaces
+    title: Schnittstellen und Systemabhaengigkeiten
+    required: true
+    sources: [code, project]
+  - id: configuration
+    title: Konfigurationsschluessel und Parametrisierung
+    required: true
+    sources: [code, project]
+  - id: environments
+    title: Betriebsumgebungen und Infrastruktur
+    required: true
+    sources: [project]
+  - id: deployment
+    title: Installation, Deployment und Rollback
+    required: true
+    sources: [project]
+  - id: security
+    title: Zugriffsschutz und IT-Sicherheit
+    required: true
+    sources: [project]
+  - id: monitoring
+    title: Monitoring, Logging und Alarmierung
+    required: true
+    sources: [project]
+  - id: backup
+    title: Datensicherung und Wiederherstellung
+    required: true
+    sources: [project]
+  - id: incident
+    title: Stoerungsbehandlung und Eskalation
+    required: true
+    sources: [project]
+  - id: responsibilities
+    title: Betriebsrollen und Verantwortlichkeiten
+    required: true
+    sources: [project]
+  - id: service_targets
+    title: Servicezeiten, Verfuegbarkeit und RTO/RPO
+    required: true
+    sources: [project]
+dependencies: []
