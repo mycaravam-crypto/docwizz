@@ -98,9 +98,12 @@ internal static class ProductPublication
         };
         foreach (var arg in arguments) process.StartInfo.ArgumentList.Add(arg);
         if (!process.Start()) throw new IOException($"unable to launch {executable}");
-        var stderr = process.StandardError.ReadToEnd();
-        var stdout = process.StandardOutput.ReadToEnd();
+        // Drain both pipes concurrently; synchronous sequential reads can deadlock a noisy renderer.
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
         if (!process.WaitForExit(180000)) { process.Kill(entireProcessTree: true); throw new IOException($"{executable} timed out"); }
+        var stdout = stdoutTask.GetAwaiter().GetResult();
+        var stderr = stderrTask.GetAwaiter().GetResult();
         if (process.ExitCode != 0)
             throw new IOException($"{executable} failed ({process.ExitCode}): {stderr[..Math.Min(800, stderr.Length)]}");
         return stdout.Trim();
