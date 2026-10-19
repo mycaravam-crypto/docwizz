@@ -99,7 +99,7 @@ public class ControlledDocumentTests
     [InlineData("retention: Gemäß dokumentierter Aufbewahrungsregel QM-03")]
     public void Missing_required_fields_fail_fast(string line)
     {
-        Assert.Throws<ArgumentException>(() => ControlledDocument.Parse(Metadata.Replace(line + "\n", "")));
+        Assert.Throws<ArgumentException>(() => ControlledDocument.Parse(Metadata.Replace("\n" + line + "\n", "\n")));
     }
 
     [Fact]
