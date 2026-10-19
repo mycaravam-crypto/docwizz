@@ -71,7 +71,11 @@ Das PDF wird auf Dateisignatur geprüft, nicht auf PDF/A oder Barrierefreiheit.
   Schlüsseln sowie Negativtests für Manipulation, Doppelveröffentlichung und falsche Signatur.
 - `.github/workflows/document-publication.yml`: manueller Ablauf nur auf `main`,
   nur in einem **privaten** Repository und nur über `document-release` mit Required Reviewers.
-  Diese Umgebung muss ein Administrator separat einrichten; ohne nachweisbare Schutzregeln
+  Die Umgebung benötigt das geschützte Secret `DOCWIZZ_RELEASE_AUDIT_TOKEN` mit ausschließlich
+  `Administration: Read` für die Abfrage der Environment-Schutzregeln; das normale `GITHUB_TOKEN`
+  verfügt nicht über diese Berechtigung. Ohne diesen Audit-Token oder ohne Required Reviewers
+  schlägt die Veröffentlichung bewusst fehl. Ein Administrator muss diese Umgebung einrichten;
+  ohne nachweisbare Schutzregeln
   wird die Veröffentlichung verweigert.
 - Trust-Policy und zugehörige Schlüssel dürfen nicht durch Antragsteller ohne Review
   ausgetauscht werden (Branch Protection, CODEOWNERS, getrennte Rollen).
