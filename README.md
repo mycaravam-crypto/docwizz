@@ -562,7 +562,7 @@ dotnet test --project tests/DocWizz.Tests   # unit, component and journey tests 
 ./test.sh                                   # end-to-end tests against fixture/
 ```
 
-- How it works: [ARCHITECTURE.md](docs/architecture.md) · what's next: [ROADMAP.md](https://github.com/mycaravam-crypto/docwizz/issues)
+- How it works: [Architecture](docs/architecture.md) · what's next: [GitHub Issues](https://github.com/mycaravam-crypto/docwizz/issues)
 - Benchmarks and advice for large repositories: [bench/](bench/README.md)
 - Every merge to `main` is released automatically; label a PR `release:minor` or `release:major` for bigger bumps
   ([versioning](docs/cli.md#versioning)).
