@@ -27,6 +27,10 @@ sections:
     title: Betriebsumgebungen und Infrastruktur
     required: true
     sources: [project]
+  - id: deployment-descriptors
+    title: Deployment- und CI-Deskriptoren im Repository
+    required: true
+    sources: [code]
   - id: deployment
     title: Installation, Deployment und Rollback
     required: true
