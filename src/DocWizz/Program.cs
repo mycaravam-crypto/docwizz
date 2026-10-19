@@ -118,6 +118,26 @@ static async Task<int> Dispatch(string[] args)
             if (pos.ElementAtOrDefault(2) is not { } edmxFile)
                 return Usage("edmx requires a repository-relative .edmx file", "edmx");
             var edmx = EdmxParser.Parse(path, edmxFile);
+            if (opts.ContainsKey("links"))
+            {
+                List<string> selectedFiles = RepoFiles(path, config);
+                if (config.Scope is not null && !selectedFiles.Any(f =>
+                    string.Equals(Path.GetFullPath(f), Path.GetFullPath(edmxFile, Path.GetFullPath(path)),
+                        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)))
+                    return Usage("the EDMX file is outside the selected project scope", "edmx");
+                var csFiles = selectedFiles.Where(f => Path.GetExtension(f).Equals(".cs", StringComparison.OrdinalIgnoreCase))
+                    .Where(f =>
+                    {
+                        var relative = Path.GetRelativePath(path, f).Replace('\\', '/');
+                        return !relative.StartsWith("tests/", StringComparison.OrdinalIgnoreCase)
+                            && config.Tests?.Any(g => FileSystemName.MatchesSimpleExpression(g, relative)) != true;
+                    })
+                    .ToList();
+                var (nodes, edges) = CSharpScanner.Scan(Path.GetFullPath(path), csFiles, config.CommentDocs);
+                var links = EdmxCodeLinks.Build(edmx, new CodeModel(null, nodes, edges));
+                Console.Write(json ? EdmxCodeLinks.Json(links) : EdmxCodeLinks.Text(links));
+                return links.Findings.Any(f => f.Severity == "error") ? 1 : 0;
+            }
             if (opts.ContainsKey("graph"))
             {
                 if (!EdmxGraph.TryWeights(opts, out var weights, out var error))
@@ -881,6 +901,7 @@ static string Reference() => $"""
       docwizz discover [dir]            read-only project and solution inventory [--format json]
       docwizz edmx <dir> <file.edmx>     read-only EF6 EDMX facts and findings [--format json]
         [--graph]                       source-backed technical graph (edmx-graph/v1)
+        [--links]                       exact C# / DbContext / MVC evidence and inferred #187 areas (edmx-code-links/v1)
         [--degree-weight n] [--fan-in-weight n] [--fan-out-weight n] [--inheritance-weight n]  0..100
       docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
         [--html]                        also write an HTML page next to every Markdown page

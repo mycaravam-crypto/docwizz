@@ -24,6 +24,8 @@ public class CliTests
     [InlineData("discover . --format json", null)]
     [InlineData("edmx . fixture-legacy/Shop/Models/Legacy.edmx --format json", null)]
     [InlineData("edmx . fixture-legacy/Shop/Models/GraphGolden.edmx --graph --format json", null)]
+    [InlineData("edmx . fixture-legacy/Shop/Models/GraphGolden.edmx --links --format json", null)]
+    [InlineData("edmx . fixture-legacy/Shop/Models/GraphGolden.edmx --links --graph", "--graph and --links are mutually exclusive")]
     [InlineData("edmx . fixture-legacy/Shop/Models/GraphGolden.edmx --graph --degree-weight 2.5 --fan-in-weight 0 --fan-out-weight 0 --inheritance-weight 1 --format json", null)]
     [InlineData("edmx . fixture-legacy/Shop/Models/Legacy.edmx --degree-weight 2", "EDMX graph weight options require --graph")]
     [InlineData("setup . --force --html --ai --profile api", null)]

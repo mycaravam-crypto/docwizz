@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<edmx:Edmx Version="3.0" xmlns:edmx="http://schemas.microsoft.com/ado/2009/11/edmx">
+ <edmx:Runtime>
+  <edmx:StorageModels>
+   <Schema Namespace="Store" xmlns="http://schemas.microsoft.com/ado/2009/11/edm/ssdl">
+    <EntityType Name="CustomerRow"><Key><PropertyRef Name="Id"/></Key><Property Name="Id" Type="int" Nullable="false"/><Property Name="Name" Type="nvarchar"/><Property Name="PremiumTier" Type="int"/></EntityType>
+    <EntityType Name="OrderRow"><Key><PropertyRef Name="Id"/></Key><Property Name="Id" Type="int" Nullable="false"/><Property Name="CustomerId" Type="int"/></EntityType>
+    <EntityType Name="AddressRow"><Key><PropertyRef Name="Id"/></Key><Property Name="Id" Type="int" Nullable="false"/><Property Name="CustomerId" Type="int"/></EntityType>
+    <EntityType Name="TagRow"><Key><PropertyRef Name="Id"/></Key><Property Name="Id" Type="int" Nullable="false"/><Property Name="Label" Type="nvarchar"/></EntityType>
+    <EntityType Name="AuditRow"><Key><PropertyRef Name="Id"/></Key><Property Name="Id" Type="int" Nullable="false"/></EntityType>
+    <EntityType Name="OrderTagLink"><Key><PropertyRef Name="OrderId"/><PropertyRef Name="TagId"/></Key><Property Name="OrderId" Type="int" Nullable="false"/><Property Name="TagId" Type="int" Nullable="false"/></EntityType>
+    <EntityContainer Name="StoreContainer">
+     <EntitySet Name="CustomerRows" EntityType="Store.CustomerRow" Schema="dbo" Table="Customers"/>
+     <EntitySet Name="OrderRows" EntityType="Store.OrderRow" Schema="dbo" Table="Orders"/>
+     <EntitySet Name="AddressRows" EntityType="Store.AddressRow" Schema="dbo" Table="Addresses"/>
+     <EntitySet Name="TagRows" EntityType="Store.TagRow" Schema="dbo" Table="Tags"/>
+     <EntitySet Name="AuditRows" EntityType="Store.AuditRow" Schema="dbo" Table="Audits"/>
+     <EntitySet Name="OrderTagLinks" EntityType="Store.OrderTagLink" Schema="dbo" Table="OrderTags"/>
+    </EntityContainer>
+   </Schema>
+  </edmx:StorageModels>
+  <edmx:ConceptualModels>
+   <Schema Namespace="Legacy" xmlns="http://schemas.microsoft.com/ado/2009/11/edm">
+    <EntityType Name="Customer">
+     <Key><PropertyRef Name="Id"/></Key>
+     <Property Name="Id" Type="Int32" Nullable="false"/><Property Name="Name" Type="String"/>
+     <NavigationProperty Name="Orders" Relationship="Legacy.CustomerOrders" FromRole="Customer" ToRole="Order"/>
+     <NavigationProperty Name="Address" Relationship="Legacy.CustomerAddress" FromRole="Customer" ToRole="Address"/>
+    </EntityType>
+    <EntityType Name="PremiumCustomer" BaseType="Legacy.Customer"><Property Name="PremiumTier" Type="Int32"/></EntityType>
+    <EntityType Name="Order">
+     <Key><PropertyRef Name="Id"/></Key>
+     <Property Name="Id" Type="Int32" Nullable="false"/><Property Name="CustomerId" Type="Int32"/>
+     <NavigationProperty Name="Customer" Relationship="Legacy.CustomerOrders" FromRole="Order" ToRole="Customer"/>
+     <NavigationProperty Name="Tags" Relationship="Legacy.OrderTags" FromRole="Order" ToRole="Tag"/>
+    </EntityType>
+    <EntityType Name="Address">
+     <Key><PropertyRef Name="Id"/></Key><Property Name="Id" Type="Int32" Nullable="false"/><Property Name="CustomerId" Type="Int32"/>
+     <NavigationProperty Name="Customer" Relationship="Legacy.CustomerAddress" FromRole="Address" ToRole="Customer"/>
+    </EntityType>
+    <EntityType Name="Tag">
+     <Key><PropertyRef Name="Id"/></Key><Property Name="Id" Type="Int32" Nullable="false"/><Property Name="Label" Type="String"/>
+     <NavigationProperty Name="Orders" Relationship="Legacy.OrderTags" FromRole="Tag" ToRole="Order"/>
+    </EntityType>
+    <EntityType Name="Audit"><Key><PropertyRef Name="Id"/></Key><Property Name="Id" Type="Int32" Nullable="false"/></EntityType>
+    <Association Name="CustomerOrders"><End Role="Customer" Type="Legacy.Customer" Multiplicity="1"/><End Role="Order" Type="Legacy.Order" Multiplicity="*"/></Association>
+    <Association Name="CustomerAddress"><End Role="Customer" Type="Legacy.Customer" Multiplicity="1"/><End Role="Address" Type="Legacy.Address" Multiplicity="0..1"/></Association>
+    <Association Name="OrderTags"><End Role="Order" Type="Legacy.Order" Multiplicity="*"/><End Role="Tag" Type="Legacy.Tag" Multiplicity="*"/></Association>
+    <EntityContainer Name="LegacyContext">
+     <EntitySet Name="Customers" EntityType="Legacy.Customer"/>
+     <EntitySet Name="Orders" EntityType="Legacy.Order"/>
+     <EntitySet Name="Addresses" EntityType="Legacy.Address"/>
+     <EntitySet Name="Tags" EntityType="Legacy.Tag"/>
+     <EntitySet Name="Audits" EntityType="Legacy.Audit"/>
+     <AssociationSet Name="CustomerOrders" Association="Legacy.CustomerOrders"><End Role="Customer" EntitySet="Customers"/><End Role="Order" EntitySet="Orders"/></AssociationSet>
+     <AssociationSet Name="CustomerAddress" Association="Legacy.CustomerAddress"><End Role="Customer" EntitySet="Customers"/><End Role="Address" EntitySet="Addresses"/></AssociationSet>
+     <AssociationSet Name="OrderTags" Association="Legacy.OrderTags"><End Role="Order" EntitySet="Orders"/><End Role="Tag" EntitySet="Tags"/></AssociationSet>
+    </EntityContainer>
+   </Schema>
+  </edmx:ConceptualModels>
+  <edmx:Mappings>
+   <Mapping Space="C-S" xmlns="http://schemas.microsoft.com/ado/2009/11/mapping/cs">
+    <EntityContainerMapping StorageEntityContainer="StoreContainer" CdmEntityContainer="LegacyContext">
+     <EntitySetMapping Name="Customers">
+      <EntityTypeMapping TypeName="IsTypeOf(Legacy.Customer)"><MappingFragment StoreEntitySet="CustomerRows"><ScalarProperty Name="Id" ColumnName="Id"/><ScalarProperty Name="Name" ColumnName="Name"/></MappingFragment></EntityTypeMapping>
+      <EntityTypeMapping TypeName="Legacy.PremiumCustomer"><MappingFragment StoreEntitySet="CustomerRows"><ScalarProperty Name="PremiumTier" ColumnName="PremiumTier"/></MappingFragment></EntityTypeMapping>
+     </EntitySetMapping>
+     <EntitySetMapping Name="Orders"><EntityTypeMapping TypeName="Legacy.Order"><MappingFragment StoreEntitySet="OrderRows"><ScalarProperty Name="Id" ColumnName="Id"/><ScalarProperty Name="CustomerId" ColumnName="CustomerId"/></MappingFragment></EntityTypeMapping></EntitySetMapping>
+     <EntitySetMapping Name="Addresses"><EntityTypeMapping TypeName="Legacy.Address"><MappingFragment StoreEntitySet="AddressRows"><ScalarProperty Name="Id" ColumnName="Id"/><ScalarProperty Name="CustomerId" ColumnName="CustomerId"/></MappingFragment></EntityTypeMapping></EntitySetMapping>
+     <EntitySetMapping Name="Tags"><EntityTypeMapping TypeName="Legacy.Tag"><MappingFragment StoreEntitySet="TagRows"><ScalarProperty Name="Id" ColumnName="Id"/><ScalarProperty Name="Label" ColumnName="Label"/></MappingFragment></EntityTypeMapping></EntitySetMapping>
+     <EntitySetMapping Name="Audits"><EntityTypeMapping TypeName="Legacy.Audit"><MappingFragment StoreEntitySet="AuditRows"><ScalarProperty Name="Id" ColumnName="Id"/></MappingFragment></EntityTypeMapping></EntitySetMapping>
+     <AssociationSetMapping Name="OrderTags" TypeName="Legacy.OrderTags" StoreEntitySet="OrderTagLinks">
+      <EndProperty Name="Order"><ScalarProperty Name="Id" ColumnName="OrderId"/></EndProperty>
+      <EndProperty Name="Tag"><ScalarProperty Name="Id" ColumnName="TagId"/></EndProperty>
+     </AssociationSetMapping>
+    </EntityContainerMapping>
+   </Mapping>
+  </edmx:Mappings>
+ </edmx:Runtime>
+</edmx:Edmx>
