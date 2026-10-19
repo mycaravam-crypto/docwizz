@@ -130,7 +130,7 @@ static async Task<int> Dispatch(string[] args)
                     {
                         var relative = Path.GetRelativePath(path, f).Replace('\\', '/');
                         return !relative.StartsWith("tests/", StringComparison.OrdinalIgnoreCase)
-                            && !config.Tests.Any(g => FileSystemName.MatchesSimpleExpression(g, relative));
+                            && config.Tests?.Any(g => FileSystemName.MatchesSimpleExpression(g, relative)) != true;
                     })
                     .ToList();
                 var (nodes, edges) = CSharpScanner.Scan(Path.GetFullPath(path), csFiles, config.CommentDocs);
