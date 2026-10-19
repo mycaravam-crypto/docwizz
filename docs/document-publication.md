@@ -61,8 +61,8 @@ docwizz product publish . templates/vmodell-xt/sw-architecture.yaml docs/publish
 
 Ergebnis: `<ID>-<VERSION>.docx`, `<ID>-<VERSION>.pdf` und
 `<ID>-<VERSION>.publication.json` mit Input-/Output-Hashes. Bereits bestehende
-Zielverzeichnisse werden nicht überschrieben. Pandoc generiert die DOCX-Inhaltsübersicht,
-LibreOffice das PDF; beide Werkzeuge und Git müssen installiert sein.
+Zielverzeichnisse werden nicht überschrieben. Das aus dem Projekt stammende verlinkte Inhaltsverzeichnis bleibt im DOCX/PDF erhalten,
+während die DOCX-Verarbeitung einen Seitenumbruch nach dem Deckblatt und dynamische Seitenzahlen (PAGE/NUMPAGES) ergänzt. LibreOffice erstellt das PDF; beide Renderer und Git müssen installiert sein.
 Das PDF wird auf Dateisignatur geprüft, nicht auf PDF/A oder Barrierefreiheit.
 
 ## Workflow und tatsächliche Schutzgrenzen
