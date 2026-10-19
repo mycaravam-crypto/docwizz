@@ -29,7 +29,7 @@ Beide Artefakte unterliegen dem bestehenden Überschreibschutz. Der Entwurf ist 
 | Betriebsumgebung, Deployment-/Rollback-Verfahren, Monitoring, Backup, Incident, Rollen, SLA/RTO/RPO | explizite menschliche Quellen | ohne Quelle immer **OFFEN** |
 
 Eigene Angaben können über den vorhandenen `--context`-Vertrag
-mit Quellbelegen ergänzt werden (siehe [Product drafts](../CLI.md#product-drafts)).
+mit Quellbelegen ergänzt werden (siehe [Product drafts](cli.md#product-drafts)).
 `product check` meldet offene Pflichtabschnitte als `PROD-001`-Warnung;
 ein Entwurf bleibt dadurch erstellbar, benötigt aber fachliche Abnahme.
 

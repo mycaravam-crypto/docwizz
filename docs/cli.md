@@ -150,7 +150,7 @@ docwizz generate . --html --screenshots --base-url http://localhost:5173 --stora
   it out of Git, restrict access, and use a low-privilege test account with sanitized data.
 
 For Windows Chromium installation, missing headless-shell executables, authenticated login steps and troubleshooting,
-see [Playwright screenshot troubleshooting](docs/PLAYWRIGHT_SCREENSHOTS.md).
+see [Playwright screenshot troubleshooting](PLAYWRIGHT_SCREENSHOTS.md).
 
 ### 3. Architecture analysis
 
@@ -162,7 +162,7 @@ docwizz architecture . --format json
 Lists the layers, the dependencies between them, violations (each `ARCH-…` rule with a severity) and module cycles.
 Set the layers (path globs, first match wins) and `architecture.allow` in `docwizz.yaml`. `check.fail_on` sets the
 lowest severity that counts against `max_violations`; lower ones are only reported. Custom rules:
-[README: Architecture rules](README.md#architecture-rules).
+[README: Architecture rules](../README.md#architecture-rules).
 
 ### 4. Quality gates and CI
 
@@ -212,7 +212,7 @@ docwizz generate . --ai --ai-ratings   # explicitly request both
 server (vLLM, NVIDIA NIM, Nutanix Enterprise AI, a LiteLLM gateway). Cloud models and public hosts are refused and
 proxies are bypassed. Drafts are marked 🤖, cite their facts, fill only empty sections and **never** close a gap, raise
 coverage or pass a check. Drafts are cached by code hash; without `--ai`, no new drafts are requested. More:
-[README: AI drafts](README.md#draft-missing-docs-with-a-local-ai).
+[README: AI drafts](../README.md#draft-missing-docs-with-a-local-ai).
 
 `--ai-ratings` independently enables advisory 1–5 usefulness ratings of written docs in `quality.md` for `generate`
 and `setup`. Ratings never affect coverage, doc quality or `check`. They can dominate a cold run, so `--ai` alone
@@ -298,7 +298,7 @@ cp templates/AGENTS.md ./AGENTS.md                    # or append it to the agen
 
 Coding agents (Claude Code, OpenCode, Qwen Code, Cline, Aider) can read the generated docs instead of exploring the
 code file by file, which is where local models with small context windows drift on long runs.
-[templates/AGENTS.md](templates/AGENTS.md) is a section for `AGENTS.md`, `CLAUDE.md`, `.clinerules` or
+[templates/AGENTS.md](../templates/AGENTS.md) is a section for `AGENTS.md`, `CLAUDE.md`, `.clinerules` or
 `CONVENTIONS.md`. It tells the agent:
 
 - **what to read first:** `docs/index.md`, `docs/solutions/<solution>.md`, `docs/projects/<project>.md`, then
@@ -409,7 +409,7 @@ code that no cross-check questions, with criteria) and Unclear (every other link
 no other folder calls into it) that calls into exactly one other type to that type's area, and an interface method to
 its implementations' area. Every member carries its reason; the schema is `docwizz.domain-areas/v1` and every area is
 `inferred`, never confirmed.
-See [domain-discovery.md](docs/domain-discovery.md) for provenance, limitations and the full
+See [domain-discovery.md](domain-discovery.md) for provenance, limitations and the full
 GitWizz/ADO/DocWizz workflow.
 
 ## Multi-project repositories
@@ -488,7 +488,7 @@ With projects or solutions in the model, `generate` writes `docs/index.md` → `
 
 Classic non-SDK ASP.NET MVC projects are inventoried, but conventional `MapRoute` routing can't be fully inferred
 statically; `api.md` warns when such a project is present. The acceptance matrix and migration notes are in
-[MULTI_PROJECT_ACCEPTANCE.md](MULTI_PROJECT_ACCEPTANCE.md); `bash scripts/benchmark-multi-project.sh` measures full
+[MULTI_PROJECT_ACCEPTANCE.md](quality/multi-project-acceptance.md); `bash scripts/benchmark-multi-project.sh` measures full
 versus scoped scans.
 
 ## SBOM inventory
@@ -515,7 +515,7 @@ When running `docwizz generate .`, its console report checks the existing requir
 ## Project evidence
 
 These commands work on requirement and project evidence kept as YAML, CSV or Markdown, in the format described in
-[docs/project-evidence.md](docs/project-evidence.md). None of them make network or AI calls (except `product --ai`),
+[docs/project-evidence.md](project-evidence.md). None of them make network or AI calls (except `product --ai`),
 overwrite source files, or claim conformity.
 
 ### Traceability report
@@ -541,7 +541,7 @@ current.
 
 ### Product drafts
 
-Optional ISO-oriented document control: [cover, clickable contents and document history](docs/document-control.md), activated with `--control document-control.yaml` for `product` and `product check`.
+Optional ISO-oriented document control: [cover, clickable contents and document history](document-control.md), activated with `--control document-control.yaml` for `product` and `product check`.
 
 ```bash
 docwizz product . templates/vmodell-xt/sw-architecture.yaml [out.md] [--context project.yaml] [--control document-control.yaml] [--ai]
@@ -556,7 +556,7 @@ official templates or a conformity claim.
 For an IT operations concept, use `templates/it-operations/betriebskonzept.yaml` (generic
 `document_type: it-operations`, without `xt_variant`/`xt_version`/`tailoring`). This is a
 source-backed **draft**, not evidence of operational readiness. Recognised deployment/CI descriptor files are inventoried by source path only; deployment procedures stay `OFFEN` until independently evidenced. See
-[IT operating concept](docs/IT_OPERATIONS.md) for generated sections and explicit limits.
+[IT operating concept](IT_OPERATIONS.md) for generated sections and explicit limits.
 
 
 - **`--context project.yaml`** adds sourced project statements. Statements that don't fit a section exit 1; nothing is
@@ -626,7 +626,7 @@ inputs write nothing, and known commits aren't scanned again. `show` answers fro
 symbol) or `candidate` (only a confirmed pull request's link, or a mention in a commit message), with the commit, PR,
 file and lines, and `changedSince` when the symbol changed after that commit. The `outcome` tells `linked`, `no-link` (verified
 none), `unavailable`, `not-in-history` and `not-current` apart. Files only, no network; the same inputs give the same
-bytes. Input shapes and rules: [docs/requirement-context.md](docs/requirement-context.md).
+bytes. Input shapes and rules: [docs/requirement-context.md](requirement-context.md).
 
 `import` shows the progress bar `generate` does (commits mapped, time left); `--progress` forces it into redirected
 output and CI logs. It maps each commit under the configured `scope:`. A selected project that doesn't exist yet at an
@@ -704,9 +704,6 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `--screenshots --base-url <url>` | off | generate | captures detected static routes from a running frontend; anonymous isolated contexts by default; HTTP errors and redirects are skipped | opt-in |
 | `--storage-state <file>` | off | generate | with `--screenshots`, starts each route's context from a saved Playwright login state; path relative to the scanned directory; keep it out of Git | opt-in |
 | `--screenshot-delay <ms>` | 0 | generate | with `--screenshots`, extra wait (0 to 60000 ms) after the page settles, for slow pages | opt-in |
-| `--control <file.yaml>` | off | product | adds declarative cover, revision history, review references and clickable contents; not an approval process | normal |
-| `--approval <signed.json>` | off | product | independently signed quality/security publication approvals; only publish |
-| `--trust <policy.json>` | off | product | reviewed public-key trust policy; only publish |
 | `--ai` | off | generate, product, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it; does not enable ratings | opt-in |
 | `--ai-ratings` | off | generate, setup | independently rates written docs; cached ratings are used without it; combine with `--ai` for drafts too | opt-in |
 | `--since <ref>` | — | check, remediate | check: only problems introduced since `<ref>` fail; remediate: says whether each update touches only what changed since `<ref>` | CI |
@@ -722,6 +719,9 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `--auto-rescan` | off | mcp | rescans when the model is stale instead of only reporting `stale: true` | coding agents |
 | `--package <name> --to <version>` | `remediation.targets` and version drift | remediate | given together or not at all | maintenance |
 | `--validate` | off | remediate | runs the configured restore/build/test commands in a temporary copy, never the working tree | maintenance |
+| `--control <file.yaml>` | off | product | adds declarative cover, revision history, review references and clickable contents; not an approval process | normal |
+| `--approval <signed.json>` | off | product | independently signed quality/security publication approvals; only publish |
+| `--trust <policy.json>` | off | product | reviewed public-key trust policy; only publish |
 | `--context <file.yaml>` | off | product | validates sourced project statements against the template before writing | product documents |
 | `--force` | off | setup | replaces an existing `docwizz.yaml`; any other command rejects it | setup only |
 | `--select-projects` | off | setup | terminal-only project selection after discovery; on an existing config replaces only `scope:` | setup only |
@@ -806,7 +806,7 @@ creates.
 
 Versions follow [Semantic Versioning](https://semver.org). While the major version is `0`, a minor release may change
 options or output. Git tags (`vX.Y.Z`) are the version: releases build with `-p:Version` from their tag, and any other
-build derives it from the tags in its checkout ([DocWizz.csproj](src/DocWizz/DocWizz.csproj)):
+build derives it from the tags in its checkout ([DocWizz.csproj](../src/DocWizz/DocWizz.csproj)):
 
 | Built from | `docwizz --version` |
 |---|---|
@@ -818,7 +818,7 @@ build derives it from the tags in its checkout ([DocWizz.csproj](src/DocWizz/Doc
 
 ### Releases
 
-Every pull request merged into `main` is a release. The [release workflow](.github/workflows/release.yml) bumps the
+Every pull request merged into `main` is a release. The [release workflow](../.github/workflows/release.yml) bumps the
 latest `vX.Y.Z` tag according to the PR's label, builds and tests that version, tags the merge commit and creates a
 GitHub release with generated notes. Nothing is committed to `main`.
 
@@ -832,10 +832,9 @@ GitHub release with generated notes. Nothing is committed to `main`.
 - The first release, with no tag yet, is `0.1.0`.
 - Two release labels on one PR fail the workflow instead of guessing.
 - A commit already covered by a newer tag is not released again.
-- The bump rule is [semver-next.sh](.github/scripts/semver-next.sh), specified by
-  [semver-next.test.sh](.github/scripts/semver-next.test.sh), which runs before every release.
-
+- The bump rule is [semver-next.sh](../.github/scripts/semver-next.sh), specified by
+  [semver-next.test.sh](../.github/scripts/semver-next.test.sh), which runs before every release.
 
 ### Signed DOCX/PDF publication
 
-After a controlled draft passes `product check`, use `docwizz product publish <dir> <template.yaml> [out-dir] --control document-control.yaml --context context.yaml --approval signed-approval.json --trust .github/document-release-policy.json`. Publication is separate from drafts and refuses overwrites. See [release policy and CI](docs/document-publication.md).
+After a controlled draft passes `product check`, use `docwizz product publish <dir> <template.yaml> [out-dir] --control document-control.yaml --context context.yaml --approval signed-approval.json --trust .github/document-release-policy.json`. Publication is separate from drafts and refuses overwrites. See [release policy and CI](document-publication.md).

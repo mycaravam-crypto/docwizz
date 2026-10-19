@@ -52,6 +52,6 @@ Die Ausgabestruktur **unterstützt** ISO 9001:2015 (inklusive Amd 1:2024) sowie 
 
 Das Markdown-Verzeichnis enthält anklickbare Kapitel, **kein** Word-Feld für ein paginiertes Inhaltsverzeichnis. DOCX-/PDF-Veröffentlichung mit Seitenzahlen, Seitengestaltung und signierbaren Freigaben ist eine eigenständige Folgestufe.
 
-Quellen: [ISO 9001](https://www.dinmedia.de/de/norm/din-en-iso-9001/235671251), [ISO/IEC 27001](https://committee.iso.org/cms/live/live/en/sites/isoorg/contents/data/standard/08/84/88435.html?browse=tc), [DocWizz Product drafts](../CLI.md#product-drafts).
+Quellen: [ISO 9001](https://www.dinmedia.de/de/norm/din-en-iso-9001/235671251), [ISO/IEC 27001](https://committee.iso.org/cms/live/live/en/sites/isoorg/contents/data/standard/08/84/88435.html?browse=tc), [DocWizz Product drafts](cli.md#product-drafts).
 
 Vorher die YAML-Produktvorlage in das Projekt kopieren und versionieren: alle Template-, Kontext- und Dokumentenlenkungsdateien müssen im Projektverzeichnis liegen. Externe absolute Pfade werden für diese drei Eingaben abgelehnt.

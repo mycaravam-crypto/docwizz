@@ -15,7 +15,7 @@ This is the traceable final acceptance checklist for discovery, explicit scope, 
 | 9. Invalid paths, missing refs, symlinks, root escape and regeneration | `ProjectScopeTests`, `ProjectDiscoveryTests`, `DiscoveryBoundaryTests`; no symlinked or external files are accepted. Scope fingerprint and generated-page cleanup are covered in Journey tests. |
 | 10. Legacy ASP.NET MVC inventory with honest endpoint limitations | `MultiProjectAcceptanceJourneyTests` exercises a non-SDK .NET Framework 4.7.2 `.csproj` without building; `api.md` warns that conventional `MapRoute` MVC endpoints cannot be treated as complete runtime routing inventory. Full MVC5 route analysis is explicitly out of scope. |
 | 11. CI, deterministic non-AI and golden file | Focused/Component/Journey/E2E and Golden inventory, mixed scoped Markdown/HTML/model snapshot on rerun; existing generator cleanup tests preserve hand-authored files. The synthetic `ProjectHierarchyIndexTests` asserts one ownership lookup per eligible model node, independent of project count. |
-| 12. User documentation and migration | `README.md`, `CLI.md`, `ARCHITECTURE.md`, and this acceptance checklist document scope/reference modes, precedence, prompt defaults, output hierarchy, partial legacy routing and limits. |
+| 12. User documentation and migration | `README.md`, `docs/cli.md`, `docs/architecture.md`, and this acceptance checklist document scope/reference modes, precedence, prompt defaults, output hierarchy, partial legacy routing and limits. |
 
 ## Repeatable performance sample
 
