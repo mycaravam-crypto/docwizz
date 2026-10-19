@@ -120,6 +120,12 @@ if dotnet "$dll" product publish "$root" "$root/template.yaml" "$root/duplicate-
 fi
 test ! -e duplicate-key
 test ! -e output
+# A valid signature does not authorize writing release artifacts outside the project root.
+if dotnet "$dll" product publish "$root" "$root/template.yaml" "$root/../outside-publication" \
+  --context "$root/context.yaml" --control "$root/control.yaml" \
+  --trust "$root/policy.json" --approval "$root/signed-approval.json"; then
+  echo "Escaping publication path was accepted" >&2; exit 1
+fi
 publish "$root/signed-approval.json"
 test -s output/CI-RELEASE-0.1.docx
 test -s output/CI-RELEASE-0.1.pdf
