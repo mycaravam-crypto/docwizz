@@ -125,6 +125,10 @@ test -s output/CI-RELEASE-0.1.docx
 test -s output/CI-RELEASE-0.1.pdf
 test -s output/CI-RELEASE-0.1.publication.json
 pdfinfo output/CI-RELEASE-0.1.pdf | grep -q '^Pages:'
+pdfinfo output/CI-RELEASE-0.1.pdf | awk '/^Pages:/ { if ($2 < 2) exit 1; found=1 } END { if (!found) exit 1 }'
+pdftotext output/CI-RELEASE-0.1.pdf - | grep -q 'Inhaltsverzeichnis'
+pdftotext output/CI-RELEASE-0.1.pdf - | grep -q 'Seite 1'
+
 pdftotext output/CI-RELEASE-0.1.pdf - | grep -q 'Fiktive'
 pdftoppm -f 1 -l 1 -scale-to 1000 -png -singlefile output/CI-RELEASE-0.1.pdf first-page >/dev/null 2>&1
 test -s first-page.png
