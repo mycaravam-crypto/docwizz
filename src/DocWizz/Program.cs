@@ -650,7 +650,7 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
     ControlledDocument? control = null;
     if (controlName is not null)
     {
-        var controlPath = File.Exists(controlName) ? controlName : Path.Combine(root, controlName);
+        var controlPath = File.Exists(controlName) ? controlName : Path.Join(root, controlName);
         try { control = ControlledDocument.Load(controlPath); }
         catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
         catch (IOException e) { Console.Error.WriteLine($"{controlPath}: {e.Message}"); return 1; }
