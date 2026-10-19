@@ -41,20 +41,25 @@ static class EdmxParser
 
     static (string Full, string Relative) CheckedFile(string root, string file)
     {
-        var basePath = Path.GetFullPath(root);
-        var full = Path.GetFullPath(Path.IsPathRooted(file) ? file : Path.Combine(basePath, file));
+        // Normalize the root once (including its trailing separator) before walking ancestors.
+        // GetFullPath(path, basePath) handles rooted input without Path.Combine's reset semantics.
+        var basePath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        var full = Path.GetFullPath(file, basePath);
         var rel = Path.GetRelativePath(basePath, full).Replace('\\', '/');
         if (rel is ".." or "." || rel.StartsWith("../", StringComparison.Ordinal) || Path.IsPathRooted(rel))
             throw new ArgumentException("EDMX file must be inside the selected root");
         // File and parent directory links must not allow an in-root path to read an out-of-root target.
         var p = full;
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         while (true)
         {
             if ((File.GetAttributes(p) & FileAttributes.ReparsePoint) != 0)
                 throw new IOException("EDMX path contains a symbolic link or reparse point");
-            if (string.Equals(p, basePath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
-                break;
-            p = Path.GetDirectoryName(p) ?? throw new IOException("EDMX path has no parent");
+            if (string.Equals(p, basePath, comparison)) break;
+            var parent = Path.GetDirectoryName(p);
+            if (parent is null || string.Equals(parent, p, comparison))
+                throw new IOException("EDMX path traversal did not reach the selected root");
+            p = parent;
         }
         if (!string.Equals(Path.GetExtension(full), ".edmx", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Expected an .edmx file");
@@ -235,12 +240,10 @@ static class EdmxParser
             foreach (var p in e.Properties.Where(p => p.Key && p.Name.Length == 0))
                 Error("EDMX_REFERENCE", "Empty key property", p.Source);
         }
-        foreach (var x in sets)
-            if (!conceptualTypes.ContainsKey(x.EntityType))
-                Error("EDMX_REFERENCE", "Missing conceptual entity: " + x.EntityType, x.Source);
-        foreach (var x in storageSets)
-            if (!storageTypes.ContainsKey(x.EntityType))
-                Error("EDMX_REFERENCE", "Missing storage entity: " + x.EntityType, x.Source);
+        foreach (var x in sets.Where(x => !conceptualTypes.ContainsKey(x.EntityType)))
+            Error("EDMX_REFERENCE", "Missing conceptual entity: " + x.EntityType, x.Source);
+        foreach (var x in storageSets.Where(x => !storageTypes.ContainsKey(x.EntityType)))
+            Error("EDMX_REFERENCE", "Missing storage entity: " + x.EntityType, x.Source);
         foreach (var a in associations)
         {
             if (a.Ends.Count != 2)
@@ -257,35 +260,28 @@ static class EdmxParser
         {
             if (!assoc.ContainsKey(a.Association))
                 Error("EDMX_REFERENCE", "Missing association: " + a.Association, a.Source);
-            foreach (var name in a.EntitySets)
-                if (!cs.ContainsKey(name))
-                    Error("EDMX_REFERENCE", "Missing association entity set: " + name, a.Source);
+            foreach (var name in a.EntitySets.Where(name => !cs.ContainsKey(name)))
+                Error("EDMX_REFERENCE", "Missing association entity set: " + name, a.Source);
         }
-        foreach (var n in navigations)
-        {
-            if (!assoc.TryGetValue(n.Relationship, out var a) ||
-                !a.Ends.Any(e => e.Role == n.FromRole) || !a.Ends.Any(e => e.Role == n.ToRole))
-                Error("EDMX_REFERENCE", "Unresolved navigation: " + n.Owner + "." + n.Name, n.Source);
-        }
+        foreach (var n in navigations.Where(n =>
+            !assoc.TryGetValue(n.Relationship, out var a) ||
+            !a.Ends.Any(e => e.Role == n.FromRole) || !a.Ends.Any(e => e.Role == n.ToRole)))
+            Error("EDMX_REFERENCE", "Unresolved navigation: " + n.Owner + "." + n.Name, n.Source);
         foreach (var m in mappings)
         {
             if (!cs.ContainsKey(m.ConceptualSet) || !conceptualTypes.ContainsKey(m.ConceptualType) || !ss.ContainsKey(m.StorageSet))
                 Error("EDMX_REFERENCE", "Unresolved entity mapping: " + m.ConceptualSet + " -> " + m.StorageSet, m.Source);
             if (ss.TryGetValue(m.StorageSet, out var target) && storageTypes.TryGetValue(target.EntityType, out var store))
-                foreach (var p in m.Properties)
-                    if (!store.Properties.Any(x => x.Name == p.Column))
-                        Error("EDMX_REFERENCE", "Missing storage column: " + p.Column, p.Source);
+                foreach (var p in m.Properties.Where(p => !store.Properties.Any(x => x.Name == p.Column)))
+                    Error("EDMX_REFERENCE", "Missing storage column: " + p.Column, p.Source);
             if (conceptualTypes.TryGetValue(m.ConceptualType, out var source))
-                foreach (var p in m.Properties)
-                    if (!source.Properties.Any(x => x.Name == p.Property) &&
-                        !(source.BaseType is { } b && conceptualTypes.TryGetValue(b, out var parent) && parent.Properties.Any(x => x.Name == p.Property)))
-                        Error("EDMX_REFERENCE", "Missing conceptual property: " + p.Property, p.Source);
+                foreach (var p in m.Properties.Where(p =>
+                    !source.Properties.Any(x => x.Name == p.Property) &&
+                    !(source.BaseType is { } b && conceptualTypes.TryGetValue(b, out var parent) && parent.Properties.Any(x => x.Name == p.Property))))
+                    Error("EDMX_REFERENCE", "Missing conceptual property: " + p.Property, p.Source);
         }
-        foreach (var a in associationMappings)
-        {
-            if (!associationSets.Any(x => x.Name == a.Name) || !ss.ContainsKey(a.StorageSet))
-                Error("EDMX_REFERENCE", "Unresolved association mapping: " + a.Name, a.Source);
-        }
+        foreach (var a in associationMappings.Where(a => !associationSets.Any(x => x.Name == a.Name) || !ss.ContainsKey(a.StorageSet)))
+            Error("EDMX_REFERENCE", "Unresolved association mapping: " + a.Name, a.Source);
         return Result();
     }
 

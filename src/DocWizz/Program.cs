@@ -871,6 +871,7 @@ static string Reference() => $"""
 
     everyday:
       docwizz discover [dir]            read-only project and solution inventory [--format json]
+      docwizz edmx <dir> <file.edmx>     read-only EF6 EDMX facts and findings [--format json]
       docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
         [--html]                        also write an HTML page next to every Markdown page
         [--screenshots --base-url <url>]  capture static routes from a running frontend (Playwright)
@@ -927,7 +928,7 @@ static string Reference() => $"""
     options:
       --profile <name|file.yaml>        setup/generate/check/analyze/architecture/diff: documentation profile,
                                         one of {string.Join(", ", Profiles.Names)}, or your own file
-      --format console|json             discover/analyze/check/architecture/diff/context/domain/product/trace/evidence-diff/requirements/remediate output
+      --format console|json             discover/edmx/analyze/check/architecture/diff/context/domain/product/trace/evidence-diff/requirements/remediate output
       --timings                         time per stage and peak memory, on stderr (benchmarks)
       --help, -h                        help for a command: docwizz <command> --help
       --version, -v                     version, commit and runtime (also: docwizz version)

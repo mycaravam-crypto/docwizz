@@ -53,12 +53,40 @@ public class EdmxParserTests
         Assert.Throws<ArgumentException>(() => EdmxParser.Parse(source.Root, "."));
     }
 
+    [Fact]
+    public void Canonical_paths_accept_trailing_separators_and_absolute_in_root_files()
+    {
+        using var source = new Sources(("Models/order.edmx", "<Edmx/>"));
+        var rootWithSeparator = source.Root + Path.DirectorySeparatorChar;
+        var report = EdmxParser.Parse(rootWithSeparator, source.Files.Single());
+        Assert.Equal("Models/order.edmx", report.File);
+        Assert.Contains(report.Findings, f => f.Code == "EDMX_STRUCTURE");
+    }
+
+    [Fact]
+    public void Absolute_path_outside_root_is_rejected()
+    {
+        using var selected = new Sources(("in.edmx", "<Edmx/>"));
+        using var other = new Sources(("out.edmx", "<Edmx/>"));
+        Assert.Throws<ArgumentException>(() => EdmxParser.Parse(selected.Root, other.Files.Single()));
+    }
+
+    [Fact]
+    public void Directory_symlink_outside_root_is_rejected()
+    {
+        if (OperatingSystem.IsWindows()) return; // Windows link creation may require a privilege.
+        using var selected = new Sources(("in.edmx", "<Edmx/>"));
+        using var other = new Sources(("out.edmx", "<Edmx/>"));
+        Directory.CreateSymbolicLink(Path.Join(selected.Root, "external"), other.Root);
+        Assert.Throws<IOException>(() => EdmxParser.Parse(selected.Root, "external/out.edmx"));
+    }
+
     static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "fixture-legacy", "Shop", "Models", "Legacy.edmx")))
+            if (File.Exists(Path.Join(directory.FullName, "fixture-legacy", "Shop", "Models", "Legacy.edmx")))
                 return directory.FullName;
             directory = directory.Parent;
         }
