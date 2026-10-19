@@ -20,6 +20,26 @@ public class ProductPublicationTests
         finally { Directory.Delete(root, recursive: true); }
     }
 
+    [Fact]
+    public void Publication_rejects_symbolic_link_components()
+    {
+        // Windows often requires special privileges to create test symlinks.
+        if (OperatingSystem.IsWindows()) return;
+        var repo = Directory.CreateTempSubdirectory("docwizz-symlink-root-");
+        var outside = Directory.CreateTempSubdirectory("docwizz-symlink-target-");
+        try
+        {
+            Directory.CreateSymbolicLink(Path.Join(repo.FullName, "linked"), outside.FullName);
+            Assert.Contains("symbolic link", Assert.Throws<ArgumentException>(() =>
+                ProductPublication.ConfinedPath(repo.FullName, "linked/document.yaml")).Message);
+        }
+        finally
+        {
+            repo.Delete(recursive: true);
+            outside.Delete(recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("../outside")]
     [InlineData("1.0/other")]
