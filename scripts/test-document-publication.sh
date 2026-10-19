@@ -61,6 +61,13 @@ approvals:
     date: 2026-10-19
     evidence: docs/approval.md
 YAML
+# A publish attempt with no generated draft must fail as a controlled CLI error.
+if dotnet "$dll" product publish "$root" "$root/template.yaml" "$root/output" \
+  --context "$root/context.yaml" --control "$root/control.yaml" \
+  --approval "$root/absent.json" --trust "$root/absent-policy.json" > "$root/missing.stdout" 2> "$root/missing.stderr"; then
+  echo "Publication without generated draft was accepted" >&2; exit 1
+fi
+grep -q 'PROD-004' "$root/missing.stderr"
 dotnet "$dll" product "$root" "$root/template.yaml" --context "$root/context.yaml" --control "$root/control.yaml"
 dotnet "$dll" product check "$root" "$root/template.yaml" --context "$root/context.yaml" --control "$root/control.yaml"
 
@@ -114,6 +121,28 @@ publish() {
     --trust "$root/policy.json" --approval "$1"
 }
 if publish "$root/bad-approval.json"; then echo "Invalid signature accepted" >&2; exit 1; fi
+python3 - <<'PY'
+import json
+source=json.load(open("signed-approval.json"))
+source["payload_base64"] = "%%%invalid-base64%%%"
+with open("malformed-approval.json", "w") as f: json.dump(source, f)
+PY
+if publish "$root/malformed-approval.json" > "$root/malformed.stdout" 2> "$root/malformed.stderr"; then
+  echo "Invalid base64 accepted" >&2; exit 1
+fi
+grep -q 'Publication blocked:' "$root/malformed.stderr"
+if grep -q 'Unhandled exception' "$root/malformed.stderr"; then
+  echo "Malformed approval crashed CLI" >&2; exit 1
+fi
+# The document version becomes a filename: invalid separators must be rejected before rendering.
+sed 's/version: "0.1"/version: "..\/outside"/g' control.yaml > invalid-version.yaml
+if dotnet "$dll" product publish "$root" "$root/template.yaml" "$root/invalid-version" \
+  --context "$root/context.yaml" --control "$root/invalid-version.yaml" \
+  --trust "$root/policy.json" --approval "$root/signed-approval.json" > "$root/version.stdout" 2> "$root/version.stderr"; then
+  echo "Unsafe revision identifier accepted" >&2; exit 1
+fi
+grep -q 'filename-safe' "$root/version.stderr"
+
 # Two role IDs cannot share one actual public key, even if the IDs differ.
 python3 - <<'PY'
 import json
