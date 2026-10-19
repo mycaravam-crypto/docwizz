@@ -81,9 +81,11 @@ internal static class PublicationLayout
                 new XAttribute(XNamespace.Xmlns + "w", W.NamespaceName),
                 new XElement(W + "p",
                     new XElement(W + "pPr", new XElement(W + "jc", new XAttribute(W + "val", "right"))),
-                    new XElement(W + "r", new XElement(W + "t", "Seite ")),
+                    new XElement(W + "r", new XElement(W + "t",
+                        new XAttribute(XNamespace.Xml + "space", "preserve"), "Seite ")),
                     new XElement(W + "fldSimple", new XAttribute(W + "instr", "PAGE")),
-                    new XElement(W + "r", new XElement(W + "t", " von ")),
+                    new XElement(W + "r", new XElement(W + "t",
+                        new XAttribute(XNamespace.Xml + "space", "preserve"), " von ")),
                     new XElement(W + "fldSimple", new XAttribute(W + "instr", "NUMPAGES")))));
         Write(archive, "word/footerDocWizz.xml", footer);
     }
