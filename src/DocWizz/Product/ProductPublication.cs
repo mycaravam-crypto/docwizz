@@ -144,10 +144,9 @@ internal static class ProductPublication
         {
             var source = Path.Combine(staging, "source.md");
             var markdown = File.ReadAllText(draft);
-            // The original clickable TOC is replaced with a paginated DOCX TOC field by pandoc.
-            // The transformation is performed only after signatures verified against original bytes.
-            markdown = Regex.Replace(markdown,
-                @"(?ms)^## Inhaltsverzeichnis\s*\n.*?^---\s*$", "", RegexOptions.CultureInvariant);
+            // Preserve the already generated clickable contents. Pandoc's --toc creates an
+            // empty index on the LibreOffice PDF conversion path unless fields are updated by UNO.
+            // Changing signed source text happens exclusively in this ephemeral render copy.
             markdown = markdown.Replace("Gelenkter **Entwurf**", "Gelenkte **Veröffentlichung**", StringComparison.Ordinal)
                 .Replace("Entwurf – Genehmigung nicht verifiziert", "Signierte Freigabe durch QM und ISMS geprüft", StringComparison.Ordinal)
                 .Replace("Entwurf – keine V-Modell-XT-Konformitäts- oder Freigabeaussage.",
@@ -159,10 +158,11 @@ internal static class ProductPublication
             File.WriteAllText(source, markdown);
             var prefix = control.Id + "-" + control.Version;
             var docx = Path.Combine(staging, prefix + ".docx");
-            Run("pandoc", root, "--from=gfm", "--to=docx", "--standalone", "--toc", "--toc-depth=2",
+            Run("pandoc", root, "--from=gfm", "--to=docx", "--standalone",
                 "--output", docx, source);
             if (!File.Exists(docx) || new FileInfo(docx).Length < 512)
                 throw new IOException("DOCX conversion produced no document");
+            PublicationLayout.Apply(docx); // cover page, physical page numbers and stable links
             // Isolated LO profile avoids shared-user locks on concurrent CI runners.
             var loProfile = new Uri(Path.Combine(staging, "libreoffice-profile")).AbsoluteUri;
             Run("libreoffice", root, "-env:UserInstallation=" + loProfile, "--headless",
