@@ -189,6 +189,36 @@ manifest=json.load(open("output/CI-RELEASE-0.1.publication.json"))
 assert manifest["status"]=="published-from-signed-sources"
 assert set(manifest["independent_approvals"])=={"quality","security"}
 PY
+# A draft created at a custom path must be publishable without moving or regenerating it.
+mkdir -p docs/custom
+dotnet "$dll" product "$root" "$root/template.yaml" "$root/docs/custom/revision.md" \
+  --context "$root/context.yaml" --control "$root/control.yaml"
+dotnet "$dll" product check "$root" "$root/template.yaml" "$root/docs/custom/revision.md" \
+  --context "$root/context.yaml" --control "$root/control.yaml"
+python3 - <<'PY'
+import base64, hashlib, json, pathlib, subprocess
+root = pathlib.Path.cwd()
+approval = json.loads((root / "signed-approval.json").read_text())
+payload = json.loads(base64.b64decode(approval["payload_base64"]))
+for key, name in (("draft_sha256","revision.md"), ("evidence_sha256","revision.evidence.json")):
+    payload[key] = hashlib.sha256((root / "docs" / "custom" / name).read_bytes()).hexdigest()
+blob = json.dumps(payload, sort_keys=True, separators=(",",":")).encode()
+(root / "custom-payload.bin").write_bytes(blob)
+approval["payload_base64"] = base64.b64encode(blob).decode()
+for entry in approval["signatures"]:
+    role = entry["role"]
+    signed = root / f"custom-{role}.sig"
+    subprocess.run(["openssl","dgst","-sha256","-sign",f"keys/{role}.private.pem",
+                    "-out",str(signed),"custom-payload.bin"],check=True)
+    entry["signature_base64"] = base64.b64encode(signed.read_bytes()).decode()
+(root / "custom-approval.json").write_text(json.dumps(approval))
+PY
+dotnet "$dll" product publish "$root" "$root/template.yaml" "$root/custom-published" \
+  --draft docs/custom/revision.md --context "$root/context.yaml" --control "$root/control.yaml" \
+  --trust "$root/policy.json" --approval "$root/custom-approval.json"
+test -s custom-published/CI-RELEASE-0.1.docx
+test -s custom-published/CI-RELEASE-0.1.pdf
+
 if publish "$root/signed-approval.json"; then echo "Existing release overwritten" >&2; exit 1; fi
 printf '\nManipulation\n' >> docs/products/ci-release.md
 if dotnet "$dll" product publish "$root" "$root/template.yaml" "$root/unapproved" \
