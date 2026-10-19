@@ -147,6 +147,15 @@ internal static class ProductDraft
                     $"Konfigurationsschluessel: {Escape(n.Name)} (Quelle: {CodeModel.Location(n)})"))
                 .ToList();
         }
+        if (sectionId == "deployment-descriptors")
+        {
+            // Only manifest *presence* is detected; no claim that services were deployed or rollback was tested.
+            return allowed.Values.Where(n => n.Kind == "deployment-descriptor")
+                .OrderBy(n => n.File, StringComparer.Ordinal)
+                .Take(MaxFacts).Select(n => ("code", $"Im Repository gefunden: {Escape(n.Name)} – `{Escape(n.File)}`",
+                    CodeModel.Location(n), $"Im Repository gefunden: {Escape(n.Name)} – `{Escape(n.File)}` (Quelle: `{CodeModel.Location(n)}`)"))
+                .ToList();
+        }
         if (sectionId == "structure")
         {
             return allowed.Values.Where(n => Generator.TopKinds.Contains(n.Kind) && n.Kind != "module" && !childIds.Contains(n.Id))
