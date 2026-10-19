@@ -639,7 +639,9 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
         return Usage("product needs a template YAML path", "product");
     var templatePath = File.Exists(templateName) ? templateName : Path.Combine(root, templateName);
     ProductTemplate template;
-    try { template = ProductTemplate.Load(ProductPublication.ConfinedPath(root, templatePath)); }
+    // Only signed publication imposes repository confinement. Drafts/checks have always accepted
+    // shared templates from another DocWizz checkout; retain that supported CLI contract.
+    try { template = ProductTemplate.Load(publish ? ProductPublication.ConfinedPath(root, templatePath) : templatePath); }
     catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
     catch (IOException e) { Console.Error.WriteLine($"{templatePath}: {e.Message}"); return 1; }
     ProjectContext? project = null;
@@ -648,7 +650,7 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
         var contextPath = File.Exists(contextName) ? contextName : Path.Combine(root, contextName);
         try
         {
-            contextPath = ProductPublication.ConfinedPath(root, contextPath);
+            if (publish) contextPath = ProductPublication.ConfinedPath(root, contextPath);
             project = ProjectContext.Load(contextPath); project.Validate(template);
         }
         catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
@@ -660,7 +662,7 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
         var controlPath = File.Exists(controlName) ? controlName : Path.Join(root, controlName);
         try
         {
-            controlPath = ProductPublication.ConfinedPath(root, controlPath);
+            if (publish) controlPath = ProductPublication.ConfinedPath(root, controlPath);
             control = ControlledDocument.Load(controlPath);
         }
         catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
@@ -671,31 +673,35 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
         if (ai || json) return Usage("product publish does not allow --ai or --format", "product");
         if (control is null || string.IsNullOrWhiteSpace(approvalName) || string.IsNullOrWhiteSpace(trustName))
             return Usage("product publish requires --control, --approval and --trust", "product");
-        var original = Path.Combine(root, "docs", "products", template.ProductId + ".md");
+        // Validates filename safety before control.Version is interpolated into the release directory.
+        try { ProductPublication.ValidateReleaseVersion(control.Version); }
+        catch (ArgumentException e) { Console.Error.WriteLine("Publication blocked: " + e.Message); return 1; }
+        var original = Path.Join(root, "docs", "products", template.ProductId + ".md");
         var releaseEvidencePath = Path.ChangeExtension(original, ".evidence.json");
-        var findings = ProductCheck.Run(root, template, ProductModel(root, config, template), project, original, control);
-        var hasBlockingFinding = findings.Any(f => f.Severity == "error" || f.Rule is "PROD-001" or "DOC-003");
-        var hasRecordedReview = control.Approvals.Any(a => a.Kind == "review");
-        var hasRecordedApproval = control.Approvals.Any(a => a.Kind == "approval");
-        if (hasBlockingFinding || !hasRecordedReview || !hasRecordedApproval)
-        {
-            ProductCheck.Report(template, findings, Console.Error);
-            Console.Error.WriteLine("Publication blocked: every required section, review and approval must have recorded evidence.");
-            return 1;
-        }
         try
         {
+            // A missing draft is a regular fail-closed finding (PROD-004), not an unhandled CLI failure.
+            var findings = ProductCheck.Run(root, template, ProductModel(root, config, template), project, original, control);
+            var hasBlockingFinding = findings.Any(f => f.Severity == "error" || f.Rule is "PROD-001" or "DOC-003");
+            var hasRecordedReview = control.Approvals.Any(a => a.Kind == "review");
+            var hasRecordedApproval = control.Approvals.Any(a => a.Kind == "approval");
+            if (hasBlockingFinding || !hasRecordedReview || !hasRecordedApproval)
+            {
+                ProductCheck.Report(template, findings, Console.Error);
+                Console.Error.WriteLine("Publication blocked: every required section, review and approval must have recorded evidence.");
+                return 1;
+            }
             var trust = ProductPublication.ConfinedPath(root, trustName);
             var signed = ProductPublication.ConfinedPath(root, approvalName);
             var published = ProductPublication.ConfinedPath(root, outName is null
-                ? Path.Combine(root, "docs", "published", control.Id + "-" + control.Version)
+                ? Path.Join(root, "docs", "published", control.Id + "-" + control.Version)
                 : outName);
             await ProductPublication.PublishAsync(root, template, control, original, releaseEvidencePath, trust, signed, published);
             Console.WriteLine("→ " + Path.GetRelativePath(root, published));
             return 0;
         }
         catch (Exception e) when (e is ArgumentException or IOException or JsonException or
-            System.Security.Cryptography.CryptographicException or UnauthorizedAccessException or InvalidOperationException)
+            System.Security.Cryptography.CryptographicException or UnauthorizedAccessException or InvalidOperationException or FormatException)
         {
             Console.Error.WriteLine("Publication blocked: " + e.Message);
             return 1;
