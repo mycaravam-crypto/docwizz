@@ -56,17 +56,22 @@ jobs:
           set -euo pipefail
           for path in "$TEMPLATE" "$CONTROL" "$CONTEXT" "$APPROVAL"; do
             [[ "$path" != /* && "$path" != *..* && -f "$path" ]] || exit 1
+            git ls-files --error-unmatch -- "$path" >/dev/null
+            resolved="$(realpath -e -- "$path")"
+            [[ "$resolved" == "$GITHUB_WORKSPACE/"* ]] || exit 1
           done
           test -f .github/document-release-policy.json
+          git ls-files --error-unmatch -- .github/document-release-policy.json >/dev/null
+          test ! -L .github/document-release-policy.json
           dll="$PWD/src/DocWizz/bin/Release/net10.0/DocWizz.dll"
           dotnet "$dll" product check . "$TEMPLATE" --context "$CONTEXT" --control "$CONTROL"
-          dotnet "$dll" product publish . "$TEMPLATE" "$RUNNER_TEMP/publication" \
+          dotnet "$dll" product publish . "$TEMPLATE" "$GITHUB_WORKSPACE/docs/.docwizz-release-output" \
             --context "$CONTEXT" --control "$CONTROL" \
             --approval "$APPROVAL" --trust .github/document-release-policy.json
       - name: Store release artifact (private repository only)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: signed-document-publication
-          path: ${{ runner.temp }}/publication/
+          path: ${{ github.workspace }}/docs/.docwizz-release-output/
           retention-days: 7
           if-no-files-found: error
