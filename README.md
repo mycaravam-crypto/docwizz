@@ -347,6 +347,8 @@ For projects that keep requirements as YAML evidence:
 
 See [project evidence](docs/project-evidence.md) and [CLI.md](CLI.md#product-drafts).
 
+For expanded V-Modell XT example product structures (SW architecture, SW specification and system-element test specification), see [the template guide](docs/vmodell-xt-templates.md) and its section-level review aids.
+
 ## Configuration
 
 `setup` writes `docwizz.yaml` from what the repository shows; `docwizz init` writes plain defaults. docwizz looks for it

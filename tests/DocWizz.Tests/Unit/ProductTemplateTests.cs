@@ -81,23 +81,33 @@ public class ProductTemplateTests
             root = root.Parent;
         Assert.NotNull(root);
 
-        var specification = ProductTemplate.Load(Path.Combine(root!.FullName, "templates/vmodell-xt/sw-specification.yaml"));
-        var testSpecification = ProductTemplate.Load(Path.Combine(root.FullName, "templates/vmodell-xt/system-element-test-specification.yaml"));
+        var architecture = ProductTemplate.Load(Path.Join(root!.FullName, "templates/vmodell-xt/sw-architecture.yaml"));
+        var specification = ProductTemplate.Load(Path.Join(root.FullName, "templates/vmodell-xt/sw-specification.yaml"));
+        var testSpecification = ProductTemplate.Load(Path.Join(root.FullName, "templates/vmodell-xt/system-element-test-specification.yaml"));
 
+        Assert.Equal("sw-architecture", architecture.ProductId);
         Assert.Equal("sw-specification", specification.ProductId);
         Assert.Equal("system-element-test-specification", testSpecification.ProductId);
-        Assert.Equal("V-Modell XT", specification.XtVariant);
-        Assert.Equal("2.4", testSpecification.XtVersion);
-        Assert.Equal("project-specific", specification.Tailoring);
-        Assert.Equal("project-specific", testSpecification.Tailoring);
-        Assert.Empty(specification.Dependencies);
-        Assert.Equal(["sw-specification"], testSpecification.Dependencies);
-        Assert.All(new[] { specification, testSpecification }, p =>
+        Assert.All(new[] { architecture, specification, testSpecification }, p =>
         {
-            Assert.All(p.Sections, section => Assert.True(section.Required));
+            Assert.Equal("V-Modell XT", p.XtVariant);
+            Assert.Equal("2.4", p.XtVersion);
+            Assert.Equal("project-specific", p.Tailoring);
             Assert.Contains(p.Sections, section => section.Sources.Contains("project"));
         });
-        Assert.Equal(2, new[] { specification.ProductId, testSpecification.ProductId }.Distinct().Count());
+        Assert.Empty(architecture.Dependencies);
+        Assert.Empty(specification.Dependencies);
+        Assert.Equal(["sw-specification"], testSpecification.Dependencies);
+
+        // Optional sections are deliberate project-tailoring aids, not missing mandatory content.
+        // Assert the exact optional IDs: this also verifies every other section remains required.
+        Assert.Equal(17, architecture.Sections.Count);
+        Assert.Equal(17, specification.Sections.Count);
+        Assert.Equal(15, testSpecification.Sections.Count);
+        Assert.Equal(["risks-debt", "references"], architecture.Sections.Where(s => !s.Required).Select(s => s.Id));
+        Assert.Equal(["glossary"], specification.Sections.Where(s => !s.Required).Select(s => s.Id));
+        Assert.Equal(["references"], testSpecification.Sections.Where(s => !s.Required).Select(s => s.Id));
+        Assert.Equal(3, new[] { architecture.ProductId, specification.ProductId, testSpecification.ProductId }.Distinct().Count());
     }
 
 }
