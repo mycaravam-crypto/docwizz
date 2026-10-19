@@ -126,6 +126,12 @@ static async Task<int> Dispatch(string[] args)
                         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)))
                     return Usage("the EDMX file is outside the selected project scope", "edmx");
                 var csFiles = selectedFiles.Where(f => Path.GetExtension(f).Equals(".cs", StringComparison.OrdinalIgnoreCase))
+                    .Where(f =>
+                    {
+                        var relative = Path.GetRelativePath(path, f).Replace('\', '/');
+                        return !relative.StartsWith("tests/", StringComparison.OrdinalIgnoreCase)
+                            && !config.Tests.Any(g => FileSystemName.MatchesSimpleExpression(g, relative));
+                    })
                     .ToList();
                 var (nodes, edges) = CSharpScanner.Scan(Path.GetFullPath(path), csFiles, config.CommentDocs);
                 var links = EdmxCodeLinks.Build(edmx, new CodeModel(null, nodes, edges));

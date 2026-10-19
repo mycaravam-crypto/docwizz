@@ -5,7 +5,7 @@ namespace DocWizz.Tests.Component;
 public class EdmxCodeLinksTests
 {
     const string Edmx = "fixture-legacy/Shop/Models/GraphGolden.edmx";
-    const string CSharp = "fixture-legacy/Shop/Code/LegacyMvc.cs";
+    const string CSharp = "tests/fixtures/edmx-code/LegacyMvc.cs";
 
     static string Root()
     {

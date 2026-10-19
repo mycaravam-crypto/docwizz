@@ -136,9 +136,9 @@ static class EdmxCodeLinks
                 if (item.Path.Count >= MaxDepth || visited.Count >= MaxVisitedPerAction ||
                     traces.Count >= MaxTraces) continue;
                 if (!forward.TryGetValue(item.Id, out var next)) continue;
-                foreach (var edge in next)
+                foreach (var edge in next.Where(e => !visited.Contains(e.To)))
                 {
-                    if (!visited.Add(edge.To)) continue;
+                    visited.Add(edge.To);
                     queue.Enqueue((edge.To, [.. item.Path, edge]));
                 }
             }
@@ -156,11 +156,13 @@ static class EdmxCodeLinks
         var areaByMethod = areas.Areas.SelectMany(a => a.Members.Select(m => (a.Name, m)))
             .ToDictionary(x => x.m.Id, x => (x.Name, x.m.Reason), StringComparer.Ordinal);
         foreach (var trace in traces)
-            foreach (var symbol in trace.Hops.Select(h => h.From).Append(trace.Action).Distinct(StringComparer.Ordinal))
-                if (areaByMethod.TryGetValue(symbol, out var area) &&
-                    uniqueCode.TryGetValue(symbol, out var node))
-                    hints.Add(new(area.Name, "inferred", trace.Entity, symbol,
-                        area.Reason, trace.EdmxSource, At(node)));
+            foreach (var symbol in trace.Hops.Select(h => h.From).Append(trace.Action).Distinct(StringComparer.Ordinal)
+                .Where(symbol => areaByMethod.ContainsKey(symbol) && uniqueCode.ContainsKey(symbol)))
+            {
+                var area = areaByMethod[symbol];
+                hints.Add(new(area.Name, "inferred", trace.Entity, symbol,
+                    area.Reason, trace.EdmxSource, At(uniqueCode[symbol])));
+            }
         foreach (var entity in contextsByEntity.Keys.Order(StringComparer.Ordinal)
             .Where(id => !traces.Any(t => t.Entity == id)))
             unknowns.Add(new(entity, "controller-path", "unknown",
