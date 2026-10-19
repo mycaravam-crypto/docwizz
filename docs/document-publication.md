@@ -84,6 +84,17 @@ Das PDF wird auf Dateisignatur geprüft, nicht auf PDF/A oder Barrierefreiheit.
 Nicht enthalten: Hardware-Schlüsselschutz, Widerrufsdienst, qualifizierte eIDAS-Signatur,
 PDF/A-Validierung, DMS-Aufbewahrung, PDF-Layoutfreigabe oder ISO-Zertifizierung.
 
+### Eigener Entwurfspfad
+
+Standardmäßig veröffentlicht `product publish` den erzeugten Entwurf
+`docs/products/<product_id>.md` und den benachbarten Evidenzbericht.
+Wurde der Entwurf mit einem individuellen Ausgabeort erzeugt, muss die
+Publikation diesen mit `--draft docs/custom/my-product.md` explizit
+auswählen. Der Pfad muss innerhalb des Repositories liegen; der signierte
+Payload muss die SHA-256-Werte **dieser** Markdown-Datei und ihrer
+`*.evidence.json` enthalten. `--draft` verändert nicht das Verzeichnis,
+in dem DOCX/PDF ausgegeben werden.
+
 ## Datei- und Versionssicherheit
 
 Die signierte Veröffentlichung (`product publish`) akzeptiert **nur** Dateien und Zielverzeichnisse
