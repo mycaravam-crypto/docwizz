@@ -41,6 +41,14 @@ public class ControlledDocumentTests
     }
 
     [Fact]
+    public void Fingerprint_is_independent_of_line_endings()
+    {
+        var lf = ControlledDocument.Parse(Metadata);
+        var crlf = ControlledDocument.Parse(Metadata.Replace("\n", "\r\n", StringComparison.Ordinal));
+        Assert.Equal(lf.Hash, crlf.Hash);
+    }
+
+    [Fact]
     public void Control_hash_is_recorded_and_changes_are_detectable()
     {
         var first = ControlledDocument.Parse(Metadata);
@@ -212,7 +220,7 @@ public class ControlledDocumentTests
             Assert.Contains(missing, finding => finding.Rule == "DOC-003" && finding.Severity == "warning");
 
             var evidence = Path.Join(dir.FullName, "docs", "reviews", "review.md");
-            Directory.CreateDirectory(Path.GetDirectoryName(evidence)!);
+            Directory.CreateDirectory(Path.Join(dir.FullName, "docs", "reviews"));
             File.WriteAllText(evidence, "# Human review record");
             var withReview = reviewOnly.Check(dir.FullName, report);
             Assert.DoesNotContain(withReview, finding => finding.Rule == "DOC-002");
