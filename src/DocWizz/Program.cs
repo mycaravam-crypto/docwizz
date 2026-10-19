@@ -630,6 +630,16 @@ static CodeModel ProductModel(string root, Config config, ProductTemplate templa
         : model;
 }
 
+// Publish mode resolves repository-relative inputs without probing external locations first.
+// Draft/check retain their established cwd-first behavior for shared templates and context.
+static string ProductInput(string root, string name, bool publish)
+{
+    if (publish)
+        return ProductPublication.ConfinedPath(root,
+            Path.IsPathRooted(name) ? name : Path.Join(root, name));
+    return File.Exists(name) ? name : Path.Join(root, name);
+}
+
 // Product draft from evidence; with --ai, a local model words each section from it (validated, cached). Manual files are
 // never overwritten.
 static async Task<int> ProductCommand(string root, string? templateName, string? outName, string? contextName, Config config, string? controlName = null, bool ai = false, bool check = false, bool json = false,
@@ -637,20 +647,20 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
 {
     if (string.IsNullOrWhiteSpace(templateName))
         return Usage("product needs a template YAML path", "product");
-    var templatePath = File.Exists(templateName) ? templateName : Path.Join(root, templateName);
+    var templatePath = templateName;
     ProductTemplate template;
     // Only signed publication imposes repository confinement. Drafts/checks have always accepted
     // shared templates from another DocWizz checkout; retain that supported CLI contract.
-    try { template = ProductTemplate.Load(publish ? ProductPublication.ConfinedPath(root, templatePath) : templatePath); }
+    try { template = ProductTemplate.Load(ProductInput(root, templatePath, publish)); }
     catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
     catch (IOException e) { Console.Error.WriteLine($"{templatePath}: {e.Message}"); return 1; }
     ProjectContext? project = null;
     if (contextName is not null)
     {
-        var contextPath = File.Exists(contextName) ? contextName : Path.Join(root, contextName);
+        var contextPath = contextName;
         try
         {
-            if (publish) contextPath = ProductPublication.ConfinedPath(root, contextPath);
+            contextPath = ProductInput(root, contextPath, publish);
             project = ProjectContext.Load(contextPath); project.Validate(template);
         }
         catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
@@ -659,10 +669,10 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
     ControlledDocument? control = null;
     if (controlName is not null)
     {
-        var controlPath = File.Exists(controlName) ? controlName : Path.Join(root, controlName);
+        var controlPath = controlName;
         try
         {
-            if (publish) controlPath = ProductPublication.ConfinedPath(root, controlPath);
+            controlPath = ProductInput(root, controlPath, publish);
             control = ControlledDocument.Load(controlPath);
         }
         catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
