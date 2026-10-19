@@ -32,9 +32,10 @@ jobs:
           persist-credentials: false
       - name: Fail closed without protected environment and private storage
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.DOCWIZZ_RELEASE_AUDIT_TOKEN }}
         run: |
           set -euo pipefail
+          : "${GH_TOKEN:?environment secret DOCWIZZ_RELEASE_AUDIT_TOKEN (Administration: read) is required}"
           test "${{ github.event.repository.visibility }}" = private
           gh api "repos/$GITHUB_REPOSITORY/environments/document-release" > "$RUNNER_TEMP/release-environment.json"
           jq -e '[.protection_rules[]? | select(.type == "required_reviewers")] | length >= 1' "$RUNNER_TEMP/release-environment.json"
