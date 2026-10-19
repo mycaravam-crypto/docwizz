@@ -56,6 +56,8 @@ static class EdmxParser
                 break;
             p = Path.GetDirectoryName(p) ?? throw new IOException("EDMX path has no parent");
         }
+        if (!string.Equals(Path.GetExtension(full), ".edmx", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Expected an .edmx file");
         if (new FileInfo(full).Length > MaxFileBytes)
             throw new InvalidDataException("EDMX file exceeds 20 MiB safety limit");
         return (full, rel);
@@ -179,7 +181,7 @@ static class EdmxParser
             }
         }
 
-        foreach (var s in Schemas(doc, "Mappings"))
+        foreach (var s in doc.Descendants().Where(e => e.Name.LocalName == "Mappings").SelectMany(e => Children(e, "Mapping")))
         {
             foreach (var esm in s.Descendants().Where(e => e.Name.LocalName == "EntitySetMapping"))
                 foreach (var etm in Children(esm, "EntityTypeMapping"))

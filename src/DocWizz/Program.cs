@@ -114,6 +114,12 @@ static async Task<int> Dispatch(string[] args)
 
     switch (cmd)
     {
+        case "edmx":
+            if (pos.ElementAtOrDefault(2) is not { } edmxFile)
+                return Usage("edmx requires a repository-relative .edmx file", "edmx");
+            var edmx = EdmxParser.Parse(path, edmxFile);
+            Console.Write(json ? EdmxParser.Json(edmx) : EdmxParser.Text(edmx));
+            return edmx.Findings.Any(f => f.Severity == "error") ? 1 : 0;
         case "discover":
             var inventory = ProjectDiscovery.Scan(path, RepoFilesUnscoped(path, config));
             Console.WriteLine(json ? JsonSerializer.Serialize(inventory, JsonOptions()) : ProjectDiscovery.ConsoleReport(inventory));
