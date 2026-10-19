@@ -78,7 +78,7 @@ public class ControlledDocumentTests
     [InlineData("document_id: SWA-001", "document_id: X")]
     [InlineData("document_id: SWA-001", "document_id: invalid/path")]
     [InlineData("document_id: SWA-001", "document_id: ")]
-    [InlineData("version: \"0.1\"", "version: \"0.2\"")]
+    [InlineData("version: \"0.1\"\nauthor:", "version: \"0.2\"\nauthor:")]
     [InlineData("created: 2026-10-19", "created: 19-10-2026")]
     [InlineData("created: 2026-10-19", "created: 2026/10/19")]
     [InlineData("schema: 1", "schema: 2")]
@@ -142,7 +142,7 @@ public class ControlledDocumentTests
         Assert.Contains("must be a mapping", Assert.Throws<ArgumentException>(() =>
             ControlledDocument.Parse(Metadata.Replace("approvals: []", "approvals: [text]"))).Message);
         Assert.Contains(".kind is required", Assert.Throws<ArgumentException>(() =>
-            ControlledDocument.Parse(full.Replace("kind: approval\n", ""))).Message);
+            ControlledDocument.Parse(full.Replace("  - kind: approval\n    role: Qualitätsmanagement", "  - role: Qualitätsmanagement"))).Message);
         Assert.Contains("review or approval", Assert.Throws<ArgumentException>(() =>
             ControlledDocument.Parse(full.Replace("kind: approval", "kind: signoff"))).Message);
         Assert.Contains("date must be yyyy-MM-dd", Assert.Throws<ArgumentException>(() =>
@@ -181,7 +181,7 @@ public class ControlledDocumentTests
                 evidence: docs/reviews/approval.md
             """;
         var control = ControlledDocument.Parse(Metadata.Replace("approvals: []", rows)
-            .Replace("description: Erstentwurf", "description: Review `code` | #draft"));
+            .Replace("description: Erstentwurf", "description: 'Review `code` | #draft'"));
         var rendered = control.Render(ProductDraftTests.Template(),
             ProductDraft.Render(ProductDraftTests.Template(), controlled: true));
         Assert.Contains("| review | QS | Prüfer | 2026-10-18 | docs/reviews/review.md |", rendered);
