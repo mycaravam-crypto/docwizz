@@ -84,7 +84,23 @@ Das PDF wird auf Dateisignatur geprüft, nicht auf PDF/A oder Barrierefreiheit.
 Nicht enthalten: Hardware-Schlüsselschutz, Widerrufsdienst, qualifizierte eIDAS-Signatur,
 PDF/A-Validierung, DMS-Aufbewahrung, PDF-Layoutfreigabe oder ISO-Zertifizierung.
 
-For security, project context and document-control YAML inputs must resolve inside the selected project repository. Reusable product templates may still be read from external paths in non-publishing draft mode; publishing is confined to the checkout.
+## Datei- und Versionssicherheit
 
-### Repository-bound inputs
-All product-template, project-context and document-control paths must remain inside the documented repository (including non-release drafts and checks). Copy a shared template into a versioned `templates/` directory of the target project before calling `docwizz product`. This fail-closed path policy prevents traversal and prevents a privileged release from reading arbitrary external files. The signing policy and approval paths are also confined.
+Die signierte Veröffentlichung (`product publish`) akzeptiert **nur** Dateien und Zielverzeichnisse
+innerhalb des ausgewählten Repositorys: Template, Kontext, Dokumentenlenkung, signierte
+Freigabe, Trust-Policy, Markdown-Entwurf und Evidenzbericht. Pfade werden
+nach Normalisierung geprüft; vorhandene symbolische Links im Pfad werden abgelehnt.
+Die Revisionskennung wird vor der Bildung der DOCX-/PDF-Dateinamen auf 1–80
+dateinamenverträgliche Zeichen (Buchstaben, Ziffern, Punkt, Unterstrich, Bindestrich;
+beginnend mit Buchstabe oder Ziffer) beschränkt.
+
+**Rückwärtskompatibilität:** `product` und `product check` (ohne `publish`)
+dürfen weiterhin geteilte Templates, Projektkontexte und Dokumentenlenkungsdateien
+außerhalb des zu dokumentierenden Repositories referenzieren. Diese gewöhnlichen
+Entwurfs-/Prüfoperationen sind **keine** Freigaben. Ein veröffentlichtes Dokument
+benötigt dagegen eine überprüfte, im Repository liegende Quellenkopie.
+
+Fehlerhafte oder manipulierte Signaturen, fehlende Entwürfe und nicht vorhandene
+Veröffentlichungsvoraussetzungen führen zu einem regulären CLI-Fehler und
+Exit-Code 1 statt einer Freigabe. Quell-, Rollen- und Schlüsselhoheit bleiben
+organisatorische Aufgaben; das Tool kann sie nicht ersetzen.
