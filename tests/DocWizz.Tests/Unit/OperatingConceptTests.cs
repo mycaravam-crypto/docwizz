@@ -22,7 +22,11 @@ public class OperatingConceptTests
         dependencies: []
         """;
 
-    static ProductTemplate Parse(string yaml) => ProductTemplate.Parse(new StringReader(yaml), "operations.yaml");
+    static ProductTemplate Parse(string yaml)
+    {
+        using var reader = new StringReader(yaml);
+        return ProductTemplate.Parse(reader, "operations.yaml");
+    }
 
     [Fact]
     public void Generic_contract_is_separate_from_v_model()
@@ -71,10 +75,10 @@ public class OperatingConceptTests
     public void Shipped_operating_template_loads()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !File.Exists(Path.Combine(root.FullName, "templates/it-operations/betriebskonzept.yaml")))
+        while (root is not null && !File.Exists(Path.Join(root.FullName, "templates/it-operations/betriebskonzept.yaml")))
             root = root.Parent;
         Assert.NotNull(root);
-        var template = ProductTemplate.Load(Path.Combine(root!.FullName, "templates/it-operations/betriebskonzept.yaml"));
+        var template = ProductTemplate.Load(Path.Join(root!.FullName, "templates/it-operations/betriebskonzept.yaml"));
         Assert.Equal("it-betriebskonzept", template.ProductId);
         Assert.False(template.IsVModel);
         Assert.Contains(template.Sections, section => section.Id == "backup" && section.Required && section.Sources.SequenceEqual(["project"]));
