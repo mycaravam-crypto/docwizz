@@ -34,7 +34,7 @@ internal static class ProductPublication
 
     // Verify the detached PKCS#1 v1.5 / SHA-256 signatures over the exact decoded payload bytes.
     // The trust store must come from a protected, reviewed branch; a user-supplied store alone is
-    // not an authority. Re-using a key or person across the two roles is explicitly rejected.
+    // not an authority. Re-using a public key across the two roles is explicitly rejected.
     internal static void Verify(string root, string policyPath, string approvalPath,
         ControlledDocument control, string draft, string evidence, string gitCommit)
     {
@@ -67,6 +67,7 @@ internal static class ProductPublication
         if (signatures.Length != RequiredRoles.Length)
             throw new ArgumentException("exactly two independent approvals (quality and security) required");
         var used = new HashSet<string>(StringComparer.Ordinal);
+        var usedPublicKeys = new HashSet<string>(StringComparer.Ordinal);
         var roles = new HashSet<string>(StringComparer.Ordinal);
         foreach (var signature in signatures)
         {
@@ -77,6 +78,9 @@ internal static class ProductPublication
                 throw new ArgumentException("untrusted, repeated or wrong-role approval");
             using var rsa = RSA.Create();
             rsa.ImportFromPem(File.ReadAllText(SafeRelative(root, key.PemPath)));
+            var publicFingerprint = Convert.ToHexString(SHA256.HashData(rsa.ExportSubjectPublicKeyInfo()));
+            if (!usedPublicKeys.Add(publicFingerprint))
+                throw new ArgumentException("different approval roles must use independent public keys");
             if (!rsa.VerifyData(payload, Convert.FromBase64String(Str(signature, "signature_base64")),
                 HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1))
                 throw new ArgumentException($"invalid signature for role {role}");
