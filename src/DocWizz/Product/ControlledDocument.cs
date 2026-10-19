@@ -32,15 +32,15 @@ internal sealed record ControlledDocument(
     static ControlledDocument ParseCore(string content)
     {
         var yaml = new YamlStream();
-        try { yaml.Load(new StringReader(content)); }
+        using var reader = new StringReader(content);
+        try { yaml.Load(reader); }
         catch (YamlDotNet.Core.YamlException e) { throw new ArgumentException($"invalid YAML: {e.Message}", e); }
         if (yaml.Documents.Count != 1 || yaml.Documents[0].RootNode is not YamlMappingNode root)
             throw new ArgumentException("expected one YAML mapping");
         Keys(root, RootKeys, "control");
-        if (Field(root, "schema", "control") != "1" ||
-            root.Children[new YamlScalarNode("schema")] is not YamlScalarNode schema ||
-            schema.Style != YamlDotNet.Core.ScalarStyle.Plain)
-            throw new ArgumentException("schema must be unquoted 1");
+        // Both schema: 1 and schema: "1" are valid; the value, not YAML quoting, selects the contract.
+        if (Field(root, "schema", "control") != "1")
+            throw new ArgumentException("schema must be 1");
 
         var id = Field(root, "document_id", "control");
         if (!Regex.IsMatch(id, @"^[A-Za-z0-9][A-Za-z0-9._-]{1,79}$"))
@@ -99,6 +99,9 @@ internal sealed record ControlledDocument(
         if (!map.Children.TryGetValue(new YamlScalarNode(name), out var node) ||
             node is not YamlScalarNode { Value: { } value } || string.IsNullOrWhiteSpace(value))
             throw new ArgumentException($"{key}.{name} is required");
+        // Metadata is rendered in Markdown table cells and cover fields, never as free-form prose.
+        // Bound cells to prevent oversized documents; require one line to preserve table integrity.
+        // Detailed policies and decisions belong in versioned, cited docs rather than inline metadata.
         if (value.Length > 500 || value.Contains('\r') || value.Contains('\n'))
             throw new ArgumentException($"{key}.{name} must be one line (max. 500 chars)");
         return value.Trim();
@@ -118,7 +121,11 @@ internal sealed record ControlledDocument(
                 throw new ArgumentException($"{key}: unknown key {entry}");
     }
 
-    static string Esc(string s) => s.Replace("&", "&amp;", StringComparison.Ordinal)
+    // Escape untrusted metadata before interpolating it into Markdown headings, tables or list items.
+    static string Esc(string s) => s.Replace("\\", "\\\\", StringComparison.Ordinal)
+        .Replace("`", "\\`", StringComparison.Ordinal)
+        .Replace("#", "\\#", StringComparison.Ordinal)
+        .Replace("&", "&amp;", StringComparison.Ordinal)
         .Replace("<", "&lt;", StringComparison.Ordinal).Replace(">", "&gt;", StringComparison.Ordinal)
         .Replace("|", "\\|", StringComparison.Ordinal).Replace("[", "\\[", StringComparison.Ordinal)
         .Replace("]", "\\]", StringComparison.Ordinal).Replace("*", "\\*", StringComparison.Ordinal)
@@ -220,9 +227,9 @@ internal sealed record ControlledDocument(
                 !obj.TryGetProperty("sha256", out var oldHash) || oldHash.GetString() != Hash)
                 findings.Add(new("DOC-001", "error", null, "document-control data stale or absent; regenerate"));
         }
-        foreach (var approval in Approvals)
-            if (!File.Exists(Path.Combine(root, approval.Evidence)))
-                findings.Add(new("DOC-002", "error", null, $"approval evidence missing: {approval.Evidence}"));
+        // Paths were validated as repository-relative docs/*.md during parsing.
+        foreach (var approval in Approvals.Where(a => !File.Exists(Path.Join(root, a.Evidence))))
+            findings.Add(new("DOC-002", "error", null, $"approval evidence missing: {approval.Evidence}"));
         if (!Approvals.Any(x => x.Kind == "approval"))
             findings.Add(new("DOC-003", "warning", null, "no external approval evidence declared"));
         return findings;
