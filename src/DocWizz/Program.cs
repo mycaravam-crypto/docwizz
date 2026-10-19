@@ -639,7 +639,7 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
         return Usage("product needs a template YAML path", "product");
     var templatePath = File.Exists(templateName) ? templateName : Path.Combine(root, templateName);
     ProductTemplate template;
-    try { template = ProductTemplate.Load(publish ? ProductPublication.ConfinedPath(root, templatePath) : templatePath); }
+    try { template = ProductTemplate.Load(ProductPublication.ConfinedPath(root, templatePath)); }
     catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
     catch (IOException e) { Console.Error.WriteLine($"{templatePath}: {e.Message}"); return 1; }
     ProjectContext? project = null;

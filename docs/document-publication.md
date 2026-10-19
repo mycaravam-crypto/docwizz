@@ -85,3 +85,6 @@ Nicht enthalten: Hardware-Schlüsselschutz, Widerrufsdienst, qualifizierte eIDAS
 PDF/A-Validierung, DMS-Aufbewahrung, PDF-Layoutfreigabe oder ISO-Zertifizierung.
 
 For security, project context and document-control YAML inputs must resolve inside the selected project repository. Reusable product templates may still be read from external paths in non-publishing draft mode; publishing is confined to the checkout.
+
+### Repository-bound inputs
+All product-template, project-context and document-control paths must remain inside the documented repository (including non-release drafts and checks). Copy a shared template into a versioned `templates/` directory of the target project before calling `docwizz product`. This fail-closed path policy prevents traversal and prevents a privileged release from reading arbitrary external files. The signing policy and approval paths are also confined.

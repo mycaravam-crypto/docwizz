@@ -213,4 +213,20 @@ public class ProductJourneyTests
         Assert.Contains("DOC-001", stale.Out);
     }
 
+    [Fact]
+    public void Product_publish_requires_signed_approval_and_rejects_external_templates()
+    {
+        using var repo = new Sources(("template.yaml", Template), ("Example.cs", "public class Example {}"));
+        var template = Path.Combine(repo.Root, "template.yaml");
+        var blocked = Docwizz.Run("product", "publish", repo.Root, template);
+        Assert.Equal(1, blocked.Exit);
+        Assert.Contains("--control", blocked.Err);
+        Assert.False(Directory.Exists(Path.Combine(repo.Root, "docs", "published")));
+
+        var external = Path.Combine(Path.GetTempPath(), "external-product-template.yaml");
+        var forbidden = Docwizz.Run("product", repo.Root, external);
+        Assert.Equal(1, forbidden.Exit);
+        Assert.Contains("escapes the project repository", forbidden.Err);
+    }
+
 }

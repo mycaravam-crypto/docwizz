@@ -34,7 +34,7 @@ internal static class PublicationLayout
         var paragraphs = document.Descendants(W + "p").ToList();
         // Headings from the known controlled-document contract, not an arbitrary Markdown parser.
         var controlHeader = paragraphs.FirstOrDefault(p =>
-            string.Concat(p.Descendants(W + "t").Select(t => t.Value)).Trim() == "Dokumentenlenkung");
+            string.Concat(p.Descendants(W + "t").Select(t => t.Value)).Trim() == ControlledDocument.DocumentControlHeading);
         if (controlHeader is null)
             throw new IOException("document-control heading missing from generated DOCX");
         var properties = controlHeader.Element(W + "pPr");

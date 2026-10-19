@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
@@ -8,7 +9,7 @@ using System.Text.RegularExpressions;
 // source bytes are required; self-declared "approved" metadata alone can never pass this gate.
 internal static class ProductPublication
 {
-    static readonly string[] RequiredRoles = ["quality", "security"];
+    static readonly ImmutableArray<string> RequiredRoles = ["quality", "security"];
     const int MaxSignedPayloadBytes = 16 * 1024;
     const int MinGeneratedDocumentBytes = 512;
     const int PdfSignatureBytes = 4;
