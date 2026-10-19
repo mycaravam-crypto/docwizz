@@ -27,7 +27,7 @@ public class ControlledDocumentTests
         var control = ControlledDocument.Parse(Metadata);
         var template = ProductDraftTests.Template();
         var plain = ProductDraft.Render(template);
-        var withControl = control.Render(template, plain);
+        var withControl = control.Render(template, ProductDraft.Render(template, controlled: true));
         Assert.Contains("# SW-Architektur Auftragsverwaltung", withControl);
         Assert.Contains("## Deckblatt", withControl);
         Assert.Contains("## Dokumentenlenkung", withControl);
@@ -36,7 +36,7 @@ public class ControlledDocumentTests
         Assert.Contains("<a id=\"structure\"></a>", withControl);
         Assert.Contains("Genehmigung nicht verifiziert", withControl);
         Assert.Contains("OFFEN – keine Prüf- oder Freigabenachweise", withControl);
-        Assert.Equal(withControl, control.Render(template, plain));
+        Assert.Equal(withControl, control.Render(template, ProductDraft.Render(template, controlled: true)));
         Assert.Equal(plain, ProductDraft.Render(template));
     }
 

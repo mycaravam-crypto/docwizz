@@ -127,8 +127,6 @@ internal sealed record ControlledDocument(
     // Logical cover, document control and ToC in Markdown, not physical pages or a Word ToC.
     public string Render(ProductTemplate template, string draft)
     {
-        var first = draft.IndexOf('\n');
-        var content = first >= 0 ? draft[(first + 1)..].TrimStart('\n', '\r') : draft;
         var sb = new StringBuilder();
         sb.AppendLine("# " + Esc(Title));
         sb.AppendLine();
@@ -185,16 +183,9 @@ internal sealed record ControlledDocument(
         sb.AppendLine();
         sb.AppendLine("## Produktinformation");
         sb.AppendLine();
-        var next = 0;
-        foreach (var line in content.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
-        {
-            if (next < template.Sections.Count && line == "## " + template.Sections[next].Title)
-            {
-                sb.AppendLine($"<a id=\"{template.Sections[next].Id}\"></a>");
-                next++;
-            }
-            sb.AppendLine(line);
-        }
+        // ProductDraft emits anchored sections in controlled mode; avoid parsing prose/heading text.
+        sb.Append(draft);
+        if (!draft.EndsWith("\n", StringComparison.Ordinal)) sb.AppendLine();
         return sb.ToString();
     }
 

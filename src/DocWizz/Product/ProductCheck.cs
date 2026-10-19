@@ -15,6 +15,7 @@ static class ProductCheck
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     // Every finding for the draft at `draft` (its report sits next to it), errors and warnings, in rule order.
+    // A controlled product also validates the external control metadata hash and review references.
     public static List<Finding> Run(string root, ProductTemplate template, CodeModel model, ProjectContext? project, string draft, ControlledDocument? control = null)
     {
         var findings = new List<Finding>();

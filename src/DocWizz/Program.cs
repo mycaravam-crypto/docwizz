@@ -687,7 +687,7 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
             Path.Combine(root, "docs", ".docwizz", "product-ai-cache.json"));
         if (synthesis.Count == 0) synthesis = null;   // nothing worded: the deterministic draft, without ids or an AI note
     }
-    var plainDraft = ProductDraft.Render(template, model, project, synthesis);
+    var plainDraft = ProductDraft.Render(template, model, project, synthesis, controlled: control is not null);
     var text = (marker + "\n" + (control is null ? plainDraft : control.Render(template, plainDraft))).Replace("\r\n", "\n");
     // The evidence and gap report sits next to the draft (<id>.evidence.json) and is protected the same way.
     var report = Path.ChangeExtension(full, ".evidence.json");

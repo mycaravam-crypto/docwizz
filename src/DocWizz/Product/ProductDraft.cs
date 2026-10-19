@@ -32,11 +32,14 @@ internal static class ProductDraft
     // sentences per section, ProductSynthesis), each section opens with them, marked as a draft, and every piece of
     // evidence shows the id the sentences cite. Without it, the output is the deterministic draft.
     public static string Render(ProductTemplate template, CodeModel? model = null, ProjectContext? project = null,
-        IReadOnlyDictionary<string, List<ProductSynthesis.Sentence>>? synthesis = null)
+        IReadOnlyDictionary<string, List<ProductSynthesis.Sentence>>? synthesis = null, bool controlled = false)
     {
         var output = new StringBuilder();
-        output.AppendLine("# " + template.ProductId);
-        output.AppendLine();
+        if (!controlled)
+        {
+            output.AppendLine("# " + template.ProductId);
+            output.AppendLine();
+        }
         output.AppendLine(template.IsVModel
             ? $"V-Modell: {template.XtVariant} {template.XtVersion}; Tailoring: {template.Tailoring}"
             : $"Dokumenttyp: {template.DocumentType}");
@@ -51,6 +54,7 @@ internal static class ProductDraft
         output.AppendLine();
         foreach (var (section, evidence) in Catalog(template, model, project))
         {
+            if (controlled) output.AppendLine($"<a id=\"{section.Id}\"></a>");
             output.AppendLine("## " + section.Title);
             output.AppendLine();
             if (evidence.Count == 0)
