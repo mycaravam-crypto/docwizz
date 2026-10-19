@@ -12,8 +12,31 @@ internal static class ProductPublication
     internal sealed record SigningKey(string Id, string Role, string PemPath);
     internal sealed record Approval(string Role, string KeyId, string SignatureBase64);
 
-    internal static string Sha256(string path) =>
-        Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
+    internal static string Sha256(string path)
+    {
+        using var file = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(file)).ToLowerInvariant();
+    }
+
+    // Release paths must remain in the checked-out project. Reject existing symbolic-link
+    // ancestors as well, so protected CI cannot be redirected outside its checkout.
+    internal static string ConfinedPath(string root, string path)
+    {
+        var project = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar);
+        var full = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(project, path));
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (!full.StartsWith(project + Path.DirectorySeparatorChar, comparison))
+            throw new ArgumentException("publication path escapes the project repository");
+        var cursor = project;
+        foreach (var segment in Path.GetRelativePath(project, full).Split(Path.DirectorySeparatorChar))
+        {
+            cursor = Path.Combine(cursor, segment);
+            if ((File.Exists(cursor) || Directory.Exists(cursor)) &&
+                (File.GetAttributes(cursor) & FileAttributes.ReparsePoint) != 0)
+                throw new ArgumentException("publication path contains a symbolic link");
+        }
+        return full;
+    }
 
     static JsonElement Property(JsonElement obj, string name) =>
         obj.TryGetProperty(name, out var value) ? value : throw new ArgumentException($"missing {name}");
@@ -25,11 +48,7 @@ internal static class ProductPublication
     {
         if (Path.IsPathRooted(rel) || rel.Split(['/', '\\']).Any(x => x is ".." or "" or "."))
             throw new ArgumentException("unsafe relative release key path");
-        var basePath = Path.GetFullPath(root) + Path.DirectorySeparatorChar;
-        var absolute = Path.GetFullPath(Path.Combine(root, rel));
-        if (!absolute.StartsWith(basePath, StringComparison.Ordinal))
-            throw new ArgumentException("release key path escapes repository");
-        return absolute;
+        return ConfinedPath(root, rel);
     }
 
     // Verify the detached PKCS#1 v1.5 / SHA-256 signatures over the exact decoded payload bytes.
