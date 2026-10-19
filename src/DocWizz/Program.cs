@@ -646,7 +646,11 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
     if (contextName is not null)
     {
         var contextPath = File.Exists(contextName) ? contextName : Path.Combine(root, contextName);
-        try { project = ProjectContext.Load(contextPath); project.Validate(template); }
+        try
+        {
+            if (publish) contextPath = ProductPublication.ConfinedPath(root, contextPath);
+            project = ProjectContext.Load(contextPath); project.Validate(template);
+        }
         catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
         catch (IOException e) { Console.Error.WriteLine($"{contextPath}: {e.Message}"); return 1; }
     }
@@ -654,7 +658,11 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
     if (controlName is not null)
     {
         var controlPath = File.Exists(controlName) ? controlName : Path.Join(root, controlName);
-        try { control = ControlledDocument.Load(controlPath); }
+        try
+        {
+            if (publish) controlPath = ProductPublication.ConfinedPath(root, controlPath);
+            control = ControlledDocument.Load(controlPath);
+        }
         catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
         catch (IOException e) { Console.Error.WriteLine($"{controlPath}: {e.Message}"); return 1; }
     }
@@ -674,13 +682,13 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
             Console.Error.WriteLine("Publication blocked: every required section, review and approval must have recorded evidence.");
             return 1;
         }
-        var trust = File.Exists(trustName) ? trustName : Path.Combine(root, trustName);
-        var signed = File.Exists(approvalName) ? approvalName : Path.Combine(root, approvalName);
-        var published = outName is null
-            ? Path.Combine(root, "docs", "published", control.Id + "-" + control.Version)
-            : Path.GetFullPath(outName);
         try
         {
+            var trust = ProductPublication.ConfinedPath(root, trustName);
+            var signed = ProductPublication.ConfinedPath(root, approvalName);
+            var published = ProductPublication.ConfinedPath(root, outName is null
+                ? Path.Combine(root, "docs", "published", control.Id + "-" + control.Version)
+                : outName);
             ProductPublication.Publish(root, template, control, original, releaseEvidencePath, trust, signed, published);
             Console.WriteLine("→ " + Path.GetRelativePath(root, published));
             return 0;
