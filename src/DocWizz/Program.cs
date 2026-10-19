@@ -128,7 +128,7 @@ static async Task<int> Dispatch(string[] args)
                 var csFiles = selectedFiles.Where(f => Path.GetExtension(f).Equals(".cs", StringComparison.OrdinalIgnoreCase))
                     .Where(f =>
                     {
-                        var relative = Path.GetRelativePath(path, f).Replace('\', '/');
+                        var relative = Path.GetRelativePath(path, f).Replace('\\', '/');
                         return !relative.StartsWith("tests/", StringComparison.OrdinalIgnoreCase)
                             && !config.Tests.Any(g => FileSystemName.MatchesSimpleExpression(g, relative));
                     })
