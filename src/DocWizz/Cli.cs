@@ -8,7 +8,7 @@ static class Cli
 
     public record Request(string? Command, Dictionary<string, string> Options, List<string> Positional, string? Error);
 
-    public static readonly string[] Flags = ["ai", "ai-ratings", "html", "screenshots", "progress", "refresh-html-on-version-change", "timings", "validate", "force", "include-ai", "auto-rescan", "select-projects", "all-projects", "yes", "requirements", "graph", "help", "version"];
+    public static readonly string[] Flags = ["ai", "ai-ratings", "html", "screenshots", "progress", "refresh-html-on-version-change", "timings", "validate", "force", "include-ai", "auto-rescan", "select-projects", "all-projects", "yes", "requirements", "graph", "links", "help", "version"];
 
     // Valued option → what its value is, for the error when it is missing.
     public static readonly Dictionary<string, string> Valued = new()
@@ -33,10 +33,10 @@ static class Cli
     {
         ["tests"] = new("tests import <dir> <snapshot.json>", "offline ADO test traceability import", "evidence",
             "docwizz tests import . alpha-tests.json", "", []),
-        ["edmx"] = new("edmx <dir> <file.edmx>", "read-only EF6 EDMX facts or technical graph (--graph)", "architects",
-            "docwizz edmx . Models/Legacy.edmx --graph --format json",
-            "--graph (source-backed technical graph), --degree-weight <0..100>, --fan-in-weight <0..100>, --fan-out-weight <0..100>, --inheritance-weight <0..100>; --format console|json",
-            ["graph", "degree-weight", "fan-in-weight", "fan-out-weight", "inheritance-weight", "format"]),
+        ["edmx"] = new("edmx <dir> <file.edmx>", "read-only EF6 EDMX facts, graph (--graph) or code evidence (--links)", "architects",
+            "docwizz edmx . Models/Legacy.edmx --links --format json",
+            "--graph (technical graph), --links (source-backed C# and inferred #187 domain evidence; exclusive with --graph), --degree-weight <0..100>, --fan-in-weight <0..100>, --fan-out-weight <0..100>, --inheritance-weight <0..100>; --format console|json",
+            ["graph", "links", "degree-weight", "fan-in-weight", "fan-out-weight", "inheritance-weight", "format"]),
         ["discover"] = new("discover [dir]", "read-only inventory of solutions, projects and references", "everyday",
             "docwizz discover . --format json", "--format console|json", ["format"]),
         ["setup"] = new("setup [dir]", "first run: detect the stack, write docwizz.yaml, analyze, generate docs, check", "start here",
@@ -120,6 +120,8 @@ static class Cli
                 new[] { "degree-weight", "fan-in-weight", "fan-out-weight", "inheritance-weight" }
                     .Any(opts.ContainsKey))
                 error ??= "EDMX graph weight options require --graph";
+            if (cmd == "edmx" && opts.ContainsKey("graph") && opts.ContainsKey("links"))
+                error ??= "--graph and --links are mutually exclusive";
             if (cmd == "generate")
             {
                 if (opts.ContainsKey("screenshots") && !opts.ContainsKey("base-url"))
