@@ -25,7 +25,8 @@ Beide Artefakte unterliegen dem bestehenden Überschreibschutz. Der Entwurf ist 
 | Laufzeit/Projekte | Projektdatei, Rolle, Target Framework | kein Nachweis tatsächlicher Betriebssysteme/Hosts |
 | Schnittstellen | bestehende statische Code-Abhängigkeiten | keine Zusage über Laufzeitkonnektivität |
 | Konfiguration | nur Schlüsselnamen und Fundstellen | **keine Werte, Secrets oder URL-Hosts** |
-| Umgebung, Deployment, Monitoring, Backup, Incident, Rollen, SLA/RTO/RPO | explizite menschliche Quellen | ohne Quelle immer **OFFEN** |
+| Deployment-/CI-Deskriptoren (P2) | Dateityp/Pfad der durch den vorhandenen Deployment-Scanner erkannten Dateien (Dockerfile, Compose, Kubernetes, Helm, IaC, CI) | **kein** Import von Service-Details, Konfigurationswerten oder Ausführungsergebnissen |
+| Betriebsumgebung, Deployment-/Rollback-Verfahren, Monitoring, Backup, Incident, Rollen, SLA/RTO/RPO | explizite menschliche Quellen | ohne Quelle immer **OFFEN** |
 
 Eigene Angaben können über den vorhandenen `--context`-Vertrag
 mit Quellbelegen ergänzt werden (siehe [Product drafts](../CLI.md#product-drafts)).
@@ -46,13 +47,21 @@ wenn dafür keine Quellen existieren.
   `configuration` lesen nur bereits erkannte Fakten. Die vorhandene
   Evidenzbegrenzung auf 40 Elemente je Abschnitt bleibt bestehen: Listen sind
   **nicht zwangsläufig vollständig**.
+- `ProductDeploymentFacts`: übernimmt ausschließlich Datei-Metadaten aus
+  `DeploymentDescriptors.Is` und der bereits gefilterten Projektdateiliste
+  (inkl. `.github` / `.circleci`). Der CodeModel-Graph anderer Dokumenttypen
+  bleibt unangetastet. Das separate Kapitel `deployment` bleibt ohne
+  menschliche Quellen `OFFEN`, auch wenn Deskriptoren gefunden werden.
+  Bei neu hinzugefügten oder entfernten Dateien wird der Evidenzbericht
+  durch `product check` als veraltet erkannt; **Inhaltsänderungen** an
+  unveränderten Deskriptorpfaden werden in P2 noch nicht bewertet.
 - `ProductCheck`: verwendet die vorhandenen Quellen-, Änderungs- und
   KI-Zitatprüfungen; keine neue Prüf-Engine.
 - Unit-/Journey-Tests: Templatevalidierung, Offenkennzeichnung, deterministische
   Ausgabe, Schutz der Konfigurationswerte, wiederholbarer CLI-Lauf.
 
-**Nicht enthalten:** automatische Übernahme von Docker/Kubernetes/CI-Daten in den
-Produkt-Evidenzkatalog, DOCX, Bewertung von Backup-Erfolg, reale Betriebsmetriken,
+**Nicht enthalten:** detaillierte Auswertung von Docker/Kubernetes/CI-Inhalten
+(Services, Images, Jobs, Ports, Umgebung), DOCX, Bewertung von Backup-Erfolg, reale Betriebsmetriken,
 Automatisierung von Betriebsentscheidungen oder separate KI-Pipelines.
 Diese Erweiterungen benötigen gesonderte Evidenzverträge und reale Pilotfälle.
 

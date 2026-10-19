@@ -619,6 +619,15 @@ static List<string> BuildFiles(string root, Config config)
     return [.. RepoFiles(root, config).Where(f => exts.Contains(Path.GetExtension(f)))];
 }
 
+// A product-specific, read-only enrichment. It shares the repository scope and recognizer used by the deployment view.
+static CodeModel ProductModel(string root, Config config, ProductTemplate template)
+{
+    var model = BuildModel(root, config).Model;
+    return template.DocumentType == "it-operations"
+        ? ProductDeploymentFacts.Add(model, root, RepoFiles(root, config, [".github", ".circleci"]))
+        : model;
+}
+
 // Product draft from evidence; with --ai, a local model words each section from it (validated, cached). Manual files are
 // never overwritten.
 static async Task<int> ProductCommand(string root, string? templateName, string? outName, string? contextName, Config config, bool ai = false, bool check = false, bool json = false)
@@ -644,7 +653,7 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
     if (check)
     {
         if (ai) return Usage("product check makes no AI calls; drop --ai", "product");
-        var findings = ProductCheck.Run(root, template, BuildModel(root, config).Model, project, full);
+        var findings = ProductCheck.Run(root, template, ProductModel(root, config, template), project, full);
         var errors = findings.Count(f => f.Severity == "error");
         if (json) Console.WriteLine(JsonSerializer.Serialize(new { product = template.ProductId, pass = errors == 0, findings,
             note = "references and freshness only; content, decisions and approval need human review" }, JsonOptions()));
@@ -658,7 +667,7 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
         Console.Error.WriteLine($"{full} exists and is not docwizz-generated; refusing to overwrite");
         return 1;
     }
-    var model = BuildModel(root, config).Model;
+    var model = ProductModel(root, config, template);
     Dictionary<string, List<ProductSynthesis.Sentence>>? synthesis = null;
     if (ai)
     {
