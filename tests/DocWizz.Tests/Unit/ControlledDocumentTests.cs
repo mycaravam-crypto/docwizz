@@ -115,11 +115,11 @@ public class ControlledDocumentTests
     {
         var changed = Metadata.Replace("changes:\n  - version: \"0.1\"\n    date: 2026-10-19\n    author: Architekturteam\n    description: Erstentwurf", "changes: unknown");
         Assert.Contains("must be a list", Assert.Throws<ArgumentException>(() => ControlledDocument.Parse(changed)).Message);
-        Assert.Contains("must be a list", Assert.Throws<ArgumentException>(() => ControlledDocument.Parse(Metadata.Replace("changes:\n", ""))).Message);
+        Assert.Contains("must be a list", Assert.Throws<ArgumentException>(() => ControlledDocument.Parse(Metadata.Replace("changes:\n  - version: \"0.1\"\n    date: 2026-10-19\n    author: Architekturteam\n    description: Erstentwurf", ""))).Message);
         Assert.Contains("changes must contain current version",
             Assert.Throws<ArgumentException>(() => ControlledDocument.Parse(Metadata.Replace("  - version: \"0.1\"", "  - version: \"0.0\""))).Message);
         Assert.Contains("required", Assert.Throws<ArgumentException>(() => ControlledDocument.Parse(
-            Metadata.Replace("  - version: \"0.1\"\n", ""))).Message);
+            Metadata.Replace("  - version: \"0.1\"\n    date: 2026-10-19\n    author: Architekturteam\n    description: Erstentwurf", "  - date: 2026-10-19\n    author: Architekturteam\n    description: Erstentwurf"))).Message);
         Assert.Contains("unknown key", Assert.Throws<ArgumentException>(() => ControlledDocument.Parse(
             Metadata.Replace("description: Erstentwurf", "description: Erstentwurf\n    bogus: yes"))).Message);
     }
@@ -186,7 +186,7 @@ public class ControlledDocumentTests
             ProductDraft.Render(ProductDraftTests.Template(), controlled: true));
         Assert.Contains("| review | QS | Prüfer | 2026-10-18 | docs/reviews/review.md |", rendered);
         Assert.Contains("| approval | QM | Genehmiger | 2026-10-19 | docs/reviews/approval.md |", rendered);
-        Assert.Contains(@"Review \`code\` \\| \\#draft", rendered);
+        Assert.Contains(@"Review \`code\` \| \#draft", rendered);
         Assert.Contains("keine Identitäts-, Signatur- oder Genehmigungsprüfung", rendered);
     }
 
