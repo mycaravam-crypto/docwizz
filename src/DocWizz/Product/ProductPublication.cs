@@ -13,7 +13,6 @@ internal static class ProductPublication
     const int MinGeneratedDocumentBytes = 512;
     const int PdfSignatureBytes = 4;
     const int MaxRendererErrorChars = 800;
-    const string PdfMagic = "%PDF";
     static readonly Regex ReleaseVersion = new("^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$", RegexOptions.CultureInvariant);
     internal sealed record SigningKey(string Id, string Role, string PemPath);
     internal sealed record Approval(string Role, string KeyId, string SignatureBase64);
@@ -226,7 +225,7 @@ internal static class ProductPublication
             using (var pdfStream = File.OpenRead(pdf))
             {
                 Span<byte> header = stackalloc byte[PdfSignatureBytes];
-                if (pdfStream.Read(header) != PdfSignatureBytes || !header.SequenceEqual(PdfMagicu8))
+                if (pdfStream.Read(header) != PdfSignatureBytes || !header.SequenceEqual("%PDF"u8))
                     throw new IOException("PDF conversion produced invalid header");
             }
             File.Delete(source);
