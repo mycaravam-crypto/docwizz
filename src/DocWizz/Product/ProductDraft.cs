@@ -37,11 +37,15 @@ internal static class ProductDraft
         var output = new StringBuilder();
         output.AppendLine("# " + template.ProductId);
         output.AppendLine();
-        output.AppendLine($"V-Modell: {template.XtVariant} {template.XtVersion}; Tailoring: {template.Tailoring}");
+        output.AppendLine(template.IsVModel
+            ? $"V-Modell: {template.XtVariant} {template.XtVersion}; Tailoring: {template.Tailoring}"
+            : $"Dokumenttyp: {template.DocumentType}");
         output.AppendLine($"Produktabhängigkeiten: {(template.Dependencies.Count == 0 ? "keine angegeben" : string.Join(", ", template.Dependencies))}");
         if (model is not null) output.AppendLine($"Code-Stand: {model.Commit ?? "unbekannt"}");
         output.AppendLine();
-        output.AppendLine("> Entwurf – keine V-Modell-XT-Konformitäts- oder Freigabeaussage.");
+        output.AppendLine(template.IsVModel
+            ? "> Entwurf – keine V-Modell-XT-Konformitäts- oder Freigabeaussage."
+            : "> Entwurf – keine Aussage zur betrieblichen Einsatzbereitschaft oder Freigabe.");
         if (synthesis is not null)
             output.AppendLine(">\n> 🤖 KI-Entwurf: Sätze mit [E…] sind von einem lokalen Modell aus den genannten Belegen formuliert und nicht geprüft. Maßgeblich sind die Belege.");
         output.AppendLine();
@@ -84,10 +88,15 @@ internal static class ProductDraft
         return System.Text.Json.JsonSerializer.Serialize(new
         {
             generator = "docwizz product",
-            product = template.ProductId, variant = template.XtVariant, version = template.XtVersion, tailoring = template.Tailoring,
+            product = template.ProductId, document_type = template.DocumentType,
+            variant = template.IsVModel ? template.XtVariant : null,
+            version = template.IsVModel ? template.XtVersion : null,
+            tailoring = template.IsVModel ? template.Tailoring : null,
             dependencies = template.Dependencies,
             commit = model?.Commit,
-            note = "evidence inventory and gaps of a draft; not a statement of review, approval or V-Modell XT conformity",
+            note = template.IsVModel
+                ? "evidence inventory and gaps of a draft; not a statement of review, approval or V-Modell XT conformity"
+                : "evidence inventory and gaps of a draft; not a statement of review, approval or operational readiness",
             required = new { total = required.Count, evidenced = required.Count(x => x.status == "evidenced"), open = required.Where(x => x.status == "open").Select(x => x.id) },
             sections,
         }, new System.Text.Json.JsonSerializerOptions
@@ -114,6 +123,30 @@ internal static class ProductDraft
         var childIds = model.Edges.Where(e => e.Kind == "contains").Select(e => e.To).ToHashSet();
         // CodeModel provided by the normal scan excludes test declarations; ignore explicit test projects as well.
         var allowed = nodes.Values.Where(n => n.Tags?.Contains("test") != true).ToDictionary(n => n.Id);
+        if (sectionId == "runtime")
+        {
+            // Project manifests describe target runtimes, not the servers on which software actually runs.
+            return allowed.Values.Where(n => n.Kind == "project")
+                .OrderBy(n => n.File, StringComparer.Ordinal).ThenBy(n => n.Id, StringComparer.Ordinal)
+                .Take(MaxFacts).Select(n =>
+                {
+                    var role = (n.Tags ?? []).FirstOrDefault(t => t is "executable" or "library" or "test") ?? "unknown";
+                    var targets = (n.Tags ?? []).Where(t => t.StartsWith("net", StringComparison.OrdinalIgnoreCase)
+                        && t.Any(char.IsDigit)).Order(StringComparer.Ordinal).ToList();
+                    var label = $"Projekt: {Escape(n.Name)} (Rolle: {role}"
+                        + (targets.Count == 0 ? ")" : $"; Target Framework: {string.Join(", ", targets)})");
+                    return ("code", label, CodeModel.Location(n), $"{label} (Quelle: {CodeModel.Location(n)})");
+                }).ToList();
+        }
+        if (sectionId == "configuration")
+        {
+            // Configuration nodes contain only keys; never emit tags, which may contain URL hosts.
+            return allowed.Values.Where(n => n.Kind == "config")
+                .OrderBy(n => n.Name, StringComparer.Ordinal).ThenBy(n => n.File, StringComparer.Ordinal)
+                .Take(MaxFacts).Select(n => ("code", $"Konfigurationsschluessel: {Escape(n.Name)}", CodeModel.Location(n),
+                    $"Konfigurationsschluessel: {Escape(n.Name)} (Quelle: {CodeModel.Location(n)})"))
+                .ToList();
+        }
         if (sectionId == "structure")
         {
             return allowed.Values.Where(n => Generator.TopKinds.Contains(n.Kind) && n.Kind != "module" && !childIds.Contains(n.Id))

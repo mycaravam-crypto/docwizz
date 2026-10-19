@@ -5,10 +5,12 @@ using YamlDotNet.RepresentationModel;
 internal sealed record ProductSection(string Id, string Title, bool Required, IReadOnlyList<string> Sources);
 internal sealed record ProductTemplate(
     string ProductId, string XtVariant, string XtVersion, string Tailoring,
-    IReadOnlyList<ProductSection> Sections, IReadOnlyList<string> Dependencies)
+    IReadOnlyList<ProductSection> Sections, IReadOnlyList<string> Dependencies, string? DocumentType = null)
 {
+    // Generic documents and V-Modell XT products have distinct metadata contracts.
+    public bool IsVModel => DocumentType is null;
     static readonly HashSet<string> RootKeys =
-        ["schema", "product_id", "xt_variant", "xt_version", "tailoring", "sections", "dependencies"];
+        ["schema", "product_id", "document_type", "xt_variant", "xt_version", "tailoring", "sections", "dependencies"];
     static readonly HashSet<string> SectionKeys = ["id", "title", "required", "sources"];
     static readonly HashSet<string> SourceKinds = ["code", "project"];
 
@@ -40,9 +42,17 @@ internal sealed record ProductTemplate(
         var id = Required(root, "product_id", "template");
         if (!Slug.IsValid(id))
             throw new ArgumentException("template.product_id must be a lowercase slug");
-        var variant = Required(root, "xt_variant", "template");
-        var version = Required(root, "xt_version", "template");
-        var tailoring = Required(root, "tailoring", "template");
+        // Preserve the original XT contract; a generic product cannot claim XT metadata.
+        var documentType = root.Children.ContainsKey(new YamlScalarNode("document_type"))
+            ? Required(root, "document_type", "template") : null;
+        if (documentType is not null && !Slug.IsValid(documentType))
+            throw new ArgumentException("template.document_type must be a lowercase slug");
+        if (documentType is not null && new[] { "xt_variant", "xt_version", "tailoring" }
+            .Any(key => root.Children.ContainsKey(new YamlScalarNode(key))))
+            throw new ArgumentException("generic document_type must not declare XT metadata");
+        var variant = documentType is null ? Required(root, "xt_variant", "template") : "";
+        var version = documentType is null ? Required(root, "xt_version", "template") : "";
+        var tailoring = documentType is null ? Required(root, "tailoring", "template") : "";
 
         if (!root.Children.TryGetValue(new YamlScalarNode("sections"), out var sectionNode)
             || sectionNode is not YamlSequenceNode sections || sections.Children.Count == 0)
@@ -78,7 +88,7 @@ internal sealed record ProductTemplate(
                 throw new ArgumentException($"invalid dependency id: {dependency}");
         if (dependencies.Contains(id)) throw new ArgumentException("product cannot depend on itself");
         Unique(dependencies, "template.dependencies");
-        return new ProductTemplate(id, variant, version, tailoring, result, dependencies);
+        return new ProductTemplate(id, variant, version, tailoring, result, dependencies, documentType);
     }
 
     static void Unique(IEnumerable<string> values, string context)

@@ -343,6 +343,7 @@ For projects that keep requirements as YAML evidence:
 - `docwizz product` drafts a work product from a template, code and evidence; `product check` verifies references and
   freshness. Illustrative V-Modell XT 2.4 templates are in [templates/vmodell-xt/](templates/vmodell-xt/) (not
   official templates or a conformity claim).
+  A first [IT operations concept](docs/IT_OPERATIONS.md) template documents code-derived facts and explicit operational gaps.
 
 See [project evidence](docs/project-evidence.md) and [CLI.md](CLI.md#product-drafts).
 
