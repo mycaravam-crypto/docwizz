@@ -248,7 +248,7 @@ static class EdmxCodeLinks
             b.AppendLine(t.Entity + ": " + t.Controller + "/" + t.Action + " route=" +
                 (t.Route ?? "unknown") + " (" + string.Join(" -> ", t.Hops.Select(h => h.Kind)) + ")");
         foreach (var x in report.Unknowns)
-            b.AppendLine("unknown " + x.Kind.ToString() + " " + x.Entity + ": " + x.Reason);
+            b.AppendLine("unknown " + x.Kind + " " + x.Entity + ": " + x.Reason);
         b.AppendLine("These are code-structure observations, not confirmed processes or bounded contexts.");
         return b.ToString();
     }
