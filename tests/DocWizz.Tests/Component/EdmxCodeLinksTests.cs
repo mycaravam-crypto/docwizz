@@ -84,6 +84,23 @@ public class EdmxCodeLinksTests
     }
 
     [Fact]
+    public void Cli_reports_exact_links_from_an_isolated_EF6_fixture_without_running_user_code()
+    {
+        var root = Path.Join(Root(), "tests", "fixtures", "edmx-code");
+        var execution = Docwizz.Run("edmx", root, "GraphGolden.edmx", "--links", "--format", "json");
+        Assert.Equal(0, execution.Exit);
+        using var document = JsonDocument.Parse(execution.Out);
+        Assert.Equal(EdmxCodeLinks.Schema, document.RootElement.GetProperty("schema").GetString());
+        var links = document.RootElement.GetProperty("links");
+        Assert.True(links.GetArrayLength() >= 5);
+        Assert.Contains(links.EnumerateArray(), link =>
+            link.GetProperty("entity").GetString() == "Legacy.Customer" &&
+            link.GetProperty("kind").GetString() == "entity-class");
+        Assert.NotEmpty(document.RootElement.GetProperty("traces").EnumerateArray());
+        Assert.DoesNotContain("StackTrace", execution.Err, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Without_any_csharp_evidence_all_entities_are_unknown()
     {
         var facts = EdmxParser.Parse(Root(), Edmx);

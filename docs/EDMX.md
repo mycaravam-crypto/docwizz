@@ -57,10 +57,12 @@ Component tests verify the golden output, JSON reproducibility, source evidence,
 
 ## P2: evidence-backed EDMX ↔ C# links
 
-Run `docwizz edmx . fixture-legacy/Shop/Models/GraphGolden.edmx --links --format json` for the separate `docwizz.edmx-code-links/v1` output. `--links` and `--graph` are mutually exclusive; P0 and P1 output remains backward-compatible.
+Run `docwizz edmx tests/fixtures/edmx-code GraphGolden.edmx --links --format json` for the separate `docwizz.edmx-code-links/v1` output. `--links` and `--graph` are mutually exclusive; P0 and P1 output remains backward-compatible.
 
 P2 links **only exact, fully qualified CSDL/C# type IDs** (e.g. `Legacy.Customer` ↔ `cs:Legacy.Customer`), scanner-observed `DbContext.DbSet<T>` persistence, and directed `calls`, `accesses`, `injects` and `creates` C# edges from MVC actions to DbContext. Links and code-hop endpoints carry both EDMX and source-declaration file/line evidence. Declaring a method is not evidence of the invocation's precise line; code-hop evidence is explicitly named `fromDeclaration` / `toDeclaration`. A call chain only appears when code-scanner edges support it. Maximum path length is 8; traversal is bounded.
 
 Unresolved types, persistence and controller paths are `unknown`; **no guessed** method calls, convention routes, semantic business processes, DDD bounded contexts or cross-namespace name matches. With no explicit attribute route, a matching classic MVC action has `routeStatus: unknown`. When project scope is configured, only selected scoped C# files may participate; an EDMX excluded by that scope is rejected. Non-AI mode performs no build, NuGet restore, external request or user-code execution.
 
 `domainEvidence` reuses **`DomainAreas.Group(CodeModel)` from #187** to label code-method links as `inferred`. There is no additional area-grouping algorithm or automatic `confirmed` state. Generated EF classes are matched as C# types, not claimed to be generated if no generator provenance is present. MSL/SSDL tables are not treated as independently confirmed domain entities. The link schema is an evidence handoff; Markdown/HTML navigation and AI remain P3.
+
+The isolated test-only directory `tests/fixtures/edmx-code` intentionally contains its own EDMX copy and C# model, so CLI integration tests exercise actual source links without contaminating the legacy fixture used by existing end-to-end checks.
