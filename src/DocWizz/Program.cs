@@ -845,6 +845,7 @@ static string Reference() => $"""
         [--work-item <id>] [--format json]  one work item's symbols (123 or github#123); machine-readable
       docwizz product <dir> <template.yaml> [out.md]  product draft from code and project evidence
         [--context <file.yaml>]         load sourced project facts
+        [--control <file.yaml>]         cover, revision metadata, review evidence and linked contents
         [--ai]                          a self-hosted model words sections, citing evidence ids
       docwizz product check <dir> <template.yaml> [draft.md]  references and freshness of a draft; exit 1 on errors
 
