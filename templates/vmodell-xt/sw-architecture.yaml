@@ -1,25 +1,97 @@
-# Minimal illustrative structure, not an official V-Modell XT template.
-# Tailor the sections and product relations to the licensed/reference process version.
+# Verbesserte ORIGINAL-Vorlage fuer DocWizz (Schema 1), nicht amtlich.
+# Fachlich orientiert an V-Modell XT Bund Produktreferenz und arc42-Praxisbeispielen.
+# Tailoring, Produktversion und inhaltliche Freigabe projektspezifisch festlegen.
+# HINWEIS: Kommentare dienen als Ausfuellhilfe und erscheinen NICHT im Markdown-Produkt.
+# In DocWizz werden nur die IDs "structure" und "interfaces" aus Code vorbelegt.
 schema: 1
 product_id: sw-architecture
 xt_variant: V-Modell XT
 xt_version: "2.4"
 tailoring: project-specific
 sections:
-  - id: scope
-    title: Geltungsbereich und Randbedingungen
+  # Ziel/Nachweis: Identität der SW-Einheit, Versions- und Baselinebezug, Autor, Reviewer und Änderungsverlauf; Freigabe extern nachweisen.
+  - id: document-control
+    title: Dokumentenlenkung und Konfigurationsstand
     required: true
     sources: [project]
-  - id: structure
-    title: Softwarestruktur und Bausteine
+  # Ziel/Nachweis: Systemgrenze, Stakeholder, Vor- und Nachbarsysteme, Annahmen und Ausschlüsse.
+  - id: scope
+    title: Geltungsbereich, Systemkontext und Abgrenzung
     required: true
-    sources: [code]
-  - id: interfaces
-    title: Schnittstellen und Abhängigkeiten
+    sources: [project]
+  # Ziel/Nachweis: Anforderungs-IDs, priorisierte Qualitätsszenarien und überprüfbare Randbedingungen; ISO/IEC 25010.
+  - id: architecture-drivers
+    title: Architekturtreiber und Qualitätsziele
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Leitprinzipien und mindestens zwei ernsthaft bewertete Alternativen mit Kriterien und Trade-offs.
+  - id: principles-alternatives
+    title: Architekturprinzipien und Entwurfsalternativen
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: ADR-IDs, Entscheidungsstatus nach menschlichem Prozess, Kontext, Optionen, Konsequenzen und Risiken.
+  - id: decisions
+    title: Architekturentscheidungen und Begründungen
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Automatisch: Auswahl erkannter Top-Level-Codeelemente (maximal 40); menschlich: Verantwortung, Grenzen, Schichten und Abgleich mit Soll-Architektur.
+  - id: structure
+    title: Dekomposition der SW-Einheit und Bausteinsicht
     required: true
     sources: [code, project]
-  - id: decisions
-    title: Architekturentscheidungen
+  # Ziel/Nachweis: SW-Einheiten, Komponenten, Module; Auswahl zur separaten Spezifikation und begründete Nicht-Auswahl.
+  - id: elements-to-specify
+    title: Zu spezifizierende SW-Elemente
     required: true
+    sources: [project]
+  # Ziel/Nachweis: Automatisch: erkannte Code-Abhängigkeiten (maximal 40), keine vollständigen API-Verträge; menschlich: Protokoll, Rollen, Versionierung und Fehlerfälle.
+  - id: interfaces
+    title: Schnittstellenübersicht und Abhängigkeiten
+    required: true
+    sources: [code, project]
+  # Ziel/Nachweis: Mindestens Normalablauf, Abbruch, Retry/Timeout, Konkurrenzfall und Fehlerszenario mit Sequenzdiagramm-Quelle.
+  - id: runtime-scenarios
+    title: Laufzeit- und Interaktionsszenarien
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Ein-/Ausgabeschemata, Typen, Wertebereiche, Zuständigkeit, Klassifikation und Datenlebenszyklus.
+  - id: data-catalog
+    title: Datenkatalog und Datenflüsse
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Fehlerbehandlung, Transaktionen, Versionierung, Logging, Monitoring, Konsistenz und Konfiguration.
+  - id: crosscutting-concepts
+    title: Übergreifende Konzepte
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Bedrohungen und Sicherheitsanforderungen mit CIA-Zielen, AuthN/AuthZ, Geheimnisverwaltung, Nachweisverweis; ISO 27001 allein ist kein Produktzertifikat.
+  - id: security-evidence
+    title: Informationssicherheit und Datenschutz
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Laufzeitknoten, Deployment, Skalierung, Backup, Restore, RPO/RTO, Observability und Ressourcen.
+  - id: deployment-operations
+    title: Verteilung, Betrieb und Wiederanlauf
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Szenariobasierte Architekturbewertung, Prototypen, Qualitätsnachweise, offene Befunde, Abhilfemaßnahmen.
+  - id: design-assurance
+    title: Designabsicherung und Architekturprüfung
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Bidirektionale Zuordnung REQ -> Architekturbaustein/ADR -> Prüfnachweis; zusätzlich docwizz trace nutzen.
+  - id: traceability
+    title: Anforderungs- und Architektur-Nachverfolgung
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Risikoeigner, Eintritt/Auswirkung, Gegenmaßnahmen, Reviewtermin und technische Schulden.
+  - id: risks-debt
+    title: Architekturrisiken und technische Schulden
+    required: false
+    sources: [project]
+  # Ziel/Nachweis: Dokumentierte Quellen, versionierte Schnittstellenverträge, Glossar und Namenskonventionen.
+  - id: references
+    title: Referenzen und Begriffe
+    required: false
     sources: [project]
 dependencies: []

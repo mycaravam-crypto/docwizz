@@ -1,25 +1,87 @@
-# Illustrative product structure, not an official V-Modell XT template.
-# A dependency is an example of a project-specific tailoring decision.
+# Verbesserte ORIGINAL-Vorlage fuer DocWizz (Schema 1), nicht amtlich.
+# Fachlich orientiert an V-Modell XT Bund Produktreferenz und arc42-Praxisbeispielen.
+# Tailoring, Produktversion und inhaltliche Freigabe projektspezifisch festlegen.
+# HINWEIS: Kommentare dienen als Ausfuellhilfe und erscheinen NICHT im Markdown-Produkt.
+# In DocWizz werden nur die IDs "structure" und "interfaces" aus Code vorbelegt.
 schema: 1
 product_id: system-element-test-specification
 xt_variant: V-Modell XT
 xt_version: "2.4"
 tailoring: project-specific
 sections:
-  - id: scope
-    title: Prüfgegenstand und Prüfziele
+  # Ziel/Nachweis: Prüfspezifikationsversion, verantwortlicher Prüfer, Baseline, Änderungen und Reviewverweise.
+  - id: document-control
+    title: Dokumentenlenkung und Prüfstand
     required: true
     sources: [project]
+  # Ziel/Nachweis: Element-ID, Release/Commit, Build und geprüfte Schnittstellen; testrelevante externe Abhängigkeiten.
+  - id: test-object
+    title: Prüfobjekt und eindeutige Konfiguration
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Freigegebene SW-Spezifikation, Prüfkonzept, Anforderungsstände, Scope und Ausschlüsse.
+  - id: test-basis
+    title: Prüfgrundlagen, Anforderungen und Geltungsbereich
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Risiko-/Anforderungsbezug, Black-/White-Box, Funktions-, Security-, Performance- und Zuverlässigkeitsprüfungen.
+  - id: test-strategy
+    title: Prüfstrategie, Teststufen und Methoden
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Schadensausmaß und Eintrittswahrscheinlichkeit, Priorisierung und Begründung ausgelassener Prüfungen.
+  - id: risk-priorities
+    title: Prüfprioritäten und risikobasierte Auswahl
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: TC-ID, Requirement-ID, Startzustand, Eingangsdaten, Aktionen, erwarteter Endzustand, Orakel und negatives Beispiel.
   - id: test-cases
-    title: Prüffälle mit Bezug auf Anforderungen
+    title: Prüffälle mit Schritten und erwarteten Ergebnissen
     required: true
     sources: [project]
+  # Ziel/Nachweis: Datensätze, Anonymisierung, Grenzwerte, Seed, Löschkonzept und deterministische Wiederholbarkeit.
+  - id: test-data
+    title: Prüfdaten, Testkonten und Datenbereinigung
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Hardware/OS/Container, Dienste, Versionen, Netz, Zugriffsrollen, Tools und externe Test-Doubles.
   - id: test-environment
-    title: Prüfumgebung und Voraussetzungen
+    title: Prüfumgebung, Voraussetzungen und Konfiguration
     required: true
     sources: [project]
+  # Ziel/Nachweis: Pass/Fail je Prüffall, Stop-Kriterien, Fehler-Schweregrade und Freigabeschwellen vorab.
   - id: acceptance
-    title: Erwartete Ergebnisse und Bewertungskriterien
+    title: Eintritts-, Abschluss- und Bewertungskriterien
     required: true
+    sources: [project]
+  # Ziel/Nachweis: Explizit REQ -> TC; Risikogewichtung, Branch-/Code-Coverage optional und fehlende Nachweise.
+  - id: coverage
+    title: Prüffallzuordnung und Abdeckungsmatrix
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Testdatenschutz, Credential-Handling, Isolierung, CIA-Nachweise und Schutzvorkehrungen für destruktive Tests.
+  - id: security-privacy
+    title: Schutzvorkehrungen und Informationssicherheit
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Defect-Triage, Schweregrad, Re-Test, Regression, Nachweislink; Protokoll ist separates Ergebnisprodukt.
+  - id: defect-handling
+    title: Abweichungen, Fehlerbehandlung und Wiederholung
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Test-Runner, Pipeline, Versionierung, Kennzeichnung flaky Tests, Artefaktaufbewahrung und Testprozedur.
+  - id: automation
+    title: Automatisierung und Reproduzierbarkeit
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Vollständigkeit, Widerspruchsfreiheit, Reviewrollen und Nachweis offener Risiken; keine automatische Freigabe.
+  - id: review-criteria
+    title: Prüfbarkeit und QS-Review der Spezifikation
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Verbindliche Spezifikationen, Ausführungsanleitungen und Prüfrichtlinien.
+  - id: references
+    title: Glossar und Referenzen
+    required: false
     sources: [project]
 dependencies: [sw-specification]

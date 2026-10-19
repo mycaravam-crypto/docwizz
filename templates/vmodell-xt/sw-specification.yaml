@@ -1,25 +1,97 @@
-# Illustrative product structure, not an official V-Modell XT template.
-# Review sections and dependencies against the project's tailored process.
+# Verbesserte ORIGINAL-Vorlage fuer DocWizz (Schema 1), nicht amtlich.
+# Fachlich orientiert an V-Modell XT Bund Produktreferenz und arc42-Praxisbeispielen.
+# Tailoring, Produktversion und inhaltliche Freigabe projektspezifisch festlegen.
+# HINWEIS: Kommentare dienen als Ausfuellhilfe und erscheinen NICHT im Markdown-Produkt.
+# In DocWizz werden nur die IDs "structure" und "interfaces" aus Code vorbelegt.
 schema: 1
 product_id: sw-specification
 xt_variant: V-Modell XT
 xt_version: "2.4"
 tailoring: project-specific
 sections:
+  # Ziel/Nachweis: SW-Element-ID, Ebene (Einheit/Komponente/Modul), Produktbaseline und Revisionshistorie.
+  - id: document-control
+    title: Dokumentenlenkung und Versionsbezug
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Zweck, Rolle im System, Besitzer und fachliche Grenzen des SW-Elements.
+  - id: element-overview
+    title: SW-Element-Überblick und Verantwortung
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Ausgangssystem, übergeordnete Spezifikation und ausgenommene Verhaltensweisen.
   - id: scope
-    title: Geltungsbereich und Anforderungen
+    title: Geltungsbereich, Annahmen und Kontext
     required: true
     sources: [project]
-  - id: functions
-    title: Funktionale Anforderungen und Verhalten
+  # Ziel/Nachweis: Anforderungs-IDs, Elternanforderung, Priorität, Quelle, Annahme und Zuordnungsregel.
+  - id: derived-requirements
+    title: Abgeleitete und zugeordnete Anforderungen
     required: true
     sources: [project]
+  # Ziel/Nachweis: Atomare prüfbare SHALL/MUSS-Aussagen, Vor-/Nachbedingungen, Varianten und Domänenregeln.
+  - id: functional-requirements
+    title: Funktionale Anforderungen und Geschäftsregeln
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Automatisch nur Abhängigkeitskanten, kein Vertrag; ergänze Operationen, Schemas, Protokolle, Version und Berechtigungen.
   - id: interfaces
-    title: Externe und interne Schnittstellen
+    title: Schnittstellenbeschreibung – statischer Vertrag
     required: true
-    sources: [project, code]
+    sources: [code, project]
+  # Ziel/Nachweis: Ablauf- und Zustandsübergänge, Nebenläufigkeit, Zeitüberschreitungen, Wiederholungen und Negativfälle.
+  - id: behaviour
+    title: Dynamisches Verhalten und Zustandsmodell
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Datentypen, Einheiten, Grenzen, Pflichtfelder, Identifikatoren, Datenqualität und Lebensdauer.
+  - id: data-contracts
+    title: Datenstrukturen, Invarianten und Validierung
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Messbare Ziele für Zuverlässigkeit, Performance, Wartbarkeit, Interaktionsfähigkeit, Sicherheit, Kompatibilität und ggf. Safety.
+  - id: nonfunctional-requirements
+    title: Qualitätsanforderungen nach ISO/IEC 25010
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: CIA-Schutzziele, Rollen/Rechte, Nachvollziehbarkeit, Datenminimierung, Bedrohung und verifizierbares Kriterium.
+  - id: security-privacy
+    title: Sicherheits-, Datenschutz- und Schutzbedarfsanforderungen
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Verfeinerung der Schnittstellenfunktionen auf untergeordnete SW-Elemente, nicht mit Architekturdiagramm verwechseln.
+  - id: interface-realization
+    title: Schnittstellenrealisierung und Zuordnung
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Budgets und Qualitätsziele auf Komponenten verteilen, inklusive Kombinations- und Messregel.
+  - id: quality-refinement
+    title: Verfeinerung nichtfunktionaler Anforderungen
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Fehlercodes, Kompensation, Rollback, Resilienzregeln, Rate Limits und Nutzerkommunikation.
+  - id: error-semantics
+    title: Fehlerfälle, Ausnahme- und Wiederanlaufverhalten
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Testbare Kriterien je Anforderung samt Testniveau, Messverfahren, Toleranzen und Sollwert.
+  - id: acceptance-criteria
+    title: Verifikations- und Abnahmekriterien
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: REQ nach übergeordnet/unten, SW-Element/Architektur und Test-IDs; docwizz trace zeigt deklarierte Lücken.
+  - id: traceability
+    title: Bidirektionale Anforderungsverfolgung
+    required: true
+    sources: [project]
+  # Ziel/Nachweis: Freigegebene Plattformen, IT-Sicherheitskonzept, Lifecycle, Technologieauflagen und Betriebsrestriktionen.
   - id: constraints
-    title: Qualitätsanforderungen und Randbedingungen
+    title: Normen, regulatorische und technische Randbedingungen
     required: true
+    sources: [project]
+  # Ziel/Nachweis: Einheitliche Domainbegriffe, Dokumentreferenzen und externe Standards mit Versionsbezug.
+  - id: glossary
+    title: Glossar und Referenzen
+    required: false
     sources: [project]
 dependencies: []
