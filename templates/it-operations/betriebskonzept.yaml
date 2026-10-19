@@ -51,7 +51,7 @@ sections:
     title: Betriebsrollen und Verantwortlichkeiten
     required: true
     sources: [project]
-  - id: service_targets
+  - id: service-targets
     title: Servicezeiten, Verfuegbarkeit und RTO/RPO
     required: true
     sources: [project]
