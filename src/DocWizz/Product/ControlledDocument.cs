@@ -73,7 +73,9 @@ internal sealed record ControlledDocument(
             approvals.Add(new(kind, Field(row, "role", key), Field(row, "person", key),
                 Date(Field(row, "date", key), key), evidence));
         }
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
+        // The evidence fingerprint represents YAML content, not the host platform's line ending convention.
+        var normalized = content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized))).ToLowerInvariant();
         return new(id, Field(root, "title", "control"), version,
             Field(root, "author", "control"), Field(root, "owner", "control"),
             Date(Field(root, "created", "control"), "created"),
