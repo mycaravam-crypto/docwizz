@@ -722,7 +722,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `--control <file.yaml>` | off | product | adds declarative cover, revision history, review references and clickable contents; not an approval process | normal |
 | `--approval <signed.json>` | off | product | independently signed quality/security publication approvals; only publish |
 | `--trust <policy.json>` | off | product | reviewed public-key trust policy; only publish |
-| `--draft <existing.md>` | off | product publish only | repository-confined DocWizz-generated draft to publish (otherwise `docs/products/<id>.md`) |
+| `--draft <existing.md>` | off | product | repository-confined DocWizz-generated draft to publish (otherwise `docs/products/<id>.md`); only valid for `product publish` |
 | `--context <file.yaml>` | off | product | validates sourced project statements against the template before writing | product documents |
 | `--force` | off | setup | replaces an existing `docwizz.yaml`; any other command rejects it | setup only |
 | `--select-projects` | off | setup | terminal-only project selection after discovery; on an existing config replaces only `scope:` | setup only |
