@@ -120,7 +120,7 @@ static async Task<int> Dispatch(string[] args)
             var edmx = EdmxParser.Parse(path, edmxFile);
             if (opts.ContainsKey("links"))
             {
-                var selectedFiles = RepoFiles(path, config);
+                List<string> selectedFiles = RepoFiles(path, config);
                 if (config.Scope is not null && !selectedFiles.Any(f =>
                     string.Equals(Path.GetFullPath(f), Path.GetFullPath(edmxFile, Path.GetFullPath(path)),
                         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)))
