@@ -172,4 +172,45 @@ public class ProductJourneyTests
         Assert.Equal(1, exit);
         Assert.Contains("drop --ai", Docwizz.Run("product", "check", repo.Root, Path.Combine(repo.Root, "template.yaml"), "--ai").Err);
     }
+    [Fact]
+    public void Controlled_product_generates_cover_and_check_detects_metadata_drift()
+    {
+        const string metadata = """
+            schema: 1
+            document_id: SWA-001
+            title: Softwarearchitektur
+            version: "0.1"
+            author: Architekt
+            owner: Projektleitung
+            created: 2026-10-19
+            classification: Intern
+            distribution: Team
+            retention: QM-Verfahrensanweisung
+            changes:
+              - version: "0.1"
+                date: 2026-10-19
+                author: Architekt
+                description: Entwurf
+            approvals: []
+            """;
+        using var repo = new Sources(("template.yaml", Template), ("document-control.yaml", metadata), ("Example.cs", "public class Example {}"));
+        var template = Path.Join(repo.Root, "template.yaml");
+        var file = Path.Join(repo.Root, "document-control.yaml");
+        var made = Docwizz.Run("product", repo.Root, template, "--control", file);
+        Assert.Equal(0, made.Exit);
+        var doc = File.ReadAllText(Path.Join(repo.Root, "docs", "products", "sw-architecture.md"));
+        Assert.Contains("## Inhaltsverzeichnis", doc);
+        Assert.Contains("## Deckblatt", doc);
+        Assert.Contains("## Dokumentenlenkung", doc);
+        Assert.Equal(0, Docwizz.Run("product", "check", repo.Root, template, "--control", file).Exit);
+        var withoutControl = Docwizz.Run("product", "check", repo.Root, template);
+        Assert.Equal(1, withoutControl.Exit);
+        Assert.Contains("DOC-004", withoutControl.Out);
+
+        File.WriteAllText(file, metadata.Replace("Entwurf", "Angepasster Entwurf"));
+        var stale = Docwizz.Run("product", "check", repo.Root, template, "--control", file);
+        Assert.Equal(1, stale.Exit);
+        Assert.Contains("DOC-001", stale.Out);
+    }
+
 }

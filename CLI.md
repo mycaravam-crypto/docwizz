@@ -541,9 +541,11 @@ current.
 
 ### Product drafts
 
+Optional ISO-oriented document control: [cover, clickable contents and document history](docs/document-control.md), activated with `--control document-control.yaml` for `product` and `product check`.
+
 ```bash
-docwizz product . templates/vmodell-xt/sw-architecture.yaml [out.md] [--context project.yaml] [--ai]
-docwizz product check . templates/vmodell-xt/sw-architecture.yaml --context project.yaml [--format json]
+docwizz product . templates/vmodell-xt/sw-architecture.yaml [out.md] [--context project.yaml] [--control document-control.yaml] [--ai]
+docwizz product check . templates/vmodell-xt/sw-architecture.yaml --context project.yaml [--control document-control.yaml] [--format json]
 ```
 
 Renders a work product from a template, filled from the code model; anything without evidence stays `OFFEN`. Output
@@ -681,7 +683,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `tests` | `docwizz tests import <dir> <snapshot.json>` | validate and store offline ADO test traceability | product documents |
 | `load` | `docwizz load import <dir> <report.json>...` | store powerwizz reports; `generate` adds measured numbers per endpoint to `api.md` | performance |
 | `requirements` | `docwizz requirements import <dir> <history.json> [<work-items>] [--progress]`, `docwizz requirements show <dir> (--for <symbol> \| --work-item <id>) [--format json]`, `docwizz requirements query <dir> <query.json>` | index exported history; one symbol's requirements, or one work item's symbols; gitwizz's requirement query | coding agents, reviews |
-| `product` | `docwizz product [check] <dir> <template.yaml> [out.md] [--context file.yaml] [--ai] [--format f]` | product draft from evidence; `check`: references and freshness | architects |
+| `product` | `docwizz product [check] <dir> <template.yaml> [out.md] [--context file.yaml] [--control document-control.yaml] [--ai] [--format f]` | product draft from evidence; `check`: references and freshness | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
 | `init` | `docwizz init [dir]` | write a `docwizz.yaml` with every default; refuses to overwrite | manual setup |
@@ -702,6 +704,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `--screenshots --base-url <url>` | off | generate | captures detected static routes from a running frontend; anonymous isolated contexts by default; HTTP errors and redirects are skipped | opt-in |
 | `--storage-state <file>` | off | generate | with `--screenshots`, starts each route's context from a saved Playwright login state; path relative to the scanned directory; keep it out of Git | opt-in |
 | `--screenshot-delay <ms>` | 0 | generate | with `--screenshots`, extra wait (0 to 60000 ms) after the page settles, for slow pages | opt-in |
+| `--control <file.yaml>` | off | product | adds declarative cover, revision history, review references and clickable contents; not an approval process | normal |
 | `--ai` | off | generate, product, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it; does not enable ratings | opt-in |
 | `--ai-ratings` | off | generate, setup | independently rates written docs; cached ratings are used without it; combine with `--ai` for drafts too | opt-in |
 | `--since <ref>` | — | check, remediate | check: only problems introduced since `<ref>` fail; remediate: says whether each update touches only what changed since `<ref>` | CI |

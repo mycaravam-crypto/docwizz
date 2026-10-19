@@ -141,7 +141,7 @@ static async Task<int> Dispatch(string[] args)
         case "trace":
             return TraceCommand(path, pos.ElementAtOrDefault(2), json);
         case "product":
-            return await ProductCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), opts.GetValueOrDefault("context"), config, opts.ContainsKey("ai"), productCheck, json);
+            return await ProductCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), opts.GetValueOrDefault("context"), config, opts.GetValueOrDefault("control"), opts.ContainsKey("ai"), productCheck, json);
         case "sbom":
             return SbomCommand(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "sbom.cdx.json"), config);
         case "scan":
@@ -630,7 +630,7 @@ static CodeModel ProductModel(string root, Config config, ProductTemplate templa
 
 // Product draft from evidence; with --ai, a local model words each section from it (validated, cached). Manual files are
 // never overwritten.
-static async Task<int> ProductCommand(string root, string? templateName, string? outName, string? contextName, Config config, bool ai = false, bool check = false, bool json = false)
+static async Task<int> ProductCommand(string root, string? templateName, string? outName, string? contextName, Config config, string? controlName = null, bool ai = false, bool check = false, bool json = false)
 {
     if (string.IsNullOrWhiteSpace(templateName))
         return Usage("product needs a template YAML path", "product");
@@ -647,13 +647,21 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
         catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
         catch (IOException e) { Console.Error.WriteLine($"{contextPath}: {e.Message}"); return 1; }
     }
+    ControlledDocument? control = null;
+    if (controlName is not null)
+    {
+        var controlPath = File.Exists(controlName) ? controlName : Path.Join(root, controlName);
+        try { control = ControlledDocument.Load(controlPath); }
+        catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
+        catch (IOException e) { Console.Error.WriteLine($"{controlPath}: {e.Message}"); return 1; }
+    }
     var output = outName is null ? Path.Combine(root, "docs", "products", template.ProductId + ".md")
         : outName;
     var full = Path.GetFullPath(output);
     if (check)
     {
         if (ai) return Usage("product check makes no AI calls; drop --ai", "product");
-        var findings = ProductCheck.Run(root, template, ProductModel(root, config, template), project, full);
+        var findings = ProductCheck.Run(root, template, ProductModel(root, config, template), project, full, control);
         var errors = findings.Count(f => f.Severity == "error");
         if (json) Console.WriteLine(JsonSerializer.Serialize(new { product = template.ProductId, pass = errors == 0, findings,
             note = "references and freshness only; content, decisions and approval need human review" }, JsonOptions()));
@@ -679,10 +687,12 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
             Path.Combine(root, "docs", ".docwizz", "product-ai-cache.json"));
         if (synthesis.Count == 0) synthesis = null;   // nothing worded: the deterministic draft, without ids or an AI note
     }
-    var text = (marker + "\n" + ProductDraft.Render(template, model, project, synthesis)).Replace("\r\n", "\n");
+    var plainDraft = ProductDraft.Render(template, model, project, synthesis, controlled: control is not null);
+    var text = (marker + "\n" + (control is null ? plainDraft : control.Render(template, plainDraft))).Replace("\r\n", "\n");
     // The evidence and gap report sits next to the draft (<id>.evidence.json) and is protected the same way.
     var report = Path.ChangeExtension(full, ".evidence.json");
     var evidence = ProductDraft.Report(template, model, project, synthesis);
+    if (control is not null) evidence = control.AddToReport(evidence);
     if (File.Exists(report) && !File.ReadAllText(report).Contains("\"generator\": \"docwizz product\""))
     {
         Console.Error.WriteLine($"{report} exists and is not docwizz-generated; refusing to overwrite");
@@ -835,6 +845,7 @@ static string Reference() => $"""
         [--work-item <id>] [--format json]  one work item's symbols (123 or github#123); machine-readable
       docwizz product <dir> <template.yaml> [out.md]  product draft from code and project evidence
         [--context <file.yaml>]         load sourced project facts
+        [--control <file.yaml>]         cover, revision metadata, review evidence and linked contents
         [--ai]                          a self-hosted model words sections, citing evidence ids
       docwizz product check <dir> <template.yaml> [draft.md]  references and freshness of a draft; exit 1 on errors
 
