@@ -15,6 +15,7 @@ internal sealed record ControlledDocument(
     string Classification, string Distribution, string Retention,
     IReadOnlyList<DocumentChange> Changes, IReadOnlyList<DocumentApproval> Approvals, string Hash)
 {
+    internal const string DocumentControlHeading = "Dokumentenlenkung";
     const int MaxMetadataFieldLength = 500; // bounded Markdown cover/table metadata, not full document prose
     static readonly HashSet<string> RootKeys =
         ["schema", "document_id", "title", "version", "author", "owner", "created",
@@ -153,7 +154,7 @@ internal sealed record ControlledDocument(
             ("Erstellungsdatum", Created), ("Klassifizierung (Deklaration)", Classification) })
             sb.AppendLine($"| {name} | {Esc(value)} |");
         sb.AppendLine();
-        sb.AppendLine("## Dokumentenlenkung");
+        sb.AppendLine("## " + DocumentControlHeading);
         sb.AppendLine();
         sb.AppendLine("### Änderungsstand");
         sb.AppendLine();

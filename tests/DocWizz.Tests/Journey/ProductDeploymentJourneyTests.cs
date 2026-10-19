@@ -16,6 +16,14 @@ public class ProductDeploymentJourneyTests
             (".github/workflows/deploy.yml", "name: internal-deploy\n"),
             ("appsettings.json", "{\"Key\":\"HIDDEN-VALUE\"}"));
 
+        // The publication contract requires the template to be inside the documented repository.
+        // Keep it out of the scanned code/deployment inventory to preserve the original test fixture.
+        var templateDir = Path.Join(repo.Root, ".docwizz-fixture");
+        Directory.CreateDirectory(templateDir);
+        var localTemplate = Path.Join(templateDir, "product.yaml");
+        File.Copy(template, localTemplate);
+        template = localTemplate;
+
         var first = Docwizz.Run("product", repo.Root, template);
         Assert.Equal(0, first.Exit);
         var markdownPath = Path.Join(repo.Root, "docs", "products", "it-betriebskonzept.md");

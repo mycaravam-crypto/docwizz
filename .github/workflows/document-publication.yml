@@ -1,0 +1,78 @@
+name: controlled-document-publication
+on:
+  workflow_dispatch:
+    inputs:
+      template:
+        description: Versioned product template path
+        required: true
+        type: string
+      control:
+        description: Versioned document-control YAML path
+        required: true
+        type: string
+      context:
+        description: Versioned project context YAML path
+        required: true
+        type: string
+      approval:
+        description: Signed approval JSON from protected main
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: document-release # must be configured with independent required reviewers
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Fail closed without protected environment and private storage
+        env:
+          GH_TOKEN: ${{ secrets.DOCWIZZ_RELEASE_AUDIT_TOKEN }}
+        run: |
+          set -euo pipefail
+          : "${GH_TOKEN:?environment secret DOCWIZZ_RELEASE_AUDIT_TOKEN (Administration: read) is required}"
+          test "${{ github.event.repository.visibility }}" = private
+          gh api "repos/$GITHUB_REPOSITORY/environments/document-release" > "$RUNNER_TEMP/release-environment.json"
+          jq -e '[.protection_rules[]? | select(.type == "required_reviewers")] | length >= 1' "$RUNNER_TEMP/release-environment.json"
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with: { dotnet-version: 10.0.x }
+      - name: Install document renderers
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends pandoc libreoffice-writer
+      - name: Build
+        run: dotnet build src/DocWizz/DocWizz.csproj -c Release --nologo -v q
+      - name: Validate evidence and produce signed publication
+        env:
+          TEMPLATE: ${{ inputs.template }}
+          CONTROL: ${{ inputs.control }}
+          CONTEXT: ${{ inputs.context }}
+          APPROVAL: ${{ inputs.approval }}
+        run: |
+          set -euo pipefail
+          for path in "$TEMPLATE" "$CONTROL" "$CONTEXT" "$APPROVAL"; do
+            [[ "$path" != /* && "$path" != *..* && -f "$path" ]] || exit 1
+            git ls-files --error-unmatch -- "$path" >/dev/null
+            resolved="$(realpath -e -- "$path")"
+            [[ "$resolved" == "$GITHUB_WORKSPACE/"* ]] || exit 1
+          done
+          test -f .github/document-release-policy.json
+          git ls-files --error-unmatch -- .github/document-release-policy.json >/dev/null
+          test ! -L .github/document-release-policy.json
+          dll="$PWD/src/DocWizz/bin/Release/net10.0/DocWizz.dll"
+          dotnet "$dll" product check . "$TEMPLATE" --context "$CONTEXT" --control "$CONTROL"
+          dotnet "$dll" product publish . "$TEMPLATE" "$GITHUB_WORKSPACE/docs/.docwizz-release-output" \
+            --context "$CONTEXT" --control "$CONTROL" \
+            --approval "$APPROVAL" --trust .github/document-release-policy.json
+      - name: Store release artifact (private repository only)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: signed-document-publication
+          path: ${{ github.workspace }}/docs/.docwizz-release-output/
+          retention-days: 7
+          if-no-files-found: error

@@ -35,7 +35,8 @@ static async Task<int> Dispatch(string[] args)
     if (cmd == "diff" && pos.Count >= 2 && !Directory.Exists(pos[1])) pos.Insert(1, ".");
     // `docwizz product check <dir> <template.yaml>`: the subcommand comes before the directory (a folder named check: ./check).
     var productCheck = cmd == "product" && pos.ElementAtOrDefault(1) == "check";
-    if (productCheck) pos.RemoveAt(1);
+    var productPublish = cmd == "product" && pos.ElementAtOrDefault(1) == "publish";
+    if (productCheck || productPublish) pos.RemoveAt(1);
     // `docwizz requirements import|show|query <dir> ...`: the same, the subcommand first.
     string? requirementsAction = null;
     if (cmd == "requirements")
@@ -141,7 +142,8 @@ static async Task<int> Dispatch(string[] args)
         case "trace":
             return TraceCommand(path, pos.ElementAtOrDefault(2), json);
         case "product":
-            return await ProductCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), opts.GetValueOrDefault("context"), config, opts.GetValueOrDefault("control"), opts.ContainsKey("ai"), productCheck, json);
+            return await ProductCommand(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), opts.GetValueOrDefault("context"), config, opts.GetValueOrDefault("control"), opts.ContainsKey("ai"), productCheck, json,
+                productPublish, opts.GetValueOrDefault("approval"), opts.GetValueOrDefault("trust"), opts.GetValueOrDefault("draft"));
         case "sbom":
             return SbomCommand(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "sbom.cdx.json"), config);
         case "scan":
@@ -628,32 +630,96 @@ static CodeModel ProductModel(string root, Config config, ProductTemplate templa
         : model;
 }
 
+// Publish mode resolves repository-relative inputs without probing external locations first.
+// Draft/check retain their established cwd-first behavior for shared templates and context.
+static string ProductInput(string root, string name, bool publish)
+{
+    if (publish)
+        return ProductPublication.ConfinedPath(root,
+            Path.IsPathRooted(name) ? name : Path.Join(root, name));
+    return File.Exists(name) ? name : Path.Join(root, name);
+}
+
 // Product draft from evidence; with --ai, a local model words each section from it (validated, cached). Manual files are
 // never overwritten.
-static async Task<int> ProductCommand(string root, string? templateName, string? outName, string? contextName, Config config, string? controlName = null, bool ai = false, bool check = false, bool json = false)
+static async Task<int> ProductCommand(string root, string? templateName, string? outName, string? contextName, Config config, string? controlName = null, bool ai = false, bool check = false, bool json = false,
+    bool publish = false, string? approvalName = null, string? trustName = null, string? draftName = null)
 {
     if (string.IsNullOrWhiteSpace(templateName))
         return Usage("product needs a template YAML path", "product");
-    var templatePath = File.Exists(templateName) ? templateName : Path.Combine(root, templateName);
+    if (!publish && draftName is not null)
+        return Usage("--draft applies only to product publish", "product");
+    var templatePath = templateName;
     ProductTemplate template;
-    try { template = ProductTemplate.Load(templatePath); }
+    // Only signed publication imposes repository confinement. Drafts/checks have always accepted
+    // shared templates from another DocWizz checkout; retain that supported CLI contract.
+    try { template = ProductTemplate.Load(ProductInput(root, templatePath, publish)); }
     catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
     catch (IOException e) { Console.Error.WriteLine($"{templatePath}: {e.Message}"); return 1; }
     ProjectContext? project = null;
     if (contextName is not null)
     {
-        var contextPath = File.Exists(contextName) ? contextName : Path.Combine(root, contextName);
-        try { project = ProjectContext.Load(contextPath); project.Validate(template); }
+        var contextPath = contextName;
+        try
+        {
+            contextPath = ProductInput(root, contextPath, publish);
+            project = ProjectContext.Load(contextPath); project.Validate(template);
+        }
         catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
         catch (IOException e) { Console.Error.WriteLine($"{contextPath}: {e.Message}"); return 1; }
     }
     ControlledDocument? control = null;
     if (controlName is not null)
     {
-        var controlPath = File.Exists(controlName) ? controlName : Path.Join(root, controlName);
-        try { control = ControlledDocument.Load(controlPath); }
+        var controlPath = controlName;
+        try
+        {
+            controlPath = ProductInput(root, controlPath, publish);
+            control = ControlledDocument.Load(controlPath);
+        }
         catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
         catch (IOException e) { Console.Error.WriteLine($"{controlPath}: {e.Message}"); return 1; }
+    }
+    if (publish)
+    {
+        if (ai || json) return Usage("product publish does not allow --ai or --format", "product");
+        if (control is null || string.IsNullOrWhiteSpace(approvalName) || string.IsNullOrWhiteSpace(trustName))
+            return Usage("product publish requires --control, --approval and --trust", "product");
+        // Validates filename safety before control.Version is interpolated into the release directory.
+        try { ProductPublication.ValidateReleaseVersion(control.Version); }
+        catch (ArgumentException e) { Console.Error.WriteLine("Publication blocked: " + e.Message); return 1; }
+        // Existing default remains supported; --draft selects a repository-confined custom generated draft.
+        var original = ProductPublication.ConfinedPath(root, draftName is null
+            ? Path.Join(root, "docs", "products", template.ProductId + ".md") : draftName);
+        var releaseEvidencePath = Path.ChangeExtension(original, ".evidence.json");
+        try
+        {
+            // A missing draft is a regular fail-closed finding (PROD-004), not an unhandled CLI failure.
+            var findings = ProductCheck.Run(root, template, ProductModel(root, config, template), project, original, control);
+            var hasBlockingFinding = findings.Any(f => f.Severity == "error" || f.Rule is "PROD-001" or "DOC-003");
+            var hasRecordedReview = control.Approvals.Any(a => a.Kind == "review");
+            var hasRecordedApproval = control.Approvals.Any(a => a.Kind == "approval");
+            if (hasBlockingFinding || !hasRecordedReview || !hasRecordedApproval)
+            {
+                ProductCheck.Report(template, findings, Console.Error);
+                Console.Error.WriteLine("Publication blocked: every required section, review and approval must have recorded evidence.");
+                return 1;
+            }
+            var trust = ProductPublication.ConfinedPath(root, trustName);
+            var signed = ProductPublication.ConfinedPath(root, approvalName);
+            var published = ProductPublication.ConfinedPath(root, outName is null
+                ? Path.Join(root, "docs", "published", control.Id + "-" + control.Version)
+                : outName);
+            await ProductPublication.PublishAsync(root, template, control, original, releaseEvidencePath, trust, signed, published);
+            Console.WriteLine("→ " + Path.GetRelativePath(root, published));
+            return 0;
+        }
+        catch (Exception e) when (e is ArgumentException or IOException or JsonException or
+            System.Security.Cryptography.CryptographicException or UnauthorizedAccessException or InvalidOperationException or FormatException)
+        {
+            Console.Error.WriteLine("Publication blocked: " + e.Message);
+            return 1;
+        }
     }
     var output = outName is null ? Path.Combine(root, "docs", "products", template.ProductId + ".md")
         : outName;
@@ -848,6 +914,9 @@ static string Reference() => $"""
         [--control <file.yaml>]         cover, revision metadata, review evidence and linked contents
         [--ai]                          a self-hosted model words sections, citing evidence ids
       docwizz product check <dir> <template.yaml> [draft.md]  references and freshness of a draft; exit 1 on errors
+      docwizz product publish <dir> <template.yaml> [out-dir]  signed DOCX/PDF publication
+        [--control <file.yaml>] [--approval <signed.json>] [--trust <policy.json>]  required for publish
+        [--draft <existing.md>]        optional generated Markdown draft (inside repository)
 
     options:
       --profile <name|file.yaml>        setup/generate/check/analyze/architecture/diff: documentation profile,

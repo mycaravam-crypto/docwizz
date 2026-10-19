@@ -8,6 +8,7 @@
 - [Architecture](architecture.md) — components, data model, scanners, generators, tests
 - [IT operations concept](IT_OPERATIONS.md) — source-based draft and limits
 - [V-Modell XT templates](vmodell-xt-templates.md) — example product structures and review aids
+- [Controlled publication](document-publication.md) — signed DOCX/PDF release with independent approval gate
 - [Screenshots](PLAYWRIGHT_SCREENSHOTS.md) — capture and troubleshooting
 
 ## Architecture, evidence and analysis

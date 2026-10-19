@@ -14,6 +14,7 @@ static class Cli
     public static readonly Dictionary<string, string> Valued = new()
     {
         ["format"] = "console or json", ["profile"] = $"a profile ({string.Join(", ", Profiles.Names)}) or a .yaml file",
+        ["approval"] = "signed approval JSON", ["trust"] = "reviewed publication key policy JSON", ["draft"] = "existing generated Markdown draft (publish only)",
         ["context"] = "a project context YAML file", ["control"] = "a document-control YAML file", ["since"] = "a git ref, e.g. origin/main", ["package"] = "a package name", ["to"] = "a version",
         ["for"] = "a symbol, file, folder or endpoint (\"POST /api/orders\")", ["hops"] = $"a number of hops, 1 to {AgentContext.MaxHops}",
         ["budget"] = "a number of tokens", ["work-item"] = "a work item id, e.g. 1234 or github#1234",
@@ -58,8 +59,8 @@ static class Cli
             "docwizz trace . project-evidence.yaml --format json", "--format json", ["format"]),
         ["evidence-diff"] = new("evidence-diff <dir> <before.yaml> <after.yaml>", "changed evidence, explicit relations and affected tests", "product documents",
             "docwizz evidence-diff . before.yaml after.yaml --format json", "--format json", ["format"]),
-        ["product"] = new("product [check] <dir> <template.yaml> [out.md]", "render a product draft from code and project evidence (--ai: local model wording, cited); check: references and freshness", "product documents",
-            "docwizz product . templates/vmodell-xt/sw-architecture.yaml --context project.yaml", "--context <file.yaml>, --control <document-control.yaml> (cover, ToC, revision metadata), --ai (self-hosted model words each section from its evidence), --format json (product check)", ["context", "control", "ai", "format"]),
+        ["product"] = new("product [check|publish] <dir> <template.yaml> [out.md|out-dir]", "render a product draft from code and project evidence (--ai: local model wording, cited); check: references and freshness", "product documents",
+            "docwizz product . templates/vmodell-xt/sw-architecture.yaml --context project.yaml", "--context <file.yaml>, --control <document-control.yaml> (cover, ToC, revision metadata), --approval <signed.json> --trust <policy.json> [--draft <existing.md>] (publish only), --ai (self-hosted model words each section from its evidence), --format json (product check)", ["context", "control", "approval", "trust", "draft", "ai", "format"]),
         ["requirements"] = new("requirements import|show|query <dir> ...", "index exported commit/PR/work-item history (import), then the requirements of one symbol (show) or of a PR's changed symbols for gitwizz (query)", "coding agents, reviews",
             "docwizz requirements show . --for MaterialService.CreateAsync --format json", "import <dir> <history.json> [<work-items dir|file>] [--progress]; show <dir> --for <symbol> | --work-item <id>, --format json; query <dir> <query.json> (gitwizz.requirement-query/v1 → gitwizz.requirement-input/v1)",
             ["for", "work-item", "format", "progress"]),

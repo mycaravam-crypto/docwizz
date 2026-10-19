@@ -9,8 +9,8 @@ Kopiere [document-control.example.yaml](../templates/vmodell-xt/document-control
 Das Dateiformat bleibt separat vom bestehenden Produkttemplate-\`schema: 1\`. Die zusätzliche CLI-Option ist optional; frühere Produktentwürfe bleiben ohne sie unverändert.
 
 \`\`\`bash
-docwizz product . /path/to/docwizz/templates/vmodell-xt/sw-architecture.yaml --control document-control.yaml --context project-architecture.yaml
-docwizz product check . /path/to/docwizz/templates/vmodell-xt/sw-architecture.yaml --control document-control.yaml --context project-architecture.yaml
+docwizz product . templates/vmodell-xt/sw-architecture.yaml --control document-control.yaml --context project-architecture.yaml
+docwizz product check . templates/vmodell-xt/sw-architecture.yaml --control document-control.yaml --context project-architecture.yaml
 \`\`\`
 
 \`product\` schreibt weiter \`docs/products/sw-architecture.md\` und \`sw-architecture.evidence.json\`. Im gelenkten Modus enthält der Entwurf ein Deckblatt mit Identität, Autor, Rolle, Datum, Schutzklassifizierung und Status, die Revisionshistorie, externe Prüf-/Freigabereferenzen, Verteil- und Aufbewahrungsvorgaben sowie ein anklickbares Inhaltsverzeichnis. Ein expliziter Kapitelanker wird je Produkttemplate-Abschnitt erzeugt.
@@ -53,3 +53,5 @@ Die Ausgabestruktur **unterstützt** ISO 9001:2015 (inklusive Amd 1:2024) sowie 
 Das Markdown-Verzeichnis enthält anklickbare Kapitel, **kein** Word-Feld für ein paginiertes Inhaltsverzeichnis. DOCX-/PDF-Veröffentlichung mit Seitenzahlen, Seitengestaltung und signierbaren Freigaben ist eine eigenständige Folgestufe.
 
 Quellen: [ISO 9001](https://www.dinmedia.de/de/norm/din-en-iso-9001/235671251), [ISO/IEC 27001](https://committee.iso.org/cms/live/live/en/sites/isoorg/contents/data/standard/08/84/88435.html?browse=tc), [DocWizz Product drafts](cli.md#product-drafts).
+
+Vorher die YAML-Produktvorlage in das Projekt kopieren und versionieren: alle Template-, Kontext- und Dokumentenlenkungsdateien müssen im Projektverzeichnis liegen. Externe absolute Pfade werden für diese drei Eingaben abgelehnt.

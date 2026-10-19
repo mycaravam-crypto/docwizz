@@ -347,7 +347,7 @@ For projects that keep requirements as YAML evidence:
 
 See [project evidence](docs/project-evidence.md) and [CLI.md](docs/cli.md#product-drafts).
 
-For ISO-oriented document control (cover, contents, revisions and declared review evidence), see [document control](docs/document-control.md).
+For ISO-oriented document control (cover, contents, revisions and declared review evidence), see [document control](docs/document-control.md). Signed DOCX/PDF release gates are explained in [publication guide](docs/document-publication.md).
 [Browse the documentation](docs/README.md) for CLI, architecture, guides and acceptance records.
 
 For expanded V-Modell XT example product structures (SW architecture, SW specification and system-element test specification), see [the template guide](docs/vmodell-xt-templates.md) and its section-level review aids.
