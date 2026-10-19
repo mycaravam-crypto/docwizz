@@ -553,7 +553,7 @@ official templates or a conformity claim.
 
 For an IT operations concept, use `templates/it-operations/betriebskonzept.yaml` (generic
 `document_type: it-operations`, without `xt_variant`/`xt_version`/`tailoring`). This is a
-source-backed **draft**, not evidence of operational readiness. See
+source-backed **draft**, not evidence of operational readiness. Recognised deployment/CI descriptor files are inventoried by source path only; deployment procedures stay `OFFEN` until independently evidenced. See
 [IT operating concept](docs/IT_OPERATIONS.md) for generated sections and explicit limits.
 
 
