@@ -140,7 +140,7 @@ public class ControlledDocumentTests
     [Fact]
     public void Missing_required_changes_are_reported_explicitly()
     {
-        const string changeBlock = "changes:\\n  - version: \\"0.1\\"\\n    date: 2026-10-19\\n    author: Architekturteam\\n    description: Erstentwurf";
+        const string changeBlock = "changes:\n  - version: \"0.1\"\n    date: 2026-10-19\n    author: Architekturteam\n    description: Erstentwurf";
         var withoutChanges = Metadata.Replace(changeBlock, "");
         var error = Assert.Throws<ArgumentException>(() => ControlledDocument.Parse(withoutChanges));
         Assert.Contains("changes must be a list", error.Message);
