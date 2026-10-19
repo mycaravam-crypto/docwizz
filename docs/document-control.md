@@ -26,6 +26,12 @@ Die \`--control\`-Datei verwendet folgendes **Schema 1**:
 | \`changes\` | mindestens ein Änderungsdatensatz zur aktuellen Revision (\`version\`, \`date\`, \`author\`, \`description\`) |
 | \`approvals\` | optionale deklarierte externe Nachweise mit \`kind: review|approval\`, \`role\`, \`person\`, \`date\`, \`evidence: docs/*.md\` |
 
+Die Angaben `schema: 1` und `schema: "1"` werden gleichermaßen akzeptiert. Für
+Deckblatt und Revisionstabellen gelten kurze einzeilige Metadatenfelder (maximal
+500 Zeichen je Wert): Zeilenumbrüche oder umfangreiche Freitexte würden das
+Markdown-Tabellenlayout beschädigen. Ausführliche Verteilungs-/Aufbewahrungsregeln
+und Prüfergebnisse gehören in versionierte, zugriffsgeschützte Belegdokumente
+statt in Metadatenwerte. DocWizz authentifiziert diese Belege nicht.
 Datumsfelder müssen \`yyyy-MM-dd\` verwenden. Unbekannte Schlüssel und unsichere Nachweispfade werden abgelehnt. \`product check\` prüft bei aktivierter Lenkung zusätzlich:
 
 - **DOC-001 (error):** Kontrollmetadaten fehlen im Nachweisbericht oder haben sich seit der Generierung geändert (SHA-256).
