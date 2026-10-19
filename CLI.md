@@ -551,6 +551,12 @@ defaults to `docs/products/<product_id>.md`. Paths resolve from the current dire
 output isn't rewritten, and hand-maintained output is never replaced. The V-Modell XT templates are illustrative, not
 official templates or a conformity claim.
 
+For an IT operations concept, use `templates/it-operations/betriebskonzept.yaml` (generic
+`document_type: it-operations`, without `xt_variant`/`xt_version`/`tailoring`). This is a
+source-backed **draft**, not evidence of operational readiness. See
+[IT operating concept](docs/IT_OPERATIONS.md) for generated sections and explicit limits.
+
+
 - **`--context project.yaml`** adds sourced project statements. Statements that don't fit a section exit 1; nothing is
   silently dropped.
 - **`--ai`** has a self-hosted model (the `ai:` provider) word each section that has evidence. Each piece of evidence
