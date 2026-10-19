@@ -21,6 +21,9 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v6.0.0
         with: {python-version: '3.12'}
       - run: pip install python-docx==1.2.0
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libreoffice-writer
       - run: python -m unittest discover -s tools/tests -p test_publish_product.py -v
   approved-publication:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
