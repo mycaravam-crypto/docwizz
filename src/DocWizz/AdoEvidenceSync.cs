@@ -52,7 +52,8 @@ static class AdoEvidenceSync
 
     static JsonElement Read(string path)
     {
-        using var json = JsonDocument.Parse(File.ReadAllText(path));
+        using var stream = File.OpenRead(path);
+        using var json = JsonDocument.Parse(stream);
         return json.RootElement.Clone();
     }
 
