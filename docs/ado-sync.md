@@ -10,7 +10,7 @@ Omit `--history-since` to import only the Area Requirements Catalog and explicit
 
 The native synchronizer executes external programs with an argument array (not a shell), validates the staged JSON schema and requested project/area, and imports only after the exports succeed. For historical mapping, it retrieves work-item context for all exported IDs. Temporary files use a private directory and are removed on completion.
 
-**Limitations:** The existing import API is not transactional and does not yet roll back a previously imported index if a later import fails. Full provenance/origin validation, incremental remote export, comprehensive fake-executable journey tests and atomic commit remain open in #278. Never publish generated documentation without reviewing work-item confidentiality.
+**Limitations:** The native generate path now snapshots the existing imported evidence and restores it if a later import fails. This is rollback on failure, not atomic visibility for concurrent readers or crash-safe multi-file commit. Full provenance/origin validation, incremental remote export, comprehensive fake-executable journey tests and atomic publication for concurrent readers remains open in #278. Never publish generated documentation without reviewing work-item confidentiality.
 
 ## Alternative script
 
