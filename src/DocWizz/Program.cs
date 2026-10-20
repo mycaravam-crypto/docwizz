@@ -213,7 +213,7 @@ static async Task<int> Dispatch(string[] args)
                     File.WriteAllText(target, snapshot.Content.TrimEnd() + "\n");
                     Console.WriteLine("ADO evidence imported for requested project and area");
                 }
-                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or JsonException or System.ComponentModel.Win32Exception)
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or JsonException or KeyNotFoundException or System.ComponentModel.Win32Exception)
                 {
                     Console.Error.WriteLine("docwizz: ADO synchronization failed: " + ex.Message);
                     return 1;
