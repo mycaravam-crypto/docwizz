@@ -136,7 +136,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         var kinds = model.Nodes.GroupBy(n => n.Kind).ToDictionary(g => g.Key, g => g.Count());
         sb.AppendLine($"# {Path.GetFileName(Path.GetFullPath(root))}\n");
         sb.AppendLine($"Generated from commit `{model.Commit ?? "unknown"}`.\n");
-        if (AdoTests.Count > 0) sb.AppendLine("## Imported test evidence\n\nSee [Quality → Tests & requirements](tests.md) for imported plans, requirements and test cases. Explicit links are not execution or coverage proof.\n");
+        const string importedTestScope = "Imported test artifacts (plans, requirements and test cases) are listed in " +
+            "[Quality → Tests & requirements](tests.md). Explicit links are not execution or coverage proof.";
         if (config.Scope is { } active)
         {
             sb.AppendLine("## Documentation scope\n");
@@ -147,6 +148,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
                 $"test links: `{active.Projects.TestLinks.ToString().ToLowerInvariant()}`; " +
                 $"unassigned sources: `{active.UnassignedSources}`.\n");
             sb.AppendLine($"Repository deployment/CI/config descriptors: `{active.RepositoryFiles}`.\n");
+            if (AdoTests.Count > 0) sb.AppendLine(importedTestScope + "\n");
             if (model.ScopeInventory is { } effective)
             {
                 sb.AppendLine("### Effective scan\n");
@@ -178,6 +180,11 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
                 }
             }
             sb.AppendLine("Referenced projects marked `metadata-only` are dependency stubs, not analyzed source code.\n");
+        }
+        else if (AdoTests.Count > 0)
+        {
+            sb.AppendLine("## Documentation scope\n");
+            sb.AppendLine(importedTestScope + "\n");
         }
         sb.AppendLine("| | |\n|---|---|");
         foreach (var (label, kind) in new[] { ("Classes & records", "class"), ("Methods", "method"), ("Frontend functions", "function") })
