@@ -39,7 +39,8 @@ jq -e --arg project "$project" --arg area "$area" '
   .schema == "ado.workitem-catalog/v1" and
   .complete == true and .project == $project and .area == $area and
   (.items | type == "array") and
-  ([.items[].id] | length == (unique | length))
+  ([.items[].id] | length == (unique | length)) and
+  all(.items[].id; type == "number" and . > 0 and . == floor)
 ' "$workdir/workitems.json" >/dev/null || {
   echo "Incomplete or mismatched ADO area catalog; no imports performed" >&2
   exit 1
@@ -72,7 +73,7 @@ if [[ -n "$since" ]]; then
       echo "Invalid ADO work-item context for id $id; no imports performed" >&2
       exit 1
     }
-  done < <(jq -r '.items[].id' "$workdir/workitems.json")
+  done < <(jq -r '.items[].id | tonumber' "$workdir/workitems.json")
 fi
 
 # Imports are sequential in the current DocWizz API. A future native implementation
