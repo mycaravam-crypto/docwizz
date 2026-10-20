@@ -194,7 +194,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         if (drafts.Count > 0)
             sb.AppendLine($"🤖 marks {drafts.Count} AI-drafted summaries for code that has no docs yet — review them, then move them into the code.\n");
         sb.AppendLine("- [Architecture description](architecture-description.md)\n- [Architecture](architecture.md)\n- [API endpoints](api.md)\n" +
-            "- [Frontend](frontend.md)\n" + (Requirements is null ? "" : "- [Historical requirements](requirements/index.md)\n") +
+            "- [Frontend](frontend.md)\n" + (Requirements is null ? "" : "- [Requirements](requirements/index.md)\n") +
             (Catalog is null ? "" : "- [Area requirements catalog](requirements/area-catalog.md)\n") + "- [Quality](quality.md)\n");
         if (hierarchy is not null) sb.Append(hierarchy.Index());
         if (Technology().ToList() is { Count: > 0 } tech)
