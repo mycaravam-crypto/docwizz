@@ -62,7 +62,7 @@ Run `docwizz discover .` to inventory solutions and projects. Configure `scope:`
 | `edmx` | `docwizz edmx <dir> <file.edmx> [--graph] [--links] [--degree-weight n] [--fan-in-weight n] [--fan-out-weight n] [--inheritance-weight n] [--format console\|json]` | read-only EF6 EDMX facts or deterministic evidence-backed technical graph or code-link evidence (exact C#↔EDMX, inferred #187 areas) | architects |
 | `discover` | `docwizz discover [dir] [--format console\|json]` | read-only inventory of solutions, projects and references | everyday |
 | `setup` | `docwizz setup [dir] [--select-projects] [--all-projects] [--yes] [--force] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--ai-ratings] [--profile p]` | detect the stack, write `docwizz.yaml`, analyze, architecture, generate, check | start here |
-| `generate` | `docwizz generate <dir> [out] [--html] [--screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>]] [--progress] [--refresh-html-on-version-change] [--ai] [--ai-ratings] [--requirements] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
+| `generate` | `docwizz generate <dir> [out] [--html] [--screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>]] [--progress] [--refresh-html-on-version-change] [--ai] [--ai-ratings] [--requirements] [--ado-project <name> --ado-area <path> [--history-since <ref>]] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
 | `check` | `docwizz check <dir> [--since ref] [--format f] [--profile p]` | quality gate; exit 1 when thresholds fail | CI |
 | `analyze` | `docwizz analyze <dir> [--format f] [--profile p]` | documentation and architecture report, no gate | everyday |
 | `architecture` | `docwizz architecture <dir> [--format f] [--profile p]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
@@ -112,6 +112,9 @@ Run `docwizz discover .` to inventory solutions and projects. Configure `scope:`
 | `--limit <n>` | 100 | domain | maximum reached symbols, 1–500; truncation is explicit | architects |
 | `--hops <n>` | 2 | context | how far neighbours are listed, 1 to 4; hops beyond 1 are signature only | coding agents |
 | `--budget <tokens>` | 6000 | context | at least 100; estimated as characters / 4; lower-priority sections are cut first, and the cut is reported | coding agents |
+| `--ado-project <name>` | — | generate | online ADO synchronization; requires `--ado-area` | opt-in |
+| `--ado-area <path>` | — | generate | Azure DevOps Area Path; requires `--ado-project` | opt-in |
+| `--history-since <ref>` | — | generate | optional GitWizz code history after the specified Git ref | opt-in |
 | `--requirements` | off | generate, context | generate: prompts also get each symbol's linked work items (intent/deviation sections, cited and labeled); context: adds a Requirements section. Needs `docwizz requirements import`; exits 1 without an index | opt-in |
 | `--include-ai` | off | context | includes cached 🤖 drafts, marked `ai-drafted`; never calls a model | coding agents |
 | `--auto-rescan` | off | mcp | rescans when the model is stale instead of only reporting `stale: true` | coding agents |
@@ -238,3 +241,7 @@ GitHub release with generated notes. Nothing is committed to `main`.
 ### Signed DOCX/PDF publication
 
 After a controlled draft passes `product check`, use `docwizz product publish <dir> <template.yaml> [out-dir] --control document-control.yaml --context context.yaml --approval signed-approval.json --trust .github/document-release-policy.json`. Publication is separate from drafts and refuses overwrites. A custom existing generated draft can be selected using `--draft docs/custom/architecture.md`; its adjacent `.evidence.json` is verified against the signatures. See [release policy and CI](reference/publication.md).
+
+## Native Azure DevOps evidence synchronization
+
+`docwizz generate . --html --ado-project Shop --ado-area 'Shop\\Orders' --history-since v1.0.0` explicitly exports and imports ADO requirements, test associations and optional GitWizz history before HTML generation. Omitting ADO options leaves generation offline. See [ADO sync](ado-sync.md). Review the confidentiality of exported documentation.

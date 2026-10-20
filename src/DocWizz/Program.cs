@@ -85,7 +85,7 @@ static async Task<int> Dispatch(string[] args)
         var snapshot = AdoTestSnapshot.Load(Path.GetFullPath(source));
         var folder = Path.Combine(path, "docs", ".docwizz");
         Directory.CreateDirectory(folder);
-        var target = Path.Combine(folder, $"ado-tests-{(snapshot.PlanIds.Length == 1 ? snapshot.PlanIds[0].ToString() : "all")}.json");
+        var target = Path.Join(folder, $"ado-tests-{(snapshot.PlanIds is { Length: 1 } planIds ? planIds[0].ToString() : "all")}.json");
         File.WriteAllText(target, snapshot.Content.TrimEnd() + "\n");
         Console.WriteLine(AdoTestSnapshot.Summary(snapshot));
         Console.WriteLine($"Imported to {target}");
@@ -196,6 +196,31 @@ static async Task<int> Dispatch(string[] args)
         case "remediate":
             return Remediate(path, config, opts.GetValueOrDefault("package"), opts.GetValueOrDefault("to"), opts.ContainsKey("validate"), opts.GetValueOrDefault("since"), json);
         case "generate":
+            if (opts.GetValueOrDefault("ado-project") is { } adoProject)
+            {
+                try
+                {
+                    using var staged = await AdoEvidenceSync.Export(adoProject, opts["ado-area"], opts.GetValueOrDefault("history-since"));
+                    // Stage all external exports before changing local evidence. Roll back on import failure.
+                    using var rollback = new AdoEvidenceRollback(path);
+                    if (staged.WithHistory && RequirementsImport(path, staged.History, staged.WorkItems, config, new()) != 0)
+                        return 1;
+                    RequirementsCatalog.Import(path, staged.Catalog);
+                    var snapshot = staged.ValidatedTests ?? throw new InvalidOperationException("ADO test snapshot missing after validation");
+                    var folder = Path.Combine(path, "docs", ".docwizz");
+                    Directory.CreateDirectory(folder);
+                    var target = Path.Combine(folder, $"ado-tests-{(snapshot.PlanIds.Length == 1 ? snapshot.PlanIds[0].ToString() : "all")}.json");
+                    File.WriteAllText(target, snapshot.Content.TrimEnd() + "\n");
+                    if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(target, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                    rollback.Commit();
+                    Console.WriteLine("ADO evidence imported for requested project and area");
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or JsonException or FormatException or KeyNotFoundException or System.ComponentModel.Win32Exception)
+                {
+                    Console.Error.WriteLine("docwizz: ADO synchronization failed: " + ex.Message);
+                    return 1;
+                }
+            }
             var storageState = opts.GetValueOrDefault("storage-state");
             var stateFile = storageState is null ? null : Path.GetFullPath(Path.IsPathRooted(storageState)
                 ? storageState : Path.Combine(path, storageState));
@@ -914,6 +939,7 @@ static string Reference() => $"""
         [--ai]                          draft missing summaries with a self-hosted model (Ollama or OpenAI-compatible)
         [--ai-ratings]                  rate written docs with a self-hosted model (advisory; independent of --ai)
         [--requirements]                drafts also get each symbol's linked work items (requirements import first)
+        [--ado-project <name> --ado-area <path>] [--history-since <ref>]  explicitly sync ADO evidence
       docwizz analyze <dir>             documentation report
       docwizz check <dir>               report + exit 1 if thresholds fail (CI)
       docwizz check <dir> --since <ref> exit 1 only on gaps/violations introduced since <ref>

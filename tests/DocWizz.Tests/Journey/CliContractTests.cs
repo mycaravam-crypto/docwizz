@@ -167,4 +167,13 @@ public class CliContractTests
         using var doc = System.Text.Json.JsonDocument.Parse(r.Out);   // throws if anything else is mixed in
         Assert.Equal(System.Text.Json.JsonValueKind.Object, doc.RootElement.ValueKind);
     }
+    [Fact]
+    public void Ado_generation_options_require_explicit_complete_selection()
+    {
+        Assert.Contains("--ado-project and --ado-area", Cli.Parse(["generate", ".", "--ado-project", "Shop"]).Error);
+        Assert.Contains("--history-since requires", Cli.Parse(["generate", ".", "--history-since", "v1.0.0"]).Error);
+        Assert.Null(Cli.Parse(["generate", ".", "--html", "--ado-project", "Shop", "--ado-area", "Shop\\Orders", "--history-since", "v1.0.0"]).Error);
+        Assert.Null(Cli.Parse(["generate", ".", "--html"]).Error);
+    }
+
 }
