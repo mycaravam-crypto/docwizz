@@ -20,14 +20,13 @@ Never manufacture a missing connection using name similarity. Preserve per-sourc
 
 When a supported ADO `ado.test-traceability/v1` or `v2` snapshot was imported with `docwizz tests import`, `generate` validates it and emits `tests.md` (also HTML when `--html` is enabled). The page summarizes scopes, plans, requirements and explicit linked test cases. The generated index links to it. The console report distinguishes absent, valid and invalid imported tests and requirements.
 
-Requirements pages continue to use the existing requirement history index; this is a separate evidence source. At this stage, **no requirement-to-code-to-test join is asserted** and no success rate is shown, because this interchange contains no execution outcome data.
+A separately imported `ado.workitem-catalog/v1` area inventory is now represented in the generated Markdown and HTML requirements pages (including work items without code history). Compatible historical ADO code links, explicit ADO test-case links and structural test-code references are shown as **separate evidence categories**. They never assert fulfillment, executed test outcomes or a success rate: the interchanges do not contain such proof. See [area-path requirements](area-requirements.md).
 
-## Follow-up increments
+## Remaining limitations
 
-1. Link imported ADO requirements by numeric Work Item ID to existing requirement pages where the provider identity also matches.
-2. Place proven technical test relationships on relevant module pages, with code evidence.
-3. Add a consolidated traceability-gaps view across evidence sources, explicitly distinguishing unknown, unlinked and failed.
-4. Introduce execution statuses only after an outcome-bearing, timestamped interchange contract exists.
+- ADO catalog/code evidence is joined only when provider identity and project match; unresolved origins remain unavailable rather than becoming false links.
+- The area catalog distinguishes not assessed, not linked and unavailable. A combined formal verification or requirement coverage rate is **not** computed.
+- An execution status would require a separate outcome-bearing, timestamped and scope-aware interchange contract. Work-item state and ADO test-case links do not supply that.
 
 The generator stays offline, deterministic for identical inputs, and does not query Azure DevOps or execute tests.
 
