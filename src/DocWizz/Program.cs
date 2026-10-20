@@ -1228,11 +1228,10 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
         Load = LoadAttached(root, model),
         AdoTests = GenerateEvidenceFeedback.ValidSnapshots(root),
         Requirements = pageRequirements,
+        Catalog = RequirementsCatalog.LoadFromRepository(root),
         Head = pageRequirements is null ? null : head ?? Git(root, "rev-parse", "HEAD")?.Trim(),
         Files = [.. RepoFiles(root, config, [".github", ".circleci"]).Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))],
     }.Run());
-    // Catalog data is maintained separately from history-derived requirements and survives normal generation.
-    RequirementsCatalog.RenderIfPresent(root, outDir);
     bar.Advance("write pages", $"{Plural(pages.Count, "page")}, {changed.Count} changed");
 
     bar.Begin("metadata");

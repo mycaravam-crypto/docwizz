@@ -327,6 +327,9 @@ See the [GitHub export/import workflow](docs/requirement-context.md#github-issue
 
 ### Requirements and traceability
 
+**Area-path inventories:** Import the entire Azure DevOps work-item structure, including requirements without code links, using `ado workitem export --area <path> --output workitems.json` followed by `docwizz requirements catalog-import . workitems.json`. The generated area table, individual requirement pages, HTML navigation and search can then show *independent* historical code and imported ADO test-case links. Absence of a link does not establish absence of an implementation or test. See [area-path requirements](docs/area-requirements.md).
+
+
 For projects that keep requirements as YAML evidence:
 
 - `docwizz trace` reports requirement → architecture → test gaps.

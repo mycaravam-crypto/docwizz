@@ -2,7 +2,7 @@ using System.Text.Json;
 using System.Text;
 
 // Offline work-item inventory; never conflates organizational area paths with explicit parent/child links.
-static class RequirementsCatalog
+static partial class RequirementsCatalog
 {
     public const string FileName = "docs/.docwizz/workitem-catalog.json";
     const string InputSchema = "ado.workitem-catalog/v1";
@@ -71,7 +71,9 @@ static class RequirementsCatalog
 
     static string Escape(string? text) => (text ?? "")
         .Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
-        .Replace("|", "&#124;").Replace("\r", " ").Replace("\n", " ");
+        .Replace("|", "&#124;").Replace("\r", " ").Replace("\n", " ")
+        .Replace("\\", "\\\\").Replace("[", "\\[").Replace("]", "\\]")
+        .Replace("!", "\\!").Replace("`", "\\`");
     static string Multiline(string? text) => string.Join("\n", (text ?? "").Replace("\r\n", "\n")
         .Split('\n').Select(line => "> " + Escape(line)));
     static string Val(JsonElement item, string name) =>

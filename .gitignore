@@ -7,3 +7,9 @@ staging/
 bench/results.json
 bench/agents-results.json
 __pycache__/
+
+# Imported area work items and generated pages can contain confidential requirements.
+docs/.docwizz/workitem-catalog.json
+docs/requirements/area-catalog.md
+docs/requirements/area-catalog.html
+docs/requirements/items/
