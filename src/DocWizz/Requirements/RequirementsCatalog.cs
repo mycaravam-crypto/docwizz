@@ -2,7 +2,7 @@ using System.Text.Json;
 using System.Text;
 
 // Offline work-item inventory; never conflates organizational area paths with explicit parent/child links.
-static class RequirementsCatalog
+static partial class RequirementsCatalog
 {
     public const string FileName = "docs/.docwizz/workitem-catalog.json";
     const string InputSchema = "ado.workitem-catalog/v1";
