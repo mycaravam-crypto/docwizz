@@ -115,6 +115,27 @@ public class AdoEvidenceSyncTests
 
 
     [Fact]
+    public void GitWizz_dll_override_and_fallback_preserve_command_arguments()
+    {
+        string root = Directory.CreateTempSubdirectory("docwizz-gitwizz-dll-").FullName;
+        try
+        {
+            string assembly = Path.Combine(root, "git wizz.dll");
+            File.WriteAllText(assembly, "");
+            var command = AdoEvidenceSync.GitWizzCommand("gw", assembly);
+            Assert.Equal("dotnet", command.Executable);
+            Assert.Equal([Path.GetFullPath(assembly)], command.Prefix);
+
+            var fallback = AdoEvidenceSync.GitWizzCommand("gw", null);
+            Assert.Equal("gw", fallback.Executable);
+            Assert.Empty(fallback.Prefix);
+            Assert.Throws<ArgumentException>(() =>
+                AdoEvidenceSync.GitWizzCommand("gw", Path.Combine(root, "missing.dll")));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public void Failed_import_restores_original_evidence_and_successful_import_keeps_changes()
     {
         string root = Directory.CreateTempSubdirectory("docwizz-rollback-test-").FullName;

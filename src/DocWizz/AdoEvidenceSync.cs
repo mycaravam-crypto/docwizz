@@ -44,6 +44,16 @@ static class AdoEvidenceSync
             throw new InvalidOperationException($"{executable} export failed (exit {process.ExitCode}); evidence was not imported");
     }
 
+    // Pure selection logic ensures DLL execution and PATH fallback can be regression-tested.
+    internal static (string Executable, string[] Prefix) GitWizzCommand(string executable, string? assembly)
+    {
+        if (string.IsNullOrWhiteSpace(assembly)) return (executable, []);
+        string file = Path.GetFullPath(assembly);
+        if (!File.Exists(file))
+            throw new ArgumentException("DOCWIZZ_GITWIZZ_DLL does not point to an existing file");
+        return ("dotnet", [file]);
+    }
+
     static void Restrict(string path)
     {
         if (!OperatingSystem.IsWindows())
@@ -92,25 +102,17 @@ static class AdoEvidenceSync
                 status?.Invoke("GitWizz: exporting history");
                 // A Git Bash alias/function named gw is not executable by Process.Start on Windows.
                 // Point DOCWIZZ_GITWIZZ_DLL at the published assembly to run it without shell activation.
-                string? gitwizzDll = Environment.GetEnvironmentVariable("DOCWIZZ_GITWIZZ_DLL");
-                if (!string.IsNullOrWhiteSpace(gitwizzDll))
+                var command = GitWizzCommand(gwExecutable, Environment.GetEnvironmentVariable("DOCWIZZ_GITWIZZ_DLL"));
+                try
                 {
-                    string dll = Path.GetFullPath(gitwizzDll);
-                    if (!File.Exists(dll)) throw new ArgumentException("DOCWIZZ_GITWIZZ_DLL does not point to an existing file");
-                    await Run("dotnet", dll, "history", "export", "--since", since, "--provider", "azure-devops", "-o", result.History);
+                    await Run(command.Executable, [.. command.Prefix, "history", "export", "--since", since,
+                        "--provider", "azure-devops", "-o", result.History]);
                 }
-                else
+                catch (System.ComponentModel.Win32Exception e) when (OperatingSystem.IsWindows() && command.Prefix.Length == 0)
                 {
-                    try
-                    {
-                        await Run(gwExecutable, "history", "export", "--since", since, "--provider", "azure-devops", "-o", result.History);
-                    }
-                    catch (System.ComponentModel.Win32Exception e) when (OperatingSystem.IsWindows())
-                    {
-                        throw new InvalidOperationException(
-                            "GitWizz is not available as a Windows executable. Git Bash aliases/functions cannot be started by .NET. " +
-                            "Set DOCWIZZ_GITWIZZ_DLL to the published gitwizz.dll path, or install a native gitwizz.exe on PATH.", e);
-                    }
+                    throw new InvalidOperationException(
+                        "GitWizz is not available as a Windows executable. Git Bash aliases/functions cannot be started by .NET. " +
+                        "Set DOCWIZZ_GITWIZZ_DLL to the published gitwizz.dll path, or install a native gitwizz.exe on PATH.", e);
                 }
                 Restrict(result.History);
                 if (Read(result.History).GetProperty("schema").GetString() != "gitwizz.history/v2")

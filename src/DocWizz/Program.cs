@@ -201,7 +201,7 @@ static async Task<int> Dispatch(string[] args)
                 try
                 {
                     using var syncProgress = CliProgress.ForConsole(
-                        [new("export", 3, "ADO and GitWizz exports"), new("import", 1, "Importing evidence")],
+                        [new("export", 1, "ADO and GitWizz exports"), new("import", 1, "Importing evidence")],
                         opts.ContainsKey("progress"));
                     syncProgress.Begin("export");
                     using var staged = await AdoEvidenceSync.Export(adoProject, opts["ado-area"],
