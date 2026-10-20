@@ -51,8 +51,8 @@ static class AdoEvidenceSync
         string file = Path.GetFullPath(assembly);
         if (!File.Exists(file))
             throw new ArgumentException("DOCWIZZ_GITWIZZ_DLL does not point to an existing file");
-        if (!string.Equals(Path.GetFileName(file), "gitwizz.dll", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("DOCWIZZ_GITWIZZ_DLL must refer to gitwizz.dll, not another application assembly.");
+        if (string.Equals(Path.GetFileName(file), "docwizz.dll", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("DOCWIZZ_GITWIZZ_DLL points to docwizz.dll; configure the GitWizz assembly instead.");
         return ("dotnet", [file]);
     }
 
