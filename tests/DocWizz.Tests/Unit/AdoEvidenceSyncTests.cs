@@ -25,6 +25,18 @@ public class AdoEvidenceSyncTests
                 () => AdoEvidenceSync.Preflight(root, "not-a-tag-or-branch", ado, ado));
             Assert.Contains("--history-since", error.Message);
             await AdoEvidenceSync.Preflight(root, null, ado, ado);
+            using (var commit = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("git")
+            {
+                ArgumentList = { "-C", root, "-c", "user.name=DocWizz Test", "-c",
+                    "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "preflight test" },
+                UseShellExecute = false
+            })!)
+            {
+                commit.WaitForExit();
+                Assert.Equal(0, commit.ExitCode);
+            }
+            await AdoEvidenceSync.Preflight(root, "HEAD", ado, ado);
+            await AdoEvidenceSync.Preflight(root, "HEAD~0", ado, ado);
             await Assert.ThrowsAsync<ArgumentException>(
                 () => AdoEvidenceSync.Preflight(root, "-unsafe", ado, ado));
             await Assert.ThrowsAsync<InvalidOperationException>(
