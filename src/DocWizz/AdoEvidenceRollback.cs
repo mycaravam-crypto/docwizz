@@ -1,6 +1,6 @@
 // Restore previously imported evidence when a later import fails. Does not make multi-file updates atomic
 // to concurrent readers; publication must be serialized separately.
-static class AdoEvidenceRollback : IDisposable
+sealed class AdoEvidenceRollback : IDisposable
 {
     readonly List<(string Target, string Backup, bool Existed)> entries = [];
     readonly string staging = Directory.CreateTempSubdirectory("docwizz-evidence-backup-").FullName;
