@@ -206,7 +206,7 @@ static async Task<int> Dispatch(string[] args)
                     if (staged.WithHistory && RequirementsImport(path, staged.History, staged.WorkItems, config, new()) != 0)
                         return 1;
                     RequirementsCatalog.Import(path, staged.Catalog);
-                    var snapshot = AdoTestSnapshot.Load(staged.Tests);
+                    var snapshot = staged.ValidatedTests ?? throw new InvalidOperationException("ADO test snapshot missing after validation");
                     var folder = Path.Combine(path, "docs", ".docwizz");
                     Directory.CreateDirectory(folder);
                     var target = Path.Combine(folder, $"ado-tests-{(snapshot.PlanIds.Length == 1 ? snapshot.PlanIds[0].ToString() : "all")}.json");
