@@ -46,23 +46,24 @@ static class AdoEvidenceSync
         return json.RootElement.Clone();
     }
 
+    /// <summary>Export and validate ADO area requirements, tests, and optional GitWizz history before importing any evidence.</summary>
     public static async Task<Staged> Export(string project, string area, string? since)
     {
         var result = new Staged(since is not null);
         try
         {
             await Run("ado", "workitem", "export", "--project", project, "--area", area, "--output", result.Catalog);
-            var catalog = Read(result.Catalog);
+            JsonElement catalog = Read(result.Catalog);
             if (catalog.GetProperty("schema").GetString() != "ado.workitem-catalog/v1" ||
                 catalog.GetProperty("complete").GetBoolean() != true ||
                 catalog.GetProperty("project").GetString() != project || catalog.GetProperty("area").GetString() != area)
                 throw new ArgumentException("Incomplete or mismatched ADO catalog");
-            var ids = catalog.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("id").GetInt32()).ToArray();
+            int[] ids = catalog.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("id").GetInt32()).ToArray();
             if (ids.Any(id => id <= 0) || ids.Distinct().Count() != ids.Length)
                 throw new ArgumentException("Invalid or duplicate ADO work item ids");
 
             await Run("ado", "testplan", "trace-export", "--project", project, "--area", area, "--output", result.Tests);
-            var tests = Read(result.Tests);
+            JsonElement tests = Read(result.Tests);
             if (tests.GetProperty("format").GetString() is not ("ado.test-traceability/v1" or "ado.test-traceability/v2") ||
                 tests.GetProperty("project").GetString() != project || tests.GetProperty("area").GetString() != area)
                 throw new ArgumentException("Mismatched ADO test snapshot");
@@ -84,11 +85,11 @@ static class AdoEvidenceSync
                     var stdout = p.StandardOutput.ReadToEndAsync();
                     var stderr = p.StandardError.ReadToEndAsync();
                     await p.WaitForExitAsync();
-                    var data = await stdout;
+                    string data = await stdout;
                     await stderr;
                     if (p.ExitCode != 0) throw new InvalidOperationException($"ADO context export failed for work item {id}");
                     File.WriteAllText(file, data);
-                    var context = Read(file);
+                    JsonElement context = Read(file);
                     if (context.GetProperty("schema").GetString() != "ado.requirement-context/v1" ||
                         context.GetProperty("id").GetInt32() != id)
                         throw new ArgumentException($"Invalid ADO context for work item {id}");
