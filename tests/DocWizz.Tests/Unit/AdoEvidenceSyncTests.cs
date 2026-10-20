@@ -5,6 +5,45 @@ namespace DocWizz.Tests.Unit;
 public class AdoEvidenceSyncTests
 {
     [Fact]
+    public async Task Windows_preflight_reports_unavailable_GitWizz_alias()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        string root = Directory.CreateTempSubdirectory("docwizz-windows-preflight-").FullName;
+        try
+        {
+            using (var init = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("git")
+            {
+                ArgumentList = { "-C", root, "init" }, UseShellExecute = false
+            })!)
+            {
+                init.WaitForExit();
+                Assert.Equal(0, init.ExitCode);
+            }
+            using (var commit = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("git")
+            {
+                ArgumentList = { "-C", root, "-c", "user.name=DocWizz Test",
+                    "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "test" },
+                UseShellExecute = false
+            })!)
+            {
+                commit.WaitForExit();
+                Assert.Equal(0, commit.ExitCode);
+            }
+            string? original = Environment.GetEnvironmentVariable("DOCWIZZ_GITWIZZ_DLL");
+            try
+            {
+                Environment.SetEnvironmentVariable("DOCWIZZ_GITWIZZ_DLL", null);
+                InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(
+                    () => AdoEvidenceSync.Preflight(root, "HEAD", "git",
+                        Path.Join(root, "missing-gitwizz-executable.exe")));
+                Assert.Contains("Git Bash aliases", error.Message);
+            }
+            finally { Environment.SetEnvironmentVariable("DOCWIZZ_GITWIZZ_DLL", original); }
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public void GitWizz_command_rejects_a_DocWizz_assembly()
     {
         string dir = Directory.CreateTempSubdirectory("docwizz-dll-check-").FullName;
