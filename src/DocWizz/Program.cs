@@ -41,7 +41,7 @@ static async Task<int> Dispatch(string[] args)
     string? requirementsAction = null;
     if (cmd == "requirements")
     {
-        if (pos.ElementAtOrDefault(1) is not ("import" or "show" or "query" or "catalog-import")) return Usage("requirements needs import, catalog-import, show or query: docwizz requirements catalog-import <dir> <catalog.json>", "requirements");
+        if (pos.ElementAtOrDefault(1) is not ("import" or "show" or "query" or "catalog-import")) return Usage("requirements needs import, show or query; catalog-import is also supported: docwizz requirements catalog-import <dir> <catalog.json>", "requirements");
         requirementsAction = pos[1];
         pos.RemoveAt(1);
     }
