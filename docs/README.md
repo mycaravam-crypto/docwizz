@@ -1,29 +1,47 @@
 # Documentation
 
-[Back to project overview](../README.md). This directory contains maintained product guidance and reference material. The repository root holds only the README as a Markdown entry point.
+[Project overview](../README.md) · [Getting started](getting-started.md) · [CLI reference](cli.md)
 
-## Getting started and reference
+**Start with a task.** Tutorials are under `guides/`; exact contracts and data formats live in `reference/`; implementation details in `internals/`. The main CLI reference contains syntax, flags and exit codes—not parallel walkthroughs.
 
-- [CLI reference](cli.md) — commands, options, setup, error codes
-- [Architecture](architecture.md) — components, data model, scanners, generators, tests
-- [IT operations concept](IT_OPERATIONS.md) — source-based draft and limits
-- [V-Modell XT templates](vmodell-xt-templates.md) — example product structures and review aids
-- [Controlled publication](document-publication.md) — signed DOCX/PDF release with independent approval gate
-- [Screenshots](PLAYWRIGHT_SCREENSHOTS.md) — capture and troubleshooting
+## Getting started and daily work
 
-## Architecture, evidence and analysis
+- [Getting started](getting-started.md) — setup, first documentation, initial checks
+- [Generate documentation](guides/generation.md) — Markdown, HTML and optional AI drafting
+- [Quality, architecture and CI](guides/quality.md) — checks, change impact, CI
+- [Multi-project repositories](guides/multi-project.md) — scan scope and hierarchy
+- [Coding agents and MCP](guides/agent-context.md) — bounded context and MCP tools
+- [CLI reference](cli.md) — every command, option, precedence rule and exit code
 
-- [Domain discovery](domain-discovery.md)
-- [Project evidence](project-evidence.md)
-- [Requirements context](requirement-context.md)
-- [Evidence-driven generation](evidence-driven-generation.md)
-- [ADR — product template contract](adr/0001-product-template-contract.md)
+## Features and evidence
 
-## Quality and project history
+- [Requirements and traceability](guides/requirements.md) — ADO work-item catalog, Git history and explicit test links
+- [Project evidence](guides/project-evidence.md) — explicit requirement → architecture → test links
+- [Domain discovery](guides/domain-discovery.md) — technical exploration and inferred areas
+- [Product document workflow](guides/product-documents.md) — drafts, reviews and publishing
+- [V-Modell-XT templates](guides/vmodell-xt-templates.md) — example structures and validation
+- [IT operations concept](guides/it-operations.md) — sourced draft and limits
+- [Screenshots](guides/screenshots.md) — authenticated capture and troubleshooting
+- [Dependencies and test snapshots](guides/supply-chain.md) · [Load reports](guides/load-reports.md)
 
-- [Multi-project acceptance baseline (Epic #124)](quality/multi-project-acceptance.md) — point-in-time acceptance evidence, not a permanent product specification
-- [Benchmarks](../bench/README.md) — methods, reproducible fixtures and measurements
+## Contracts and implementation
 
-## Planning
+- [Requirement interchange formats](reference/requirement-formats.md) — provider and historical evidence semantics
+- [Evidence provenance and limits](reference/evidence-levels.md) — observed, declared, historical, inferred
+- [EDMX graph and links](reference/edmx.md) — versioned technical contracts
+- [Signed publication](reference/publication.md) — signatures, independent approval and boundaries
+- [Scanner distribution](reference/scanner-distribution.md) — package and action runtime contracts
+- [Implementation architecture](internals/architecture.md) — scanners, data model, generators and tests
+- [Product contract decision](adr/0001-product-template-contract.md) — ADR-0001
+- [SW architecture template guide](vmodell-xt/sw-architecture-guide.md)
+  · [SW specification](vmodell-xt/sw-specification-guide.md)
+  · [System-element test specification](vmodell-xt/system-element-test-specification-guide.md)
 
-Current and planned work lives in [GitHub Issues](https://github.com/mycaravam-crypto/docwizz/issues) and [Pull Requests](https://github.com/mycaravam-crypto/docwizz/pulls); there is no separate static roadmap to maintain.
+## Historical evidence
+
+- [Multi-project acceptance baseline](archive/multi-project-acceptance.md) — historical, point-in-time checklist
+- [Benchmarks](../bench/README.md) — reproducible synthetic measurements
+
+Active feature work is tracked in [GitHub Issues](https://github.com/mycaravam-crypto/docwizz/issues) and [Pull Requests](https://github.com/mycaravam-crypto/docwizz/pulls). Maintained pages use lowercase `kebab-case.md`; `README.md` is an index convention, and a few older paths remain only as link-preserving compatibility pages.
+
+**Security:** generated application documentation, search indexes and imported work items may contain private requirements. Distribution and access to generated output are independent of the maintained project documentation here.
