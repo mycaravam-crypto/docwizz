@@ -611,6 +611,18 @@ comparable and are left out; nothing judges what counts as a regression. **Timel
 spanning several seconds shows their worst p95, so a spike isn't averaged away. A `series` point without `t`,
 `requests` or `p95_ms` exits 1 naming it.
 
+## Area-path requirements catalog
+
+The area-scoped `ado.workitem-catalog/v1` import works without a historical requirements index:
+
+```bash
+ado workitem export --project Shop --area "Shop\\Orders" --output workitems.json
+docwizz requirements catalog-import . workitems.json
+docwizz generate . --html
+```
+
+The resulting catalog appears in the project index, the HTML navigation and search, with individual work-item pages. If a compatible GitWizz/ADO history index and ADO test snapshots have been imported, their **separate** code/test links appear alongside each item (not as proof of implementation or test execution). See [area-path requirements](area-requirements.md) for an integrated workflow and evidence statuses. Local work-item exports and generated pages may contain confidential business data; review access before publication.
+
 ## Requirement history
 
 ```bash
@@ -684,7 +696,7 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `trace` | `docwizz trace <dir> <evidence.yaml> [--format json]` | explicit traceability and missing links | product documents |
 | `tests` | `docwizz tests import <dir> <snapshot.json>` | validate and store offline ADO test traceability | product documents |
 | `load` | `docwizz load import <dir> <report.json>...` | store powerwizz reports; `generate` adds measured numbers per endpoint to `api.md` | performance |
-| `requirements` | `docwizz requirements import <dir> <history.json> [<work-items>] [--progress]`, `docwizz requirements show <dir> (--for <symbol> \| --work-item <id>) [--format json]`, `docwizz requirements query <dir> <query.json>` | index exported history; one symbol's requirements, or one work item's symbols; gitwizz's requirement query | coding agents, reviews |
+| `requirements` | `docwizz requirements import <dir> <history.json> [<work-items>] [--progress]`, `docwizz requirements catalog-import <dir> <catalog.json>`, `docwizz requirements show <dir> (--for <symbol> \| --work-item <id>) [--format json]`, `docwizz requirements query <dir> <query.json>` | index exported history; one symbol's requirements, or one work item's symbols; gitwizz's requirement query | coding agents, reviews |
 | `product` | `docwizz product [check or publish] <dir> <template.yaml> [out.md or out-dir] [--context file.yaml] [--control document-control.yaml] [--approval signed.json] [--trust policy.json] [--draft existing.md] [--ai] [--format f]` | product draft from evidence; `check`: references and freshness | architects |
 | `sbom` | `docwizz sbom [dir] [out]` | direct declared dependencies as CycloneDX 1.6 JSON | supply-chain inventory |
 | `remediate` | `docwizz remediate <dir> [--package n --to v] [--validate] [--since ref] [--format f]` | package update suggestions: command or patch, impact, confidence | maintenance |
