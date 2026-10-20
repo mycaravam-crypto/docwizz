@@ -5,6 +5,108 @@ namespace DocWizz.Tests.Unit;
 public class AdoEvidenceSyncTests
 {
     [Fact]
+    public async Task Windows_preflight_reports_unavailable_GitWizz_alias()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        string root = Directory.CreateTempSubdirectory("docwizz-windows-preflight-").FullName;
+        try
+        {
+            using (var init = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("git")
+            {
+                ArgumentList = { "-C", root, "init" }, UseShellExecute = false
+            })!)
+            {
+                init.WaitForExit();
+                Assert.Equal(0, init.ExitCode);
+            }
+            using (var commit = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("git")
+            {
+                ArgumentList = { "-C", root, "-c", "user.name=DocWizz Test",
+                    "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "test" },
+                UseShellExecute = false
+            })!)
+            {
+                commit.WaitForExit();
+                Assert.Equal(0, commit.ExitCode);
+            }
+            string? original = Environment.GetEnvironmentVariable("DOCWIZZ_GITWIZZ_DLL");
+            try
+            {
+                Environment.SetEnvironmentVariable("DOCWIZZ_GITWIZZ_DLL", null);
+                InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(
+                    () => AdoEvidenceSync.Preflight(root, "HEAD", "git",
+                        Path.Join(root, "missing-gitwizz-executable.exe")));
+                Assert.Contains("Git Bash aliases", error.Message);
+            }
+            finally { Environment.SetEnvironmentVariable("DOCWIZZ_GITWIZZ_DLL", original); }
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public void GitWizz_command_rejects_a_DocWizz_assembly()
+    {
+        string dir = Directory.CreateTempSubdirectory("docwizz-dll-check-").FullName;
+        try
+        {
+            string dll = Path.Join(dir, "docwizz.dll");
+            File.WriteAllText(dll, "");
+            ArgumentException error = Assert.Throws<ArgumentException>(
+                () => AdoEvidenceSync.GitWizzCommand("gw", dll));
+            Assert.Contains("docwizz.dll", error.Message);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    [Fact]
+    public async Task Preflight_rejects_unknown_history_ref_before_export()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        string root = Directory.CreateTempSubdirectory("docwizz-preflight-test-").FullName;
+        try
+        {
+            string ado = Path.Join(root, "ado.sh");
+            File.WriteAllText(ado, "#!/bin/sh\nexit 0\n");
+            File.SetUnixFileMode(ado, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            using var git = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("git")
+            {
+                ArgumentList = { "-C", root, "init" },
+                UseShellExecute = false
+            })!;
+            git.WaitForExit();
+            Assert.Equal(0, git.ExitCode);
+            ArgumentException error = await Assert.ThrowsAsync<ArgumentException>(
+                () => AdoEvidenceSync.Preflight(root, "not-a-tag-or-branch", ado, ado));
+            Assert.Contains("--history-since", error.Message);
+            await AdoEvidenceSync.Preflight(root, null, ado, ado);
+            using (var commit = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("git")
+            {
+                ArgumentList = { "-C", root, "-c", "user.name=DocWizz Test", "-c",
+                    "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "preflight test" },
+                UseShellExecute = false
+            })!)
+            {
+                commit.WaitForExit();
+                Assert.Equal(0, commit.ExitCode);
+            }
+            await AdoEvidenceSync.Preflight(root, "HEAD", ado, ado);
+            await AdoEvidenceSync.Preflight(root, "HEAD~0", ado, ado);
+            await Assert.ThrowsAsync<ArgumentException>(
+                () => AdoEvidenceSync.Preflight(root, "-unsafe", ado, ado));
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => AdoEvidenceSync.Preflight(root, null, Path.Join(root, "missing-ado"), ado));
+            string other = Directory.CreateTempSubdirectory("docwizz-preflight-no-git-").FullName;
+            try
+            {
+                await Assert.ThrowsAsync<ArgumentException>(
+                    () => AdoEvidenceSync.Preflight(other, "v1.0.4", ado, ado));
+            }
+            finally { Directory.Delete(other, recursive: true); }
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public void Staged_directory_is_private_and_removed_when_disposed()
     {
         string path;

@@ -51,7 +51,71 @@ static class AdoEvidenceSync
         string file = Path.GetFullPath(assembly);
         if (!File.Exists(file))
             throw new ArgumentException("DOCWIZZ_GITWIZZ_DLL does not point to an existing file");
+        if (string.Equals(Path.GetFileName(file), "docwizz.dll", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("DOCWIZZ_GITWIZZ_DLL points to docwizz.dll; configure the GitWizz assembly instead.");
         return ("dotnet", [file]);
+    }
+
+    // Preflight is read-only and runs before any ADO export or evidence write.
+    internal static async Task Preflight(string repository, string? since, string adoExecutable = "ado", string gwExecutable = "gw")
+    {
+        await CheckExecutable(adoExecutable, ["--help"], "ADO CLI 'ado' cannot be started. Install it and add it to PATH.");
+        if (since is null) return;
+        await CheckGit(repository, ["rev-parse", "--is-inside-work-tree"],
+            "Git repository not found. Run generate from a Git worktree.");
+        if (string.IsNullOrWhiteSpace(since) || since.StartsWith("-", StringComparison.Ordinal))
+            throw new ArgumentException("--history-since must be a non-empty Git tag, branch or commit.");
+        await CheckGit(repository, ["rev-parse", "--verify", "--end-of-options", since + "^{commit}"],
+            $"--history-since '{since}' cannot be resolved to a commit. Check git tag -l and git branch -a, or fetch the missing refs.");
+        var command = GitWizzCommand(gwExecutable, Environment.GetEnvironmentVariable("DOCWIZZ_GITWIZZ_DLL"));
+        try
+        {
+            await CheckExecutable(command.Executable, [.. command.Prefix, "history", "export", "--help"],
+                "GitWizz history export is not available. Verify DOCWIZZ_GITWIZZ_DLL points to gitwizz.dll or install a native GitWizz executable.");
+        }
+        catch (System.ComponentModel.Win32Exception e)
+        {
+            throw new InvalidOperationException("GitWizz cannot be started. On Windows Git Bash aliases are not executables; configure DOCWIZZ_GITWIZZ_DLL with the path to gitwizz.dll.", e);
+        }
+    }
+
+    static async Task CheckGit(string repository, string[] arguments, string message)
+    {
+        var start = new ProcessStartInfo("git") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        start.ArgumentList.Add("-C");
+        // Canonicalize -C input and keep it in ArgumentList; never invoke a shell.
+        string fullRepository = Path.GetFullPath(repository);
+        if (!Directory.Exists(fullRepository))
+            throw new ArgumentException("Git repository directory does not exist.");
+        start.ArgumentList.Add(fullRepository);
+        foreach (string argument in arguments) start.ArgumentList.Add(argument);
+        try
+        {
+            using var process = Process.Start(start) ?? throw new InvalidOperationException(message);
+            Task<string> output = process.StandardOutput.ReadToEndAsync();
+            Task<string> errors = process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            await Task.WhenAll(output, errors);
+            if (process.ExitCode != 0 || (arguments.Contains("--is-inside-work-tree") && output.Result.Trim() != "true"))
+                throw new ArgumentException(message);
+        }
+        catch (System.ComponentModel.Win32Exception e) { throw new InvalidOperationException("Git is not available on PATH.", e); }
+    }
+
+    static async Task CheckExecutable(string executable, string[] arguments, string message)
+    {
+        var start = new ProcessStartInfo(executable) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        foreach (string argument in arguments) start.ArgumentList.Add(argument);
+        try
+        {
+            using var process = Process.Start(start) ?? throw new InvalidOperationException(message);
+            Task<string> output = process.StandardOutput.ReadToEndAsync();
+            Task<string> errors = process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            await Task.WhenAll(output, errors);
+            // --help is a presence probe; some CLI implementations return nonzero for usage.
+        }
+        catch (System.ComponentModel.Win32Exception e) { throw new InvalidOperationException(message, e); }
     }
 
     static void Restrict(string path)

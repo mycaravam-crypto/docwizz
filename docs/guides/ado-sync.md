@@ -6,6 +6,8 @@ The first native, opt-in integration is available in DocWizz:
 docwizz generate . --html --ado-project Shop --ado-area 'Shop\Orders' --history-since v1.0.0
 ```
 
+Preflight validates that `ado` starts, and, with `--history-since`, that Git sees a worktree, the requested tag/branch/commit resolves to a commit, and GitWizz is launchable. These checks run **before** any ADO data export. A missing ref reports a concrete suggestion to fetch refs. Preflight cannot guarantee remote authentication or a successful provider export; those failures still occur during the export.
+
 Omit `--history-since` to import only the Area Requirements Catalog and explicit ADO test-case relationships. Without `--ado-project` and `--ado-area`, generation remains offline; both values must be given together. Native mode requires the `ado` binary, and optionally `gw`, configured on `PATH`, with ADO authentication already performed.
 
 ### Windows / Git Bash: GitWizz as a shell alias
