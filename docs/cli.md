@@ -511,7 +511,7 @@ When running `docwizz generate .`, its console report checks the existing requir
 
 `docwizz tests import . alpha-tests.json` accepts both single-plan `ado.test-traceability/v1` and multi-plan `ado.test-traceability/v2` snapshots; v2 preserves explicit plan/suite/testcase assignments. It validates these references and stores the snapshot offline.
 
-`docwizz tests import . alpha-tests.json` validates `ado.test-traceability/v1` exported by `ado testplan trace-export` and saves a normalized snapshot under `docs/.docwizz/ado-tests-<planId>.json`. The command reports explicit requirement-to-test-case associations. It does not infer relationships to code tests or assert test execution. This first integration is an offline import and summary; generated report-page integration is not yet implemented.
+`docwizz tests import . alpha-tests.json` validates `ado.test-traceability/v1` exported by `ado testplan trace-export` and saves a normalized snapshot under `docs/.docwizz/ado-tests-<planId>.json`. The command reports explicit requirement-to-test-case associations. It does not infer relationships to code tests or assert test execution. The generator adds a separate `tests.md` page (and an HTML page with `--html`) showing explicit plan, requirement and test-case associations; it never asserts execution or coverage.
 
 ## Project evidence
 
