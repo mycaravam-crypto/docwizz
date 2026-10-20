@@ -244,4 +244,4 @@ After a controlled draft passes `product check`, use `docwizz product publish <d
 
 ## Native Azure DevOps evidence synchronization
 
-`docwizz generate . --html --ado-project Shop --ado-area 'Shop\\Orders' --history-since v1.0.0` explicitly exports and imports ADO requirements, test associations and optional GitWizz history before HTML generation. Omitting ADO options leaves generation offline. See [ADO sync](ado-sync.md). Review the confidentiality of exported documentation.
+`docwizz generate . --html --ado-project Shop --ado-area 'Shop\\Orders' --history-since v1.0.0` explicitly exports and imports ADO requirements, test associations and optional GitWizz history before HTML generation. Omitting ADO options leaves generation offline. See [ADO sync](guides/ado-sync.md). Review the confidentiality of exported documentation.
