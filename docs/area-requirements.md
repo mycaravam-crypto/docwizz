@@ -49,6 +49,6 @@ The history overlay uses stable ADO work-item IDs **only after** verifying that 
 
 ## Security and repeatability
 
-The snapshot and pages can contain internal requirements, unpublished features, customer details and acceptance criteria. **Do not commit or publish those artifacts to a public repository or website unless reviewed and authorized.** DocWizz ignores the new default catalog output paths in its Git configuration, but custom output locations need equivalent controls. The local input exports remain your responsibility.
+The snapshot and pages can contain internal requirements, unpublished features, customer details and acceptance criteria. **Do not commit or publish those artifacts to a public repository or website unless reviewed and authorized.** DocWizz ignores the new default catalog output paths in Git, but **other generated files (including search.json, search.js, index.html and other HTML pages) may still contain work-item titles**. Protect the entire generated documentation site, its web hosting and any custom output locations; do not rely on .gitignore as an access-control mechanism. Local input exports remain your responsibility.
 
 Generation is deterministic for identical imported evidence and code models. The normal generator owns its Markdown and HTML pages and removes stale generated pages without deleting manual pages; import and generation do not call an LLM or external provider.
