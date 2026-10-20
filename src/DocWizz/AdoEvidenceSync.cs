@@ -47,12 +47,15 @@ static class AdoEvidenceSync
     }
 
     /// <summary>Export and validate ADO area requirements, tests, and optional GitWizz history before importing any evidence.</summary>
-    public static async Task<Staged> Export(string project, string area, string? since)
+    public static Task<Staged> Export(string project, string area, string? since) =>
+        Export(project, area, since, "ado", "gw");
+
+    internal static async Task<Staged> Export(string project, string area, string? since, string adoExecutable, string gwExecutable)
     {
         var result = new Staged(since is not null);
         try
         {
-            await Run("ado", "workitem", "export", "--project", project, "--area", area, "--output", result.Catalog);
+            await Run(adoExecutable, "workitem", "export", "--project", project, "--area", area, "--output", result.Catalog);
             JsonElement catalog = Read(result.Catalog);
             if (catalog.GetProperty("schema").GetString() != "ado.workitem-catalog/v1" ||
                 catalog.GetProperty("complete").GetBoolean() != true ||
@@ -71,7 +74,7 @@ static class AdoEvidenceSync
 
             if (since is not null)
             {
-                await Run("gw", "history", "export", "--since", since, "--provider", "azure-devops", "-o", result.History);
+                await Run(gwExecutable, "history", "export", "--since", since, "--provider", "azure-devops", "-o", result.History);
                 if (Read(result.History).GetProperty("schema").GetString() != "gitwizz.history/v2")
                     throw new ArgumentException("Invalid GitWizz history schema");
                 System.IO.Directory.CreateDirectory(result.WorkItems);
@@ -79,7 +82,7 @@ static class AdoEvidenceSync
                 {
                     var file = Path.Combine(result.WorkItems, id + ".json");
                     // The CLI writes the context to stdout; unlike export commands it has no --output flag.
-                    var psi = new ProcessStartInfo("ado") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+                    var psi = new ProcessStartInfo(adoExecutable) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
                     psi.ArgumentList.Add("workitem"); psi.ArgumentList.Add("context"); psi.ArgumentList.Add(id.ToString());
                     using var p = Process.Start(psi) ?? throw new InvalidOperationException("Could not start ado");
                     var stdout = p.StandardOutput.ReadToEndAsync();
