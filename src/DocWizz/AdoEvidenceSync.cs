@@ -20,7 +20,10 @@ static class AdoEvidenceSync
             if (!OperatingSystem.IsWindows())
                 File.SetUnixFileMode(DirectoryPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
-        public void Dispose() => System.IO.Directory.Delete(DirectoryPath, recursive: true);
+        public void Dispose()
+        {
+            if (System.IO.Directory.Exists(DirectoryPath)) System.IO.Directory.Delete(DirectoryPath, recursive: true);
+        }
     }
 
     static async Task Run(string executable, params string[] args)
@@ -65,7 +68,7 @@ static class AdoEvidenceSync
             await Run(adoExecutable, "workitem", "export", "--project", project, "--area", area, "--output", result.Catalog);
             JsonElement catalog = Read(result.Catalog);
             if (catalog.GetProperty("schema").GetString() != "ado.workitem-catalog/v1" ||
-                catalog.GetProperty("complete").GetBoolean() != true ||
+                !catalog.GetProperty("complete").GetBoolean() ||
                 catalog.GetProperty("project").GetString() != project || catalog.GetProperty("area").GetString() != area)
                 throw new ArgumentException("Incomplete or mismatched ADO catalog");
             int[] ids = catalog.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("id").GetInt32()).ToArray();
