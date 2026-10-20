@@ -28,7 +28,7 @@ JSON
       fi
       shift
     done ;;
-  "workitem context") echo '{"schema":"ado.requirement-context/v1","id":4711}'; exit ;;
+  "workitem context") printf '{"schema":"ado.requirement-context/v1","id":%s}\n' "$3"; exit ;;
 esac
 exit 1
 ADO
