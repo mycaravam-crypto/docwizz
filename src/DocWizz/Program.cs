@@ -85,7 +85,7 @@ static async Task<int> Dispatch(string[] args)
         var snapshot = AdoTestSnapshot.Load(Path.GetFullPath(source));
         var folder = Path.Combine(path, "docs", ".docwizz");
         Directory.CreateDirectory(folder);
-        var target = Path.Combine(folder, $"ado-tests-{(snapshot.PlanIds.Length == 1 ? snapshot.PlanIds[0].ToString() : "all")}.json");
+        var target = Path.Join(folder, $"ado-tests-{(snapshot.PlanIds.Length == 1 ? snapshot.PlanIds[0].ToString() : "all")}.json");
         File.WriteAllText(target, snapshot.Content.TrimEnd() + "\n");
         Console.WriteLine(AdoTestSnapshot.Summary(snapshot));
         Console.WriteLine($"Imported to {target}");
