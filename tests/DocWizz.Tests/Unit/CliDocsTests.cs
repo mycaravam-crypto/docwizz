@@ -9,6 +9,8 @@ public class CliDocsTests
     static readonly string Root = FindRoot();
     static readonly string CliMd = File.ReadAllText(Path.Join(Root, "docs", "cli.md"));
     static readonly string Readme = File.ReadAllText(Path.Combine(Root, "README.md"));
+    static readonly string GettingStarted = File.ReadAllText(Path.Combine(Root, "docs", "getting-started.md"));
+    static readonly string QualityGuide = File.ReadAllText(Path.Combine(Root, "docs", "guides", "quality.md"));
 
     // Setup's stages as setup prints them (Journey/SetupJourneyTests checks the order on a real run).
     public static readonly string[] SetupStages = ["discover", "scan", "config", "analyze", "architecture", "generate", "check"];
@@ -98,7 +100,7 @@ public class CliDocsTests
     [Fact]
     public void The_first_setup_workflow_is_documented()
     {
-        var setup = Section(CliMd, "### 1. First setup");
+        var setup = Section(GettingStarted, "## First setup");
         Assert.Contains("docwizz setup .", setup);
         Assert.Equal(SetupStages, Rows(setup).Where(r => int.TryParse(r[0], out _)).Select(r => r[1]));   // the stage table, in run order
         Assert.All(["SUCCESS", "SUCCESS_WITH_FINDINGS", "FAILED"], s => Assert.Contains($"| `{s}` |", setup));
@@ -110,7 +112,7 @@ public class CliDocsTests
     [Fact]
     public void The_ci_workflow_is_documented()
     {
-        var ci = Section(CliMd, "### 4. Quality gates and CI");
+        var ci = Section(QualityGuide, "## Quality gates and CI");
         Assert.Contains("docwizz check . --since", ci);
         Assert.Contains("uses: mycaravam-crypto/docwizz@", ci);   // the GitHub Action in this repository
         Assert.True(File.Exists(Path.Combine(Root, "action.yml")));
