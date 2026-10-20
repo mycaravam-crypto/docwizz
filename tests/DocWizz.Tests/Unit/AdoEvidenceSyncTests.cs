@@ -25,6 +25,17 @@ public class AdoEvidenceSyncTests
                 () => AdoEvidenceSync.Preflight(root, "not-a-tag-or-branch", ado, ado));
             Assert.Contains("--history-since", error.Message);
             await AdoEvidenceSync.Preflight(root, null, ado, ado);
+            await Assert.ThrowsAsync<ArgumentException>(
+                () => AdoEvidenceSync.Preflight(root, "-unsafe", ado, ado));
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => AdoEvidenceSync.Preflight(root, null, Path.Join(root, "missing-ado"), ado));
+            string other = Directory.CreateTempSubdirectory("docwizz-preflight-no-git-").FullName;
+            try
+            {
+                await Assert.ThrowsAsync<ArgumentException>(
+                    () => AdoEvidenceSync.Preflight(other, "v1.0.4", ado, ado));
+            }
+            finally { Directory.Delete(other, recursive: true); }
         }
         finally { Directory.Delete(root, recursive: true); }
     }
