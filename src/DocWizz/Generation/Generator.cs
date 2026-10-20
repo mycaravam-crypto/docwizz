@@ -62,7 +62,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         Write("api.md", Api());
         Write("frontend.md", FrontendPage());
         foreach (var (page, body) in RoutePages()) Write(page, body);
-        if (Requirements is not null) Directory.CreateDirectory(Path.Combine(outDir, "requirements"));
+        if (Requirements is not null || Catalog is not null) Directory.CreateDirectory(Path.Combine(outDir, "requirements"));
+        if (Catalog is not null) Directory.CreateDirectory(Path.Combine(outDir, "requirements", "items"));
         foreach (var (page, body) in RequirementPages()) Write(page, body);
         if (Catalog is { } catalog)
             foreach (var (page, body) in RequirementsCatalog.Pages(catalog, Requirements, Head, model, AdoTests)) Write(page, body);
