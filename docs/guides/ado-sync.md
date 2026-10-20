@@ -1,6 +1,6 @@
 # Native ADO synchronization (Issue #278)
 
-The first native, opt-in integration is available on this branch:
+The first native, opt-in integration is available in DocWizz:
 
 ```bash
 docwizz generate . --html --ado-project Shop --ado-area 'Shop\Orders' --history-since v1.0.0

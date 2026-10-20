@@ -4,9 +4,9 @@ DocWizz liefert drei **illustrative, projektbezogen anzupassende** Produktvorlag
 
 | Produkt | YAML-Vorlage | Ausfüll- und Reviewhilfe | Abschnitte |
 |---|---|---|---:|
-| SW-Architektur | [sw-architecture.yaml](../../templates/vmodell-xt/sw-architecture.yaml) | [SW-Architektur](../vmodell-xt/sw-architecture-guide.md) | 17 |
-| SW-Spezifikation | [sw-specification.yaml](../../templates/vmodell-xt/sw-specification.yaml) | [SW-Spezifikation](../vmodell-xt/sw-specification-guide.md) | 17 |
-| Systemelement-Testspezifikation | [system-element-test-specification.yaml](../../templates/vmodell-xt/system-element-test-specification.yaml) | [Testspezifikation](../vmodell-xt/system-element-test-specification-guide.md) | 15 |
+| SW-Architektur | [sw-architecture.yaml](../../templates/vmodell-xt/sw-architecture.yaml) | [SW-Architektur](../reference/vmodell-xt/sw-architecture.md) | 17 |
+| SW-Spezifikation | [sw-specification.yaml](../../templates/vmodell-xt/sw-specification.yaml) | [SW-Spezifikation](../reference/vmodell-xt/sw-specification.md) | 17 |
+| Systemelement-Testspezifikation | [system-element-test-specification.yaml](../../templates/vmodell-xt/system-element-test-specification.yaml) | [Testspezifikation](../reference/vmodell-xt/system-element-test-specification.md) | 15 |
 
 ## Verwendung
 
@@ -39,7 +39,7 @@ statements:
     source: docs/project-charter.md
   - section: decisions
     text: Die Entscheidung zur Trennung von Anwendungslogik und Infrastruktur ist im ADR dokumentiert.
-    source: docs/adr/0001-architecture.md
+    source: docs/internals/decisions/architecture.md
 ```
 
 Die referenzierten Dateien müssen im Software-Repository existieren; der Inhalt oben ist nur beispielhaft und muss durch projektspezifische Nachweise ersetzt werden.
@@ -54,7 +54,7 @@ Die referenzierten Dateien müssen im Software-Repository existieren; der Inhalt
 - Bewertbare Qualitätsziele können sich an ISO/IEC 25010 orientieren. Sicherheitsanforderungen (Vertraulichkeit, Integrität, Verfügbarkeit) benötigen projektspezifische Nachweise; ISO/IEC 27001 ersetzt keine Produktprüfung.
 - Die Testspezifikation hat die beispielhafte direkte Abhängigkeit `sw-specification`; andere Produktbeziehungen müssen im Projekt-Tailoring explizit entschieden werden.
 
-Weitere Details: [Product drafts](../cli.md#product-drafts), [Project evidence](project-evidence.md), [Template contract](../adr/0001-product-template-contract.md).
+Weitere Details: [Product drafts](../cli.md#product-drafts), [Project evidence](project-evidence.md), [Template contract](../internals/decisions/product-template-contract.md).
 
 ## Fachliche Referenzen
 

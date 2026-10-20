@@ -2,7 +2,7 @@
 """Check links in maintained Markdown docs and canonical documentation filenames.
 
 Only repository-local links are checked: external URLs and GitHub anchor slugs
-are not verified offline. Legacy # Moved files preserve historical URLs.
+are not verified offline. Documentation has no legacy redirect files.
 """
 from __future__ import annotations
 
@@ -14,7 +14,9 @@ from urllib.parse import unquote, urlsplit
 LINK = re.compile(r"!?\[[^\]]*\]\((<?[^)\s>]+>?)(?:\s+[\"'][^\"']+[\"'])?\)")
 FENCE = re.compile(r"^\s{0,3}(" + chr(96) + r"{3,}|~{3,})")
 INLINE_CODE = re.compile(r"\x60+[^\x60]*\x60+")
-KEBAB = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
+KEBAB = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*\.md$")
+DIRECTORIES = {"guides", "reference", "internals", "archive"}
+ROOT_DOCS = {"README.md", "cli.md", "getting-started.md"}
 
 
 def lint(root: Path) -> list[str]:
@@ -29,10 +31,20 @@ def lint(root: Path) -> list[str]:
     for file in files:
         relative = file.relative_to(root).as_posix()
         content = file.read_text(encoding="utf-8")
-        compatibility = content.startswith("# Moved\n")
-        if file != root / "README.md" and file.name != "README.md":
-            if not KEBAB.fullmatch(file.name) and not compatibility:
+        if file != root / "README.md":
+            parts = file.relative_to(docs).parts
+            if len(parts) == 1:
+                if parts[0] not in ROOT_DOCS:
+                    problems.append(f"{relative}: misplaced documentation: move into guides/reference/internals/archive")
+            elif parts[0] not in DIRECTORIES:
+                problems.append(f"{relative}: unsupported directory: {parts[0]}")
+            if file.name != "README.md" and not KEBAB.fullmatch(file.name):
                 problems.append(f"{relative}: non-canonical filename (use lowercase kebab-case.md)")
+            if any(not re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", part)
+                   for part in parts[:-1]):
+                problems.append(f"{relative}: non-canonical directory name")
+            if content.startswith("# Moved\n"):
+                problems.append(f"{relative}: obsolete compatibility redirect; remove the file and update links")
         fence_char = ""
         fence_count = 0
         for index, source in enumerate(content.splitlines(), start=1):

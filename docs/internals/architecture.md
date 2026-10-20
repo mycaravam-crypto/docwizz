@@ -297,7 +297,7 @@ items without a summary, plus an overview for each module (folder) of three or m
   declared `docs/*.md` paths and never following symlinks.
 - **`evidence-diff`** ([ProjectEvidenceImpact](../../src/DocWizz/Product/ProjectEvidenceImpact.cs)) compares declaration
   hashes between two snapshots and follows declared links to affected tests.
-- **Product drafts.** [ADR-0001](../adr/0001-product-template-contract.md) defines the template contract,
+- **Product drafts.** [ADR-0001](decisions/product-template-contract.md) defines the template contract,
   independent of coverage profiles. [ProductDraft](../../src/DocWizz/Product/ProductDraft.cs) builds an evidence catalog per
   section (code facts and sourced statements from [ProjectContext](../../src/DocWizz/Discovery/ProjectContext.cs)) with
   document-wide ids; sections without evidence say `OFFEN`. With `--ai`,
