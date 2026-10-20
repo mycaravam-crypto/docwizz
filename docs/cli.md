@@ -47,13 +47,13 @@ The command and option tables below are the normative CLI reference; task instru
 - [Agent context and MCP](guides/agent-context.md)
 - [Requirements and test traceability](guides/requirements.md)
 - [Product documents and controlled publication](guides/product-documents.md)
-- [Domain discovery](domain-discovery.md)
+- [Domain discovery](guides/domain-discovery.md)
 - [Scanner distribution](reference/scanner-distribution.md)
 - [Multi-project setup](#multi-project-repositories)
 
 ## Multi-project repositories
 
-Run `docwizz discover .` to inventory solutions and projects. Configure `scope:` in `docwizz.yaml`, or use `docwizz setup . --select-projects` to select project manifests. A project scope restricts what is scanned; dependency-only projects are clearly identified as metadata-only. With no scope, the original whole-repository behavior is retained. For the complete scope/configuration contract see [implementation architecture](architecture.md) and [historical multi-project acceptance](quality/multi-project-acceptance.md).
+Run `docwizz discover .` to inventory solutions and projects. Configure `scope:` in `docwizz.yaml`, or use `docwizz setup . --select-projects` to select project manifests. A project scope restricts what is scanned; dependency-only projects are clearly identified as metadata-only. With no scope, the original whole-repository behavior is retained. For the complete scope/configuration contract see [implementation architecture](internals/architecture.md) and [historical multi-project acceptance](archive/multi-project-acceptance.md).
 
 ## Commands
 
@@ -237,4 +237,4 @@ GitHub release with generated notes. Nothing is committed to `main`.
 
 ### Signed DOCX/PDF publication
 
-After a controlled draft passes `product check`, use `docwizz product publish <dir> <template.yaml> [out-dir] --control document-control.yaml --context context.yaml --approval signed-approval.json --trust .github/document-release-policy.json`. Publication is separate from drafts and refuses overwrites. A custom existing generated draft can be selected using `--draft docs/custom/architecture.md`; its adjacent `.evidence.json` is verified against the signatures. See [release policy and CI](document-publication.md).
+After a controlled draft passes `product check`, use `docwizz product publish <dir> <template.yaml> [out-dir] --control document-control.yaml --context context.yaml --approval signed-approval.json --trust .github/document-release-policy.json`. Publication is separate from drafts and refuses overwrites. A custom existing generated draft can be selected using `--draft docs/custom/architecture.md`; its adjacent `.evidence.json` is verified against the signatures. See [release policy and CI](reference/publication.md).

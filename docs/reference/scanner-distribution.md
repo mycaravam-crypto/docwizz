@@ -1,6 +1,6 @@
 # Scanner distribution
 
-[CLI reference](../cli.md) · [Implementation architecture](../architecture.md)
+[CLI reference](../cli.md) · [Implementation architecture](../internals/architecture.md)
 
 ## Packaging and runtime requirements
 

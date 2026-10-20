@@ -78,5 +78,5 @@ With projects or solutions in the model, `generate` writes `docs/index.md` → `
 
 Classic non-SDK ASP.NET MVC projects are inventoried, but conventional `MapRoute` routing can't be fully inferred
 statically; `api.md` warns when such a project is present. The acceptance matrix and migration notes are in
-[MULTI_PROJECT_ACCEPTANCE.md](../quality/multi-project-acceptance.md); `bash scripts/benchmark-multi-project.sh` measures full
+[MULTI_PROJECT_ACCEPTANCE.md](../archive/multi-project-acceptance.md); `bash scripts/benchmark-multi-project.sh` measures full
 versus scoped scans.
