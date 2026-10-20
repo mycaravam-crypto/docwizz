@@ -203,7 +203,9 @@ static async Task<int> Dispatch(string[] args)
                     using var syncProgress = CliProgress.ForConsole(
                         [new("export", 1, "ADO and GitWizz exports"), new("import", 1, "Importing evidence")],
                         opts.ContainsKey("progress"));
-                    syncProgress.Begin("export");
+                    syncProgress.Begin("export", "Checking ADO, GitWizz and Git references");
+                    await AdoEvidenceSync.Preflight(path, opts.GetValueOrDefault("history-since"));
+                    syncProgress.Detail("Preflight successful");
                     using var staged = await AdoEvidenceSync.Export(adoProject, opts["ado-area"],
                         opts.GetValueOrDefault("history-since"), syncProgress.Detail);
                     syncProgress.Advance("export", "validated");
