@@ -41,7 +41,7 @@ static async Task<int> Dispatch(string[] args)
     string? requirementsAction = null;
     if (cmd == "requirements")
     {
-        if (pos.ElementAtOrDefault(1) is not ("import" or "show" or "query")) return Usage("requirements needs import, show or query: docwizz requirements import <dir> <history.json> [<work-items>]", "requirements");
+        if (pos.ElementAtOrDefault(1) is not ("import" or "show" or "query" or "catalog-import")) return Usage("requirements needs import, show or query; catalog-import is also supported: docwizz requirements catalog-import <dir> <catalog.json>", "requirements");
         requirementsAction = pos[1];
         pos.RemoveAt(1);
     }
@@ -168,6 +168,7 @@ static async Task<int> Dispatch(string[] args)
             return requirementsAction switch
             {
                 "import" => RequirementsImport(path, pos.ElementAtOrDefault(2), pos.ElementAtOrDefault(3), config, opts),
+                "catalog-import" => RequirementsCatalog.Import(path, pos.ElementAtOrDefault(2)),
                 "query" => RequirementsQuery(path, pos.ElementAtOrDefault(2), config),
                 _ => RequirementsShow(path, config, opts, json),
             };
@@ -1230,6 +1231,8 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
         Head = pageRequirements is null ? null : head ?? Git(root, "rev-parse", "HEAD")?.Trim(),
         Files = [.. RepoFiles(root, config, [".github", ".circleci"]).Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))],
     }.Run());
+    // Catalog data is maintained separately from history-derived requirements and survives normal generation.
+    RequirementsCatalog.RenderIfPresent(root, outDir);
     bar.Advance("write pages", $"{Plural(pages.Count, "page")}, {changed.Count} changed");
 
     bar.Begin("metadata");
