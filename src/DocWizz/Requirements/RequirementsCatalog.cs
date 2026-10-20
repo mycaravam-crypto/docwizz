@@ -16,7 +16,8 @@ static class RequirementsCatalog
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
         Validate(doc.RootElement);
         var target = Path.Join(Path.GetFullPath(root), "docs", ".docwizz", "workitem-catalog.json");
-        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        var parent = Path.GetDirectoryName(target) ?? throw new ArgumentException("invalid catalog destination");
+        Directory.CreateDirectory(parent);
         var canonical = JsonSerializer.Serialize(doc.RootElement, new JsonSerializerOptions { WriteIndented = true }) + "\n";
         if (!File.Exists(target) || File.ReadAllText(target) != canonical) File.WriteAllText(target, canonical);
         Render(doc.RootElement, Path.Join(Path.GetFullPath(root), "docs"));
@@ -71,6 +72,8 @@ static class RequirementsCatalog
     static string Escape(string? text) => (text ?? "")
         .Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
         .Replace("|", "&#124;").Replace("\r", " ").Replace("\n", " ");
+    static string Multiline(string? text) => string.Join("\n", (text ?? "").Replace("\r\n", "\n")
+        .Split('\n').Select(line => "> " + Escape(line)));
     static string Val(JsonElement item, string name) =>
         item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? Escape(value.GetString()) : "";
     static string Parent(JsonElement item) =>
@@ -80,7 +83,8 @@ static class RequirementsCatalog
 
     static void Write(string path, string content)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var parent = Path.GetDirectoryName(path) ?? throw new ArgumentException("invalid documentation destination");
+        Directory.CreateDirectory(parent);
         if (!File.Exists(path) || File.ReadAllText(path) != content)
             File.WriteAllText(path, content);
     }
@@ -107,12 +111,17 @@ static class RequirementsCatalog
             page.AppendLine($"- Iteration: {Val(item,"iteration")}");
             page.AppendLine($"- Parent: {Parent(item)}\n");
             page.AppendLine("## Description\n");
-            page.AppendLine(Val(item,"description") + "\n");
+            page.AppendLine(Multiline(item.TryGetProperty("description", out var description) && description.ValueKind == JsonValueKind.String
+                ? description.GetString() : null) + "\n");
             page.AppendLine("## Acceptance criteria\n");
             if (item.TryGetProperty("criteria", out var criteria) && criteria.ValueKind == JsonValueKind.Array)
                 foreach (var (criterion, number) in criteria.EnumerateArray().Select((v, i) => (v, i + 1)))
                     if (criterion.ValueKind == JsonValueKind.String)
-                        page.AppendLine($"{number}. {Escape(criterion.GetString())}");
+                    {
+                        var lines = (criterion.GetString() ?? "").Replace("\r\n", "\n").Split('\n');
+                        page.AppendLine($"{number}. {Escape(lines[0])}");
+                        foreach (var line in lines.Skip(1)) page.AppendLine("   " + Escape(line));
+                    }
             page.AppendLine("\nImplementation and test evidence: not assessed by this catalog.");
             Write(Path.Join(directory, "items", id + ".md"), page.ToString() + "\n");
         }
