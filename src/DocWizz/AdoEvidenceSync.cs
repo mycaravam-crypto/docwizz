@@ -58,14 +58,15 @@ static class AdoEvidenceSync
     }
 
     /// <summary>Export and validate ADO area requirements, tests, and optional GitWizz history before importing any evidence.</summary>
-    public static Task<Staged> Export(string project, string area, string? since) =>
-        Export(project, area, since, "ado", "gw");
+    public static Task<Staged> Export(string project, string area, string? since, Action<string>? status = null) =>
+        Export(project, area, since, "ado", "gw", status);
 
-    internal static async Task<Staged> Export(string project, string area, string? since, string adoExecutable, string gwExecutable)
+    internal static async Task<Staged> Export(string project, string area, string? since, string adoExecutable, string gwExecutable, Action<string>? status = null)
     {
         var result = new Staged(since is not null);
         try
         {
+            status?.Invoke("ADO: exporting area work items");
             await Run(adoExecutable, "workitem", "export", "--project", project, "--area", area, "--output", result.Catalog);
             JsonElement catalog = Read(result.Catalog);
             if (catalog.GetProperty("schema").GetString() != "ado.workitem-catalog/v1" ||
@@ -76,6 +77,7 @@ static class AdoEvidenceSync
             if (ids.Any(id => id <= 0) || ids.Distinct().Count() != ids.Length)
                 throw new ArgumentException("Invalid or duplicate ADO work item ids");
 
+            status?.Invoke("ADO: exporting test-case relationships");
             await Run(adoExecutable, "testplan", "trace-export", "--project", project, "--area", area, "--output", result.Tests);
             JsonElement tests = Read(result.Tests);
             if (tests.GetProperty("format").GetString() is not ("ado.test-traceability/v1" or "ado.test-traceability/v2") ||
@@ -87,13 +89,37 @@ static class AdoEvidenceSync
 
             if (since is not null)
             {
-                await Run(gwExecutable, "history", "export", "--since", since, "--provider", "azure-devops", "-o", result.History);
+                status?.Invoke("GitWizz: exporting history");
+                // A Git Bash alias/function named gw is not executable by Process.Start on Windows.
+                // Point DOCWIZZ_GITWIZZ_DLL at the published assembly to run it without shell activation.
+                string? gitwizzDll = Environment.GetEnvironmentVariable("DOCWIZZ_GITWIZZ_DLL");
+                if (!string.IsNullOrWhiteSpace(gitwizzDll))
+                {
+                    string dll = Path.GetFullPath(gitwizzDll);
+                    if (!File.Exists(dll)) throw new ArgumentException("DOCWIZZ_GITWIZZ_DLL does not point to an existing file");
+                    await Run("dotnet", dll, "history", "export", "--since", since, "--provider", "azure-devops", "-o", result.History);
+                }
+                else
+                {
+                    try
+                    {
+                        await Run(gwExecutable, "history", "export", "--since", since, "--provider", "azure-devops", "-o", result.History);
+                    }
+                    catch (System.ComponentModel.Win32Exception e) when (OperatingSystem.IsWindows())
+                    {
+                        throw new InvalidOperationException(
+                            "GitWizz is not available as a Windows executable. Git Bash aliases/functions cannot be started by .NET. " +
+                            "Set DOCWIZZ_GITWIZZ_DLL to the published gitwizz.dll path, or install a native gitwizz.exe on PATH.", e);
+                    }
+                }
                 Restrict(result.History);
                 if (Read(result.History).GetProperty("schema").GetString() != "gitwizz.history/v2")
                     throw new ArgumentException("Invalid GitWizz history schema");
                 System.IO.Directory.CreateDirectory(result.WorkItems);
+                int processed = 0;
                 foreach (var id in ids)
                 {
+                    status?.Invoke($"ADO: work-item contexts {processed + 1}/{ids.Length}");
                     var file = Path.Join(result.WorkItems, id + ".json");
                     // The CLI writes the context to stdout; unlike export commands it has no --output flag.
                     var psi = new ProcessStartInfo(adoExecutable) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
@@ -111,6 +137,7 @@ static class AdoEvidenceSync
                     if (context.GetProperty("schema").GetString() != "ado.requirement-context/v1" ||
                         context.GetProperty("id").GetInt32() != id)
                         throw new ArgumentException($"Invalid ADO context for work item {id}");
+                    processed++;
                 }
             }
             return result;
