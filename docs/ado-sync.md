@@ -1,4 +1,18 @@
-# One-command ADO evidence integration (Issue #278)
+# Native ADO synchronization (Issue #278)
+
+The first native, opt-in integration is available on this branch:
+
+```bash
+docwizz generate . --html --ado-project Shop --ado-area 'Shop\Orders' --history-since v1.0.0
+```
+
+Omit `--history-since` to import only the Area Requirements Catalog and explicit ADO test-case relationships. Without `--ado-project` and `--ado-area`, generation remains offline; both values must be given together. Native mode requires the `ado` binary, and optionally `gw`, configured on `PATH`, with ADO authentication already performed.
+
+The native synchronizer executes external programs with an argument array (not a shell), validates the staged JSON schema and requested project/area, and imports only after the exports succeed. For historical mapping, it retrieves work-item context for all exported IDs. Temporary files use a private directory and are removed on completion.
+
+**Limitations:** The existing import API is not transactional and does not yet roll back a previously imported index if a later import fails. Full provenance/origin validation, incremental remote export, comprehensive fake-executable journey tests and atomic commit remain open in #278. Never publish generated documentation without reviewing work-item confidentiality.
+
+## Alternative script
 
 Initial, opt-in integration: `scripts/sync-ado-evidence.sh` orchestrates existing ADO/GitWizz/DocWizz CLIs without changing the offline `docwizz generate` command.
 
