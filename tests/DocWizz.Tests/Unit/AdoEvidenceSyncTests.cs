@@ -99,12 +99,41 @@ public class AdoEvidenceSyncTests
                 printf '%s\n' '{"schema":"ado.workitem-catalog/v1"}' > "$1"
                 """);
             File.SetUnixFileMode(invalid, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-            await Assert.ThrowsAnyAsync<Exception>(() => AdoEvidenceSync.Export("Shop", "Shop\\Orders", null, invalid, invalid));
+            await Assert.ThrowsAsync<KeyNotFoundException>(() => AdoEvidenceSync.Export("Shop", "Shop\\Orders", null, invalid, invalid));
         }
         finally
         {
             Directory.Delete(folder, recursive: true);
         }
+    }
+
+
+    [Fact]
+    public void Failed_import_restores_original_evidence_and_successful_import_keeps_changes()
+    {
+        string root = Directory.CreateTempSubdirectory("docwizz-rollback-test-").FullName;
+        try
+        {
+            string folder = Path.Join(root, "docs", ".docwizz");
+            Directory.CreateDirectory(folder);
+            string file = Path.Join(folder, "requirements.json");
+            File.WriteAllText(file, "original");
+            using (new AdoEvidenceRollback(root))
+            {
+                File.WriteAllText(file, "partial");
+                File.WriteAllText(Path.Join(folder, "new.json"), "unexpected");
+            }
+            Assert.Equal("original", File.ReadAllText(file));
+            Assert.False(File.Exists(Path.Join(folder, "new.json")));
+
+            using (var transaction = new AdoEvidenceRollback(root))
+            {
+                File.WriteAllText(file, "committed");
+                transaction.Commit();
+            }
+            Assert.Equal("committed", File.ReadAllText(file));
+        }
+        finally { Directory.Delete(root, recursive: true); }
     }
 
 }
