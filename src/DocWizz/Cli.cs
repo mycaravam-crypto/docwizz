@@ -22,6 +22,7 @@ static class Cli
         ["budget"] = "a number of tokens", ["work-item"] = "a work item id, e.g. 1234 or github#1234",
         ["seed"] = "a symbol id, qualified method name or endpoint (POST /api/orders)", ["depth"] = "the traversal depth (0 to 8)",
         ["limit"] = "the maximum number of technical symbols (1 to 500)", ["base-url"] = "a running application URL (http or https)",
+        ["ado-project"] = "an Azure DevOps project", ["ado-area"] = "an Azure DevOps area path", ["history-since"] = "a Git history ref for optional requirement links",
         ["storage-state"] = "a Playwright storageState JSON file", ["screenshot-delay"] = "a number of milliseconds, 0 to 60000",
     };
 
@@ -42,7 +43,7 @@ static class Cli
         ["setup"] = new("setup [dir]", "first run: detect the stack, write docwizz.yaml, analyze, generate docs, check", "start here",
             "docwizz setup . --select-projects", "--select-projects (TTY wizard), --all-projects (clear scope), --yes (no prompts), --force (overwrite docwizz.yaml), --html, --progress, --refresh-html-on-version-change, --ai, --ai-ratings (advisory ratings of written docs), --profile <name|file>", ["select-projects", "all-projects", "yes", "force", "html", "progress", "refresh-html-on-version-change", "ai", "ai-ratings", "profile"]),
         ["generate"] = new("generate <dir> [out]", "write Markdown docs (default <dir>/docs)", "everyday",
-            "docwizz generate . --html", "--html (HTML next to every page), --screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>] (Playwright captures detected routes), --progress, --refresh-html-on-version-change, --ai (self-hosted model drafts), --ai-ratings (advisory ratings of written docs), --requirements (drafts also get each symbol's linked work items), --profile", ["html", "screenshots", "base-url", "storage-state", "screenshot-delay", "progress", "refresh-html-on-version-change", "ai", "ai-ratings", "requirements", "profile"]),
+            "docwizz generate . --html", "--html (HTML next to every page), --screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>] (Playwright captures detected routes), --progress, --refresh-html-on-version-change, --ai (self-hosted model drafts), --ai-ratings (advisory ratings of written docs), --requirements (drafts also get each symbol's linked work items), --profile", ["html", "screenshots", "base-url", "storage-state", "screenshot-delay", "progress", "refresh-html-on-version-change", "ai", "ai-ratings", "requirements", "ado-project", "ado-area", "history-since", "profile"]),
         ["check"] = new("check <dir> [--since <ref>]", "quality gate: exit 1 when thresholds fail (only new problems with --since)", "CI",
             "docwizz check . --since origin/main", "--since <ref>, --format json, --profile", ["since", "format", "profile"]),
         ["analyze"] = new("analyze <dir>", "documentation report: gaps, coverage, quality, architecture", "everyday",
@@ -124,6 +125,10 @@ static class Cli
                 error ??= "--graph and --links are mutually exclusive";
             if (cmd == "generate")
             {
+                if (opts.ContainsKey("ado-project") != opts.ContainsKey("ado-area"))
+                    error ??= "--ado-project and --ado-area must be provided together";
+                if (opts.ContainsKey("history-since") && !opts.ContainsKey("ado-project"))
+                    error ??= "--history-since requires --ado-project and --ado-area";
                 if (opts.ContainsKey("screenshots") && !opts.ContainsKey("base-url"))
                     error ??= "--screenshots requires --base-url <url>";
                 if (!opts.ContainsKey("screenshots") && opts.ContainsKey("base-url"))
