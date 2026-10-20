@@ -141,10 +141,10 @@ public partial class RequirementIndexTests
             Assert.Contains("requirements/area-catalog.html", pages);
             Assert.Contains("requirements/items/43.md", pages);
             Assert.Contains("requirements/items/43.html", pages);
-            Assert.Contains("Area requirements catalog", File.ReadAllText(Path.Join(output, "index.md")));
-            Assert.Contains("WI-43", File.ReadAllText(Path.Join(output, "search.json")));
-            Assert.Contains("area-catalog.html", File.ReadAllText(Path.Join(output, "requirements", "items", "43.html")));
-            Assert.Contains("not-assessed", File.ReadAllText(Path.Join(output, "requirements", "area-catalog.md")));
+            Assert.Contains("Area requirements catalog", System.IO.File.ReadAllText(Path.Join(output, "index.md")));
+            Assert.Contains("WI-43", System.IO.File.ReadAllText(Path.Join(output, "search.json")));
+            Assert.Contains("area-catalog.html", System.IO.File.ReadAllText(Path.Join(output, "requirements", "items", "43.html")));
+            Assert.Contains("not-assessed", System.IO.File.ReadAllText(Path.Join(output, "requirements", "area-catalog.md")));
         }
         finally { Directory.Delete(root, true); }
     }
