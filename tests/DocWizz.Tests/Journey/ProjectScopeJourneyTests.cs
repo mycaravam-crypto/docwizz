@@ -138,6 +138,45 @@ public class ProjectScopeJourneyTests
         Assert.DoesNotContain("Excluded.Dependency", File.ReadAllText(sbomFile));
     }
 
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Imported_test_artifacts_are_part_of_documentation_scope_in_markdown_and_html(bool scoped)
+    {
+        using var repo = Repo();
+        if (scoped)
+            File.WriteAllText(Path.Combine(repo.Root, "docwizz.yaml"), Yaml());
+
+        var snapshot = Path.Combine(repo.Root, "ado-snapshot.json");
+        File.WriteAllText(snapshot, """
+            {"format":"ado.test-traceability/v2","project":"Demo","area":"Area",
+             "generatedAt":"2026-10-16T06:00:00+00:00",
+             "plans":[{"id":7,"name":"Plan"}],
+             "testCases":[{"id":11,"title":"Case","area":"Area","suiteIds":[3]}],
+             "assignments":[{"planId":7,"suiteId":3,"testCaseId":11}],
+             "requirements":[{"id":21,"title":"Requirement","testCaseIds":[11]}]}
+            """);
+        Assert.Equal(0, Docwizz.Run("tests", "import", repo.Root, snapshot).Exit);
+        Assert.Equal(0, Docwizz.Run("generate", repo.Root, "--html").Exit);
+
+        var docs = Path.Combine(repo.Root, "docs");
+        var markdown = File.ReadAllText(Path.Combine(docs, "index.md"));
+        var scopeStart = markdown.IndexOf("## Documentation scope", StringComparison.Ordinal);
+        var artifactStart = markdown.IndexOf("Imported test artifacts", StringComparison.Ordinal);
+        Assert.True(scopeStart >= 0 && artifactStart > scopeStart);
+        Assert.DoesNotContain("## Imported test evidence", markdown);
+        Assert.Contains("[Quality → Tests & requirements](tests.md)", markdown);
+        Assert.Contains("Explicit links are not execution or coverage proof", markdown);
+        Assert.True(File.Exists(Path.Combine(docs, "tests.md")));
+
+        var html = File.ReadAllText(Path.Combine(docs, "index.html"));
+        Assert.Contains("Documentation scope", html);
+        Assert.Contains("Imported test artifacts", html);
+        Assert.Contains("tests.html", html);
+        Assert.DoesNotContain("Imported test evidence</h2>", html);
+    }
+
     [Fact]
     public void Repository_level_deployment_and_ci_remain_visible_under_scope()
     {
