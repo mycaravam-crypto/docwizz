@@ -83,7 +83,11 @@ static class AdoEvidenceSync
     {
         var start = new ProcessStartInfo("git") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
         start.ArgumentList.Add("-C");
-        start.ArgumentList.Add(repository);
+        // Canonicalize -C input and keep it in ArgumentList; never invoke a shell.
+        string fullRepository = Path.GetFullPath(repository);
+        if (!Directory.Exists(fullRepository))
+            throw new ArgumentException("Git repository directory does not exist.");
+        start.ArgumentList.Add(fullRepository);
         foreach (string argument in arguments) start.ArgumentList.Add(argument);
         try
         {
