@@ -73,7 +73,7 @@ Follow-up:
 - In a repository with several solutions, `setup` offers to pick the projects to document (see
   [Multi-project repositories](#multi-project-repositories)).
 
-To try it without your own code, run the steps below on the bundled sample in [fixture/](fixture/): an ASP.NET API
+To try it without your own code, run the steps below on the bundled sample in [fixture/](fixture): an ASP.NET API
 with Vue and React frontends and some deliberate mistakes. All output in this README comes from it.
 
 ## Workflow
@@ -172,7 +172,7 @@ working. Slow pages: add `--screenshot-delay <ms>`. Hash routers are opened as `
 errors, redirects, expired sessions and pages whose API calls answer 401/403 are skipped with a warning.
 **The state file holds session tokens:** keep it out of Git, and use a low-privilege test account with sanitized data.
 Limits are listed in [CLI.md](docs/cli.md#options); for Windows installation errors, authenticated capture and diagnostics,
-see [Playwright screenshot troubleshooting](docs/PLAYWRIGHT_SCREENSHOTS.md).
+see [Playwright screenshot troubleshooting](docs/guides/screenshots.md).
 
 ### Draft missing docs with a local AI
 
@@ -318,16 +318,16 @@ docwizz domain discover . --work-item 4711 --depth 3 --limit 100 --format json
 
 The second form requires `docwizz requirements import`. Without an index, the first form still
 works with technical evidence only. Both are offline; no LLM and no repository changes.
-See [domain discovery](docs/domain-discovery.md) for the evidence contract and limitations.
+See [domain discovery](docs/guides/domain-discovery.md) for the evidence contract and limitations.
 
 For GitHub issue context, import a GitWizz `--provider github` history plus issue JSON exported with
 `gh issue view --json number,url,title,body,labels,state,updatedAt`, then use `--work-item github#123`.
 Issue links remain historical candidates; the importer and queries make no network calls.
-See the [GitHub export/import workflow](docs/requirement-context.md#github-issue-exports).
+See the [GitHub export/import workflow](docs/reference/requirement-formats.md#github-issue-exports).
 
 ### Requirements and traceability
 
-**Area-path inventories:** Import the entire Azure DevOps work-item structure, including requirements without code links, using `ado workitem export --area <path> --output workitems.json` followed by `docwizz requirements catalog-import . workitems.json`. The generated area table, individual requirement pages, HTML navigation and search can then show *independent* historical code and imported ADO test-case links. Absence of a link does not establish absence of an implementation or test. See [area-path requirements](docs/area-requirements.md).
+**Area-path inventories:** Import the entire Azure DevOps work-item structure, including requirements without code links, using `ado workitem export --area <path> --output workitems.json` followed by `docwizz requirements catalog-import . workitems.json`. The generated area table, individual requirement pages, HTML navigation and search can then show *independent* historical code and imported ADO test-case links. Absence of a link does not establish absence of an implementation or test. See [area-path requirements](docs/guides/requirements.md).
 
 
 For projects that keep requirements as YAML evidence:
@@ -338,22 +338,22 @@ For projects that keep requirements as YAML evidence:
   `confirmed` (a commit the provider links to it changed it) or `candidate` (only a PR link or a commit-message
   mention), with commit, file and lines. It reads `gitwizz history export` (`gitwizz.history/v2`) directly.
   `generate --ai --requirements` and `context --requirements` hand that bounded, cited context to a local model or
-  agent. See [requirement context](docs/requirement-context.md).
+  agent. See [requirement context](docs/reference/requirement-formats.md).
 - Once that history is imported, a plain `generate` adds `requirements/` pages (criteria, linked routes and code, commits,
   PRs), a Requirements section on each route page, work-item backlinks on module pages, and a "Traceability gaps"
   section in `quality.md`: routes without work items or endpoints, work items without current code, and acceptance
   criteria, which stay **unverified** because no test results are imported.
 - `docwizz product` drafts a work product from a template, code and evidence; `product check` verifies references and
-  freshness. Illustrative V-Modell XT 2.4 templates are in [templates/vmodell-xt/](templates/vmodell-xt/) (not
+  freshness. Illustrative V-Modell XT 2.4 templates are in [templates/vmodell-xt/](templates/vmodell-xt) (not
   official templates or a conformity claim).
-  The [IT operations concept](docs/IT_OPERATIONS.md) template documents code facts, discovered deployment/CI descriptor files and explicit operational gaps (not deployed-state evidence).
+  The [IT operations concept](docs/guides/it-operations.md) template documents code facts, discovered deployment/CI descriptor files and explicit operational gaps (not deployed-state evidence).
 
-See [project evidence](docs/project-evidence.md) and [CLI.md](docs/cli.md#product-drafts).
+See [project evidence](docs/guides/project-evidence.md) and [CLI.md](docs/cli.md#product-drafts).
 
-For ISO-oriented document control (cover, contents, revisions and declared review evidence), see [document control](docs/document-control.md). Signed DOCX/PDF release gates are explained in [publication guide](docs/document-publication.md).
+For ISO-oriented document control (cover, contents, revisions and declared review evidence), see [document control](docs/guides/document-control.md). Signed DOCX/PDF release gates are explained in [publication guide](docs/reference/publication.md).
 [Browse the documentation](docs/README.md) for CLI, architecture, guides and acceptance records.
 
-For expanded V-Modell XT example product structures (SW architecture, SW specification and system-element test specification), see [the template guide](docs/vmodell-xt-templates.md) and its section-level review aids.
+For expanded V-Modell XT example product structures (SW architecture, SW specification and system-element test specification), see [the template guide](docs/guides/vmodell-xt-templates.md) and its section-level review aids.
 
 ## Configuration
 
@@ -449,7 +449,7 @@ architecture:
 ```
 
 Selectors match `layer`, `path`, `kind`, `tag` and `name` (globs where it makes sense); `kind`, `tag` and `name` also
-match through the containing type. `edge` takes edge kinds from [the code model](docs/architecture.md#the-code-model).
+match through the containing type. `edge` takes edge kinds from [the code model](docs/internals/architecture.md#the-code-model).
 Custom findings count for `architecture` and `check` like built-in ones; an invalid rule stops docwizz with a message.
 
 ### Security rules
@@ -477,7 +477,7 @@ invisible, so each finding says "unless".
 - Generated docs then navigate index → solutions → projects → modules → components.
 
 The `scope:` schema is in [CLI.md](docs/cli.md#scope); limits and the acceptance baseline in
-[MULTI_PROJECT_ACCEPTANCE.md](docs/quality/multi-project-acceptance.md). Classic non-SDK ASP.NET MVC projects are inventoried, but
+[MULTI_PROJECT_ACCEPTANCE.md](docs/archive/multi-project-acceptance.md). Classic non-SDK ASP.NET MVC projects are inventoried, but
 conventional MVC routing is not fully modelled as endpoints.
 
 ### Remediation
@@ -529,7 +529,7 @@ them (`UseNpgsql`, `fetch('https://…')`), *inferred* when only a package point
 |---|---|
 | `docwizz setup [dir]` | first run: discover, configure, analyze, generate, check |
 | `docwizz discover [dir]` | read-only project and solution inventory |
-| `docwizz edmx <dir> <file.edmx>` | EF6 EDMX facts, `--graph` technical metrics or `--links` evidence-backed C# ↔ EF6/DbContext/MVC links (`--format json`); see [EDMX](docs/EDMX.md) |
+| `docwizz edmx <dir> <file.edmx>` | EF6 EDMX facts, `--graph` technical metrics or `--links` evidence-backed C# ↔ EF6/DbContext/MVC links (`--format json`); see [EDMX](docs/reference/edmx.md) |
 | `docwizz analyze <dir>` | documentation gaps and quality |
 | `docwizz architecture <dir>` | layers, violations, cycles, security findings |
 | `docwizz generate <dir> [out]` | write the docs (`--html`, `--screenshots`, `--ai`) |
@@ -558,7 +558,7 @@ commit. [CLI.md](docs/cli.md) is the full reference: every flag, default, preced
 
 ### Evidence-driven documentation
 
-`generate` aims to combine code, architecture, historical requirements and explicit test evidence into a navigable, provenance-aware system description. With an imported ADO test snapshot, it now generates `tests.md` and links it from the project index. Test case links are not execution or coverage proof. See [evidence-driven generation](docs/evidence-driven-generation.md) for the intended behavior and evidence boundaries.
+`generate` aims to combine code, architecture, historical requirements and explicit test evidence into a navigable, provenance-aware system description. With an imported ADO test snapshot, it now generates `tests.md` and links it from the project index. Test case links are not execution or coverage proof. See [evidence-driven generation](docs/reference/evidence-levels.md) for the intended behavior and evidence boundaries.
 
 ## Development
 
@@ -567,7 +567,7 @@ dotnet test --project tests/DocWizz.Tests   # unit, component and journey tests 
 ./test.sh                                   # end-to-end tests against fixture/
 ```
 
-- How it works: [Architecture](docs/architecture.md) · what's next: [GitHub Issues](https://github.com/mycaravam-crypto/docwizz/issues)
+- How it works: [Architecture](docs/internals/architecture.md) · what's next: [GitHub Issues](https://github.com/mycaravam-crypto/docwizz/issues)
 - Benchmarks and advice for large repositories: [bench/](bench/README.md)
 - Every merge to `main` is released automatically; label a PR `release:minor` or `release:major` for bigger bumps
   ([versioning](docs/cli.md#versioning)).

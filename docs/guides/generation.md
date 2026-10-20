@@ -51,7 +51,7 @@ docwizz generate . --html --screenshots --base-url http://localhost:5173 --stora
   it out of Git, restrict access, and use a low-privilege test account with sanitized data.
 
 For Windows Chromium installation, missing headless-shell executables, authenticated login steps and troubleshooting,
-see [Playwright screenshot troubleshooting](../PLAYWRIGHT_SCREENSHOTS.md).
+see [Playwright screenshot troubleshooting](screenshots.md).
 
 ## Optional AI-assisted documentation
 

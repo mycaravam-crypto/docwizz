@@ -1,0 +1,24 @@
+name: docs-links
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "README.md"
+      - "scripts/check-doc-links.py"
+      - "tests/test-doc-links.py"
+      - ".github/workflows/docs-links.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check canonical doc filenames and local links
+        run: python3 scripts/check-doc-links.py
+      - name: Exercise checker
+        run: python3 tests/test-doc-links.py
