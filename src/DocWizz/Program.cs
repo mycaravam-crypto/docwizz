@@ -211,9 +211,10 @@ static async Task<int> Dispatch(string[] args)
                     Directory.CreateDirectory(folder);
                     var target = Path.Combine(folder, $"ado-tests-{(snapshot.PlanIds.Length == 1 ? snapshot.PlanIds[0].ToString() : "all")}.json");
                     File.WriteAllText(target, snapshot.Content.TrimEnd() + "\n");
+                    if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(target, UnixFileMode.UserRead | UnixFileMode.UserWrite);
                     Console.WriteLine("ADO evidence imported for requested project and area");
                 }
-                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or JsonException or KeyNotFoundException or System.ComponentModel.Win32Exception)
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or JsonException or FormatException or KeyNotFoundException or System.ComponentModel.Win32Exception)
                 {
                     Console.Error.WriteLine("docwizz: ADO synchronization failed: " + ex.Message);
                     return 1;
