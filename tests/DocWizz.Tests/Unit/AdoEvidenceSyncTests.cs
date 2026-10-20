@@ -51,6 +51,9 @@ public class AdoEvidenceSyncTests
                     fi
                     shift
                   done
+                elif [[ "$1 $2" == "workitem context" ]]; then
+                  echo '{"schema":"ado.requirement-context/v1","id":4711}'
+                  exit 0
                 fi
                 exit 3
                 """);
@@ -60,6 +63,27 @@ public class AdoEvidenceSyncTests
                 Assert.True(File.Exists(staged.Catalog));
                 Assert.True(File.Exists(staged.Tests));
                 Assert.False(staged.WithHistory);
+            }
+
+            var gitwizz = Path.Combine(folder, "gw.sh");
+            File.WriteAllText(gitwizz, """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                while (( $# )); do
+                  if [[ "$1" == "-o" ]]; then
+                    echo '{"schema":"gitwizz.history/v2"}' > "$2"
+                    exit 0
+                  fi
+                  shift
+                done
+                exit 3
+                """);
+            File.SetUnixFileMode(gitwizz, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            using (var history = await AdoEvidenceSync.Export("Shop", "Shop\\Orders", "v1.0.0", success, gitwizz))
+            {
+                Assert.True(history.WithHistory);
+                Assert.True(File.Exists(history.History));
+                Assert.True(File.Exists(Path.Combine(history.WorkItems, "4711.json")));
             }
 
             var invalid = Path.Combine(folder, "invalid.sh");
