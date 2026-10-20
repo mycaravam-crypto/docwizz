@@ -5,6 +5,21 @@ namespace DocWizz.Tests.Unit;
 public class AdoEvidenceSyncTests
 {
     [Fact]
+    public void GitWizz_command_rejects_a_DocWizz_assembly()
+    {
+        string dir = Directory.CreateTempSubdirectory("docwizz-dll-check-").FullName;
+        try
+        {
+            string dll = Path.Join(dir, "docwizz.dll");
+            File.WriteAllText(dll, "");
+            ArgumentException error = Assert.Throws<ArgumentException>(
+                () => AdoEvidenceSync.GitWizzCommand("gw", dll));
+            Assert.Contains("docwizz.dll", error.Message);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    [Fact]
     public async Task Preflight_rejects_unknown_history_ref_before_export()
     {
         if (OperatingSystem.IsWindows()) return;
