@@ -15,7 +15,7 @@ ado workitem context 42 > work-items/42.json
 docwizz requirements import . history.json work-items/
 
 # Optional: explicit test-case relationships. Use an ADO test-traceability v1/v2 JSON export.
-ado testplan trace-export --project Shop --area "Shop\\Orders" --output shop-tests.json
+ado testplan trace-export --project Shop --area "Shop\Orders" --output shop-tests.json
 docwizz tests import . shop-tests.json
 
 # This step always works, even without the optional imports above.
