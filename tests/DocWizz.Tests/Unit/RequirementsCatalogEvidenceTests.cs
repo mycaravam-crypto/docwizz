@@ -118,4 +118,35 @@ public partial class RequirementIndexTests
         Assert.Contains("tracking", html);
     }
 
+    [Fact]
+    public void GeneratorOwnsAreaCatalogHtmlNavigationAndSearch()
+    {
+        var root = Path.Join(Path.GetTempPath(), "docwizz-area-generator-" + Guid.NewGuid().ToString("N"));
+        var output = Path.Join(root, "generated");
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var document = JsonDocument.Parse(AreaCatalogFixture());
+            var config = Models.Config("patterns: { all: { level: medium, sections: [summary] } }");
+            var model = At();
+            var findings = Analyzer.Analyze(model, config);
+            var architecture = Architecture.Check(model, config);
+            var generator = new Generator(root, output, model, findings, architecture, config, [])
+            {
+                Catalog = document.RootElement.Clone(),
+                WriteHtml = true
+            };
+            var (pages, _) = generator.Run();
+            Assert.Contains("requirements/area-catalog.md", pages);
+            Assert.Contains("requirements/area-catalog.html", pages);
+            Assert.Contains("requirements/items/43.md", pages);
+            Assert.Contains("requirements/items/43.html", pages);
+            Assert.Contains("Area requirements catalog", File.ReadAllText(Path.Join(output, "index.md")));
+            Assert.Contains("WI-43", File.ReadAllText(Path.Join(output, "search.json")));
+            Assert.Contains("area-catalog.html", File.ReadAllText(Path.Join(output, "requirements", "items", "43.html")));
+            Assert.Contains("not-assessed", File.ReadAllText(Path.Join(output, "requirements", "area-catalog.md")));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
 }
