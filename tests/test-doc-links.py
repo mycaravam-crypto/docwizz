@@ -22,11 +22,10 @@ class DocumentationLinkChecks(unittest.TestCase):
                 capture_output=True, text=True, check=False,
             )
 
-    def test_valid_document_and_compatibility_link(self):
+    def test_valid_document_with_canonical_paths(self):
         result = self.run_check({
             "docs/README.md": "# Index\n\n[Guide](guides/my-guide.md)\n",
             "docs/guides/my-guide.md": "# Guide\n\n[Back](../README.md)\n",
-            "docs/OLD_PAGE.md": "# Moved\n\n[Guide](guides/my-guide.md)\n",
         })
         self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -42,6 +41,18 @@ class DocumentationLinkChecks(unittest.TestCase):
         })
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("link escapes repository", result.stderr)
+        self.assertIn("non-canonical filename", result.stderr)
+
+
+    def test_legacy_redirects_and_numbered_adrs_are_errors(self):
+        result = self.run_check({
+            "docs/README.md": "# Index\n",
+            "docs/guides/old-topic.md": "# Moved\n\n[New](../README.md)\n",
+            "docs/adr/0001-old-decision.md": "# Old decision\n",
+        })
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("obsolete compatibility redirect", result.stderr)
+        self.assertIn("unsupported directory", result.stderr)
         self.assertIn("non-canonical filename", result.stderr)
 
     def test_code_fences_and_external_links_are_ignored(self):

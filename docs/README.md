@@ -16,6 +16,7 @@
 ## Features and evidence
 
 - [Requirements and traceability](guides/requirements.md) — ADO work-item catalog, Git history and explicit test links
+- [ADO evidence synchronization](guides/ado-sync.md) — offline evidence export and import
 - [Project evidence](guides/project-evidence.md) — explicit requirement → architecture → test links
 - [Domain discovery](guides/domain-discovery.md) — technical exploration and inferred areas
 - [Product document workflow](guides/product-documents.md) — drafts, reviews and publishing
@@ -32,16 +33,16 @@
 - [Signed publication](reference/publication.md) — signatures, independent approval and boundaries
 - [Scanner distribution](reference/scanner-distribution.md) — package and action runtime contracts
 - [Implementation architecture](internals/architecture.md) — scanners, data model, generators and tests
-- [Product contract decision](adr/0001-product-template-contract.md) — ADR-0001
-- [SW architecture template guide](vmodell-xt/sw-architecture-guide.md)
-  · [SW specification](vmodell-xt/sw-specification-guide.md)
-  · [System-element test specification](vmodell-xt/system-element-test-specification-guide.md)
+- [Product contract decision](internals/decisions/product-template-contract.md) — architecture decision
+- [SW architecture template guide](reference/vmodell-xt/sw-architecture.md)
+  · [SW specification](reference/vmodell-xt/sw-specification.md)
+  · [System-element test specification](reference/vmodell-xt/system-element-test-specification.md)
 
 ## Historical evidence
 
 - [Multi-project acceptance baseline](archive/multi-project-acceptance.md) — historical, point-in-time checklist
 - [Benchmarks](../bench/README.md) — reproducible synthetic measurements
 
-Active feature work is tracked in [GitHub Issues](https://github.com/mycaravam-crypto/docwizz/issues) and [Pull Requests](https://github.com/mycaravam-crypto/docwizz/pulls). Maintained pages use lowercase `kebab-case.md`; `README.md` is an index convention, and a few older paths remain only as link-preserving compatibility pages.
+Active feature work is tracked in [GitHub Issues](https://github.com/mycaravam-crypto/docwizz/issues) and [Pull Requests](https://github.com/mycaravam-crypto/docwizz/pulls). Maintained pages use lowercase `kebab-case.md`; `README.md` is an index convention, and obsolete compatibility pages have been removed.
 
 **Security:** generated application documentation, search indexes and imported work items may contain private requirements. Distribution and access to generated output are independent of the maintained project documentation here.
