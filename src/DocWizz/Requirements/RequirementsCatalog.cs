@@ -71,7 +71,9 @@ static partial class RequirementsCatalog
 
     static string Escape(string? text) => (text ?? "")
         .Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
-        .Replace("|", "&#124;").Replace("\r", " ").Replace("\n", " ");
+        .Replace("|", "&#124;").Replace("\r", " ").Replace("\n", " ")
+        .Replace("\\", "\\\\").Replace("[", "\\[").Replace("]", "\\]")
+        .Replace("!", "\\!").Replace("`", "\\`");
     static string Multiline(string? text) => string.Join("\n", (text ?? "").Replace("\r\n", "\n")
         .Split('\n').Select(line => "> " + Escape(line)));
     static string Val(JsonElement item, string name) =>
