@@ -196,6 +196,29 @@ static async Task<int> Dispatch(string[] args)
         case "remediate":
             return Remediate(path, config, opts.GetValueOrDefault("package"), opts.GetValueOrDefault("to"), opts.ContainsKey("validate"), opts.GetValueOrDefault("since"), json);
         case "generate":
+            if (opts.GetValueOrDefault("ado-project") is { } adoProject)
+            {
+                try
+                {
+                    using var staged = await AdoEvidenceSync.Export(adoProject, opts["ado-area"], opts.GetValueOrDefault("history-since"));
+                    // All external exports are completed and validated before touching imported evidence.
+                    // Imports remain sequential pending atomic transaction support in #278.
+                    if (staged.WithHistory && RequirementsImport(path, staged.History, staged.WorkItems, config, new()) != 0)
+                        return 1;
+                    RequirementsCatalog.Import(path, staged.Catalog);
+                    var snapshot = AdoTestSnapshot.Load(staged.Tests);
+                    var folder = Path.Combine(path, "docs", ".docwizz");
+                    Directory.CreateDirectory(folder);
+                    var target = Path.Combine(folder, $"ado-tests-{(snapshot.PlanIds.Length == 1 ? snapshot.PlanIds[0].ToString() : "all")}.json");
+                    File.WriteAllText(target, snapshot.Content.TrimEnd() + "\n");
+                    Console.WriteLine("ADO evidence imported for requested project and area");
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or JsonException or System.ComponentModel.Win32Exception)
+                {
+                    Console.Error.WriteLine("docwizz: ADO synchronization failed: " + ex.Message);
+                    return 1;
+                }
+            }
             var storageState = opts.GetValueOrDefault("storage-state");
             var stateFile = storageState is null ? null : Path.GetFullPath(Path.IsPathRooted(storageState)
                 ? storageState : Path.Combine(path, storageState));
