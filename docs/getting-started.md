@@ -1,33 +1,60 @@
 # Getting started
 
-Use this short path to configure DocWizz and generate source-backed documentation. For every CLI flag and exit code see the [CLI reference](cli.md).
+[Documentation home](README.md) · [CLI commands and flags](cli.md)
 
-## First run
+Run `docwizz setup .`, then open the generated `docs/index.md` or `docs/index.html`. The full initial workflow and status contract follows.
+
+## First setup
 
 ```bash
 docwizz setup .
-docwizz generate . --html
-docwizz check .
 ```
 
-`setup` discovers the repository, writes `docwizz.yaml` when missing, scans source and runs its initial checks. It does **not** execute application tests or builds, and does not use AI unless requested. A finding is not necessarily a tool failure.
+`setup` runs these stages and prints one summary at the end:
 
-Open `docs/index.html` or `docs/index.md` in the scanned repository (the default output directory). Generated pages are derived from the source model; read the code for authoritative behavior before modifying it.
+| # | Stage | Does | If it fails |
+|---|---|---|---|
+| 1 | discover | reads solutions and project manifests, reports references and unassigned source files without scanning code | the rest are skipped |
+| 2 | scan | reads the code and detects the stack: languages, frameworks, project files, tests, deployment files, layers | the rest are skipped |
+| 3 | config | writes `docwizz.yaml`, or keeps the existing one | the rest are skipped |
+| 4 | analyze | documentation coverage and critical gaps | reported; the next stages still run |
+| 5 | architecture | layer violations and cycles (and security findings if they are on) | reported; the next stages still run |
+| 6 | generate | writes the docs to `<dir>/docs` | reported; the next stages still run |
+| 7 | check | the quality gate at the configured thresholds | reported |
 
-## After the first run
+With project selection, a `select` stage runs between `discover` and `scan`
+([Multi-project repositories](#multi-project-repositories)). The summary starts with a status that keeps problems in
+the repository apart from problems running docwizz:
 
-| Need | Next step |
-|---|---|
-| Adjust architecture rules or quality thresholds | Edit `docwizz.yaml`; review [CLI profiles and checks](cli.md) |
-| Scope a large solution to selected projects | [Multi-project setup](cli.md#multi-project-repositories) |
-| Compare code or architecture changes | `docwizz diff .`, then `docwizz check . --since <base>` |
-| Include Azure DevOps work items and tests | [Area-path requirements](area-requirements.md) |
-| Draft controlled product documents | [V-Modell-XT templates](vmodell-xt-templates.md) |
-| Capture frontend pages behind a login | [Playwright screenshots](PLAYWRIGHT_SCREENSHOTS.md) |
+| Status | Means | Exit |
+|---|---|---|
+| `SUCCESS` | every stage ran; the check passes and there are no architecture or security findings | 0 |
+| `SUCCESS_WITH_FINDINGS` | every stage ran; the check fails or there are findings. On a new repository this is the starting point, not an error | 0 |
+| `FAILED` | a stage could not run (invalid `docwizz.yaml`, unreadable files, a scanner error); its error is listed | 1 |
 
-## Important boundaries
+**What `setup` never does:** contact an AI endpoint without `--ai` or `--ai-ratings`; run the repository's build, tests or package tools
+(`dotnet`, `npm`, `mvn`, `docker`, …); copy configuration values into `docwizz.yaml`.
 
-- Source-derived documentation is **not** evidence that a requirement was implemented or verified.
-- Imported work items and generated HTML/search indexes may contain confidential content; control their distribution.
-- `docwizz generate` updates generator-owned pages; never hand-edit files that are marked as generated.
-- AI drafting, screenshot capture and external evidence imports are opt-in and have separate setup steps.
+**The `docwizz.yaml` it writes** starts from the defaults (the same as `docwizz init`) and changes only what the
+repository shows evidence for:
+
+- `architecture.layers` keeps the default layers that at least one source file falls into, each commented
+  `# inferred: N files, e.g. <path>`; `architecture.allow` is narrowed to them. If none match, the defaults stay.
+- `tests` keeps the default test globs that match test files. If none match, all defaults stay.
+- In a repository with several solutions or standalone projects, a project inventory is added as comments.
+
+Intent is never inferred: the profile, `check` thresholds, allowed dependencies, `exclude`, `comment_docs` and security
+stay at their defaults. The summary's *Follow-up* list names what to decide yourself and suggests a profile when the
+stack has one (`aspnet`, `vue`). The same repository and docwizz version always produce the same file.
+
+**On an existing `docwizz.yaml`,** `setup` keeps it and runs every other stage with it. `--force` replaces it; an
+identical result is reported as `unchanged`. Running `setup` again is safe.
+
+Then read `docs/index.md` (or `docs/index.html` with `--html`) and the summary's *Next useful actions*.
+
+## Next steps
+
+- [Generate documentation and optionally draft prose](guides/generation.md)
+- [Quality gates and diff workflows](guides/quality.md)
+- [Import requirements and test evidence](guides/requirements.md)
+- [Agent context and MCP](guides/agent-context.md)
