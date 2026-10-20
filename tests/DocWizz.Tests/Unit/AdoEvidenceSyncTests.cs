@@ -5,6 +5,31 @@ namespace DocWizz.Tests.Unit;
 public class AdoEvidenceSyncTests
 {
     [Fact]
+    public async Task Preflight_rejects_unknown_history_ref_before_export()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        string root = Directory.CreateTempSubdirectory("docwizz-preflight-test-").FullName;
+        try
+        {
+            string ado = Path.Join(root, "ado.sh");
+            File.WriteAllText(ado, "#!/bin/sh\nexit 0\n");
+            File.SetUnixFileMode(ado, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            using var git = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("git")
+            {
+                ArgumentList = { "-C", root, "init" },
+                UseShellExecute = false
+            })!;
+            git.WaitForExit();
+            Assert.Equal(0, git.ExitCode);
+            ArgumentException error = await Assert.ThrowsAsync<ArgumentException>(
+                () => AdoEvidenceSync.Preflight(root, "not-a-tag-or-branch", ado, ado));
+            Assert.Contains("--history-since", error.Message);
+            await AdoEvidenceSync.Preflight(root, null, ado, ado);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public void Staged_directory_is_private_and_removed_when_disposed()
     {
         string path;
