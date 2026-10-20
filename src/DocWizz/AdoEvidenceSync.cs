@@ -61,7 +61,7 @@ static class AdoEvidenceSync
         if (since is null) return;
         await CheckGit(repository, ["rev-parse", "--is-inside-work-tree"],
             "Git repository not found. Run generate from a Git worktree.");
-        if (string.IsNullOrWhiteSpace(since) || since.StartsWith('-', StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(since) || since.StartsWith("-", StringComparison.Ordinal))
             throw new ArgumentException("--history-since must be a non-empty Git tag, branch or commit.");
         await CheckGit(repository, ["rev-parse", "--verify", "--end-of-options", since + "^{commit}"],
             $"--history-since '{since}' cannot be resolved to a commit. Check git tag -l and git branch -a, or fetch the missing refs.");
