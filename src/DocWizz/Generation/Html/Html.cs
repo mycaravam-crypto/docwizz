@@ -59,7 +59,9 @@ static class Html
         var category = rel.StartsWith("modules/") ? "Module" : rel.StartsWith("views/") ? "Architecture view"
             : rel.StartsWith("routes/") ? "Route" : rel.StartsWith("requirements/") ? "Requirement" : rel.StartsWith("projects/") ? "Project" : rel.StartsWith("solutions/") ? "Solution" : "Documentation";
         // Docs / the solution and project (or Architecture) above this page / this page.
-        List<string> trail = rel.StartsWith("views/") ? [Link("architecture.md", "Architecture")]
+        List<string> trail = rel.StartsWith("requirements/items/") && pages.ContainsKey("requirements/area-catalog.md")
+            ? [Link("requirements/area-catalog.md", "Area requirements catalog")]
+            : rel.StartsWith("views/") ? [Link("architecture.md", "Architecture")]
             : rel == "tests.md" ? [Link("quality.md", "Quality")]
             : hierarchy?.Breadcrumbs(rel, Link) ?? [];
         var breadcrumbs = string.Join("<span aria-hidden=\"true\">/</span>", [$"<a href=\"{up}index.html\">Docs</a>", .. trail, $"<span aria-current=\"page\">{Enc(title)}</span>"]);
@@ -225,6 +227,8 @@ static class Html
             .OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => (p.Key, p.Value));
         var modules = pages.Where(p => p.Key.StartsWith("modules/")).OrderBy(p => p.Value, StringComparer.Ordinal).Select(p => (p.Key, p.Value));
         var code = hierarchy?.Sidebar(link) is { Length: > 0 } tree ? tree : Items(modules);
-        return "<ul>" + string.Concat(top) + Items(other) + Folder("Code", code) + "</ul>";
+        var requirements = new[] { ("requirements/area-catalog.md", "Area catalog"), ("requirements/index.md", "Historical links") }
+            .Where(p => pages.ContainsKey(p.Item1));
+        return "<ul>" + string.Concat(top) + Folder("Requirements", Items(requirements)) + Items(other) + Folder("Code", code) + "</ul>";
     }
 }
