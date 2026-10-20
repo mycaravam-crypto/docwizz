@@ -738,6 +738,9 @@ target, gitwizz marks the answer stale. A query it can't read exits 1 with the r
 | `--limit <n>` | 100 | domain | maximum reached symbols, 1–500; truncation is explicit | architects |
 | `--hops <n>` | 2 | context | how far neighbours are listed, 1 to 4; hops beyond 1 are signature only | coding agents |
 | `--budget <tokens>` | 6000 | context | at least 100; estimated as characters / 4; lower-priority sections are cut first, and the cut is reported | coding agents |
+| `--ado-project <name>` | — | generate | explicit online Azure DevOps project; requires `--ado-area` | opt-in |
+| `--ado-area <path>` | — | generate | Azure DevOps Area Path; requires `--ado-project` | opt-in |
+| `--history-since <ref>` | — | generate | optionally import historical GitWizz evidence; requires ADO project and area | opt-in |
 | `--requirements` | off | generate, context | generate: prompts also get each symbol's linked work items (intent/deviation sections, cited and labeled); context: adds a Requirements section. Needs `docwizz requirements import`; exits 1 without an index | opt-in |
 | `--include-ai` | off | context | includes cached 🤖 drafts, marked `ai-drafted`; never calls a model | coding agents |
 | `--auto-rescan` | off | mcp | rescans when the model is stale instead of only reporting `stale: true` | coding agents |
