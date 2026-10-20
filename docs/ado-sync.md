@@ -26,4 +26,4 @@ Omit `v1.0.0` to import the area catalog and ADO test-case relationships without
 
 Security: restrictive temporary file permissions (`umask 077`); temporary exports are deleted on exit; no credential values are explicitly echoed. Do not publish the HTML output without reviewing its confidentiality and hosting permissions.
 
-Limitations of this first increment: the external CLI programs must already be installed and authenticated; the snapshot metadata and foreign origin checks still require native implementation; DocWizz's existing imports are sequential and **not atomic**. An import failure after an earlier successful import can leave mixed versions. AC3 and full AC1 are **not yet satisfied**. See #278.
+Limitations of this first increment: the external CLI programs must already be installed and authenticated; the snapshot metadata and foreign origin checks still require native implementation; DocWizz's existing imports are sequential and **not atomic**. An import failure after an earlier successful import can leave mixed versions. Concurrent-reader atomicity remains open; full AC1 is **not yet satisfied**. See #278.
