@@ -938,6 +938,7 @@ static string Reference() => $"""
         [--ai]                          draft missing summaries with a self-hosted model (Ollama or OpenAI-compatible)
         [--ai-ratings]                  rate written docs with a self-hosted model (advisory; independent of --ai)
         [--requirements]                drafts also get each symbol's linked work items (requirements import first)
+        [--ado-project <name> --ado-area <path>] [--history-since <ref>]  explicitly sync ADO evidence
       docwizz analyze <dir>             documentation report
       docwizz check <dir>               report + exit 1 if thresholds fail (CI)
       docwizz check <dir> --since <ref> exit 1 only on gaps/violations introduced since <ref>
