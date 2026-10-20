@@ -1,12 +1,25 @@
 # Native ADO synchronization (Issue #278)
 
-The first native, opt-in integration is available on this branch:
+The first native, opt-in integration is available in DocWizz:
 
 ```bash
 docwizz generate . --html --ado-project Shop --ado-area 'Shop\Orders' --history-since v1.0.0
 ```
 
 Omit `--history-since` to import only the Area Requirements Catalog and explicit ADO test-case relationships. Without `--ado-project` and `--ado-area`, generation remains offline; both values must be given together. Native mode requires the `ado` binary, and optionally `gw`, configured on `PATH`, with ADO authentication already performed.
+
+### Windows / Git Bash: GitWizz as a shell alias
+
+If `gw` works in Git Bash but `docwizz generate` reports that it cannot start `gw`, your `gw` is probably a shell alias/function, not a native executable. A .NET process cannot launch that alias. Point DocWizz at the published GitWizz .NET assembly:
+
+```bash
+export DOCWIZZ_GITWIZZ_DLL="$(cygpath -w "$HOME/tools/gitwizz/gitwizz.dll")"
+dw generate . --html --ado-project LogDB-Web --ado-area 'LogDB-Web\\xxx' --history-since v1.0.4
+```
+
+Adjust the assembly path to your installation (run `type -a gw` to inspect the shell command). The assembly is executed with `dotnet` directly; no shell interpolation is used. For an installed native `gw.exe` on Windows PATH, no variable is necessary.
+
+The ADO sync now shows a terminal progressbar with export/import stages and context fetch counts. Use `--progress` to get stage logs when stderr is redirected. ADO/GitWizz subprocesses do not expose per-work-item export progress, so stages show activity rather than invented percentages.
 
 The native synchronizer executes external programs with an argument array (not a shell), validates the staged JSON schema and requested project/area, and imports only after the exports succeed. For historical mapping, it retrieves work-item context for all exported IDs. Temporary files use a private directory and are removed on completion.
 

@@ -200,7 +200,14 @@ static async Task<int> Dispatch(string[] args)
             {
                 try
                 {
-                    using var staged = await AdoEvidenceSync.Export(adoProject, opts["ado-area"], opts.GetValueOrDefault("history-since"));
+                    using var syncProgress = CliProgress.ForConsole(
+                        [new("export", 1, "ADO and GitWizz exports"), new("import", 1, "Importing evidence")],
+                        opts.ContainsKey("progress"));
+                    syncProgress.Begin("export");
+                    using var staged = await AdoEvidenceSync.Export(adoProject, opts["ado-area"],
+                        opts.GetValueOrDefault("history-since"), syncProgress.Detail);
+                    syncProgress.Advance("export", "validated");
+                    syncProgress.Begin("import");
                     // Stage all external exports before changing local evidence. Roll back on import failure.
                     using var rollback = new AdoEvidenceRollback(path);
                     if (staged.WithHistory && RequirementsImport(path, staged.History, staged.WorkItems, config, new()) != 0)
@@ -213,6 +220,7 @@ static async Task<int> Dispatch(string[] args)
                     File.WriteAllText(target, snapshot.Content.TrimEnd() + "\n");
                     if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(target, UnixFileMode.UserRead | UnixFileMode.UserWrite);
                     rollback.Commit();
+                    syncProgress.Advance("import", "complete");
                     Console.WriteLine("ADO evidence imported for requested project and area");
                 }
                 catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or JsonException or FormatException or KeyNotFoundException or System.ComponentModel.Win32Exception)

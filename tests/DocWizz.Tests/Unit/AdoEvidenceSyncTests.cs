@@ -58,12 +58,15 @@ public class AdoEvidenceSyncTests
                 exit 3
                 """);
             File.SetUnixFileMode(success, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-            using (var staged = await AdoEvidenceSync.Export("Shop", "Shop\\Orders", null, success, success))
+            var stages = new List<string>();
+            using (var staged = await AdoEvidenceSync.Export("Shop", "Shop\\Orders", null, success, success, stages.Add))
             {
                 Assert.True(File.Exists(staged.Catalog));
                 Assert.True(File.Exists(staged.Tests));
                 Assert.False(staged.WithHistory);
             }
+            Assert.Contains(stages, stage => stage.Contains("area work items"));
+            Assert.Contains(stages, stage => stage.Contains("test-case relationships"));
 
             var gitwizz = Path.Combine(folder, "gw.sh");
             File.WriteAllText(gitwizz, """
@@ -79,12 +82,15 @@ public class AdoEvidenceSyncTests
                 exit 3
                 """);
             File.SetUnixFileMode(gitwizz, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-            using (var history = await AdoEvidenceSync.Export("Shop", "Shop\\Orders", "v1.0.0", success, gitwizz))
+            stages.Clear();
+            using (var history = await AdoEvidenceSync.Export("Shop", "Shop\\Orders", "v1.0.0", success, gitwizz, stages.Add))
             {
                 Assert.True(history.WithHistory);
                 Assert.True(File.Exists(history.History));
                 Assert.True(File.Exists(Path.Combine(history.WorkItems, "4711.json")));
             }
+            Assert.Contains(stages, stage => stage.Contains("GitWizz: exporting history"));
+            Assert.Contains(stages, stage => stage.Contains("contexts 1/1"));
 
             var invalid = Path.Combine(folder, "invalid.sh");
             File.WriteAllText(invalid, """
@@ -107,6 +113,27 @@ public class AdoEvidenceSyncTests
         }
     }
 
+
+    [Fact]
+    public void GitWizz_dll_override_and_fallback_preserve_command_arguments()
+    {
+        string root = Directory.CreateTempSubdirectory("docwizz-gitwizz-dll-").FullName;
+        try
+        {
+            string assembly = Path.Combine(root, "git wizz.dll");
+            File.WriteAllText(assembly, "");
+            var command = AdoEvidenceSync.GitWizzCommand("gw", assembly);
+            Assert.Equal("dotnet", command.Executable);
+            Assert.Equal([Path.GetFullPath(assembly)], command.Prefix);
+
+            var fallback = AdoEvidenceSync.GitWizzCommand("gw", null);
+            Assert.Equal("gw", fallback.Executable);
+            Assert.Empty(fallback.Prefix);
+            Assert.Throws<ArgumentException>(() =>
+                AdoEvidenceSync.GitWizzCommand("gw", Path.Combine(root, "missing.dll")));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
 
     [Fact]
     public void Failed_import_restores_original_evidence_and_successful_import_keeps_changes()
