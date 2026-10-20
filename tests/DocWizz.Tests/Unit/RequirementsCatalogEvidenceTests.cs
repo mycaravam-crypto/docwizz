@@ -100,4 +100,22 @@ public partial class RequirementIndexTests
         Assert.Contains("Area requirements catalog", html);
         Assert.Contains("area-catalog.html", html);
     }
+    [Fact]
+    public void ImportedMarkdownCannotCreateRemoteTrackingImages()
+    {
+        using var document = JsonDocument.Parse(AreaCatalogFixture().Replace("Credit limit",
+            "![tracking](https://attacker.example/track.png)"));
+        var pages = RequirementsCatalog.Pages(document.RootElement, null, null, At(), [])
+            .ToDictionary(x => x.Page, x => x.Body);
+        var html = Html.Page("requirements/items/42.md", pages["requirements/items/42.md"],
+            new Dictionary<string, string>
+            {
+                ["index.md"] = "Overview",
+                ["requirements/area-catalog.md"] = "Area catalog",
+                ["requirements/items/42.md"] = "Work item 42"
+            });
+        Assert.DoesNotContain("src=\"https://attacker.example", html);
+        Assert.Contains("tracking", html);
+    }
+
 }
