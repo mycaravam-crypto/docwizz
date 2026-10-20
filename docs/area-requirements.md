@@ -4,9 +4,9 @@ DocWizz imports a complete, read-only work-item inventory from **ADO** and enric
 
 ## Example workflow
 
-\`\`\`bash
+```bash
 # In the application repository, with ado-devops configured for the desired collection.
-ado workitem export --project Shop --area "Shop\\Orders" --output shop-workitems.json
+ado workitem export --project Shop --area "Shop\Orders" --output shop-workitems.json
 
 # Optional: historical code links. Export enough Git history to cover the relevant period.
 gitwizz history export --since v1.0.0 --provider azure-devops -o history.json
@@ -21,31 +21,31 @@ docwizz tests import . shop-tests.json
 # This step always works, even without the optional imports above.
 docwizz requirements catalog-import . shop-workitems.json
 docwizz generate . --html
-\`\`\`
+```
 
-**Paths and CLI options:** consult the installed versions of the ADO exporter and test-plan exporter for options. The catalog producer writes \`ado.workitem-catalog/v1\` with \`schema\`, \`project\`, \`area\`, \`source\`, \`complete\` and \`items\`. Incomplete catalogs are rejected, rather than being presented as complete requirement coverage.
+**Paths and CLI options:** consult the installed versions of the ADO exporter and test-plan exporter for options. The catalog producer writes `ado.workitem-catalog/v1` with `schema`, `project`, `area`, `source`, `complete` and `items`. Incomplete catalogs are rejected, rather than being presented as complete requirement coverage.
 
 ## Documentation output
 
-- \`docs/requirements/area-catalog.md\` and its HTML counterpart: all work items in the exported area, including planned items with no code history; parent links are explicit ADO links.
-- \`docs/requirements/items/<id>.md\` and HTML: description, acceptance criteria, children, provider-linked code symbols, code-test references and ADO test cases.
-- The project index, search index and HTML navigation link to the area catalog independently of \`docs/requirements/index.md\` (historical links).
+- `docs/requirements/area-catalog.md` and its HTML counterpart: all work items in the exported area, including planned items with no code history; parent links are explicit ADO links.
+- `docs/requirements/items/<id>.md` and HTML: description, acceptance criteria, children, provider-linked code symbols, code-test references and ADO test cases.
+- The project index, search index and HTML navigation link to the area catalog independently of `docs/requirements/index.md` (historical links).
 
-The exported ADO \`AreaPath\` selects the area and its descendants; it is **not** treated as evidence of a parent-child relationship.
+The exported ADO `AreaPath` selects the area and its descendants; it is **not** treated as evidence of a parent-child relationship.
 
 ## Semantics
 
 | Status | Meaning |
 |---|---|
-| \`confirmed link\` | An ADO-provider-confirmed commit associated with this work item touched the current symbol. Not proof of implementation. |
-| \`candidate link\` | A weaker historical association (PR or message). Not proof of implementation. |
-| \`not-linked (imported history)\` | The imported, available history contains no code link for this work item. Not proof that it is unimplemented. |
-| \`not-assessed\` | No relevant evidence source was imported. |
-| \`unavailable\` | An import is incomplete, belongs to a different ADO origin/project, or a requirement is missing from a test snapshot. No positive or negative coverage claim is made. |
-| \`linked (ADO cases)\` | Explicit ADO requirement-to-test-case relationship, **not** execution, pass/fail, test coverage or acceptance verification. |
-| \`referenced by test code\` | A structural test-code reference to a linked symbol, **not** coverage or a demonstrated pass. |
+| `confirmed link` | An ADO-provider-confirmed commit associated with this work item touched the current symbol. Not proof of implementation. |
+| `candidate link` | A weaker historical association (PR or message). Not proof of implementation. |
+| `not-linked (imported history)` | The imported, available history contains no code link for this work item. Not proof that it is unimplemented. |
+| `not-assessed` | No relevant evidence source was imported. |
+| `unavailable` | An import is incomplete, belongs to a different ADO origin/project, or a requirement is missing from a test snapshot. No positive or negative coverage claim is made. |
+| `linked (ADO cases)` | Explicit ADO requirement-to-test-case relationship, **not** execution, pass/fail, test coverage or acceptance verification. |
+| `referenced by test code` | A structural test-code reference to a linked symbol, **not** coverage or a demonstrated pass. |
 
-The history overlay uses stable ADO work-item IDs **only after** verifying that the GitWizz history refers to the same ADO server/collection and project as the catalog. GitHub issue IDs are never silently treated as ADO IDs. Importing a full area catalog does **not** change or overwrite \`docs/.docwizz/requirements.json\` or its confirmed/candidate semantics.
+The history overlay uses stable ADO work-item IDs **only after** verifying that the GitWizz history refers to the same ADO server/collection and project as the catalog. GitHub issue IDs are never silently treated as ADO IDs. Importing a full area catalog does **not** change or overwrite `docs/.docwizz/requirements.json` or its confirmed/candidate semantics.
 
 ## Security and repeatability
 
