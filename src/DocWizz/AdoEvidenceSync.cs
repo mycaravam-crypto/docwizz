@@ -41,6 +41,12 @@ static class AdoEvidenceSync
             throw new InvalidOperationException($"{executable} export failed (exit {process.ExitCode}); evidence was not imported");
     }
 
+    static void Restrict(string path)
+    {
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+    }
+
     static JsonElement Read(string path)
     {
         using var json = JsonDocument.Parse(File.ReadAllText(path));
@@ -66,16 +72,19 @@ static class AdoEvidenceSync
             if (ids.Any(id => id <= 0) || ids.Distinct().Count() != ids.Length)
                 throw new ArgumentException("Invalid or duplicate ADO work item ids");
 
-            await Run("ado", "testplan", "trace-export", "--project", project, "--area", area, "--output", result.Tests);
+            await Run(adoExecutable, "testplan", "trace-export", "--project", project, "--area", area, "--output", result.Tests);
             JsonElement tests = Read(result.Tests);
             if (tests.GetProperty("format").GetString() is not ("ado.test-traceability/v1" or "ado.test-traceability/v2") ||
                 tests.GetProperty("project").GetString() != project || tests.GetProperty("area").GetString() != area)
                 throw new ArgumentException("Mismatched ADO test snapshot");
             result.ValidatedTests = AdoTestSnapshot.Load(result.Tests);
+            Restrict(result.Catalog);
+            Restrict(result.Tests);
 
             if (since is not null)
             {
                 await Run(gwExecutable, "history", "export", "--since", since, "--provider", "azure-devops", "-o", result.History);
+                Restrict(result.History);
                 if (Read(result.History).GetProperty("schema").GetString() != "gitwizz.history/v2")
                     throw new ArgumentException("Invalid GitWizz history schema");
                 System.IO.Directory.CreateDirectory(result.WorkItems);
@@ -93,6 +102,7 @@ static class AdoEvidenceSync
                     await stderr;
                     if (p.ExitCode != 0) throw new InvalidOperationException($"ADO context export failed for work item {id}");
                     File.WriteAllText(file, data);
+                    Restrict(file);
                     JsonElement context = Read(file);
                     if (context.GetProperty("schema").GetString() != "ado.requirement-context/v1" ||
                         context.GetProperty("id").GetInt32() != id)
