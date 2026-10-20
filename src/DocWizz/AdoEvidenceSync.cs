@@ -7,10 +7,10 @@ static class AdoEvidenceSync
     public sealed class Staged : IDisposable
     {
         public string DirectoryPath { get; }
-        public string Catalog => Path.Combine(DirectoryPath, "catalog.json");
-        public string Tests => Path.Combine(DirectoryPath, "tests.json");
-        public string History => Path.Combine(DirectoryPath, "history.json");
-        public string WorkItems => Path.Combine(DirectoryPath, "work-items");
+        public string Catalog => Path.Join(DirectoryPath, "catalog.json");
+        public string Tests => Path.Join(DirectoryPath, "tests.json");
+        public string History => Path.Join(DirectoryPath, "history.json");
+        public string WorkItems => Path.Join(DirectoryPath, "work-items");
         public bool WithHistory { get; }
         public AdoTestSnapshot.ImportData? ValidatedTests { get; set; }
         public Staged(bool history)
@@ -93,7 +93,7 @@ static class AdoEvidenceSync
                 System.IO.Directory.CreateDirectory(result.WorkItems);
                 foreach (var id in ids)
                 {
-                    var file = Path.Combine(result.WorkItems, id + ".json");
+                    var file = Path.Join(result.WorkItems, id + ".json");
                     // The CLI writes the context to stdout; unlike export commands it has no --output flag.
                     var psi = new ProcessStartInfo(adoExecutable) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
                     psi.ArgumentList.Add("workitem"); psi.ArgumentList.Add("context"); psi.ArgumentList.Add(id.ToString());
