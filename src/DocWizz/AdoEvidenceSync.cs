@@ -12,6 +12,7 @@ static class AdoEvidenceSync
         public string History => Path.Combine(DirectoryPath, "history.json");
         public string WorkItems => Path.Combine(DirectoryPath, "work-items");
         public bool WithHistory { get; }
+        public AdoTestSnapshot.ImportData? ValidatedTests { get; set; }
         public Staged(bool history)
         {
             DirectoryPath = Directory.CreateTempSubdirectory("docwizz-ado-").FullName;
@@ -70,7 +71,7 @@ static class AdoEvidenceSync
             if (tests.GetProperty("format").GetString() is not ("ado.test-traceability/v1" or "ado.test-traceability/v2") ||
                 tests.GetProperty("project").GetString() != project || tests.GetProperty("area").GetString() != area)
                 throw new ArgumentException("Mismatched ADO test snapshot");
-            AdoTestSnapshot.Load(result.Tests);
+            result.ValidatedTests = AdoTestSnapshot.Load(result.Tests);
 
             if (since is not null)
             {
