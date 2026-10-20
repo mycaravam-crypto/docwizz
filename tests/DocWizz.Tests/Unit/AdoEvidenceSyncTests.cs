@@ -23,13 +23,4 @@ public class AdoEvidenceSyncTests
         Assert.False(Directory.Exists(path));
     }
 
-    [Fact]
-    public async Task Missing_export_executable_reports_clean_failure_and_removes_temp_directory()
-    {
-        // Explicit online sync is the only path that attempts an external export.
-        // PATH-independent empty executable lists are exercised in the CLI contract tests.
-        Assert.NotNull(typeof(AdoEvidenceSync).GetMethod("Export"));
-        Assert.NotNull(typeof(AdoEvidenceSync).GetMethod("Run", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static));
-        await Task.CompletedTask;
-    }
 }
