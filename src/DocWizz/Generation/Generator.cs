@@ -547,10 +547,10 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             var listens = model.Edges.Where(e => e.Kind == "subscribes" && e.Label is not null).ToLookup(e => e.From);
             sb.AppendLine("## Components\n\n| Component | Summary | Props | Emits | Hooks & composables | Renders | Listens to | Used by |\n|---|---|---|---|---|---|---|---|");
             foreach (var c in components)
-                sb.AppendLine($"| {ModuleLink(c)} | {Esc(Summary(c) ?? "—")} | {Esc(string.Join(", ", c.Parameters ?? []))} | {string.Join(", ", c.Events ?? [])} | {string.Join(", ", c.Hooks ?? [])} | " +
-                    $"{string.Join(", ", renders[c.Id].Where(nodes.ContainsKey).Select(x => nodes[x].Name).Distinct())} | " +
-                    $"{string.Join(", ", listens[c.Id].Where(e => nodes.ContainsKey(e.To)).Select(e => $"{nodes[e.To].Name} @{e.Label}").Distinct())} | " +
-                    $"{string.Join(", ", renderedBy[c.Id].Where(nodes.ContainsKey).Select(x => nodes[x].Name).Distinct())} |");
+                sb.AppendLine($"| {ModuleLink(c)} | {Esc(Summary(c) ?? "—")} | {Esc(string.Join(", ", c.Parameters ?? []))} | {Esc(string.Join(", ", c.Events ?? []))} | {Esc(string.Join(", ", c.Hooks ?? []))} | " +
+                    $"{Esc(string.Join(", ", renders[c.Id].Where(nodes.ContainsKey).Select(x => nodes[x].Name).Distinct()))} | " +
+                    $"{Esc(string.Join(", ", listens[c.Id].Where(e => nodes.ContainsKey(e.To)).Select(e => $"{nodes[e.To].Name} @{e.Label}").Distinct()))} | " +
+                    $"{Esc(string.Join(", ", renderedBy[c.Id].Where(nodes.ContainsKey).Select(x => nodes[x].Name).Distinct()))} |");
         }
         if (routes.Count > 0)
         {
