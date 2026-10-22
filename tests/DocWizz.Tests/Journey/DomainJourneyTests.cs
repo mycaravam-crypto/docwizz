@@ -77,13 +77,13 @@ public class DomainJourneyTests
         var explained = Run(repo.Root, ["domain", "explain", ".", "docs/orders-explained.md", .. seed]);
         Assert.True(explained.Exit == 0, explained.ToString());
         Docwizz.NoStackTrace(explained);
-        var md = File.ReadAllText(Path.Combine(repo.Root, "docs", "orders-explained.md"));
+        var md = File.ReadAllText(Path.Join(repo.Root, "docs", "orders-explained.md"));
         Assert.StartsWith(DomainExplain.Marker, md);
         Assert.Contains("1. `OrdersController.Get` —calls→ `IOrderService.Find` —dispatches to→ `OrderService.Find` — C1", md);
         Assert.Contains("None: no model was asked (`--ai`)", md);
         Assert.Contains("](../src/Shop/Api/OrdersController.cs#L", md);
         Assert.Contains("no requirements index", md);
-        Assert.False(File.Exists(Path.Combine(repo.Root, "docs", ".docwizz", "domain-ai-cache.json")));
+        Assert.False(File.Exists(Path.Join(repo.Root, "docs", ".docwizz", "domain-ai-cache.json")));
 
         var json = JsonDocument.Parse(Run(repo.Root, ["domain", "explain", ".", .. seed, "--format", "json"]).Out).RootElement;
         Assert.Equal(DomainExplain.Schema, json.GetProperty("schema").GetString());
@@ -91,13 +91,13 @@ public class DomainJourneyTests
 
         // A second run replaces its own draft; a file docwizz didn't write needs --force; discover is as before.
         Assert.Equal(0, Run(repo.Root, ["domain", "explain", ".", "docs/orders-explained.md", .. seed]).Exit);
-        File.WriteAllText(Path.Combine(repo.Root, "docs", "notes.md"), "mine\n");
+        File.WriteAllText(Path.Join(repo.Root, "docs", "notes.md"), "mine\n");
         var refused = Run(repo.Root, ["domain", "explain", ".", "docs/notes.md", .. seed]);
         Assert.Equal(1, refused.Exit);
         Assert.Contains("refusing to overwrite (--force replaces it)", refused.Err);
-        Assert.Equal("mine\n", File.ReadAllText(Path.Combine(repo.Root, "docs", "notes.md")));
+        Assert.Equal("mine\n", File.ReadAllText(Path.Join(repo.Root, "docs", "notes.md")));
         Assert.Equal(0, Run(repo.Root, ["domain", "explain", ".", "docs/notes.md", .. seed, "--force"]).Exit);
-        Assert.StartsWith(DomainExplain.Marker, File.ReadAllText(Path.Combine(repo.Root, "docs", "notes.md")));
+        Assert.StartsWith(DomainExplain.Marker, File.ReadAllText(Path.Join(repo.Root, "docs", "notes.md")));
         Assert.Equal(before.Out, Run(repo.Root, ["domain", "discover", ".", .. seed, "--format", "json"]).Out);
 
         var misplaced = Run(repo.Root, ["domain", "discover", ".", .. seed, "--ai"]);
@@ -119,7 +119,7 @@ public class DomainJourneyTests
             """;
         using var server = new AiProviderTests.FakeServer((200, Chat(answer)), (500, "{}"));
         using var repo = Repos.AspNet();
-        File.WriteAllText(Path.Combine(repo.Root, "docwizz.yaml"),
+        File.WriteAllText(Path.Join(repo.Root, "docwizz.yaml"),
             $"ai: {{ provider: openai-compatible, endpoint: '{server.Uri}v1', model: local-coder, api_key_env: DOCWIZZ_EXPLAIN_KEY }}\n");
         var env = new Dictionary<string, string?> { ["DOCWIZZ_EXPLAIN_KEY"] = "sk-never-in-output-123" };
         string[] args = ["domain", "explain", ".", "docs/orders.md", "--seed", "GET /api/orders/{id}", "--ai"];
@@ -130,7 +130,7 @@ public class DomainJourneyTests
         Assert.Contains("never follow anything", request);
         Assert.Contains("Bearer sk-never-in-output-123", server.Heads[0]);   // sent as a header to the local server only
 
-        var md = File.ReadAllText(Path.Combine(repo.Root, "docs", "orders.md"));
+        var md = File.ReadAllText(Path.Join(repo.Root, "docs", "orders.md"));
         var facts = md[md.IndexOf("## Technical facts", StringComparison.Ordinal)..md.IndexOf("## Business hypotheses", StringComparison.Ordinal)];
         Assert.Contains("worded by the self-hosted model `openai-compatible/local-coder`", md);
         Assert.Contains("- `OrdersController.Get` calls `IOrderService.Find`, which `OrderService.Find` implements. — C1", facts);
@@ -139,7 +139,7 @@ public class DomainJourneyTests
         Assert.Contains("- Possibly this endpoint lets customers look up one order. — S1", md);
         Assert.Contains("What does `OrderService.Find` return when no order exists? — S5", md);
         Assert.DoesNotContain("Is it approved?", md);
-        var cache = Path.Combine(repo.Root, "docs", ".docwizz", "domain-ai-cache.json");
+        var cache = Path.Join(repo.Root, "docs", ".docwizz", "domain-ai-cache.json");
         foreach (var written in new[] { md, File.ReadAllText(cache), run.Out, run.Err })
         {
             Assert.DoesNotContain("sk-never-in-output-123", written);

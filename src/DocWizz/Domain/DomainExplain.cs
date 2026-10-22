@@ -67,9 +67,8 @@ static class DomainExplain
         var (chains, capped) = Chains(report);
         foreach (var (steps, i) in chains.Select((c, i) => (c, i)))
         {
-            var text = new StringBuilder($"`{Name(byId[steps[0].To])}`");
-            foreach (var step in steps.Skip(1)) text.Append($" —{step.Verb}→ `{Name(byId[step.To])}`");
-            facts.Add(new($"C{i + 1}", "chain", text.ToString(), [.. steps.Select(s => s.To)], byId[steps[0].To].Location, null,
+            var text = $"`{Name(byId[steps[0].To])}`" + string.Concat(steps.Skip(1).Select(step => $" —{step.Verb}→ `{Name(byId[step.To])}`"));
+            facts.Add(new($"C{i + 1}", "chain", text, [.. steps.Select(s => s.To)], byId[steps[0].To].Location, null,
                 [.. steps.Skip(1).Select(s => relationFact[s.Relation!.Value])]));
         }
         foreach (var (r, i) in report.Requirements.Select((r, i) => (r, i)))
@@ -280,9 +279,11 @@ static class DomainExplain
 
         var byId = sent.ToDictionary(f => f.Id, StringComparer.Ordinal);
         var names = Names(all);
-        foreach (var section in new[] { "facts", "hypotheses", "questions" })
+        var sections = new[] { "facts", "hypotheses", "questions" }
+            .Select(name => (Name: name, List: json.TryGetProperty(name, out var l) ? l : default))
+            .Where(x => x.List.ValueKind == JsonValueKind.Array);
+        foreach (var (section, list) in sections)
         {
-            if (!json.TryGetProperty(section, out var list) || list.ValueKind != JsonValueKind.Array) continue;
             foreach (var s in list.EnumerateArray().Where(s => s.ValueKind == JsonValueKind.Object))
             {
                 var text = s.TryGetProperty("text", out var t) && t.ValueKind == JsonValueKind.String ? Regex.Replace(t.GetString()!, @"\s+", " ").Trim() : "";
@@ -371,7 +372,7 @@ static class DomainExplain
             for (var i = 0; i < parts.Length; i++)
                 (exact.TryGetValue(string.Join('.', parts[i..]), out var l) ? l : exact[string.Join('.', parts[i..])] = []).Add(id);
             (exact.TryGetValue(core, out var all) ? all : exact[core] = []).Add(id);
-            foreach (var p in Regex.Split(id[(id.IndexOf(':') + 1)..], @"[.#/(),\s]+").Where(p => p.Length > 0)) segments.Add(p);
+            segments.UnionWith(Regex.Split(id[(id.IndexOf(':') + 1)..], @"[.#/(),\s]+").Where(p => p.Length > 0));
         }
         return new(exact, segments);
     }

@@ -78,7 +78,7 @@ public class DomainExplainTests
     static string Id(DomainExplain.Package p, string kind, params string[] symbols) =>
         p.Facts.Single(f => f.Kind == kind && f.Symbols.SequenceEqual(symbols)).Id;
 
-    static string Cache() => Path.Combine(Directory.CreateTempSubdirectory("docwizz-explain-").FullName, "cache.json");
+    static string Cache() => Path.Join(Directory.CreateTempSubdirectory("docwizz-explain-").FullName, "cache.json");
 
     [Fact]
     public void Evidence_package_has_stable_ids_a_flow_chain_and_requirements_as_intent()
@@ -288,7 +288,7 @@ public class DomainExplainTests
             hypotheses: [S("Possibly `OrderService.Place` is where orders are accepted or refused.", "S2", "W1")],
             questions: [S("Is `Db.Write` the only place orders are stored?", "S5")]));
         var md = DomainExplain.Markdown(await DomainExplain.Explain(Report(Index()), model, "fake/fake-1", null), "..");
-        var golden = Path.Combine(Root(), "tests", "DocWizz.Tests", "Golden", "domain-explain.md");
+        var golden = Path.Join(Root(), "tests", "DocWizz.Tests", "Golden", "domain-explain.md");
         if (Environment.GetEnvironmentVariable("DOCWIZZ_UPDATE_GOLDEN") == "1") File.WriteAllText(golden, md);
         Assert.Equal(File.ReadAllText(golden), md);
         var order = new[] { "## Technical facts", "## Business hypotheses (unverified)", "## Open questions", "## Evidence and limitations" }
@@ -300,7 +300,7 @@ public class DomainExplainTests
     static string Root()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-            if (File.Exists(Path.Combine(dir.FullName, "global.json"))) return dir.FullName;
+            if (File.Exists(Path.Join(dir.FullName, "global.json"))) return dir.FullName;
         throw new InvalidOperationException("repository root not found");
     }
 }

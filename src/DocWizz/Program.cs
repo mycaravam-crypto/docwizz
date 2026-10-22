@@ -353,7 +353,7 @@ static async Task<int> DomainExplainCommand(string root, Config config, DomainCr
         if (provider is not null)
             Console.Error.WriteLine($"docwizz: explaining {report.Symbols.Count} symbols with {provider.Model} at {provider.Endpoint} (statements are checked against the evidence)");
         explanation = await DomainExplain.Explain(report, provider, provider is null ? null : AiProviders.Tag(config.Ai),
-            Path.Combine(root, "docs", ".docwizz", "domain-ai-cache.json"));
+            Path.Join(root, "docs", ".docwizz", "domain-ai-cache.json"));
         if (provider is null)
             explanation = explanation with { Warnings = [.. explanation.Warnings, "the configured model may not be used (see stderr); only the deterministic explanation is shown"] };
     }
