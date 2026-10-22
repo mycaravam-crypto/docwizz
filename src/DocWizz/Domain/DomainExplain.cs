@@ -364,9 +364,8 @@ static class DomainExplain
     {
         var exact = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         var segments = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var f in facts.Where(f => f.Kind == "symbol"))
+        foreach (var id in facts.Where(f => f.Kind == "symbol").Select(f => f.Symbols[0]))
         {
-            var id = f.Symbols[0];
             var core = Core(id);
             var parts = core.Split('.', StringSplitOptions.RemoveEmptyEntries);
             for (var i = 0; i < parts.Length; i++)
