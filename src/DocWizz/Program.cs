@@ -942,6 +942,7 @@ static string Reference() => $"""
         [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--ai-ratings]  as for generate
 
     everyday:
+      docwizz ai check [dir]            test configured local AI model with a synthetic request [--format json]
       docwizz discover [dir]            read-only project and solution inventory [--format json]
       docwizz edmx <dir> <file.edmx>     read-only EF6 EDMX facts and findings [--format json]
         [--graph]                       source-backed technical graph (edmx-graph/v1)
