@@ -64,6 +64,12 @@ static async Task<int> Dispatch(string[] args)
         domainAction = pos[1];
         pos.RemoveAt(1);
     }
+    if (cmd == "ai")
+    {
+        if (pos.ElementAtOrDefault(1) != "check" || pos.Count > 3)
+            return Usage("ai requires check: docwizz ai check [dir]", "ai");
+        pos.RemoveAt(1);
+    }
     var path = pos.ElementAtOrDefault(1) ?? ".";
     var json = opts.GetValueOrDefault("format") == "json";
 
@@ -114,6 +120,8 @@ static async Task<int> Dispatch(string[] args)
 
     switch (cmd)
     {
+        case "ai":
+            return await AiCheck.Run(config.Ai, json);
         case "edmx":
             if (pos.ElementAtOrDefault(2) is not { } edmxFile)
                 return Usage("edmx requires a repository-relative .edmx file", "edmx");
