@@ -158,6 +158,20 @@ public class ScreenshotCaptureTests
     public void A_password_field_on_a_page_whose_authorized_api_calls_succeed_is_part_of_the_page() =>
         Assert.Null(ScreenshotCapture.LoginFormFailure("/connect", true, true, authorizedApiCall: true));
 
+    [Theory]
+    [InlineData("event: A|B", @"event: A\|B")]
+    [InlineData("useFoo() | useBar()", @"useFoo() \| useBar()")]
+    [InlineData("Größenprüfung", "Größenprüfung")]
+    public void Component_table_cell_escaping_preserves_column_boundaries_and_unicode(string raw, string expected)
+    {
+        var escaped = Generator.Esc(raw);
+        Assert.Equal(expected, escaped);
+        var markdown = "# Components\n\n| Name | Hooks |\n|---|---|\n| Demo | " + escaped + " |\n";
+        var html = Html.Page("frontend.md", markdown, new Dictionary<string, string>());
+        Assert.Contains("<table>", html);
+        Assert.Contains(raw.Replace("|", "|"), html);
+    }
+
     [Fact]
     public void Generated_markdown_and_html_link_only_successfully_captured_images()
     {
