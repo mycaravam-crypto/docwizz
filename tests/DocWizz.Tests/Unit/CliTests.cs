@@ -82,9 +82,9 @@ public class CliTests
     // options a command doesn't use
     [InlineData("product . --ai-ratings", "--ai-ratings doesn't apply to product; it applies to setup, generate")]
     [InlineData("analyze . --html", "--html doesn't apply to analyze; it applies to setup, generate")]
-    [InlineData("scan . --ai", "--ai doesn't apply to scan; it applies to setup, generate, product")]
+    [InlineData("scan . --ai", "--ai doesn't apply to scan; it applies to setup, generate, domain, product")]
     [InlineData("generate . --format json", "--format doesn't apply to generate; it applies to edmx, ai, discover, check, analyze, architecture, diff, context, domain, trace, evidence-diff, product, requirements, remediate")]
-    [InlineData("generate . --force", "--force doesn't apply to generate; it applies to setup")]
+    [InlineData("generate . --force", "--force doesn't apply to generate; it applies to setup, domain")]
     [InlineData("check . --validate", "--validate doesn't apply to check; it applies to remediate")]
     [InlineData("analyze . --since main", "--since doesn't apply to analyze; it applies to check, remediate")]
     [InlineData("setup . --format json", "--format doesn't apply to setup; it applies to edmx, ai, discover, check, analyze, architecture, diff, context, domain, trace, evidence-diff, product, requirements, remediate")]

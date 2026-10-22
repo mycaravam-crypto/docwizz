@@ -59,8 +59,10 @@ static async Task<int> Dispatch(string[] args)
     string? domainAction = null;
     if (cmd == "domain")
     {
-        if (pos.ElementAtOrDefault(1) is not ("discover" or "areas"))
-            return Usage("domain needs discover or areas: docwizz domain discover <dir> --seed <symbol|endpoint>", "domain");
+        if (pos.ElementAtOrDefault(1) is not ("discover" or "explain" or "areas"))
+            return Usage("domain needs discover, explain or areas: docwizz domain discover <dir> --seed <symbol|endpoint>", "domain");
+        if (pos[1] != "explain" && (opts.ContainsKey("ai") || opts.ContainsKey("force")))
+            return Usage($"--{(opts.ContainsKey("ai") ? "ai" : "force")} applies to domain explain, not to domain {pos[1]}", "domain");
         domainAction = pos[1];
         pos.RemoveAt(1);
     }
@@ -167,7 +169,7 @@ static async Task<int> Dispatch(string[] args)
             Console.Write(json ? DomainAreas.Json(areas) : DomainAreas.Text(areas));
             return 0;
         case "domain":
-            return DomainCommand(path, config, opts, json, pos.ElementAtOrDefault(2));
+            return await DomainCommand(path, config, opts, json, pos.ElementAtOrDefault(2), domainAction == "explain");
         case "mcp":
             return await McpCommand(path, config, opts.ContainsKey("auto-rescan"));
         case "evidence-diff":
@@ -291,14 +293,14 @@ static int EvidenceDiffCommand(string root, string? before, string? after, bool 
     catch (IOException ex) { Console.Error.WriteLine(ex.Message); return 1; }
 }
 
-// First iteration of domain discovery: offline graph traversal with opt-in historical requirement evidence.
-// No model requests, Azure DevOps calls, Git changes or generated files.
-static int DomainCommand(string root, Config config, Dictionary<string, string> opts, bool json, string? output)
+// Domain discovery: offline graph traversal with opt-in historical requirement evidence; no Azure DevOps calls or Git
+// changes. `explain` builds its draft on the same report; only with --ai does it ask a self-hosted model (#288).
+static async Task<int> DomainCommand(string root, Config config, Dictionary<string, string> opts, bool json, string? output, bool explain)
 {
     var seed = opts.GetValueOrDefault("seed");
     var workItem = opts.GetValueOrDefault("work-item");
     if ((seed is null) == (workItem is null))
-        return Usage("domain discover needs exactly one of --seed <symbol|endpoint> or --work-item <id>", "domain");
+        return Usage($"domain {(explain ? "explain" : "discover")} needs exactly one of --seed <symbol|endpoint> or --work-item <id>", "domain");
     if (!int.TryParse(opts.GetValueOrDefault("depth") ?? $"{DomainCrawler.DefaultDepth}", out var depth)
         || depth is < 0 or > DomainCrawler.MaxDepth)
         return Usage($"--depth must be 0 to {DomainCrawler.MaxDepth}", "domain");
@@ -315,6 +317,7 @@ static int DomainCommand(string root, Config config, Dictionary<string, string> 
             Git(root, "rev-parse", "HEAD")?.Trim(), root);
         if (index is not null && index.Inputs.Scope != ProjectScope.Fingerprint(config.Scope))
             report = report with { Warnings = [.. report.Warnings, "the imported requirement scope differs from the current project scope; reimport requirements"] };
+        if (explain) return await DomainExplainCommand(root, config, report, opts.ContainsKey("ai"), opts.ContainsKey("force"), json, output);
         var md = opts.GetValueOrDefault("format") == "md";
         if (output is null)
         {
@@ -337,6 +340,41 @@ static int DomainCommand(string root, Config config, Dictionary<string, string> 
     }
     catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 1; }
     catch (IOException e) { Console.Error.WriteLine(e.Message); return 1; }
+}
+
+// `domain explain`: the evidence package, flow chains and questions, with --ai also the model's validated statements.
+// Markdown unless --format json; a file docwizz didn't write is only replaced with --force.
+static async Task<int> DomainExplainCommand(string root, Config config, DomainCrawler.Report report, bool ai, bool force, bool json, string? output)
+{
+    DomainExplain.Explanation explanation;
+    if (ai)
+    {
+        using var provider = AiProviders.Create(config.Ai, "domain explanation");
+        if (provider is not null)
+            Console.Error.WriteLine($"docwizz: explaining {report.Symbols.Count} symbols with {provider.Model} at {provider.Endpoint} (statements are checked against the evidence)");
+        explanation = await DomainExplain.Explain(report, provider, provider is null ? null : AiProviders.Tag(config.Ai),
+            Path.Combine(root, "docs", ".docwizz", "domain-ai-cache.json"));
+        if (provider is null)
+            explanation = explanation with { Warnings = [.. explanation.Warnings, "the configured model may not be used (see stderr); only the deterministic explanation is shown"] };
+    }
+    else explanation = await DomainExplain.Explain(report, null, null, null);
+    if (output is null)
+    {
+        Console.Write(json ? DomainExplain.Json(explanation) : DomainExplain.Markdown(explanation));
+        return 0;
+    }
+    var target = Path.GetFullPath(output);
+    if (!force && File.Exists(target) && File.ReadAllText(target) is var existing
+        && !existing.StartsWith(DomainExplain.Marker, StringComparison.Ordinal) && !existing.Contains($"\"{DomainExplain.Schema}\"", StringComparison.Ordinal))
+    {
+        Console.Error.WriteLine($"{output} exists and is not a docwizz domain explanation; refusing to overwrite (--force replaces it)");
+        return 1;
+    }
+    var links = Path.GetRelativePath(Path.GetDirectoryName(target)!, Path.GetFullPath(root)).Replace('\\', '/');
+    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+    File.WriteAllText(target, json ? DomainExplain.Json(explanation) : DomainExplain.Markdown(explanation, links));
+    Console.WriteLine($"→ {output}");
+    return 0;
 }
 
 // P2 traceability uses only explicit YAML links. No scan, inference or network calls.
@@ -968,6 +1006,9 @@ static string Reference() => $"""
       docwizz context <dir> --for <target>  token-budgeted facts about one symbol, file, folder or endpoint, for agents
         [--hops <1-4>] [--budget <tokens>] [--format md|json] [--include-ai] [--requirements]
       docwizz domain discover <dir> --seed <symbol|endpoint>  bounded graph walk, optional historical requirements
+      docwizz domain explain <dir> [out] --seed <symbol|endpoint>  reviewable draft: flow facts, open questions, evidence
+        [--ai] [--force]                --ai: a self-hosted model adds statements and unverified business hypotheses,
+                                        each checked against the evidence; --force replaces a file docwizz didn't write
       docwizz load import <dir> <report.json>...  powerwizz load-test results, shown per endpoint in api.md
       docwizz domain areas <dir>        candidate business areas: methods grouped by folder and delegation, inferred
         [--work-item <id>] [--depth <0-8>] [--limit <1-500>] [--format json]

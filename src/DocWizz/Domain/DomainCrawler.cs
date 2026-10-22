@@ -358,7 +358,7 @@ static class DomainCrawler
     }
 
     // Why a link is not plain intent: only a confirmed, exported, current work item on unchanged code is As-intended.
-    static List<string> Unclear(Requirement r)
+    internal static List<string> Unclear(Requirement r)
     {
         var why = new List<string>();
         if (r.Status != "confirmed")
@@ -372,7 +372,7 @@ static class DomainCrawler
     }
 
     // `src/A.cs:12-20` -> [`src/A.cs:12-20`](../src/A.cs#L12-L20): GitHub's line anchors, a plain file link elsewhere.
-    static string Source(string location, string? links)
+    internal static string Source(string location, string? links)
     {
         if (links is null) return Generator.Code(location);
         var colon = location.LastIndexOf(':');

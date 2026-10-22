@@ -184,3 +184,11 @@ $ python3 bench/domain.py --expect   # exit 1 unless every case matches gold (te
 
 Measures whether `docwizz domain discover` reaches what is on the path from its seed, and only that. No model.
 Method, ground truth and the current numbers: [domain/README.md](domain/README.md).
+
+```console
+$ python3 bench/domain_explain.py           # scripted model: supported vs unsupported statements, missing process steps
+$ python3 bench/domain_explain.py --expect  # exit 1 if an unsupported statement survives as a fact (test.sh runs this)
+```
+
+Measures whether `docwizz domain explain --ai` keeps only what its evidence package carries. Fake model on loopback,
+no real model. Numbers: [domain/README.md](domain/README.md#explanation-288).
