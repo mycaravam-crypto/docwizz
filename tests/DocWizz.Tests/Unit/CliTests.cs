@@ -22,7 +22,7 @@ public class CliTests
     // allowed
     [InlineData("ai check .", null)]
     [InlineData("ai check . --format json", null)]
-    [InlineData("ai check . --html", "--html doesn't apply to ai")]
+    [InlineData("ai check . --html", "--html doesn't apply to ai; it applies to setup, generate")]
     [InlineData("setup .", null)]
     [InlineData("discover . --format json", null)]
     [InlineData("edmx . fixture-legacy/Shop/Models/Legacy.edmx --format json", null)]
@@ -83,7 +83,7 @@ public class CliTests
     [InlineData("product . --ai-ratings", "--ai-ratings doesn't apply to product; it applies to setup, generate")]
     [InlineData("analyze . --html", "--html doesn't apply to analyze; it applies to setup, generate")]
     [InlineData("scan . --ai", "--ai doesn't apply to scan; it applies to setup, generate, product")]
-    [InlineData("generate . --format json", "--format doesn't apply to generate; it applies to edmx, discover, check, analyze, architecture, diff, context, domain, trace, evidence-diff, product, requirements, remediate")]
+    [InlineData("generate . --format json", "--format doesn't apply to generate; it applies to edmx, ai, discover, check, analyze, architecture, diff, context, domain, trace, evidence-diff, product, requirements, remediate")]
     [InlineData("generate . --force", "--force doesn't apply to generate; it applies to setup")]
     [InlineData("check . --validate", "--validate doesn't apply to check; it applies to remediate")]
     [InlineData("analyze . --since main", "--since doesn't apply to analyze; it applies to check, remediate")]
