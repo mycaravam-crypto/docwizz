@@ -20,6 +20,9 @@ public class CliTests
 
     [Theory]
     // allowed
+    [InlineData("ai check .", null)]
+    [InlineData("ai check . --format json", null)]
+    [InlineData("ai check . --html", "--html doesn't apply to ai")]
     [InlineData("setup .", null)]
     [InlineData("discover . --format json", null)]
     [InlineData("edmx . fixture-legacy/Shop/Models/Legacy.edmx --format json", null)]
