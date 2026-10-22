@@ -64,6 +64,12 @@ static async Task<int> Dispatch(string[] args)
         domainAction = pos[1];
         pos.RemoveAt(1);
     }
+    if (cmd == "ai")
+    {
+        if (pos.ElementAtOrDefault(1) != "check" || pos.Count > 3)
+            return Usage("ai requires check: docwizz ai check [dir]", "ai");
+        pos.RemoveAt(1);
+    }
     var path = pos.ElementAtOrDefault(1) ?? ".";
     var json = opts.GetValueOrDefault("format") == "json";
 
@@ -114,6 +120,8 @@ static async Task<int> Dispatch(string[] args)
 
     switch (cmd)
     {
+        case "ai":
+            return await AiCheck.Run(config.Ai, json);
         case "edmx":
             if (pos.ElementAtOrDefault(2) is not { } edmxFile)
                 return Usage("edmx requires a repository-relative .edmx file", "edmx");
@@ -934,6 +942,7 @@ static string Reference() => $"""
         [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--ai-ratings]  as for generate
 
     everyday:
+      docwizz ai check [dir]            test configured local AI model with a synthetic request [--format json]
       docwizz discover [dir]            read-only project and solution inventory [--format json]
       docwizz edmx <dir> <file.edmx>     read-only EF6 EDMX facts and findings [--format json]
         [--graph]                       source-backed technical graph (edmx-graph/v1)
@@ -996,7 +1005,7 @@ static string Reference() => $"""
     options:
       --profile <name|file.yaml>        setup/generate/check/analyze/architecture/diff: documentation profile,
                                         one of {string.Join(", ", Profiles.Names)}, or your own file
-      --format console|json             discover/edmx/analyze/check/architecture/diff/context/domain/product/trace/evidence-diff/requirements/remediate output
+      --format console|json             ai/discover/edmx/analyze/check/architecture/diff/context/domain/product/trace/evidence-diff/requirements/remediate output
       --timings                         time per stage and peak memory, on stderr (benchmarks)
       --help, -h                        help for a command: docwizz <command> --help
       --version, -v                     version, commit and runtime (also: docwizz version)

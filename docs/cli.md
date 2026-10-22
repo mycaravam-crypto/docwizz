@@ -17,6 +17,7 @@ an example and its options.
 |---|---|---|---|
 | `setup` | first repository setup | all users | **yes, start here** |
 | `edmx` | inspect EF Designer CSDL/SSDL/MSL facts and findings without executing code | architects | optional |
+| `ai` | verify the configured local model with a synthetic inference request | developers, CI | optional |
 | `discover` | project and solution inventory | developers | optional |
 | `analyze` | documentation report | developers | yes |
 | `architecture` | architecture diagnostics | architects | optional |
@@ -60,6 +61,7 @@ Run `docwizz discover .` to inventory solutions and projects. Configure `scope:`
 | Command | Syntax | Purpose | Use |
 |---|---|---|---|
 | `edmx` | `docwizz edmx <dir> <file.edmx> [--graph] [--links] [--degree-weight n] [--fan-in-weight n] [--fan-out-weight n] [--inheritance-weight n] [--format console\|json]` | read-only EF6 EDMX facts or deterministic evidence-backed technical graph or code-link evidence (exact C#↔EDMX, inferred #187 areas) | architects |
+| `ai` | `docwizz ai check [dir] [--format console\|json]` | synthetic request tests configured private model, without source data | diagnostics |
 | `discover` | `docwizz discover [dir] [--format console\|json]` | read-only inventory of solutions, projects and references | everyday |
 | `setup` | `docwizz setup [dir] [--select-projects] [--all-projects] [--yes] [--force] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--ai-ratings] [--profile p]` | detect the stack, write `docwizz.yaml`, analyze, architecture, generate, check | start here |
 | `generate` | `docwizz generate <dir> [out] [--html] [--screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>]] [--progress] [--refresh-html-on-version-change] [--ai] [--ai-ratings] [--requirements] [--ado-project <name> --ado-area <path> [--history-since <ref>]] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
@@ -89,7 +91,7 @@ Run `docwizz discover .` to inventory solutions and projects. Configure `scope:`
 | Option | Default | Applies to | Interaction | Use |
 |---|---|---|---|---|
 | `--profile <name\|file.yaml>` | `profile:` in `docwizz.yaml`, else `default` | setup, generate, check, analyze, architecture, diff | overrides `profile:` and the file's own `patterns:` | normal |
-| `--format console\|json` | `console` | discover, edmx, analyze, check, architecture, context, domain, diff, trace, evidence-diff, product, remediate, requirements | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
+| `--format console\|json` | `console` | ai, discover, edmx, analyze, check, architecture, context, domain, diff, trace, evidence-diff, product, remediate, requirements | `json` prints one JSON document to stdout; `context` also takes `md` (the same as `console`) | CI, tooling |
 | `--graph` | off | edmx | produces the versioned `docwizz.edmx-graph/v1` technical graph | architects |
 | `--links` | off | edmx | read-only explicit C# code evidence and inferred #187 domain-area hints; incompatible with `--graph` | architects |
 | `--degree-weight <n>` | 1 | edmx | 0–100; only with `--graph`; multiply resolved association degree | architects |
@@ -156,6 +158,7 @@ Run `docwizz discover .` to inventory solutions and projects. Configure `scope:`
 
 | Command | 0 | 1 |
 |---|---|---|
+| `ai` | configured private model completed a synthetic inference request | model or endpoint unavailable, disallowed or invalid response |
 | `setup` | every stage ran (`SUCCESS` or `SUCCESS_WITH_FINDINGS`) | a stage failed (`FAILED`; the others are still reported), or bad arguments |
 | `check` | thresholds pass | thresholds fail, or bad arguments/config |
 | `architecture` | within `max_violations`/`max_cycles` | above them |

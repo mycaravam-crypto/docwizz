@@ -176,6 +176,9 @@ see [Playwright screenshot troubleshooting](docs/guides/screenshots.md).
 
 ### Draft missing docs with a local AI
 
+Before drafting, test the current Ollama or OpenAI-compatible configuration with `docwizz ai check .` (or `--format json`). The check performs one synthetic inference request, sends no repository code and exits 0 if the model responds, 1 otherwise.
+
+
 ```bash
 ollama pull qwen2.5-coder:7b
 docwizz generate . --ai
@@ -528,6 +531,7 @@ them (`UseNpgsql`, `fetch('https://…')`), *inferred* when only a package point
 | Command | Does |
 |---|---|
 | `docwizz setup [dir]` | first run: discover, configure, analyze, generate, check |
+| `docwizz ai check [dir]` | probe the current local AI configuration with a synthetic inference request (`--format json`); exit 0 when usable, 1 otherwise |
 | `docwizz discover [dir]` | read-only project and solution inventory |
 | `docwizz edmx <dir> <file.edmx>` | EF6 EDMX facts, `--graph` technical metrics or `--links` evidence-backed C# ↔ EF6/DbContext/MVC links (`--format json`); see [EDMX](docs/reference/edmx.md) |
 | `docwizz analyze <dir>` | documentation gaps and quality |
