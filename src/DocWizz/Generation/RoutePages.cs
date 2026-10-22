@@ -50,7 +50,7 @@ partial class Generator
         if (components.Count == 0) gaps.Add("No component found for this path (dynamic or lazy route?).");
 
         if (Screenshots.TryGetValue(path, out var image) && File.Exists(Path.Combine(outDir, image)))
-            sb.AppendLine($"![Screenshot of {path}](../{image})\n\n_The screenshot shows the page as captured; it does not prove the page behaves correctly._\n");
+            sb.AppendLine($"![Screenshot of {path}](../{image})\n\n{(ScreenshotCapture.IsStale(outDir, path) ? "**stale** — previous screenshot retained because authentication failed (HTTP 401/403).\n\n" : "")}_The screenshot shows the page as captured; it does not prove the page behaves correctly._\n");
 
         var traces = routes.Select(r => flowGraph.TraceOf(r.Id)).Where(t => t.Layers.Count > 0).ToList();
         var units = traces.SelectMany(t => t.Layers.SelectMany(l => l)).Distinct().ToList();

@@ -538,7 +538,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             {
                 sb.AppendLine("## Screenshots\n");
                 foreach (var r in captured)
-                    sb.AppendLine($"### `{r.Route}`\n\n![Screenshot of {r.Route}]({Screenshots[r.Route!]})\n");
+                    sb.AppendLine($"### `{r.Route}`{(ScreenshotCapture.IsStale(outDir, r.Route!) ? " — **stale**" : "")}\n\n![Screenshot of {r.Route}]({Screenshots[r.Route!]})\n");
             }
         }
         var components = model.Nodes.Where(n => n.Kind == "component").OrderBy(n => n.File).ToList();

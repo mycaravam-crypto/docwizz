@@ -229,6 +229,29 @@ public class ScreenshotCaptureTests
         Assert.Empty(ScreenshotCapture.SessionStorage(null));
     }
 
+    [Theory]
+    [InlineData("HTTP 401")]
+    [InlineData("HTTP 403")]
+    [InlineData("API answered 401 for /api/me (session not accepted?)")]
+    [InlineData("API answered 403 for /api/me (session not accepted?)")]
+    public void Auth_failure_keeps_existing_capture_and_marks_it_stale(string failure)
+    {
+        using var repo = new Sources(("src/router.ts", "// routes"));
+        var outDir = Path.Combine(repo.Root, "docs");
+        var route = "/orders";
+        var file = Path.Combine(outDir, "screenshots", ScreenshotCapture.FileName(route));
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllBytes(file, [1, 2, 3]);
+        Assert.True(ScreenshotCapture.RetainOnAuthFailure(file, failure));
+        Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(file));
+        Assert.True(ScreenshotCapture.IsStale(outDir, route));
+        var model = Model([N("route:/orders", "src/router.ts", "route", route: route)]);
+        Assert.Contains(route, ScreenshotCapture.Existing(model, outDir).Keys);
+        Assert.False(ScreenshotCapture.RetainOnAuthFailure(file, "HTTP 500"));
+        Assert.False(File.Exists(file));
+        Assert.False(ScreenshotCapture.IsStale(outDir, route));
+    }
+
     [Fact]
     public void Without_a_capture_the_last_screenshots_stay_linked()
     {

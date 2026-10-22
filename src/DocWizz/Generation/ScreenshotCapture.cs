@@ -138,8 +138,28 @@ static class ScreenshotCapture
         await page.WaitForTimeoutAsync(400 + delayMs);
     }
 
-    // Without --screenshots: the last successful captures stay linked. A failed capture deletes its file, so a file that
-    // exists is the newest good one; a route that left the code is no longer linked (its file stays until the next capture).
+    // A sidecar survives later generate calls, so stale captures are always visibly labelled.
+    public static bool IsStale(string outDir, string route) =>
+        File.Exists(Path.Combine(outDir, "screenshots", FileName(route) + ".stale"));
+
+    // HTTP 401/403 means the capture failed due to access; preserve the last good image,
+    // marking it stale. Other failures keep the previous invalidation behaviour.
+    public static bool RetainOnAuthFailure(string fullPath, string failure)
+    {
+        var marker = fullPath + ".stale";
+        if (Regex.IsMatch(failure, @"^(HTTP|API answered) (401|403)\b", RegexOptions.CultureInvariant)
+            && File.Exists(fullPath))
+        {
+            File.WriteAllText(marker, "authentication failed; screenshot is from a previous capture\n");
+            return true;
+        }
+        if (File.Exists(fullPath)) File.Delete(fullPath);
+        if (File.Exists(marker)) File.Delete(marker);
+        return false;
+    }
+
+    // Without --screenshots: the last successful captures stay linked, including stale images.
+    // Routes removed from code are no longer linked.
     public static Dictionary<string, string> Existing(CodeModel model, string outDir) =>
         Routes(model).Where(r => !EndsSession(r) && File.Exists(Path.Combine(outDir, "screenshots", FileName(r))))
             .ToDictionary(r => r, r => $"screenshots/{FileName(r)}", StringComparer.Ordinal);
@@ -203,8 +223,9 @@ static class ScreenshotCapture
                             LoginFormFailure(route, storageStateFile is not null, await page.Locator("input[type=password]:visible").CountAsync() > 0, authorized);
                         if (failure is not null)
                         {
-                            if (File.Exists(fullPath)) File.Delete(fullPath);
-                            Console.Error.WriteLine($"docwizz: screenshot skipped: {route} {Explain(route, failure, storageStateFile is not null)}");
+                            var retained = RetainOnAuthFailure(fullPath, failure);
+                            if (retained) images[route] = $"screenshots/{fileName}";
+                            Console.Error.WriteLine($"docwizz: screenshot skipped: {route} {Explain(route, failure, storageStateFile is not null)}{(retained ? " (previous image retained as stale)" : "")}");
                             continue;
                         }
                         await page.ScreenshotAsync(new() { Path = fullPath, FullPage = true, Timeout = 10000 });
@@ -216,6 +237,7 @@ static class ScreenshotCapture
                             Console.Error.WriteLine($"docwizz: screenshot skipped: {route} {failure}");
                             continue;
                         }
+                        File.Delete(fullPath + ".stale");
                         images[route] = $"screenshots/{fileName}";
                     }
                     finally
