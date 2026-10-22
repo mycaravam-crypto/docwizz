@@ -79,3 +79,42 @@ item's text with the linked method's source and move exactly those three to Uncl
 item's `TRK-`, `Available` has none of its values). `--expect` fails if one of them is shown as intent again or if a
 cross-check takes out an implemented or partial link. Each check fires once on 23 labelled rules: their precision on
 real code is unmeasured, which is why a hit only moves the link to Unclear and claims nothing.
+
+## Explanation (#288)
+
+```bash
+python3 bench/domain_explain.py            # Markdown report
+python3 bench/domain_explain.py --expect   # exit 1 if an unsupported statement survives as a fact (test.sh runs this)
+```
+
+`docwizz domain explain --ai` from each labelled process entry (same repository and history as above) against a fake
+model on loopback. The fake model reads the evidence it is sent and answers with labelled statements: **supported**
+(a relation's two symbols citing that relation, a chain's first and last symbol citing the chain) and seven unsupported
+kinds: **wrong-evidence** (cites a relation that doesn't touch its symbols), **unconnected** (two symbols, no relation
+cited), **invented-code**, **invented-id**, **intent-only** (rests only on a work item), **business** (business meaning
+as a technical fact) and **claim** (approval, "implements the requirement"). **verb-mismatch** (`deletes` for a `calls`
+relation) is the documented gap: reported, not required. Per process, the gold steps that the deterministic flow chains
+reach are counted; the others are missing process steps.
+
+| Category | Labelled | Kept as fact | Moved to hypotheses | Rejected |
+|---|---|---|---|---|
+| supported | 10 | **10** | 0 | 0 |
+| wrong-evidence | 1 | 0 | 1 | 0 |
+| unconnected | 1 | 0 | 1 | 0 |
+| invented-code | 3 | 0 | 3 | 0 |
+| invented-id | 3 | 0 | 0 | 3 |
+| intent-only | 3 | 0 | 3 | 0 |
+| business | 3 | 0 | 3 | 0 |
+| claim | 4 | 0 | 0 | 4 |
+| verb-mismatch (gap) | 6 | 6 | 0 | 0 |
+
+| Process | Gold steps | In flow chains | Missing |
+|---|---|---|---|
+| checkout | 9 | 9 | none |
+| parcel tracking | 1 | 1 | none |
+| order report | 1 | 1 | none |
+
+Supported statements kept: 1.0; unsupported kept as technical facts: **0.0** (18 statements); a second run answers from
+the cache with identical output and no request. The verb check is not built: every mismatched verb survived. These are
+scripted statements that measure the validator, not a model's accuracy; a real model's rate of unsupported statements is
+unmeasured.

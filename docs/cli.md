@@ -25,7 +25,7 @@ an example and its options.
 | `diff` | change impact | developers, CI | optional |
 | `check` | quality gate | CI, developers | yes |
 | `context` | token-budgeted facts about one target, for coding agents | coding agents | optional |
-| `domain` | bounded, recursive code/requirements discovery | architects | optional |
+| `domain` | bounded, recursive code/requirements discovery; a reviewable flow explanation | architects | optional |
 | `mcp` | read-only MCP server over the code model | coding agents | optional |
 | `sbom` | CycloneDX manifest SBOM | supply-chain inventory | optional |
 | `remediate` | package update suggestions | maintainers | optional |
@@ -70,7 +70,7 @@ Run `docwizz discover .` to inventory solutions and projects. Configure `scope:`
 | `architecture` | `docwizz architecture <dir> [--format f] [--profile p]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
 | `diff` | `docwizz diff [dir] [base] [head] [--format f] [--profile p]` | change impact vs the last `generate` or git refs | reviews, CI |
 | `context` | `docwizz context <dir> --for target [--hops n] [--budget tokens] [--format md\|json] [--include-ai] [--requirements]` | token-budgeted context package for one symbol, file, folder or endpoint | coding agents |
-| `domain` | `docwizz domain discover <dir> [out] (--seed <symbol\|endpoint> \| --work-item <id>) [--depth n] [--limit n] [--format md\|json]`; `docwizz domain areas <dir> [--format json]` | recursively explore code with separately sourced historical requirements; inferred candidate business areas | architects |
+| `domain` | `docwizz domain discover <dir> [out] (--seed <symbol\|endpoint> \| --work-item <id>) [--depth n] [--limit n] [--format md\|json]`; `docwizz domain explain <dir> [out] (--seed … \| --work-item …) [--depth n] [--limit n] [--ai] [--force] [--format md\|json]`; `docwizz domain areas <dir> [--format json]` | recursively explore code with separately sourced historical requirements; explain: a draft of the flow (technical facts, unverified hypotheses, open questions, evidence); inferred candidate business areas | architects |
 | `mcp` | `docwizz mcp <dir> [--auto-rescan]` | read-only MCP server on stdio: find_symbol, context, callers, impact, check, … | coding agents |
 | `evidence-diff` | `docwizz evidence-diff <dir> <before.yaml> <after.yaml> [--format json]` | explicit evidence changes and affected tests | product documents |
 | `trace` | `docwizz trace <dir> <evidence.yaml> [--format json]` | explicit traceability and missing links | product documents |
@@ -104,7 +104,7 @@ Run `docwizz discover .` to inventory solutions and projects. Configure `scope:`
 | `--screenshots --base-url <url>` | off | generate | captures detected static routes from a running frontend; anonymous isolated contexts by default; HTTP errors and redirects are skipped | opt-in |
 | `--storage-state <file>` | off | generate | with `--screenshots`, starts each route's context from a saved Playwright login state; path relative to the scanned directory; keep it out of Git | opt-in |
 | `--screenshot-delay <ms>` | 0 | generate | with `--screenshots`, extra wait (0 to 60000 ms) after the page settles, for slow pages | opt-in |
-| `--ai` | off | generate, product, setup | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it; does not enable ratings | opt-in |
+| `--ai` | off | generate, product, setup, domain | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it; does not enable ratings. `domain`: only `domain explain`, whose statements are validated against the evidence package | opt-in |
 | `--ai-ratings` | off | generate, setup | independently rates written docs; cached ratings are used without it; combine with `--ai` for drafts too | opt-in |
 | `--since <ref>` | — | check, remediate | check: only problems introduced since `<ref>` fail; remediate: says whether each update touches only what changed since `<ref>` | CI |
 | `--for <target>` | — | context, requirements | required for context; a symbol id or qualified name, a file, a folder, or `VERB /route`; ambiguous or unknown exits 1 with candidates. `requirements show` takes a symbol, or an id the index knows from history | coding agents |
@@ -127,7 +127,7 @@ Run `docwizz discover .` to inventory solutions and projects. Configure `scope:`
 | `--trust <policy.json>` | off | product | reviewed public-key trust policy; only publish |
 | `--draft <existing.md>` | off | product | repository-confined DocWizz-generated draft to publish (otherwise `docs/products/<id>.md`); only valid for `product publish` |
 | `--context <file.yaml>` | off | product | validates sourced project statements against the template before writing | product documents |
-| `--force` | off | setup | replaces an existing `docwizz.yaml`; any other command rejects it | setup only |
+| `--force` | off | setup, domain | `setup`: replaces an existing `docwizz.yaml`; `domain explain`: replaces an output file docwizz didn't write. Any other command rejects it | explicit |
 | `--select-projects` | off | setup | terminal-only project selection after discovery; on an existing config replaces only `scope:` | setup only |
 | `--all-projects` | off | setup | removes a saved project scope while keeping other YAML | setup only |
 | `--yes` | off | setup | never prompts; does not change an existing scope | setup only |
@@ -167,7 +167,7 @@ Run `docwizz discover .` to inventory solutions and projects. Configure `scope:`
 | `diff` | done | no baseline (`generate` first or pass a ref), unknown ref |
 | `context` | package written | no `--for`, an ambiguous or unknown target (candidates on stderr), or bad arguments |
 | `mcp` | stdin closed | bad arguments or config |
-| `domain` | JSON or text summary written, even with missing optional requirements index | missing/ambiguous seed, invalid options or missing index for Work Item seed |
+| `domain` | JSON or text summary written, even with missing optional requirements index; `explain` also when the model fails (deterministic draft and a warning) | missing/ambiguous seed, invalid options, missing index for Work Item seed, or an output file docwizz didn't write (`explain` without `--force`) |
 | `remediate` | done (suggestions alone never fail) | a `--validate` run failed, or bad arguments |
 | `trace` | report on stdout | invalid/missing YAML; no data written |
 | `tests` | snapshot validated, saved and summarized | missing or invalid snapshot or unsupported version |
@@ -198,6 +198,7 @@ change the limit. A scanner that fails shows the last lines it wrote to stderr i
 | `docs/.docwizz/model.json`, `documentation.json` | docwizz: the baseline `diff` compares against, and the documentation model as data. |
 | `docs/.docwizz/requirements.json` | docwizz `requirements import`: the requirement index. Contains work-item titles and criteria, which `generate` publishes in `docs/requirements/`: don't host the docs where those texts must not be seen. |
 | `docs/.docwizz/ai-cache.json`, `ai-assessments.json` | docwizz: AI drafts and ratings, cached by code hash. Commit them to avoid re-sending code. |
+| `docs/.docwizz/domain-ai-cache.json` | docwizz `domain explain --ai`: the model's raw answers, by prompt and model; validated again on every run. No endpoint or key. |
 
 ## Versioning
 

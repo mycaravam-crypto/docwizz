@@ -321,6 +321,14 @@ docwizz domain discover . --work-item 4711 --depth 3 --limit 100 --format json
 
 The second form requires `docwizz requirements import`. Without an index, the first form still
 works with technical evidence only. Both are offline; no LLM and no repository changes.
+
+`docwizz domain explain` turns the same report into a reviewable draft: deterministic flow chains, open questions and
+an evidence table with stable ids. With `--ai`, a self-hosted model adds statements and *unverified* business hypotheses;
+each is checked against the evidence, and a technical statement its evidence doesn't carry becomes a hypothesis.
+
+```bash
+docwizz domain explain . docs/orders-flow.md --seed "POST /api/orders" --ai
+```
 See [domain discovery](docs/guides/domain-discovery.md) for the evidence contract and limitations.
 
 For GitHub issue context, import a GitWizz `--provider github` history plus issue JSON exported with
@@ -541,6 +549,7 @@ them (`UseNpgsql`, `fetch('https://…')`), *inferred* when only a package point
 | `docwizz check <dir> [--since <ref>]` | quality gate; exit 1 on failure |
 | `docwizz context <dir> --for <target>` | token-budgeted facts for coding agents |
 | `docwizz domain discover <dir> --seed <symbol>` | bounded, read-only code and requirement graph traversal |
+| `docwizz domain explain <dir> --seed <symbol>` | reviewable flow draft: cited facts, unverified hypotheses (`--ai`), open questions |
 | `docwizz domain areas <dir>` | candidate business areas, inferred from folders and delegation |
 | `docwizz mcp <dir>` | read-only MCP server for coding agents |
 | `docwizz sbom [dir] [out]` | CycloneDX 1.6 from direct manifest dependencies |

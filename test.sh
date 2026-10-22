@@ -769,6 +769,10 @@ python3 "$root/bench/requirements.py" --dll "$dll" --model fake --modes B --expe
 section "domain discovery benchmark"
 python3 "$root/bench/domain.py" --dll "$dll" --expect >/dev/null
 
+# Domain explanation (#288): a scripted model's supported and unsupported statements against the evidence package.
+section "domain explanation benchmark"
+python3 "$root/bench/domain_explain.py" --dll "$dll" --expect >/dev/null
+
 }
 
 group_d() {

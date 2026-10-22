@@ -48,8 +48,10 @@ An existing file that is not a DocWizz domain report is never overwritten.
 
 ## Discovery semantics
 
-- Uses a BFS with deterministic ordering, cycle detection, max depth 0–8 (default 3)
-  and 1–500 reached nodes (default 100). No arbitrary reverse caller walk.
+- Uses a prioritized best-first traversal: a priority queue ordered by tier (behaviour before data construction, see
+  below), then hop depth, then ordinal symbol id. A symbol is admitted once (cycle-safe), at most at depth 0–8
+  (default 3), up to 1–500 reached symbols (default 100). Not a plain breadth-first search: within the node budget,
+  a behaviour path at depth 3 is admitted before a DTO at depth 1. No arbitrary reverse caller walk.
 - The node budget goes to behaviour first: `creates` edges and edges into `record`/`struct`/`enum`
   types (DTO construction) are deferred, together with everything behind them, until no behaviour
   path within the depth bound is left. `depth` is the hop count along the path that admitted the node.
@@ -92,6 +94,61 @@ An existing file that is not a DocWizz domain report is never overwritten.
   A hit only moves the link to Unclear with its reason. Contradictions between code and intent are not claimed:
   that needs a reader (or a model) comparing the two. The same code model, history index, seed, commit and bounds produce the same output.
 
+## Explaining a flow: `domain explain`
+
+`docwizz domain explain` turns the same discovery report into a reviewable draft (#288). It runs the crawler exactly as
+`domain discover` does (same options, same bounds, same report) and adds no traversal of its own.
+
+```bash
+docwizz domain explain . docs/orders-flow.md --seed "POST /api/orders"          # deterministic, no model
+docwizz domain explain . docs/orders-flow.md --seed "POST /api/orders" --ai     # + a self-hosted model
+docwizz domain explain . --work-item 4711 --ai --format json                     # docwizz.domain-explanation/v1
+```
+
+**Evidence package** (`docwizz.domain-evidence/v1`, the `evidence` of the JSON): the code-model commit, HEAD, staleness,
+the requirements-index status, truncation and the bounds, and one fact per reached symbol (`S1`…), relation (`R1`…), flow
+chain (`C1`…) and requirement link (`W1`…), each with its source location and the facts it derives from. Ids follow the
+report's stable order, so the same report gives the same ids. A `W` fact is labelled as *historical intent, not proof of
+the current implementation*, keeps `confirmed` or `candidate`, and quotes the work item's title and criteria in a
+separate field: data written by people, never mixed into a statement or followed as an instruction.
+
+**Flow chains** are deterministic: every maximal path from the seed along calls, accesses of members, HTTP,
+persistence, events, routes, rendering and connections, with interface dispatch followed to the implementation and
+type-to-member `contains` only from a seed type (at most 10, cut before a cycle or at `--depth`). `injects`, `creates`
+and a field holding a service are dependencies, not steps.
+
+**Open questions** come from the evidence: a candidate link (may it apply?), a confirmed link on code that changed since,
+a cross-check hit, reached methods without any linked work item.
+
+**With `--ai`** (opt-in; the same self-hosted providers and loopback/private-address restriction as `generate --ai`), one
+request sends the facts (at most 80 symbols, 160 relations, 40 requirement links; a limitation says when the model saw
+fewer) and asks for technical statements, business hypotheses and questions, each citing fact ids. The answer is
+validated, never trusted:
+
+- an id that isn't in the facts the model was shown is dropped; a statement with no known id is rejected;
+- a statement that claims approval, conformity, a confirmed bounded context or business capability, or that code
+  implements or satisfies a requirement is rejected in every section (an obedient answer to an injected work item too);
+- a citation alone is not proof. A **technical fact** stays a fact only if it rests on code facts (not only on `W`),
+  names in backticks the code its evidence is about, names no code outside that evidence (nor any not in the package),
+  connects every two symbols it names through a cited relation or chain, and doesn't interpret business meaning.
+  Otherwise it moves to the hypotheses with the reason (`moved from the facts: no cited relation connects …`);
+- hypotheses are always shown as *unverified*; one resting on a candidate link says so.
+
+Model text is rendered as text (no links, images, HTML or emphasis). The model's raw answer is cached in
+`docs/.docwizz/domain-ai-cache.json` by prompt and model, without endpoint or key, and validated again on every run. If
+no model may be used, the server fails or the answer cites nothing, the deterministic draft is written with a warning
+and the exit code stays 0.
+
+**Output:** Markdown (default) with *Technical facts* (flow chains, then validated statements), *Business hypotheses
+(unverified)*, *Open questions* and *Evidence and limitations* (the discovery warnings, so a stale model, a shallow or
+truncated history, a missing requirements index and traversal truncation all reach the draft; what was rejected or
+moved, and why; the evidence table with source links). The file starts with `<!-- generated by docwizz domain explain -->`;
+an existing file without it (or the JSON schema) is never replaced unless `--force`. Nothing is published or approved:
+the draft is for a reviewer.
+
+Not checked: whether a statement's verb matches its relation (`deletes` written about a `calls` relation stays a
+fact). The benchmark measures this gap ([bench/domain/README.md](../../bench/domain/README.md#explanation-288)).
+
 ## Candidate business areas
 
 `docwizz domain areas . [--format json]` is the first layer of a separate domain model over the unchanged code model
@@ -112,15 +169,16 @@ is put with that service.
 - Adjacent methods and the current implementation can contradict historical business intent.
 - A candidate term is not a confirmed business capability, business rule or bounded context.
 - `--depth` is a maximum graph hop distance, not a count of LLM reasoning iterations.
-- There are no automatic DevOps calls, no AI prompts, no edits and no architectural compliance claims.
+- There are no automatic DevOps calls, no edits and no architectural compliance claims. The only AI prompt is
+  `domain explain --ai`, and its business statements are hypotheses for a reviewer, never confirmed findings.
 
 ## Next iterations
 
 1. Extend the domain model beyond inferred areas (`domain areas` exists): business rules, actors and process steps;
    stable human review/confirmation.
 2. Bidirectional code/history enrichment with incremental fingerprints.
-3. Mermaid domain/process views and optional local-only LLM wording over the cited facts (As-is /
-   As-intended / Unclear Markdown exists: `--format md`).
+3. Mermaid domain/process views (As-is / As-intended / Unclear Markdown exists: `--format md`; local-only LLM wording
+   over cited facts exists: `domain explain --ai`). A verb check for explanation statements against relation kinds.
 4. Domain-level gold labels for semantic accuracy and reviewer corrections (the traversal benchmark exists:
    [bench/domain/README.md](../../bench/domain/README.md)).
 
