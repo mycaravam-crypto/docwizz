@@ -38,6 +38,8 @@ static class Cli
             "docwizz edmx . Models/Legacy.edmx --links --format json",
             "--graph (technical graph), --links (source-backed C# and inferred #187 domain evidence; exclusive with --graph), --degree-weight <0..100>, --fan-in-weight <0..100>, --fan-out-weight <0..100>, --inheritance-weight <0..100>; --format console|json",
             ["graph", "links", "degree-weight", "fan-in-weight", "fan-out-weight", "inheritance-weight", "format"]),
+        ["ai"] = new("ai check [dir]", "test whether the configured private AI provider can answer a synthetic prompt", "diagnostics",
+            "docwizz ai check . --format json", "--format console|json", ["format"]),
         ["discover"] = new("discover [dir]", "read-only inventory of solutions, projects and references", "everyday",
             "docwizz discover . --format json", "--format console|json", ["format"]),
         ["setup"] = new("setup [dir]", "first run: detect the stack, write docwizz.yaml, analyze, generate docs, check", "start here",
