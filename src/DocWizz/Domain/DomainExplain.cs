@@ -287,9 +287,9 @@ static class DomainExplain
         {
             foreach (var s in list.EnumerateArray().Where(s => s.ValueKind == JsonValueKind.Object))
             {
-                var text = s.TryGetProperty("text", out var t) && t.ValueKind == JsonValueKind.String ? Regex.Replace(t.GetString()!, @"\s+", " ").Trim() : "";
+                var text = s.TryGetProperty("text", out var t) && t.ValueKind == JsonValueKind.String ? Regex.Replace(t.GetString() ?? "", @"\s+", " ").Trim() : "";
                 var cited = s.TryGetProperty("evidence", out var c) && c.ValueKind == JsonValueKind.Array
-                    ? c.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!.Trim()).Distinct().ToList() : [];
+                    ? c.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => (x.GetString() ?? "").Trim()).Distinct().ToList() : [];
                 var known = cited.Where(byId.ContainsKey).OrderBy(Order).ToList();
                 string? reason = text.Length == 0 ? "no text"
                     : known.Count == 0 ? (cited.Count == 0 ? "cites no evidence" : $"cites only evidence that doesn't exist ({string.Join(", ", cited.Take(3))})")

@@ -184,6 +184,11 @@ public class DomainExplainTests
         Assert.Equal(["cites only evidence that doesn't exist (R99)", "cites no evidence", "evidence ids in the text instead of the evidence list",
             "cites only evidence that doesn't exist (W7)", "cites no evidence"], rejected.Select(r => r.Reason));
         Assert.Equal(["not the JSON object asked for"], DomainExplain.Validate("Sure! Here you go.", package.Facts, package.Facts).Rejected.Select(r => r.Reason));
+        // JSON nulls where strings belong: a statement without text, an id that is no id.
+        var nulls = DomainExplain.Validate($$"""{"facts": [{"text": null, "evidence": ["{{call}}"]}, {"text": "`OrderController.Place` calls `OrderService.Place`.", "evidence": [null, "{{call}}"]}]}""",
+            package.Facts, package.Facts);
+        Assert.Equal(["no text"], nulls.Rejected.Select(r => r.Reason));
+        Assert.Equal([call], Assert.Single(nulls.Facts).Evidence);
     }
 
     [Fact]
