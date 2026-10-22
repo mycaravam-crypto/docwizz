@@ -55,7 +55,8 @@ def statements(facts):
         by_kind.setdefault(f["kind"], []).append(f)
     names = {f["id"]: f["text"].split("`")[1] for f in by_kind.get("symbol", [])}
     # Relations between two different methods (`A` calls `B`), as their names.
-    relations = [(f["id"], *[p for i, p in enumerate(f["text"].split("`")) if i % 2], f["text"].split("`")[2].strip())
+    # Exactly two names per relation, whatever else its text quotes.
+    relations = [(f["id"], *[p for i, p in enumerate(f["text"].split("`")) if i % 2][:2], f["text"].split("`")[2].strip())
                  for f in by_kind.get("relation", [])]
     relations = [(i, a, b, verb) for i, a, b, verb in relations if a != b and verb in ("calls", "persists", "publishes", "http")]
     out = []
@@ -215,7 +216,8 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     dll = os.path.abspath(build(args.dll))
-    gold = json.load(open(GOLD))
+    with open(GOLD) as f:
+        gold = json.load(f)
     work = tempfile.mkdtemp(prefix="docwizz-explainbench-")
     try:
         repo = os.path.join(work, "repo")
