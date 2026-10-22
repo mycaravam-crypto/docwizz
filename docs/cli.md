@@ -158,6 +158,7 @@ Run `docwizz discover .` to inventory solutions and projects. Configure `scope:`
 
 | Command | 0 | 1 |
 |---|---|---|
+| `ai` | configured private model completed a synthetic inference request | model or endpoint unavailable, disallowed or invalid response |
 | `setup` | every stage ran (`SUCCESS` or `SUCCESS_WITH_FINDINGS`) | a stage failed (`FAILED`; the others are still reported), or bad arguments |
 | `check` | thresholds pass | thresholds fail, or bad arguments/config |
 | `architecture` | within `max_violations`/`max_cycles` | above them |
