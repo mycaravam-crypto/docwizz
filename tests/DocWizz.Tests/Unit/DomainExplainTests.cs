@@ -134,6 +134,21 @@ public class DomainExplainTests
     }
 
     [Fact]
+    public void A_seed_with_more_flows_than_the_cap_lists_ten_chains_and_says_so()
+    {
+        var leaves = Enumerable.Range(1, 12).Select(i => $"cs:Shop.Fan.Leaf{i:00}.Run()").ToList();
+        var model = new CodeModel(null,
+            [N(Endpoint, "src/Api/OrderController.cs", kind: "method"), .. leaves.Select(l => N(l, "src/Fan.cs", kind: "method"))],
+            [.. leaves.Select(l => E(Endpoint, l))]);
+        var package = DomainExplain.Evidence(DomainCrawler.Discover(model, Endpoint, null, 3, 100));
+        var chains = package.Facts.Where(f => f.Kind == "chain").ToList();
+        Assert.Equal(10, chains.Count);
+        Assert.Equal(leaves[..10], chains.Select(c => c.Symbols[1]));   // the first ten in relation order, deterministic
+        Assert.Contains("only the first 10 flow chains are listed", package.Limitations);
+        Assert.DoesNotContain(DomainExplain.Evidence(Report()).Limitations, l => l.Contains("flow chains are listed"));
+    }
+
+    [Fact]
     public void Deterministic_explanation_lists_chains_and_asks_about_unclear_links_without_a_model()
     {
         var report = Report(Index());

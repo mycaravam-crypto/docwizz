@@ -106,11 +106,12 @@ static class DomainExplain
             else if (r.Kind != "contains" || seeds.Contains(r.From)) Add(r.From, new(r.To, r.Kind, (r.From, r.To, r.Kind)));
         }
         var chains = new List<List<Step>>();
+        // No step budget is needed: depth-first, a leaf (and so a chain) is at most --depth + 1 steps away, so the walk
+        // stops after about (MaxChains + 1) * (MaxDepth + 2) steps however dense the graph is.
         var capped = false;
-        var budget = 10_000;   // ponytail: bounds a dense graph's path explosion; the first chains are the deterministic ones
         void Walk(List<Step> path)
         {
-            if (capped || --budget < 0) { capped = true; return; }
+            if (capped) return;
             var at = path[^1].To;
             var onward = path.Count > report.MaxDepth ? [] : next.GetValueOrDefault(at, [])
                 .Where(s => path.All(p => p.To != s.To)).ToList();
