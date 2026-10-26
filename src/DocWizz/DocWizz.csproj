@@ -37,7 +37,7 @@
     </PropertyGroup>
   </Target>
   <ItemGroup>
-    <PackageReference Include="Markdig" Version="1.4.0" />
+    <PackageReference Include="Markdig" Version="1.4.1" />
     <PackageReference Include="Microsoft.Playwright" Version="1.63.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
