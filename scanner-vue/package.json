@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Emits docwizz model nodes/edges for .vue and .ts files (index.mjs) and Java syntax (java.mjs); stdin: file list, stdout: JSON",
   "dependencies": {
-    "@vue/compiler-sfc": "^3.5.43",
+    "@vue/compiler-sfc": "^3.5.44",
     "tree-sitter-java": "0.23.5",
     "typescript": "^6.0.3",
     "web-tree-sitter": "0.27.1"
