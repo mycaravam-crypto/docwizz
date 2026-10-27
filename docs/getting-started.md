@@ -4,6 +4,20 @@
 
 Run `docwizz setup .`, then open the generated `docs/index.md` or `docs/index.html`. The full initial workflow and status contract follows.
 
+## Install as a .NET tool
+
+From the cloned repository root, with .NET 10 SDK and Node.js installed:
+
+```bash
+npm ci --prefix scanner-vue
+dotnet pack src/DocWizz -c Release -o artifacts
+dotnet tool install --global DocWizz --add-source ./artifacts
+docwizz --help
+```
+
+The DocWizz package bundles the Vue/Java scanners; `npm ci` prepares their dependencies before packing. If already installed, use `dotnet tool update --global DocWizz --add-source ./artifacts`.
+Ensure `$HOME/.dotnet/tools` is on your `PATH`. These are local packages; no NuGet publication is required.
+
 ## First setup
 
 ```bash
