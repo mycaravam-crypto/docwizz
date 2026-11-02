@@ -1564,7 +1564,10 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
                 return path.StartsWith(directory, StringComparison.Ordinal)
                     && directory.Length > 0;
             }));
-        var selective = changedFiles is { Count: > 0 } && (scope is null || safeScoped);
+        // Opt-in diagnostic baseline for controlled equivalence/performance comparisons.
+        // Normal imports keep selective scans enabled.
+        var forceFull = Environment.GetEnvironmentVariable("DOCWIZZ_REQUIREMENTS_FORCE_FULL") == "1";
+        var selective = !forceFull && changedFiles is { Count: > 0 } && (scope is null || safeScoped);
         actualMode = selective ? "selective" : config.Scope is not null ? "scoped-full" : "full";
         if (profile) Console.Error.WriteLine($"docwizz requirements profile: {sha} mode={actualMode} changedFiles={changedFiles?.Count ?? 0}");
         if (selective)
