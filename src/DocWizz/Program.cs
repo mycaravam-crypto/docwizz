@@ -1517,6 +1517,7 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
     var last = TimeSpan.Zero;
     var scannedFiles = 0;
     var fallbackUsed = false;
+    var actualMode = "full";
     void Mark(string stage)
     {
         if (!profile) return;
@@ -1564,7 +1565,8 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
                     && directory.Length > 0;
             }));
         var selective = changedFiles is { Count: > 0 } && (scope is null || safeScoped);
-        if (profile) Console.Error.WriteLine($"docwizz requirements profile: {sha} mode={(selective ? "selective" : config.Scope is not null ? "scoped-full" : "full")} changedFiles={changedFiles?.Count ?? 0}");
+        actualMode = selective ? "selective" : config.Scope is not null ? "scoped-full" : "full";
+        if (profile) Console.Error.WriteLine($"docwizz requirements profile: {sha} mode={actualMode} changedFiles={changedFiles?.Count ?? 0}");
         if (selective)
         {
             var success = true;
@@ -1605,7 +1607,7 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
             if (success && changedFiles!.Any(p => p.EndsWith(".cs", StringComparison.Ordinal)))
             {
                 var csTar = Path.Combine(tmp.FullName, "cs.tar");
-                var csTree = prefix.Length == 0 ? gitRef : $"{gitRef}:{prefix}";
+                var csTree = prefix.Length == 0 ? commit : $"{commit}:{prefix}";
                 if (Git(top, $"archive --format=tar -o \"{csTar}\" {csTree} -- \"*.cs\"") is null) success = false;
                 else TarFile.ExtractToDirectory(csTar, dir, overwriteFiles: true);
                 Mark("git archive C# context");
@@ -1633,6 +1635,7 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
             }
             if (success) throw new InvalidOperationException("selective mapping did not return a model");
             fallbackUsed = true;
+            actualMode = "full-fallback";
             Mark("selective fallback");
             if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
             Directory.CreateDirectory(dir);
@@ -1652,7 +1655,7 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
     finally
     {
         if (profile)
-            Console.Error.WriteLine($"docwizz requirements profile: {sha} completed elapsed={clock.Elapsed.TotalSeconds:0.000}s materializedFiles={scannedFiles} fallback={fallbackUsed.ToString().ToLowerInvariant()}");
+            Console.Error.WriteLine($"docwizz requirements profile: {sha} completed elapsed={clock.Elapsed.TotalSeconds:0.000}s materializedFiles={scannedFiles} changedFiles={changedFiles?.Count ?? 0} actualMode={actualMode} fallback={fallbackUsed.ToString().ToLowerInvariant()}");
         tmp.Delete(recursive: true);
     }
 }
