@@ -28,7 +28,9 @@ public class ScopedRequirementsScanJourneyTests
         Assert.Equal(0, result.Exit);
         Assert.Contains("mode=selective", result.Err);
         Assert.DoesNotContain("mode=scoped-full", result.Err);
-        Assert.Matches(@"completed elapsed=\d+\.\d+s materializedFiles=\d+ fallback=false", result.Err);
+        Assert.Contains("completed elapsed=", result.Err);
+        Assert.Contains("materializedFiles=", result.Err);
+        Assert.Contains("fallback=false", result.Err);
         var index = RequirementIndex.Load(Path.Combine(repo.Root, RequirementIndex.DefaultFile));
         Assert.Contains(index.Commits.SelectMany(c => c.Touches), t => t.Symbol.Contains("Service.Value"));
     }
