@@ -49,6 +49,8 @@ public class ScopedRequirementsScanJourneyTests
             "requirements", "import", ".", history);
         Assert.Equal(0, baseline.Exit);
         Assert.Contains("actualMode=scoped-full", baseline.Err);
+        Assert.Contains("mode=scoped-full", baseline.Err);
+        Assert.DoesNotContain("mode=selective", baseline.Err);
         var fullIndex = RequirementIndex.Load(Path.Combine(repo.Root, RequirementIndex.DefaultFile));
         Assert.Equal(
             index.Commits.SelectMany(c => c.Touches).Select(t => t.Symbol).OrderBy(x => x),
