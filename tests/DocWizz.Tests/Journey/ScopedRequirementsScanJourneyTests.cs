@@ -28,6 +28,11 @@ public class ScopedRequirementsScanJourneyTests
         Assert.Equal(0, result.Exit);
         Assert.Contains("mode=selective", result.Err);
         Assert.DoesNotContain("mode=scoped-full", result.Err);
+        Assert.Contains("completed elapsed=", result.Err);
+        Assert.Contains("materializedFiles=", result.Err);
+        // Selective mode can legitimately fall back when the historical project layout
+        // cannot be reconstructed. Profiling must disclose the outcome rather than hide it.
+        Assert.Contains("fallback=", result.Err);
         var index = RequirementIndex.Load(Path.Combine(repo.Root, RequirementIndex.DefaultFile));
         Assert.Contains(index.Commits.SelectMany(c => c.Touches), t => t.Symbol.Contains("Service.Value"));
     }
