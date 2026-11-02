@@ -30,6 +30,8 @@ public class ScopedRequirementsScanJourneyTests
         Assert.DoesNotContain("mode=scoped-full", result.Err);
         Assert.Contains("completed elapsed=", result.Err);
         Assert.Contains("materializedFiles=", result.Err);
+        Assert.Contains("changedFiles=", result.Err);
+        Assert.Contains("actualMode=", result.Err);
         // Selective mode can legitimately fall back when the historical project layout
         // cannot be reconstructed. Profiling must disclose the outcome rather than hide it.
         Assert.Contains("fallback=", result.Err);
