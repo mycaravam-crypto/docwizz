@@ -1515,6 +1515,8 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
     var profile = Environment.GetEnvironmentVariable("DOCWIZZ_REQUIREMENTS_PROFILE") == "1" && changedFiles is not null;
     var clock = System.Diagnostics.Stopwatch.StartNew();
     var last = TimeSpan.Zero;
+    var scannedFiles = 0;
+    var fallbackUsed = false;
     void Mark(string stage)
     {
         if (!profile) return;
@@ -1613,6 +1615,7 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
                 Mark("read changed Git blobs");
                 try
                 {
+                    scannedFiles = Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).Count();
                     var selectiveModel = BuildModel(dir, config, historical: true,
                         focus: changedFiles!.Select(p => p.Replace('\\', '/')).ToHashSet(StringComparer.Ordinal)).Model with { Commit = sha };
                     Mark("scan model");
@@ -1621,6 +1624,7 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
                 catch (ScopeException) when (safeScoped)
                 {
                     // An incomplete historical project layout must not produce false evidence.
+                    fallbackUsed = true;
                     Mark("scoped selective fallback");
                     Directory.Delete(dir, recursive: true);
                     Directory.CreateDirectory(dir);
@@ -1628,6 +1632,7 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
                 }
             }
             if (success) throw new InvalidOperationException("selective mapping did not return a model");
+            fallbackUsed = true;
             Mark("selective fallback");
             if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
             Directory.CreateDirectory(dir);
@@ -1639,12 +1644,15 @@ static CodeModel? ModelAt(string root, string gitRef, Config config, bool histor
         Mark("git archive");
         TarFile.ExtractToDirectory(tar, dir, overwriteFiles: true);
         Mark("extract archive");
+        scannedFiles = Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).Count();
         var model = BuildModel(dir, config, historical: historical).Model with { Commit = sha };
         Mark("scan model");
         return model;
     }
     finally
     {
+        if (profile)
+            Console.Error.WriteLine($"docwizz requirements profile: {sha} completed elapsed={clock.Elapsed.TotalSeconds:0.000}s materializedFiles={scannedFiles} fallback={fallbackUsed.ToString().ToLowerInvariant()}");
         tmp.Delete(recursive: true);
     }
 }
