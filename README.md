@@ -202,6 +202,17 @@ effects, errors and usage for undocumented items, plus an overview for each modu
 
 Configure the server under [AI](#ai).
 
+### Include GitWizz release history (optional)
+
+Export the offline GitWizz v2 history into `docs/architecture/versions.json`, then regenerate:
+
+```bash
+gitwizz version-history export --target main -o docs/architecture/versions.json
+docwizz generate . --html
+```
+
+If present, DocWizz adds a version history page to Markdown, HTML navigation and search. Without the file, generated documentation is unchanged. The release history is separate from document-control revisions.
+
 ### See what a change affects
 
 ```console

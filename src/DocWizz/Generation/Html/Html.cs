@@ -8,7 +8,7 @@ using Markdig;
 static class Html
 {
     static readonly (string Page, string Label)[] Top =
-        [("index.md", "Overview"), ("architecture.md", "Architecture"), ("api.md", "API"), ("frontend.md", "Frontend"), ("quality.md", "Quality")];
+        [("index.md", "Overview"), ("architecture.md", "Architecture"), ("api.md", "API"), ("frontend.md", "Frontend"), ("versions.md", "Versions"), ("quality.md", "Quality")];
     // Pinned: a new Mermaid release must not change every diagram unannounced.
     public const string MermaidUrl = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
 
@@ -51,7 +51,7 @@ static class Html
         // A view or the description marks Architecture in the header as the section it belongs to.
         var section = rel.StartsWith("views/") || rel == "architecture-description.md" ? "architecture.md"
             : rel == "tests.md" ? "quality.md" : rel;
-        var nav = string.Concat(Top.Select(n => n.Page != rel && n.Page == section
+        var nav = string.Concat(Top.Where(n => pages.ContainsKey(n.Page)).Select(n => n.Page != rel && n.Page == section
             ? $"<a href=\"{up}{Path.ChangeExtension(n.Page, ".html")}\" aria-current=\"true\">{Enc(n.Label)}</a>" : Link(n.Page, n.Label)));
         var title = Title(rel, markdown);
         var side = Sidebar(pages, Link, hierarchy);
