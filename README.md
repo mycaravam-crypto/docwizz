@@ -174,6 +174,15 @@ errors, redirects, expired sessions and pages whose API calls answer 401/403 are
 Limits are listed in [CLI.md](docs/cli.md#options); for Windows installation errors, authenticated capture and diagnostics,
 see [Playwright screenshot troubleshooting](docs/guides/screenshots.md).
 
+### Screenshot-based user guides from reviewed ADO test journeys
+
+DocWizz can also render step-by-step **draft user guides** from TestWizz's `testwizz.ui-evidence/v1` screenshot bundles. TestWizz reuses ADO work-item criteria and exported test-case steps, executes only reviewed declarative Playwright interactions, and captures an image after each assertion. DocWizz validates the screenshot hashes, links guides to routes and retains ADO revision provenance:
+
+```bash
+docwizz generate . --html --journeys ../journey-evidence
+```
+
+Generated guides require human review and must not be presented as acceptance verification. The import is offline and opt-in; normal route screenshots and documentation generation remain unchanged. See [screenshot-backed user guides](docs/guides/screenshots.md#screenshot-backed-user-guide-drafts-from-testwizz).
 ### Draft missing docs with a local AI
 
 Before drafting, test the current Ollama or OpenAI-compatible configuration with `docwizz ai check .` (or `--format json`). The check performs one synthetic inference request, sends no repository code and exits 0 if the model responds, 1 otherwise.

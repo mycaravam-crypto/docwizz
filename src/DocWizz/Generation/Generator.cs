@@ -13,6 +13,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
     public bool WriteHtml { get; init; }
     public bool RebuildHtml { get; init; }
     public IReadOnlyDictionary<string, string> Screenshots { get; init; } = new Dictionary<string, string>();
+    public IReadOnlyList<JourneyEvidence.Guide> Journeys { get; init; } = [];
     // Measured load-test results per endpoint (docwizz load import); null when none were imported.
     public LoadReports.Attached? Load { get; init; }
     // Explicit offline ADO test evidence; never treated as proof of execution or code coverage.
@@ -59,6 +60,13 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         foreach (var m in modules) Write($"modules/{Naming.Slug(m.Key)}.md", Module(m.Key, m.ToList()));
         versionHistory = VersionHistoryPage.Load(root);
         Write("index.md", Index(modules.Select(m => m.Key).ToList()));
+        if (Journeys.Count > 0)
+        {
+            Directory.CreateDirectory(Path.Combine(outDir, "user-guides"));
+            Write("user-guides/index.md", JourneyEvidence.Index(Journeys));
+            foreach (var guide in Journeys)
+                Write($"user-guides/{guide.Id}.md", JourneyEvidence.Markdown(guide));
+        }
         if (versionHistory is not null) Write("versions.md", versionHistory.Markdown);
         if (AdoTests.Count > 0) Write("tests.md", AdoTestDocumentation.Render(AdoTests));
         Write("architecture.md", ArchitecturePage(modules.Select(m => m.Key).ToList()));
@@ -102,6 +110,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             if (!same) changed.Add(rel);
             OnPageProcessed?.Invoke(++processed, pages.Count);
         }
+        JourneyEvidence.CleanupImages(outDir, Journeys);
         return ([.. pages.Keys], changed);
     }
 
@@ -115,6 +124,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         foreach (var n in model.Nodes.Where(n => n.Tags?.Contains("endpoint") == true))
             Entry(Naming.EndpointLabel(n), "endpoint", "api.md", WrittenSummary(n));
         foreach (var n in model.Nodes.Where(n => n.Kind == "route")) Entry(RoutePath(n), "route", RoutePage(RoutePath(n)), null);
+        foreach (var guide in Journeys)
+            Entry(guide.Title, "user guide draft", $"user-guides/{guide.Id}.md", $"WI-{guide.WorkItem}, case #{guide.TestCase}; review required");
         if (hierarchy is not null)
         {
             foreach (var solution in hierarchy.Solutions)
@@ -218,7 +229,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         sb.AppendLine("- [Architecture description](architecture-description.md)\n- [Architecture](architecture.md)\n- [API endpoints](api.md)\n" +
             "- [Frontend](frontend.md)\n" + (Requirements is null ? "" : "- [Requirements](requirements/index.md)\n") +
             (Catalog is null ? "" : "- [Area requirements catalog](requirements/area-catalog.md)\n") +
-            (versionHistory is null ? "" : "- [Version history](versions.md)\n") + "- [Quality](quality.md)\n");
+            (versionHistory is null ? "" : "- [Version history](versions.md)\n") +
+            (Journeys.Count == 0 ? "" : "- [User guide drafts](user-guides/index.md)\n") + "- [Quality](quality.md)\n");
         if (hierarchy is not null) sb.Append(hierarchy.Index());
         if (Technology().ToList() is { Count: > 0 } tech)
             sb.AppendLine("## Technology\n\n" + string.Join("\n", tech.Select(t => $"- {t}")) + "\n");

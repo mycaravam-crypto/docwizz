@@ -251,7 +251,7 @@ static async Task<int> Dispatch(string[] args)
             }
             var requirements = opts.ContainsKey("requirements") ? LoadRequirements(path) : null;
             if (opts.ContainsKey("requirements") && requirements is null) return 1;
-            var report = await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"), refreshHtmlOnVersionChange: opts.ContainsKey("refresh-html-on-version-change"), progress: opts.ContainsKey("progress"), screenshotBaseUrl: opts.GetValueOrDefault("base-url"), screenshotStorageState: stateFile, screenshotDelayMs: int.Parse(opts.GetValueOrDefault("screenshot-delay") ?? "0"), requirements: requirements, aiRatings: opts.ContainsKey("ai-ratings"));
+            var report = await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"), refreshHtmlOnVersionChange: opts.ContainsKey("refresh-html-on-version-change"), progress: opts.ContainsKey("progress"), screenshotBaseUrl: opts.GetValueOrDefault("base-url"), screenshotStorageState: stateFile, screenshotDelayMs: int.Parse(opts.GetValueOrDefault("screenshot-delay") ?? "0"), requirements: requirements, aiRatings: opts.ContainsKey("ai-ratings"), journeyDirectory: opts.GetValueOrDefault("journeys"));
             // The first line stays the stable one-line result scripts match; the report follows it.
             Console.WriteLine(report.Line);
             Console.WriteLine();
@@ -991,6 +991,7 @@ static string Reference() => $"""
         [--screenshots --base-url <url>]  capture static routes from a running frontend (Playwright)
         [--storage-state <file>]        reuse a saved Playwright login session (generate screenshots only)
         [--screenshot-delay <ms>]       extra wait before each capture, for slow pages (screenshots only)
+        [--journeys <dir>]              render validated TestWizz screenshot evidence as review-required user guides
         [--refresh-html-on-version-change]  rewrite HTML when the docwizz version changes
         [--progress]                    print progress to stderr (including redirected output)
         [--ai]                          draft missing summaries with a self-hosted model (Ollama or OpenAI-compatible)
@@ -1230,7 +1231,7 @@ static object DocumentationJson(CodeModel model, Config config, List<Documentati
 
 // Writes the docs; returns the one-line result (setup shows it as the stage detail) and the full report `generate`
 // prints below it.
-static async Task<GenerateReport> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null, bool refreshHtmlOnVersionChange = false, bool progress = false, string? screenshotBaseUrl = null, string? screenshotStorageState = null, int screenshotDelayMs = 0, RequirementIndex.Index? requirements = null, bool aiRatings = false)
+static async Task<GenerateReport> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null, bool refreshHtmlOnVersionChange = false, bool progress = false, string? screenshotBaseUrl = null, string? screenshotStorageState = null, int screenshotDelayMs = 0, RequirementIndex.Index? requirements = null, bool aiRatings = false, string? journeyDirectory = null)
 {
     // Weights: each stage's usual share of the wall time (bench/baseline.json); the scan dominates, AI calls when on.
     List<CliProgress.Stage> stages =
@@ -1311,6 +1312,7 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
         WriteHtml = html,
         RebuildHtml = rebuildHtml,
         Screenshots = screenshots,
+        Journeys = JourneyEvidence.Import(journeyDirectory, outDir),
         Load = LoadAttached(root, model),
         AdoTests = GenerateEvidenceFeedback.ValidSnapshots(root),
         Requirements = pageRequirements,
