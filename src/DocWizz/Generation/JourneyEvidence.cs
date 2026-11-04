@@ -5,15 +5,20 @@ using System.Text.RegularExpressions;
 /// <summary>Offline TestWizz screenshot evidence; never executes tests or calls an external provider.</summary>
 static class JourneyEvidence
 {
-    public sealed record Step(int Id, string Action, string Expected, string Image);
+    public sealed record Callout(int Number, int StepId, string Target, int X, int Y);
+    public sealed record Step(int Id, string Action, string Expected, string Image,
+        IReadOnlyList<Callout>? Callouts = null);
     public sealed record Guide(string Id, string Title, string Route, int WorkItem, int WorkItemRevision,
         int TestCase, int TestCaseRevision, int Plan, string Project,
         IReadOnlyList<string> Criteria, IReadOnlyList<Step> Steps);
 
     private static readonly Regex SafeId = new(@"^wi-[0-9]+-case-[0-9]+-[a-f0-9]{12}$", RegexOptions.CultureInvariant);
-    private static readonly Regex GeneratedImage = new(@"^wi-[0-9]+-case-[0-9]+-[a-f0-9]{12}-step-[0-9]{4}\.png$", RegexOptions.CultureInvariant);
+    private static readonly Regex GeneratedImage = new(@"^wi-[0-9]+-case-[0-9]+-[a-f0-9]{12}-step-[0-9]{4}(-guide)?\.png$", RegexOptions.CultureInvariant);
+    private static readonly Regex GuideImage = new(@"^screenshots/step-[0-9]{4}-guide\.png$", RegexOptions.CultureInvariant);
     private static readonly Regex ImageName = new(@"^screenshots/step-[0-9]{4}\.png$", RegexOptions.CultureInvariant);
     private static readonly Regex Hash = new(@"^[a-f0-9]{64}$", RegexOptions.CultureInvariant);
+    private const int ScreenshotViewportWidth = 1440;
+    private const int ScreenshotViewportHeight = 900;
     private static readonly byte[] PngHeader = [137, 80, 78, 71, 13, 10, 26, 10];
 
     /// <summary>Validates all evidence before copying any screenshot to generated documentation.</summary>
@@ -69,6 +74,11 @@ static class JourneyEvidence
             var stepsJson = root.GetProperty("steps");
             if (stepsJson.GetArrayLength() is < 1 or > 6)
                 throw new InvalidDataException("Journey evidence requires 1 to 6 steps.");
+            int[] allStepIds = stepsJson.EnumerateArray().Select(i => Positive(i, "stepId")).ToArray();
+            // A callout number is the one-based position of a reviewed journey action,
+            // never an arbitrary marker index local to this screenshot.
+            var stepIdByNumber = allStepIds.Select((id, position) => (id, number: position + 1))
+                .ToDictionary(x => x.number, x => x.id);
             var steps = new List<Step>();
             foreach (var item in stepsJson.EnumerateArray())
             {
@@ -93,11 +103,53 @@ static class JourneyEvidence
                     Convert.ToHexStringLower(SHA256.HashData(data)) != expectedHash)
                     throw new InvalidDataException("Screenshot content differs from evidence SHA-256.");
                 var target = id + "-step-" + stepId.ToString("D4") + ".png";
-                images.Add((file, target, expectedHash));
+                var callouts = new List<Callout>();
+                if (item.TryGetProperty("guideScreenshot", out _))
+                {
+                    string guideRelative = Required(item, "guideScreenshot", 100);
+                    if (!GuideImage.IsMatch(guideRelative) ||
+                        guideRelative != $"screenshots/step-{stepId:D4}-guide.png")
+                        throw new InvalidDataException("Unsafe or mismatched annotated screenshot path.");
+                    string guideHash = Required(item, "guideSha256", 64);
+                    if (!Hash.IsMatch(guideHash) || !item.TryGetProperty("callouts", out var markers) ||
+                        markers.ValueKind != JsonValueKind.Array || markers.GetArrayLength() is < 1 or > 6)
+                        throw new InvalidDataException("Invalid guide screenshot integrity or callout data.");
+                    string guideFile = Path.Join(source, "screenshots", $"step-{stepId:D4}-guide.png");
+                    if (!File.Exists(guideFile) || (File.GetAttributes(guideFile) & FileAttributes.ReparsePoint) != 0 ||
+                        new FileInfo(guideFile).Length is < 32 or > 10485760)
+                        throw new InvalidDataException("Missing or unsafe annotated screenshot.");
+                    byte[] guideData = File.ReadAllBytes(guideFile);
+                    if (!guideData.AsSpan().StartsWith(PngHeader) ||
+                        Convert.ToHexStringLower(SHA256.HashData(guideData)) != guideHash)
+                        throw new InvalidDataException("Annotated screenshot SHA-256 does not match evidence.");
+                    foreach (var marker in markers.EnumerateArray())
+                    {
+                        int number = Positive(marker, "number");
+                        int referencedStep = Positive(marker, "stepId");
+                        int x = Coordinate(marker, "x", ScreenshotViewportWidth);
+                        int y = Coordinate(marker, "y", ScreenshotViewportHeight);
+                        string label = Required(marker, "target", 200);
+                        if (!stepIdByNumber.TryGetValue(number, out int mappedStepId) ||
+                            referencedStep != mappedStepId ||
+                            callouts.Any(c => c.Number == number))
+                            throw new InvalidDataException("Unreviewed or invalid callout coordinates or step mapping.");
+                        callouts.Add(new(number, referencedStep, label, x, y));
+                    }
+                    if (!callouts.Any(c => c.Number == steps.Count + 1))
+                        throw new InvalidDataException("Current action has no numbered callout.");
+                    target = id + "-step-" + stepId.ToString("D4") + "-guide.png";
+                    images.Add((guideFile, target, guideHash));
+                }
+                else
+                {
+                    if (item.TryGetProperty("callouts", out _) || item.TryGetProperty("guideSha256", out _))
+                        throw new InvalidDataException("Incomplete guide callout metadata.");
+                    images.Add((file, target, expectedHash)); // Backward-compatible unannotated evidence.
+                }
                 string expected = item.TryGetProperty("expected", out var value) ? value.GetString() ?? "" : "";
                 if (expected.Length > 500)
                     throw new InvalidDataException("Oversized expected result.");
-                steps.Add(new(stepId, Required(item, "action", 500), expected, "images/" + target));
+                steps.Add(new(stepId, Required(item, "action", 500), expected, "images/" + target, callouts));
             }
             guides.Add(new(id, title, route, workItem, workRevision, testCase, caseRevision,
                 plan, project, criteria, steps));
@@ -148,14 +200,24 @@ static class JourneyEvidence
 
     private static int Positive(JsonElement obj, string name)
     {
-        var n = obj.GetProperty(name).GetInt32();
-        if (n <= 0) throw new InvalidDataException("Invalid journey " + name);
-        return n;
+        if (!obj.TryGetProperty(name, out var value) || !value.TryGetInt32(out int number) || number <= 0)
+            throw new InvalidDataException("Invalid journey " + name);
+        return number;
+    }
+
+    private static int Coordinate(JsonElement obj, string name, int limit)
+    {
+        if (!obj.TryGetProperty(name, out var value) || !value.TryGetInt32(out int number) ||
+            number < 0 || number >= limit)
+            throw new InvalidDataException("Invalid callout coordinate " + name);
+        return number;
     }
 
     private static string Required(JsonElement obj, string name, int max)
     {
-        var text = obj.GetProperty(name).GetString();
+        if (!obj.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.String)
+            throw new InvalidDataException("Missing journey " + name);
+        string? text = value.GetString();
         if (string.IsNullOrWhiteSpace(text) || text.Length > max ||
             text.IndexOfAny(['\n', '\r', '\0']) >= 0)
             throw new InvalidDataException("Missing or unsafe journey " + name);
@@ -188,19 +250,30 @@ static class JourneyEvidence
         lines.Add("");
         lines.Add("## Instructions");
         lines.Add("");
-        foreach (var step in guide.Steps)
+        foreach (var (step, index) in guide.Steps.Select((step, index) => (step, index)))
         {
-            lines.Add($"### Step {step.Id}");
+            lines.Add($"### Step {index + 1}");
             lines.Add("");
-            lines.Add(Escape(step.Action));
+            lines.Add(Escape(step.Action) + $" (ADO test step #{step.Id})");
             lines.Add("");
             if (!string.IsNullOrWhiteSpace(step.Expected))
             {
                 lines.Add("Expected result: " + Escape(step.Expected));
                 lines.Add("");
             }
-            lines.Add($"![Observed UI after step {step.Id}]({step.Image})");
+            lines.Add(step.Callouts is { Count: > 0 }
+                ? $"![Controls numbered for instruction {index + 1}]({step.Image})"
+                : $"![Observed UI after step {step.Id}]({step.Image})");
             lines.Add("");
+            if (step.Callouts is { Count: > 0 })
+            {
+                lines.Add("Numbered controls visible in this screenshot:");
+                lines.AddRange(step.Callouts.Select(c =>
+                    $"- **{c.Number}** — {Escape(c.Target)}" +
+                    (c.Number == index + 1 ? " (current instruction)" :
+                     c.Number < index + 1 ? " (previous instruction)" : " (upcoming instruction)")));
+                lines.Add("");
+            }
         }
         return string.Join("\n", lines) + "\n";
     }
