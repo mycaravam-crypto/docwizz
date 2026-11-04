@@ -64,7 +64,7 @@ Run `docwizz discover .` to inventory solutions and projects. Configure `scope:`
 | `ai` | `docwizz ai check [dir] [--format console\|json]` | synthetic request tests configured private model, without source data | diagnostics |
 | `discover` | `docwizz discover [dir] [--format console\|json]` | read-only inventory of solutions, projects and references | everyday |
 | `setup` | `docwizz setup [dir] [--select-projects] [--all-projects] [--yes] [--force] [--html] [--progress] [--refresh-html-on-version-change] [--ai] [--ai-ratings] [--profile p]` | detect the stack, write `docwizz.yaml`, analyze, architecture, generate, check | start here |
-| `generate` | `docwizz generate <dir> [out] [--html] [--screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>]] [--progress] [--refresh-html-on-version-change] [--ai] [--ai-ratings] [--requirements] [--ado-project <name> --ado-area <path> [--history-since <ref>]] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
+| `generate` | `docwizz generate <dir> [out] [--html] [--screenshots --base-url <url> [--storage-state <file>] [--screenshot-delay <ms>]] [--journeys <dir>] [--progress] [--refresh-html-on-version-change] [--ai] [--ai-ratings] [--requirements] [--ado-project <name> --ado-area <path> [--history-since <ref>]] [--profile p]` | write the docs (default `<dir>/docs`) | everyday |
 | `check` | `docwizz check <dir> [--since ref] [--format f] [--profile p]` | quality gate; exit 1 when thresholds fail | CI |
 | `analyze` | `docwizz analyze <dir> [--format f] [--profile p]` | documentation and architecture report, no gate | everyday |
 | `architecture` | `docwizz architecture <dir> [--format f] [--profile p]` | layers, dependencies, violations, cycles; exit 1 above thresholds | architects |
@@ -104,6 +104,7 @@ Run `docwizz discover .` to inventory solutions and projects. Configure `scope:`
 | `--screenshots --base-url <url>` | off | generate | captures detected static routes from a running frontend; anonymous isolated contexts by default; HTTP errors and redirects are skipped | opt-in |
 | `--storage-state <file>` | off | generate | with `--screenshots`, starts each route's context from a saved Playwright login state; path relative to the scanned directory; keep it out of Git | opt-in |
 | `--screenshot-delay <ms>` | 0 | generate | with `--screenshots`, extra wait (0 to 60000 ms) after the page settles, for slow pages | opt-in |
+| `--journeys <dir>` | off | generate | offline, opt-in import of passed TestWizz screenshot journey evidence; validates PNG hashes and renders review-required user guides | opt-in |
 | `--ai` | off | generate, product, setup, domain | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it; does not enable ratings. `domain`: only `domain explain`, whose statements are validated against the evidence package | opt-in |
 | `--ai-ratings` | off | generate, setup | independently rates written docs; cached ratings are used without it; combine with `--ai` for drafts too | opt-in |
 | `--since <ref>` | — | check, remediate | check: only problems introduced since `<ref>` fail; remediate: says whether each update touches only what changed since `<ref>` | CI |

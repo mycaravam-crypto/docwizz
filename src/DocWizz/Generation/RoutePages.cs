@@ -75,6 +75,14 @@ partial class Generator
             gaps.Add($"Calls `{Esc(u[5..])}`, but no backend endpoint matches it.");
 
         sb.AppendLine(RouteRequirements(path, gaps));
+        var guides = Journeys.Where(g => g.Route == path).ToList();
+        if (guides.Count > 0)
+        {
+            sb.AppendLine("## User guides (review required)\n");
+            foreach (var guide in guides)
+                sb.AppendLine($"- [ADO case #{guide.TestCase}: {guide.Id}](../user-guides/{guide.Id}.md) — screenshot-backed draft");
+            sb.AppendLine();
+        }
         routeGaps[path] = gaps;
         sb.AppendLine("## Gaps\n");
         sb.AppendLine(gaps.Count == 0 ? "None found.\n" : string.Join("\n", gaps.Select(g => $"- {g}")) + "\n");
