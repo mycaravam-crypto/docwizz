@@ -176,7 +176,7 @@ see [Playwright screenshot troubleshooting](docs/guides/screenshots.md).
 
 ### Screenshot-based user guides from reviewed ADO test journeys
 
-DocWizz can also render step-by-step **draft user guides** from TestWizz's `testwizz.ui-evidence/v1` screenshot bundles. TestWizz reuses ADO work-item criteria and exported test-case steps, executes only reviewed declarative Playwright interactions, and captures an image after each assertion. DocWizz validates the screenshot hashes, links guides to routes and retains ADO revision provenance:
+DocWizz can also render step-by-step **draft user guides** from TestWizz's `testwizz.ui-evidence/v1` screenshot bundles. Annotated before-action screenshots can show **multiple numbered bubbles** for the reviewed controls visible together (e.g. Customer, Description and Save); raw after-action evidence remains separate and hash-validated. TestWizz reuses ADO work-item criteria and exported test-case steps, executes only reviewed declarative Playwright interactions, and captures an image after each assertion. DocWizz validates the screenshot hashes, links guides to routes and retains ADO revision provenance:
 
 ```bash
 docwizz generate . --html --journeys ../journey-evidence
