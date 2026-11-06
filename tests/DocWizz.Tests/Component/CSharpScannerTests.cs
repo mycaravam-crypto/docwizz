@@ -13,6 +13,28 @@ public class CSharpScannerTests
         Assert.Empty(CSharpScanner.ReferencePaths(""));
     }
 
+    // Regression: Windows supplies backslashes, while test-file filtering uses '/'-separated Git paths.
+    [Theory]
+    [InlineData(@"tests\Connector.Integration.Tests\FakeServiceNow.cs")]
+    [InlineData("tests/Connector.Integration.Tests/FakeServiceNow.cs")]
+    public void CSharp_source_paths_use_repository_separators(string path)
+    {
+        Assert.Equal("tests/Connector.Integration.Tests/FakeServiceNow.cs", CSharpScanner.NormalizeRelativePath(path));
+    }
+
+    [Fact]
+    public void CSharp_scanner_normalizes_test_source_node_paths()
+    {
+        using var src = new Sources(("tests/Connector.Integration.Tests/FakeServiceNow.cs", """
+            namespace Connector.Integration.Tests;
+            public class FakeServiceNow { public void Reply() { } }
+            """));
+        var (nodes, _) = CSharpScanner.Scan(src.Root, src.Files);
+        Assert.Contains(nodes, n => n.Id == "cs:Connector.Integration.Tests.FakeServiceNow"
+            && n.File == "tests/Connector.Integration.Tests/FakeServiceNow.cs");
+        Assert.All(nodes, n => Assert.DoesNotContain('\\', n.File));
+    }
+
     static (Dictionary<string, Node> Nodes, HashSet<(string, string, string)> Edges) Scan(params (string, string)[] files)
     {
         using var src = new Sources(files);

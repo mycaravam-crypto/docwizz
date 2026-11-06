@@ -29,6 +29,18 @@ jobs:
         run: dotnet test --project tests/DocWizz.Tests --no-build --filter-namespace DocWizz.Tests.Unit
       - name: Component tests
         run: dotnet test --project tests/DocWizz.Tests --no-build --filter-namespace DocWizz.Tests.Component
+  # Exercise the actual Windows path separator and protect test-helper exclusion on PRs.
+  windows-path-regression:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with: { dotnet-version: 10.0.x }
+      - name: C# scanner paths
+        run: dotnet test --project tests/DocWizz.Tests --filter-class "*CSharpScannerTests"
+      - name: Windows test-helper exclusion
+        run: dotnet test --project tests/DocWizz.Tests --no-build --filter-class "*WindowsTestSourcePathsJourneyTests"
+
   # Journey and end-to-end each take about a minute and need nothing from each other: separate jobs run them at once.
   journey:
     runs-on: ubuntu-latest

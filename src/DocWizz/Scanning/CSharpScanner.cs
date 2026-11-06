@@ -20,6 +20,9 @@ static class CSharpScanner
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToArray();
 
+    // Use the same repository-relative path separator as the test-file and project-scope classifiers.
+    internal static string NormalizeRelativePath(string path) => path.Replace('\\', '/');
+
     static readonly string[] HttpVerbs = ["HttpGet", "HttpPost", "HttpPut", "HttpDelete", "HttpPatch"];
     static readonly string[] MapVerbs = ["MapGet", "MapPost", "MapPut", "MapDelete", "MapPatch", "MapMethods"];
 
@@ -56,8 +59,8 @@ static class CSharpScanner
         {
             progress?.Invoke(trees.Count + scanned++, 2 * trees.Count);
             var sm = comp.GetSemanticModel(tree);
-            var rel = Path.GetRelativePath(root, tree.FilePath);
-            if (focus is not null && !focus.Contains(rel.Replace('\\', '/'))) continue;
+            var rel = NormalizeRelativePath(Path.GetRelativePath(root, tree.FilePath));
+            if (focus is not null && !focus.Contains(rel)) continue;
             var syntaxRoot = tree.GetRoot();
 
             foreach (var decl in syntaxRoot.DescendantNodes().OfType<BaseTypeDeclarationSyntax>())
