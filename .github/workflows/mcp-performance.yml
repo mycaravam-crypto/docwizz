@@ -33,7 +33,7 @@ jobs:
           ref: edea4e29facf7a53b9cb9d349f1915c3a24519cf # main immediately before #205
           path: previous
           persist-credentials: false
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with: { dotnet-version: 10.0.x }
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: 22, cache: npm, cache-dependency-path: scanner-vue/package-lock.json }
