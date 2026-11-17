@@ -338,6 +338,12 @@ own step.
 | Journey | [tests/DocWizz.Tests/Journey](../../tests/DocWizz.Tests/Journey) | the CLI as a process: `setup` on small C#, Java, Vue, mixed, console, partial and empty repositories; idempotent re-runs; findings vs failures; exit codes, stdout vs stderr, no stack traces; no AI without `--ai`, no secrets in `docwizz.yaml`, no repository code run | `… --filter-namespace DocWizz.Tests.Journey` (needs `npm ci --prefix scanner-vue`) |
 | End-to-end | [test.sh](../../test.sh) | repository → model → reports → generated pages, on the fixtures | `./test.sh` |
 
+Journey tests and `test.sh` start the CLI hundreds of times, and a cold .NET process spends about half of a small scan
+in the JIT (mostly Roslyn). Both therefore run a ReadyToRun build from
+[build-test-cli.sh](../../scripts/build-test-cli.sh): `test.sh` builds it itself, and journey tests use it when `DOCWIZZ_DLL`
+points at it (CI sets it). A check belongs to one layer: `test.sh` asserts what needs the full fixture, while re-runs,
+error paths and CLI conventions on small repositories are journey tests.
+
 `test.sh` runs against [fixture/](../../fixture), a small ASP.NET + EF Core + Vue project with deliberate gaps,
 violations, external systems, configuration and deployment descriptors. It asserts facts in the model JSON and lines in
 the generated pages. When adding a feature, extend the fixture with the smallest case that exercises it and assert both

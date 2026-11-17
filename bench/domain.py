@@ -25,7 +25,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import domain_fixture as fixture  # noqa: E402
-from requirements import build, digest, ratio, sh  # noqa: E402
+from requirements import build, digest, pmap, ratio, sh  # noqa: E402
 
 GOLD = os.path.join(HERE, "domain", "gold.json")
 REQUIREMENTS_GOLD = os.path.join(HERE, "requirements", "gold.json")
@@ -90,8 +90,7 @@ def run_case(dll, repos, case, links):
 
 def evaluate(dll, repos, gold, links):
     rows, tp, pred, exp, off, extra, missed = [], 0, 0, 0, set(), set(), set()
-    for case in gold["cases"]:
-        row, pairs, noise = run_case(dll, repos, case, links)
+    for row, pairs, noise in pmap(lambda case: run_case(dll, repos, case, links), gold["cases"]):
         rows.append(row)
         if pairs:
             on_path, expected = pairs
@@ -172,16 +171,15 @@ def domain(dll, repo, gold, work):
 
     # Processes: what a crawl from the entry reaches of the labelled steps.
     processes = []
-    for p in d["processes"]:
-        out, _ = discover(dll, repo, {"seed": p["entry"], "depth": 4})
+    for p, (out, _) in zip(d["processes"], pmap(lambda p: discover(dll, repo, {"seed": p["entry"], "depth": 4}), d["processes"])):
         got = {name(s["id"]) for s in json.loads(out.stdout)["symbols"]} if out.returncode == 0 else set()
         processes.append({"name": p["name"], "steps": len(p["steps"]), "reached": len(set(p["steps"]) & got)})
 
     # Rules: what the As-intended section would show for each labelled (work item, method), by verdict.
     verdicts = {(r["method"], r["workItem"]): r["verdict"] for r in d["rules"] if r["method"]}
     shown, before = {}, {}
-    for m in sorted({m for m, _ in verdicts}):
-        out, _ = discover(dll, repo, {"seed": m, "depth": 0})
+    seeds = sorted({m for m, _ in verdicts})
+    for m, (out, _) in zip(seeds, pmap(lambda m: discover(dll, repo, {"seed": m, "depth": 0}), seeds)):
         for r in json.loads(out.stdout)["requirements"] if out.returncode == 0 else []:
             if (m, r["id"]) in verdicts and intended(r):
                 shown[(m, r["id"])] = verdicts[(m, r["id"])]
@@ -211,7 +209,7 @@ def markdown(result):
         f"| work-item link precision / recall on path | {r['linkPrecision']} / {r['linkRecall']} |",
         f"| off-path work-item links | {r['offPathLinks']} |",
         f"| reproducible | {r['reproducible']} |",
-        f"| mean symbols / mean ms per case | {r['meanSymbols']} / {r['meanMs']} |", "",
+        f"| mean symbols / mean ms per case (cases run concurrently) | {r['meanSymbols']} / {r['meanMs']} |", "",
         "| Case | OK | Symbols | Problems |", "|---|---|---|---|",
     ]
     lines += [f"| {x['name']} | {'yes' if x['ok'] else '**no**'} | {x.get('symbols', '')} | {'; '.join(x['problems'])} |" for x in r["rows"]]

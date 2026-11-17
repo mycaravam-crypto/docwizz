@@ -11,7 +11,10 @@ static class Docwizz
         public override string ToString() => $"exit {Exit}\n--- stdout\n{Out}\n--- stderr\n{Err}";
     }
 
-    static readonly string Dll = typeof(Cli).Assembly.Location;
+    // The CLI under test: DOCWIZZ_DLL when set (CI points it at the ReadyToRun build from scripts/build-test-cli.sh, which
+    // starts each process with far less JIT work), otherwise the DocWizz.dll built next to these tests.
+    public static readonly string Dll = Environment.GetEnvironmentVariable("DOCWIZZ_DLL") is { Length: > 0 } dll && File.Exists(dll) ? dll
+        : typeof(Cli).Assembly.Location;
 
     // Absolute, so a test can put fake tools first on PATH without shadowing the runtime that runs docwizz.
     public static readonly string Dotnet = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") is { Length: > 0 } host && File.Exists(host) ? host
