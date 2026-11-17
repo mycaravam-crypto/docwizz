@@ -31,7 +31,7 @@ partial class Generator
         if (unlinked.Count > 0)
             sb.AppendLine($"Work items linked to no current code ({unlinked.Count}): " + string.Join(", ", unlinked.Select(w => WorkItemLink(w.Id, ""))) + "\n");
         // Only once guides are imported: before that, every work item would be listed.
-        var guided = Journeys.Select(g => (RequirementId)g.WorkItem).ToHashSet();
+        var guided = Journeys.Select(g => g.Requirement).OfType<RequirementId>().ToHashSet();
         var unguided = Journeys.Count == 0 ? [] : RequirementLinks().Where(l => !guided.Contains(l.Requirement.Id)
             && RouteUnits().Values.Any(units => units.Contains(flowGraph.Unit(l.Symbol.Id)))).Select(l => l.Requirement.Id).Distinct().Order().ToList();
         if (unguided.Count > 0)

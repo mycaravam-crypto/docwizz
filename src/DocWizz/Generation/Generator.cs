@@ -66,7 +66,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             Write("user-guides/index.md", JourneyEvidence.Index(Journeys, WriteHtml) + GuideStaleness.Section(Journeys, Requirements, CodeChanged));
             foreach (var guide in Journeys)
                 Write($"user-guides/{guide.Id}.md", JourneyEvidence.Markdown(guide,
-                    model.Nodes.Any(n => n.Kind == "route" && RoutePath(n) == guide.Route) ? RoutePage(guide.Route) : null, GuideRequirementPage(guide), CodeChanged(guide)));
+                    model.Nodes.Any(n => n.Kind == "route" && RoutePath(n) == guide.Route) ? RoutePage(guide.Route) : null, GuideRequirementPage(guide), GuideStaleness.Reason(guide, Requirements, CodeChanged(guide))));
         }
         if (versionHistory is not null) Write("versions.md", versionHistory.Markdown);
         if (AdoTests.Count > 0) Write("tests.md", AdoTestDocumentation.Render(AdoTests));
@@ -89,7 +89,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             var markdown = pages.Where(p => p.Key.EndsWith(".md")).ToDictionary(p => p.Key, p => Html.Title(p.Key, p.Value));
             foreach (var rel in markdown.Keys) pages[Path.ChangeExtension(rel, ".html")] = Html.Page(rel, pages[rel], markdown, hierarchy);
             pages["search.js"] = $"window.docwizzSearch = {pages["search.json"]};\n";
-            if (Journeys.Count > 0) pages["user-guides/manual.html"] = Html.Manual(JourneyEvidence.Manual(Journeys));
+            if (Journeys.Count > 0) pages["user-guides/manual.html"] = Html.Manual(JourneyEvidence.Manual(
+                [.. Journeys.Where(g => GuideStaleness.Reason(g, Requirements, CodeChanged(g)) is null)]));
         }
 
         // Only pages we generated earlier are removed, so renamed/deleted modules don't linger and hand-written ones stay.
@@ -130,7 +131,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             Entry(Naming.EndpointLabel(n), "endpoint", "api.md", WrittenSummary(n));
         foreach (var n in model.Nodes.Where(n => n.Kind == "route")) Entry(RoutePath(n), "route", RoutePage(RoutePath(n)), null);
         foreach (var guide in Journeys)
-            Entry(guide.Title, "user guide", $"user-guides/{guide.Id}.md", guide.Route + (guide.WorkItem == 0 ? "" : $", WI-{guide.WorkItem}") + "; draft");
+            Entry(guide.Title, "user guide", $"user-guides/{guide.Id}.md", guide.Route + (guide.Requirement is { } r ? ", " + r.Display : "") + "; draft");
         if (hierarchy is not null)
         {
             foreach (var solution in hierarchy.Solutions)

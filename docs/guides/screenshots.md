@@ -91,7 +91,7 @@ generation.
 title: Sign in
 intro: You need the account your administrator created for you.
 result: The start page opens. You stay signed in until you close the browser.
-requirement: 4711          # optional work item; links the guide and its requirement page
+requirement: 4711          # optional: AB#4711, or github#123 for a GitHub issue; links the guide and its requirement page
 steps:
   - open: /login
   - fill: Email
@@ -111,8 +111,15 @@ docwizz generate . --html --journeys journeys --base-url http://localhost:5173
 - **Order:** files run in file-name order in one browser session, so a sign-in journey signs the later ones in.
   `--storage-state` and `--screenshot-delay` work as for route screenshots.
 - **Values:** `${NAME}` types that environment variable into the page; use it only for the test account's credentials.
+- **Requirement:** an Azure Boards id (`4711`, `AB#4711`) or a GitHub issue (`github#123`, of the repository's
+  github.com origin, or `github:owner/repo#123`). A bare `#123` is refused because it could mean either. Import the
+  requirements ([Requirements](requirements.md)) before capturing: the guide then records the item's revision (ADO) or
+  last update (GitHub) and is marked stale when the item changes. A guide captured without that is listed under
+  **Requirement not tracked** on the user-guide index.
 - **Without the application:** a later `generate` without `--journeys` keeps the captured guides with their capture
-  date. A kept guide is marked stale once the source files behind the route it opens first have changed. To remove a
+  date. A kept guide is marked stale once the source files behind the route it opens first have changed, or its
+  requirement changed. A stale guide carries a banner, is listed under **Stale guides** on the user-guide index, and
+  is left out of `manual.html` until it is captured again. To remove a
   guide, delete its journey file and capture again.
 
 ### From TestWizz evidence

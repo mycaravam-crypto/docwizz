@@ -1234,8 +1234,11 @@ static object DocumentationJson(CodeModel model, Config config, List<Documentati
 // prints below it.
 static async Task<GenerateReport> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null, bool refreshHtmlOnVersionChange = false, bool progress = false, string? screenshotBaseUrl = null, string? screenshotStorageState = null, int screenshotDelayMs = 0, RequirementIndex.Index? requirements = null, bool aiRatings = false, string? journeyDirectory = null, string? journeyBaseUrl = null)
 {
-    // Read first: a broken journey file should not cost a scan.
-    var journeys = JourneyCapture.Load(journeyDirectory);
+    // Requirement pages come from an imported index whenever there is one; --requirements only adds it to AI prompts.
+    var pageRequirements = requirements ?? ImportedRequirements(root);
+    // Read first: a broken journey file should not cost a scan. A short github#123 belongs to this repository's origin.
+    var journeys = JourneyCapture.Load(journeyDirectory, pageRequirements?.Inputs.Repository
+        ?? (journeyDirectory is null ? null : Git(root, "remote", "get-url", "origin")?.Trim()));
     if (journeys.Count > 0 && journeyBaseUrl is null)
         throw new InvalidDataException($"{journeys[0].File} is a journey file: add --base-url <url> of the running application to capture it");
     // Weights: each stage's usual share of the wall time (bench/baseline.json); the scan dominates, AI calls when on.
@@ -1316,14 +1319,12 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
         bar.Begin("user guides", journeyBaseUrl);
         guides = await JourneyCapture.Run(journeys, model, outDir, journeyBaseUrl, screenshotStorageState, screenshotDelayMs);
         var flow = new FlowGraph(model);
-        guides = [.. guides.Select(g => g with { Code = GuideStaleness.Code(root, model, flow, g.Route) })];
+        guides = [.. guides.Select(g => GuideStaleness.Versioned(g, pageRequirements) with { Code = GuideStaleness.Code(root, model, flow, g.Route) })];
         bar.Advance("user guides", Plural(guides.Count, "guide"));
     }
     // Without --journeys the last capture stays: the application need not run for every generation.
     else if (journeyDirectory is null) guides = JourneyCapture.Retained(outDir);
 
-    // Requirement pages come from an imported index whenever there is one; --requirements only adds it to AI prompts.
-    var pageRequirements = requirements ?? ImportedRequirements(root);
     bar.Begin("write pages", html ? "Markdown and HTML" : "Markdown");
     var rebuildHtml = html && refreshHtmlOnVersionChange && HtmlVersion.NeedsRefresh(outDir, AppVersion.Number);
     var (pages, changed) = Timings.Measure("generate", () => new Generator(root, outDir, model, findings, arch, config, summaries, overviews, assessments)
