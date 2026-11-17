@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -143,7 +144,8 @@ partial class Generator
 
     // The page of a guide's work item: the area catalog's, else the imported history's; null when neither has it.
     string? GuideRequirementPage(JourneyEvidence.Guide guide) =>
-        Catalog is { } catalog && catalog.GetProperty("items").EnumerateArray().Any(i => i.GetProperty("id").GetInt32() == guide.WorkItem)
+        Catalog is { } catalog && catalog.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array
+            && items.EnumerateArray().Any(i => i.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Number && id.TryGetInt32(out var n) && n == guide.WorkItem)
             ? $"requirements/items/{guide.WorkItem}.md"
         : Requirements is { } index && (index.WorkItems.Any(w => w.Id == guide.WorkItem) || RequirementLinks().Any(l => l.Requirement.Id == guide.WorkItem))
             ? RequirementPage(guide.WorkItem) : null;

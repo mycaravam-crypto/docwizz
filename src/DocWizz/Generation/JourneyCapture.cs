@@ -55,7 +55,7 @@ static class JourneyCapture
             var kind = kinds[0];
             if (step.ContainsKey("with") != (kind == "fill")) throw Invalid($"step {number}: 'with' belongs to fill, and fill needs it");
             if (kind == "open" && (!step[kind].StartsWith('/') || step[kind].StartsWith("//"))) throw Invalid($"step {number}: open needs a path such as /login");
-            steps.Add(new(kind, step[kind].Trim(), step.GetValueOrDefault("with"), OneLine(step.GetValueOrDefault("note"))));
+            steps.Add(new(kind, step[kind].Trim(), step.GetValueOrDefault("with") ?? (kind == "fill" ? "" : null), OneLine(step.GetValueOrDefault("note"))));
         }
         if (steps.FirstOrDefault()?.Kind != "open") throw Invalid("the first step must open a page, e.g. open: /login");
         var id = Regex.Replace(Naming.Ascii(Path.GetFileNameWithoutExtension(file)).ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-');
