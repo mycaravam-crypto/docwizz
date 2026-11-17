@@ -16,7 +16,7 @@ FENCE = re.compile(r"^\s{0,3}(" + chr(96) + r"{3,}|~{3,})")
 INLINE_CODE = re.compile(r"\x60+[^\x60]*\x60+")
 KEBAB = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*\.md$")
 DIRECTORIES = {"guides", "reference", "internals", "archive"}
-ROOT_DOCS = {"README.md", "cli.md", "getting-started.md"}
+ROOT_DOCS = {"README.md", "cli.md", "getting-started.md", "configuration.md"}
 
 
 def lint(root: Path) -> list[str]:

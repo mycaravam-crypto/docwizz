@@ -1,8 +1,6 @@
 # Getting started
 
-[Documentation home](README.md) · [CLI commands and flags](cli.md)
-
-Run `docwizz setup .`, then open the generated `docs/index.md` or `docs/index.html`. The full initial workflow and status contract follows.
+[Documentation home](README.md) · [CLI reference](cli.md) · [Configuration](configuration.md)
 
 ## Install as a .NET tool
 
@@ -37,7 +35,7 @@ docwizz setup .
 | 7 | check | the quality gate at the configured thresholds | reported |
 
 With project selection, a `select` stage runs between `discover` and `scan`
-([Multi-project repositories](#multi-project-repositories)). The summary starts with a status that keeps problems in
+([multi-project repositories](guides/multi-project.md)). The summary starts with a status that keeps problems in
 the repository apart from problems running docwizz:
 
 | Status | Means | Exit |
@@ -68,6 +66,7 @@ Then read `docs/index.md` (or `docs/index.html` with `--html`) and the summary's
 
 ## Next steps
 
+- [Configure profiles, layers and thresholds](configuration.md)
 - [Generate documentation and optionally draft prose](guides/generation.md)
 - [Quality gates and diff workflows](guides/quality.md)
 - [Import requirements and test evidence](guides/requirements.md)

@@ -2,15 +2,13 @@
 
 [Documentation home](../README.md) · [CLI reference](../cli.md)
 
-## Selecting and scanning projects
-
-### Discover
+## Discover
 
 `docwizz discover .` lists project manifests, solution memberships and unresolved references; `--format json` gives a
 deterministic inventory. It runs no language scanners, build tools or AI, and ignores `scope:` so you always see
 everything available.
 
-### Select projects
+## Select projects
 
 ```bash
 docwizz setup .                   # new ambiguous repository in a terminal: offers selection
@@ -31,7 +29,7 @@ docwizz setup . --yes             # scripts and CI: never prompt
 - **Stages** become `discover → select → scan → config → …`. Config still runs after the scan, so inferred layers and
   test globs are based on the selected code.
 
-### Scope
+## Scope
 
 ```yaml
 scope:
@@ -62,7 +60,7 @@ scope:
 
 Without `scope:`, the whole repository is scanned as before.
 
-### Generated hierarchy
+## Generated hierarchy
 
 With projects or solutions in the model, `generate` writes `docs/index.md` → `docs/solutions/*.md` →
 `docs/projects/*.md` → `docs/modules/*.md` → components; `--html` adds a nested sidebar, breadcrumbs and search entries.
@@ -74,9 +72,9 @@ With projects or solutions in the model, `generate` writes `docs/index.md` → `
 - File names combine a readable slug with a stable suffix; don't hard-code them. Generated project and solution pages
   are removed on a scope change; hand-written pages are never touched.
 
-### Limits
+## Limits
 
 Classic non-SDK ASP.NET MVC projects are inventoried, but conventional `MapRoute` routing can't be fully inferred
-statically; `api.md` warns when such a project is present. The acceptance matrix and migration notes are in
-[MULTI_PROJECT_ACCEPTANCE.md](../archive/multi-project-acceptance.md); `bash scripts/benchmark-multi-project.sh` measures full
-versus scoped scans.
+statically; `api.md` warns when such a project is present. The saved model's fingerprint covers the scope
+configuration, not manifest contents: regenerate after changing project references. `bash
+scripts/benchmark-multi-project.sh` measures full versus scoped scans.

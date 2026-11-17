@@ -1,48 +1,49 @@
 # Documentation
 
-[Project overview](../README.md) · [Getting started](getting-started.md) · [CLI reference](cli.md)
+[Project overview](../README.md) · [Getting started](getting-started.md) · [CLI reference](cli.md) · [Configuration](configuration.md)
 
-**Start with a task.** Tutorials are under `guides/`; exact contracts and data formats live in `reference/`; implementation details in `internals/`. The main CLI reference contains syntax, flags and exit codes—not parallel walkthroughs.
+Guides walk through one task each; reference pages define formats and rules; internals describe the implementation.
+Every topic has one home, and other pages link to it.
 
-## Getting started and daily work
+## Start
 
-- [Getting started](getting-started.md) — setup, first documentation, initial checks
-- [Generate documentation](guides/generation.md) — Markdown, HTML and optional AI drafting
-- [Quality, architecture and CI](guides/quality.md) — checks, change impact, CI
-- [Multi-project repositories](guides/multi-project.md) — scan scope and hierarchy
-- [Coding agents and MCP](guides/agent-context.md) — bounded context and MCP tools
-- [CLI reference](cli.md) — every command, option, precedence rule and exit code
+- [Getting started](getting-started.md): install, first `setup`, what its status means
+- [Configuration](configuration.md): `docwizz.yaml`, profiles, architecture and security rules, AI
+- [CLI reference](cli.md): every command, option, environment variable and exit code
 
-## Features and evidence
+## Guides
 
-- [Requirements and traceability](guides/requirements.md) — ADO work-item catalog, Git history and explicit test links
-- [ADO evidence synchronization](guides/ado-sync.md) — offline evidence export and import
-- [Project evidence](guides/project-evidence.md) — explicit requirement → architecture → test links
-- [Domain discovery](guides/domain-discovery.md) — technical exploration and inferred areas
-- [Product document workflow](guides/product-documents.md) — drafts, reviews and publishing
-- [V-Modell-XT templates](guides/vmodell-xt-templates.md) — example structures and validation
-- [IT operations concept](guides/it-operations.md) — sourced draft and limits
-- [Screenshots](guides/screenshots.md) — authenticated capture and troubleshooting
-- [Dependencies and test snapshots](guides/supply-chain.md) · [Load reports](guides/load-reports.md)
+- [Generating documentation](guides/generation.md): pages, HTML, AI drafts and ratings, release history
+- [Quality checks and change review](guides/quality.md): gaps, architecture, the CI gate, `diff`
+- [Multi-project repositories](guides/multi-project.md): discovery, project selection, scope
+- [Coding agents](guides/agent-context.md): context packages and the MCP server
+- [Screenshots and user guides](guides/screenshots.md): route screenshots, journeys, troubleshooting
+- [Requirements and traceability](guides/requirements.md): work-item catalogs, history links, ADO test cases
+- [Domain discovery](guides/domain-discovery.md): follow code and requirements from one start point
+- [Dependencies](guides/dependencies.md): SBOM and package updates
+- [Load-test reports](guides/load-reports.md): measured numbers per endpoint
+- [Product documents](guides/product-documents.md): drafts, checks and document control
+  - [V-Modell XT templates](guides/vmodell-xt-templates.md) · [IT operations concept](guides/it-operations.md)
+- [Project evidence](guides/project-evidence.md): declared requirement → architecture → test links
 
-## Contracts and implementation
+## Reference
 
-- [Requirement interchange formats](reference/requirement-formats.md) — provider and historical evidence semantics
-- [Evidence provenance and limits](reference/evidence-levels.md) — observed, declared, historical, inferred
-- [EDMX graph and links](reference/edmx.md) — versioned technical contracts
-- [Signed publication](reference/publication.md) — signatures, independent approval and boundaries
-- [Scanner distribution](reference/scanner-distribution.md) — package and action runtime contracts
-- [Implementation architecture](internals/architecture.md) — scanners, data model, generators and tests
-- [Product contract decision](internals/decisions/product-template-contract.md) — architecture decision
-- [SW architecture template guide](reference/vmodell-xt/sw-architecture.md)
-  · [SW specification](reference/vmodell-xt/sw-specification.md)
-  · [System-element test specification](reference/vmodell-xt/system-element-test-specification.md)
+- [Evidence levels](reference/evidence-levels.md): what each kind of evidence shows, and what it doesn't
+- [Requirement formats](reference/requirement-formats.md): history exports, link rules, the index
+- [Signed publication](reference/publication.md): DOCX/PDF release with independent approvals
+- [EDMX analysis](reference/edmx.md): EF6 inventory, graph metrics, code links
+- [Scanner distribution](reference/scanner-distribution.md): packaging and the GitHub Action's scanner payload
+- V-Modell XT filling guides: [SW architecture](reference/vmodell-xt/sw-architecture.md) ·
+  [SW specification](reference/vmodell-xt/sw-specification.md) ·
+  [system-element test specification](reference/vmodell-xt/system-element-test-specification.md)
 
-## Historical evidence
+## Internals
 
-- [Multi-project acceptance baseline](archive/multi-project-acceptance.md) — historical, point-in-time checklist
-- [Benchmarks](../bench/README.md) — reproducible synthetic measurements
+- [How docwizz works](internals/architecture.md): scanners, the code model, analysis, generation, tests
+- [Product template decision](internals/decisions/product-template-contract.md)
+- [Benchmarks](../bench/README.md)
 
-Active feature work is tracked in [GitHub Issues](https://github.com/mycaravam-crypto/docwizz/issues) and [Pull Requests](https://github.com/mycaravam-crypto/docwizz/pulls). Maintained pages use lowercase `kebab-case.md`; `README.md` is an index convention, and obsolete compatibility pages have been removed.
+Work in progress is tracked in [GitHub Issues](https://github.com/mycaravam-crypto/docwizz/issues).
 
-**Security:** generated application documentation, search indexes and imported work items may contain private requirements. Distribution and access to generated output are independent of the maintained project documentation here.
+**Generated output is not public by default.** Generated documentation, search indexes and imported work items can
+contain internal requirements; decide separately who may see them.

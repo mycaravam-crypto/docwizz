@@ -52,12 +52,12 @@ class Config
             domain: []
             infrastructure: [application, domain]
           severity: {}          # rule → high/medium/low; defaults ARCH-001 high, ARCH-002 medium, ARCH-004 low
-          # rules:              # your own dependency rules (README: Custom rules)
+          # rules:              # your own dependency rules (docs/configuration.md: Custom rules)
           #   - { id: ARCH-DOMAIN-001, severity: high, from: { layer: domain }, forbid: { package: [Microsoft.EntityFrameworkCore] } }
-        # Security rules SEC-001…005: findings for a security review, from code facts (README: Security rules). Off by default.
+        # Security rules SEC-001…005: findings for a security review, from code facts (docs/configuration.md: Security rules). Off by default.
         security:
           enabled: false
-        # Package remediation (`docwizz remediate`, README: Remediation). Suggestions are advisory; --validate builds a temporary copy.
+        # Package remediation (`docwizz remediate`, docs/configuration.md: Remediation). Suggestions are advisory; --validate builds a temporary copy.
         remediation:
           targets: {}           # package → version to propose, e.g. { Newtonsoft.Json: 13.0.3 }
           # validate:           # --validate steps, in order; {target}: the solution or each affected project, {tests}: test projects
@@ -71,7 +71,7 @@ class Config
         exclude: []
         # Count a plain // comment block directly above a C# member as its summary (for code that doesn't use /// XML docs).
         comment_docs: false
-        # Self-hosted model for --ai (README: AI drafts). Default: Ollama at OLLAMA_HOST, model DOCWIZZ_MODEL.
+        # Self-hosted model for --ai (docs/configuration.md: AI). Default: Ollama at OLLAMA_HOST, model DOCWIZZ_MODEL.
         # ai:
         #   provider: openai-compatible   # ollama (default) or openai-compatible (vLLM, NVIDIA NIM, LiteLLM, ...)
         #   endpoint: http://10.0.0.5:8000/v1   # must resolve to a loopback or private address

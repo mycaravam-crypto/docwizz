@@ -27,9 +27,9 @@ architecture:
     domain: []
     infrastructure: [application, domain]
   severity: {}          # rule → high/medium/low; defaults ARCH-001 high, ARCH-002 medium, ARCH-004 low
-  # rules:              # your own dependency rules (README: Custom rules)
+  # rules:              # your own dependency rules (docs/configuration.md: Custom rules)
   #   - { id: ARCH-DOMAIN-001, severity: high, from: { layer: domain }, forbid: { package: [Microsoft.EntityFrameworkCore] } }
-# Security rules SEC-001…005: findings for a security review, from code facts (README: Security rules). Off by default.
+# Security rules SEC-001…005: findings for a security review, from code facts (docs/configuration.md: Security rules). Off by default.
 security:
   enabled: false
 # Test code (path globs): scanned only to link tests to the code they exercise; never analyzed or documented.

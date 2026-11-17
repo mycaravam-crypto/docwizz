@@ -1,7 +1,7 @@
 <!--
   A section to copy into your repository's AGENTS.md, CLAUDE.md or the equivalent file your coding agent reads
   (Cline: .clinerules, Aider: CONVENTIONS.md, Qwen Code: QWEN.md). It assumes `docwizz generate .` has written the
-  docs to docs/; change the paths if you generate elsewhere. Workflow and background: CLI.md, "8. Context for coding agents".
+  docs to docs/; change the paths if you generate elsewhere. Workflow and background: docs/guides/agent-context.md in the docwizz repository.
 -->
 
 ## Code documentation (docwizz)

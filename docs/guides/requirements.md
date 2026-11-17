@@ -2,83 +2,106 @@
 
 [Documentation home](../README.md) · [CLI reference](../cli.md)
 
-DocWizz combines **three independent evidence sources**, without inventing missing relationships:
+docwizz combines three independent kinds of requirement evidence. Each is optional, each is labeled with where it
+came from, and none is used to invent a link the others lack:
 
-1. **ADO work-item catalog:** the complete area inventory, including requirements with no history or code links. [See the area-work-item workflow](#area-path-work-item-inventory).
-2. **GitWizz historical evidence:** provider-verified commit links (`confirmed`) and weaker PR/message associations (`candidate`). [Contract and interpretation](../reference/requirement-formats.md).
-3. **Explicit test and architecture evidence:** ADO requirement-to-test-case relationships and declared requirement → architecture → test relations. [Project-evidence contract](project-evidence.md).
+| Source | Import | What it adds |
+|---|---|---|
+| Azure DevOps work-item catalog | `requirements catalog-import` | every work item of an area path, including ones with no code or history yet |
+| Git history ([GitWizz](https://github.com/mycaravam-crypto/gitwizz) export) | `requirements import` | which work items or GitHub issues a symbol was changed for: `confirmed` or `candidate` |
+| Azure DevOps test plans | `tests import` | the test cases explicitly linked to each requirement |
 
-```bash
-ado workitem export --project Shop --area "Shop\\Orders" --output workitems.json
-docwizz requirements catalog-import . workitems.json
-# Optional: docwizz requirements import . history.json work-items/
-# Optional: docwizz tests import . test-trace.json
-docwizz generate . --html
-```
+Hand-declared requirement → architecture → test links are a separate, fourth mechanism: [project evidence](project-evidence.md).
 
-The generated area catalog gives each work item a page. No history index is required. Its source-scoped history and test links are evidence of **relationships**, not verified implementation, execution or coverage. `not-assessed` (no source), `not-linked` (checked source with no link), and `unavailable` (scope/incomplete source) are distinct.
+Every import is local: docwizz reads files that `ado`, `gitwizz` and `gh` exported and never contacts Azure DevOps,
+GitHub or a Git server itself, except in the [one-step export](#exporting-from-azure-devops-in-one-step) you opt into.
 
-For detailed schemas and limits read [area requirements](#area-path-work-item-inventory), [requirement history](../reference/requirement-formats.md), and [explicit project evidence](project-evidence.md). Sensitive work-item titles, acceptance criteria and generated HTML/search files require controlled access.
-
-## Offline Azure DevOps test snapshots
-
-`docwizz tests import . alpha-tests.json` accepts both single-plan `ado.test-traceability/v1` and multi-plan `ado.test-traceability/v2` snapshots; v2 preserves explicit plan/suite/testcase assignments. It validates these references and stores the snapshot offline.
-
-`docwizz tests import . alpha-tests.json` validates `ado.test-traceability/v1` exported by `ado testplan trace-export` and saves a normalized snapshot under `docs/.docwizz/ado-tests-<planId>.json`. The command reports explicit requirement-to-test-case associations. It does not infer relationships to code tests or assert test execution. The generator adds a separate `tests.md` page (and an HTML page with `--html`) showing explicit plan, requirement and test-case associations; it never asserts execution or coverage.
-
-## Area-path work-item inventory
-
-
-DocWizz imports a complete, read-only work-item inventory from **ADO** and enriches it with two independent sources: historical GitWizz/ADO code links and offline ADO test-case snapshots. The catalog works when neither optional evidence source is present. All import and generation steps are local; DocWizz makes no Azure DevOps requests.
-
-### Example workflow
+## Typical workflow
 
 ```bash
-# In the application repository, with ado-devops configured for the desired collection.
+# Work-item catalog: the whole area, always works on its own
 ado workitem export --project Shop --area "Shop\Orders" --output shop-workitems.json
+docwizz requirements catalog-import . shop-workitems.json
 
-# Optional: historical code links. Export enough Git history to cover the relevant period.
+# Optional: history links. Export enough history to cover the period you care about.
 gitwizz history export --since v1.0.0 --provider azure-devops -o history.json
-mkdir -p work-items
-ado workitem context 42 > work-items/42.json
+mkdir -p work-items && ado workitem context 42 > work-items/42.json    # one file per work item
 docwizz requirements import . history.json work-items/
 
-# Optional: explicit test-case relationships. Use an ADO test-traceability v1/v2 JSON export.
+# Optional: explicit test-case links (ado.test-traceability v1 or v2)
 ado testplan trace-export --project Shop --area "Shop\Orders" --output shop-tests.json
 docwizz tests import . shop-tests.json
 
-# This step always works, even without the optional imports above.
-docwizz requirements catalog-import . shop-workitems.json
 docwizz generate . --html
 ```
 
-**Paths and CLI options:** consult the installed versions of the ADO exporter and test-plan exporter for options. The catalog producer writes `ado.workitem-catalog/v1` with `schema`, `project`, `area`, `source`, `complete` and `items`. Incomplete catalogs are rejected, rather than being presented as complete requirement coverage.
+The next `generate` adds:
 
-### Documentation output
+- `requirements/area-catalog.md`: every work item of the exported area, with its parent links from ADO;
+- `requirements/items/<id>.md` and, with history, `requirements/<id>.md`: description, acceptance criteria, children,
+  linked routes and current code symbols with commits and pull requests, code-test references and ADO test cases;
+- a Requirements section on each route page and work-item backlinks on module pages;
+- `tests.md`: test plans and the explicit requirement → test-case links;
+- *Traceability gaps* in `quality.md`: routes without work items or endpoints, work items without current code.
 
-- `docs/requirements/area-catalog.md` and its HTML counterpart: all work items in the exported area, including planned items with no code history; parent links are explicit ADO links.
-- `docs/requirements/items/<id>.md` and HTML: description, acceptance criteria, children, provider-linked code symbols, code-test references and ADO test cases.
-- The project index, search index and HTML navigation link to the area catalog independently of `docs/requirements/index.md` (historical links).
+The console report of `generate` says which of these sources are imported, missing or invalid. Missing sources are
+reported and never fail the generation.
 
-The exported ADO `AreaPath` selects the area and its descendants; it is **not** treated as evidence of a parent-child relationship.
-
-### Semantics
+## What a status means
 
 | Status | Meaning |
 |---|---|
-| `confirmed link` | An ADO-provider-confirmed commit associated with this work item touched the current symbol. Not proof of implementation. |
-| `candidate link` | A weaker historical association (PR or message). Not proof of implementation. |
-| `not-linked (imported history)` | The imported, available history contains no code link for this work item. Not proof that it is unimplemented. |
-| `not-assessed` | No relevant evidence source was imported. |
-| `unavailable` | An import is incomplete, belongs to a different ADO origin/project, or a requirement is missing from a test snapshot. No positive or negative coverage claim is made. |
-| `linked (ADO cases)` | Explicit ADO requirement-to-test-case relationship, **not** execution, pass/fail, test coverage or acceptance verification. |
-| `referenced by test code` | A structural test-code reference to a linked symbol, **not** coverage or a demonstrated pass. |
+| `confirmed link` | a commit the provider links to the work item changed the current symbol |
+| `candidate link` | a weaker association: only through a pull request, a commit-message mention or a rename |
+| `not-linked (imported history)` | the imported history has no code link for the work item |
+| `not-assessed` | no evidence source for this question was imported |
+| `unavailable` | an import is incomplete, belongs to another ADO organization or project, or a snapshot lacks the requirement |
+| `linked (ADO cases)` | an explicit requirement → test-case relationship in Azure DevOps |
+| `referenced by test code` | test code calls or constructs a linked symbol |
 
-The history overlay uses stable ADO work-item IDs **only after** verifying that the GitWizz history refers to the same ADO server/collection and project as the catalog. GitHub issue IDs are never silently treated as ADO IDs. Importing a full area catalog does **not** change or overwrite `docs/.docwizz/requirements.json` or its confirmed/candidate semantics.
+None of these says a requirement is implemented, tested or accepted: a link is evidence of a relationship, and its
+absence is not evidence of a gap. [Evidence levels](../reference/evidence-levels.md) explains the distinctions.
+Acceptance criteria stay *unverified* because no test results are imported.
 
-### Security and repeatability
+The history overlay on the catalog uses ADO work-item ids only after checking that the history refers to the same
+ADO organization and project; GitHub issue ids are never treated as ADO ids. Importing a catalog doesn't change the
+history index. A catalog that isn't marked `complete` is rejected rather than shown as the whole area.
 
-The snapshot and pages can contain internal requirements, unpublished features, customer details and acceptance criteria. **Do not commit or publish those artifacts to a public repository or website unless reviewed and authorized.** DocWizz ignores the new default catalog output paths in Git, but **other generated files (including search.json, search.js, index.html and other HTML pages) may still contain work-item titles**. Protect the entire generated documentation site, its web hosting and any custom output locations; do not rely on .gitignore as an access-control mechanism. Local input exports remain your responsibility.
+History formats, link rules, GitHub issues and the index: [requirement formats](../reference/requirement-formats.md).
 
-Generation is deterministic for identical imported evidence and code models. The normal generator owns its Markdown and HTML pages and removes stale generated pages without deleting manual pages; import and generation do not call an LLM or external provider.
+## Exporting from Azure DevOps in one step
 
+`generate` can run the exports itself before it writes the docs:
+
+```bash
+docwizz generate . --html --ado-project Shop --ado-area 'Shop\Orders' --history-since v1.0.0
+```
+
+It exports and imports the area catalog and the test-case links, and with `--history-since` also the GitWizz history
+after that ref and the context of every exported work item. It needs `ado` (and `gw` for history) on `PATH`, already
+signed in. Before exporting anything it checks that the tools start and, with `--history-since`, that the ref resolves
+to a commit; authentication and export failures can still happen later. Without `--ado-project` and `--ado-area`,
+`generate` stays offline.
+
+The programs run with an argument array, never a shell. Their output is staged in a private temporary directory,
+schema-checked against the requested project and area, imported only when every export succeeded, and deleted
+afterwards. If an import fails, the previous evidence is restored; this is a rollback, not an atomic switch for
+concurrent readers. A terminal progress bar shows the export stages; `--progress` logs them when stderr is redirected.
+
+**Windows / Git Bash:** if `gw` works in Git Bash but `generate` can't start it, `gw` is a shell alias, which a .NET
+process can't launch. Point docwizz at the GitWizz assembly instead:
+
+```bash
+export DOCWIZZ_GITWIZZ_DLL="$(cygpath -w "$HOME/tools/gitwizz/gitwizz.dll")"
+```
+
+[scripts/sync-ado-evidence.sh](../../scripts/sync-ado-evidence.sh) does the same with the separate CLIs, for setups
+that prefer a script (`bash sync-ado-evidence.sh Shop 'Shop\Orders' v1.0.0`, run from the application repository;
+needs `jq`). Its imports run one after another without a rollback.
+
+## Confidentiality
+
+Catalogs, history indexes and the generated pages contain work-item titles, descriptions and acceptance criteria:
+internal requirements, unpublished features, customer details. The default import locations are ignored by Git, but
+the generated pages, `search.json`, `search.js` and every HTML page may contain these texts too. Protect the whole
+generated site and its hosting; `.gitignore` is not access control.

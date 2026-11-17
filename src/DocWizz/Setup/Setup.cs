@@ -148,7 +148,7 @@ static class Setup
             if (line.StartsWith("  layers:") && keep is null)
             {
                 output.Add(line);
-                output.Add("    # no source file matches a default layer: set your own globs (README: Architecture rules)");
+                output.Add("    # no source file matches a default layer: set your own globs (docs/configuration.md: Architecture rules)");
                 continue;
             }
             if (line.StartsWith("tests:") && d.TestGlobs.Count > 0)
@@ -255,7 +255,7 @@ static class Setup
         var suggested = d.Frameworks.Contains("ASP.NET Core") && !d.Frontend ? "aspnet" : d.Frameworks.Contains("Vue") && !d.Backend ? "vue" : null;
         if (config.Profile == "default")
             todo.Add(suggested is not null
-                ? $"the stack matches the `{suggested}` profile: set `profile: {suggested}` if its rules fit (README: Profiles)"
+                ? $"the stack matches the `{suggested}` profile: set `profile: {suggested}` if its rules fit (docs/configuration.md: Profiles)"
                 : $"pick a documentation profile if `default` doesn't fit ({string.Join(", ", Profiles.Names)})");
         if (!config.Security.Enabled) todo.Add("security rules are off: set security.enabled: true for a security review (local, no network)");
         if (!checkPassed) todo.Add("check fails at the current thresholds: fix the gaps, or adjust `check:` to a baseline you will raise over time");
