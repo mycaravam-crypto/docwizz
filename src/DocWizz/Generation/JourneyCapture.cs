@@ -39,6 +39,9 @@ static class JourneyCapture
     }
 
     /// <summary>Reads one journey file into its steps, rejecting anything the capture could not play safely.</summary>
+    /// <param name="file">The journey file (*.yaml).</param>
+    /// <param name="repository">The repository's GitHub origin, which a short `requirement: github#123` belongs to.</param>
+    /// <exception cref="InvalidDataException">The file is not a valid journey; the message names the file and the step.</exception>
     public static Journey Parse(string file, string? repository = null)
     {
         var name = Path.GetFileName(file);
