@@ -4,7 +4,7 @@ public class OperatingConceptTests
 {
     const string General = """
         schema: 1
-        product_id: it-betriebskonzept
+        product_id: it-operations-concept
         document_type: it-operations
         sections:
           - id: runtime
@@ -36,8 +36,8 @@ public class OperatingConceptTests
         Assert.Equal("it-operations", template.DocumentType);
         var result = ProductDraft.Render(template);
         Assert.DoesNotContain("V-Modell", result);
-        Assert.Contains("Dokumenttyp: it-operations", result);
-        Assert.Contains("OFFEN", result);
+        Assert.Contains("Document type: it-operations", result);
+        Assert.Contains("OPEN", result);
         Assert.Contains("document_type", ProductDraft.Report(template));
 
         Assert.Contains("must not declare", Assert.Throws<ArgumentException>(() =>
@@ -62,10 +62,10 @@ public class OperatingConceptTests
         var template = Parse(General);
         var draft = ProductDraft.Render(template, model);
         var report = ProductDraft.Report(template, model);
-        Assert.Contains("Projekt: App (Rolle: executable; Target Framework: net8.0)", draft);
-        Assert.Contains("Quelle: App/App.csproj:1", draft);
-        Assert.Contains("Konfigurationsschluessel: Db:Password", draft);
-        Assert.Contains("OFFEN", draft);
+        Assert.Contains("Project: App (role: executable; target framework: net8.0)", draft);
+        Assert.Contains("source: App/App.csproj:1", draft);
+        Assert.Contains("Configuration key: Db:Password", draft);
+        Assert.Contains("OPEN", draft);
         Assert.DoesNotContain("private.example", draft);
         Assert.DoesNotContain("private.example", report);
         Assert.Equal(draft, ProductDraft.Render(template, model));
@@ -75,11 +75,11 @@ public class OperatingConceptTests
     public void Shipped_operating_template_loads()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !File.Exists(Path.Join(root.FullName, "templates/it-operations/betriebskonzept.yaml")))
+        while (root is not null && !File.Exists(Path.Join(root.FullName, "templates/it-operations/operations-concept.yaml")))
             root = root.Parent;
         Assert.NotNull(root);
-        var template = ProductTemplate.Load(Path.Join(root!.FullName, "templates/it-operations/betriebskonzept.yaml"));
-        Assert.Equal("it-betriebskonzept", template.ProductId);
+        var template = ProductTemplate.Load(Path.Join(root!.FullName, "templates/it-operations/operations-concept.yaml"));
+        Assert.Equal("it-operations-concept", template.ProductId);
         Assert.False(template.IsVModel);
         Assert.Contains(template.Sections, section => section.Id == "backup" && section.Required && section.Sources.SequenceEqual(["project"]));
     }

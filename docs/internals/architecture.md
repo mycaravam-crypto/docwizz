@@ -299,7 +299,7 @@ items without a summary, plus an overview for each module (folder) of three or m
 - **Product drafts.** [The product template decision](decisions/product-template-contract.md) defines the template contract,
   independent of coverage profiles. [ProductDraft](../../src/DocWizz/Product/ProductDraft.cs) builds an evidence catalog per
   section (code facts and sourced statements from [ProjectContext](../../src/DocWizz/Discovery/ProjectContext.cs)) with
-  document-wide ids; sections without evidence say `OFFEN`. With `--ai`,
+  document-wide ids; sections without evidence say `OPEN`. With `--ai`,
   [ProductSynthesis](../../src/DocWizz/Product/ProductSynthesis.cs) sends each section's evidence through `IAiProvider` and
   keeps only sentences that cite that section's ids and claim no status or conformity.
   [ProductCheck](../../src/DocWizz/Product/ProductCheck.cs) checks references and freshness, never content.

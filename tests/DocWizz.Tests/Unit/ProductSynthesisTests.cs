@@ -75,9 +75,9 @@ public class ProductSynthesisTests
         var synthesis = await ProductSynthesis.Synthesize(template, ProductDraft.Catalog(template, Code), model, "fake/fake-1", Cache());
         var text = ProductDraft.Render(template, Code, null, synthesis);
 
-        Assert.Contains("🤖 KI-Entwurf", text);
+        Assert.Contains("🤖 AI draft", text);
         Assert.Contains("## Bausteine\n\n🤖 Zwei Bausteine. [E1, E2]\n\n- [E1] class: `OrderController`", text.Replace("\r\n", "\n"));
-        Assert.Contains("## Geltungsbereich\n\nOFFEN – Quelle und fachliche Prüfung erforderlich.", text.Replace("\r\n", "\n"));
+        Assert.Contains("## Geltungsbereich\n\nOPEN – needs a source and expert review.", text.Replace("\r\n", "\n"));
         Assert.DoesNotContain("Geltungsbereich", string.Join("", model.Sent));   // no evidence, nothing sent
         // Without synthesis the draft is exactly the deterministic one: no ids, no AI marker.
         Assert.Equal(ProductDraft.Render(template, Code), ProductDraft.Render(template, Code, null, null));

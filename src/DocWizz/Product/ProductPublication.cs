@@ -198,14 +198,11 @@ internal static class ProductPublication
             // Preserve the already generated clickable contents. Pandoc's --toc creates an
             // empty index on the LibreOffice PDF conversion path unless fields are updated by UNO.
             // Changing signed source text happens exclusively in this ephemeral render copy.
-            markdown = markdown.Replace("Gelenkter **Entwurf**", "Gelenkte **Veröffentlichung**", StringComparison.Ordinal)
-                .Replace("Entwurf – Genehmigung nicht verifiziert", "Signierte Freigabe durch QM und ISMS geprüft", StringComparison.Ordinal)
-                .Replace("Entwurf – keine V-Modell-XT-Konformitäts- oder Freigabeaussage.",
-                    "Nach Signaturprüfung veröffentlicht – keine V-Modell-XT-Konformitätsaussage.", StringComparison.Ordinal)
-                .Replace("Entwurf – keine Aussage zur betrieblichen Einsatzbereitschaft oder Freigabe.",
-                    "Nach Signaturprüfung veröffentlicht – keine Aussage zur betrieblichen Einsatzbereitschaft.", StringComparison.Ordinal)
-                .Replace("DocWizz bestätigt keine Freigabe oder Normkonformität.",
-                    "Signierte QM- und ISMS-Freigaben geprüft; keine ISO-Zertifizierungsaussage.", StringComparison.Ordinal);
+            markdown = markdown.Replace(ControlledDocument.DraftBanner, ControlledDocument.PublishedBanner, StringComparison.Ordinal)
+                .Replace(ControlledDocument.DraftStatus, ControlledDocument.PublishedStatus, StringComparison.Ordinal)
+                .Replace(ProductDraft.VModelDisclaimer, ProductDraft.PublishedVModelDisclaimer, StringComparison.Ordinal)
+                .Replace(ProductDraft.OperationsDisclaimer, ProductDraft.PublishedOperationsDisclaimer, StringComparison.Ordinal)
+                .Replace(ControlledDocument.DraftDisclaimer, ControlledDocument.PublishedDisclaimer, StringComparison.Ordinal);
             File.WriteAllText(source, markdown);
             var prefix = control.Id + "-" + control.Version;
             var docx = Path.Join(staging, prefix + ".docx");

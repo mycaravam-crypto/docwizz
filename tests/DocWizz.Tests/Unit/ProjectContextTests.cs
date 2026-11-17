@@ -30,8 +30,8 @@ public class ProjectContextTests
         var context = ProjectContext.Parse(new StringReader(ContextYaml));
         var output = ProductDraft.Render(template, project: context);
         Assert.Contains("signed project charter", output);
-        Assert.Contains("Quelle: `docs/charter.md`", output);
-        Assert.DoesNotContain("OFFEN", output);
+        Assert.Contains("source: `docs/charter.md`", output);
+        Assert.DoesNotContain("OPEN", output);
         Assert.Equal(output, ProductDraft.Render(template, project: context));
     }
 
@@ -53,4 +53,16 @@ public class ProjectContextTests
     [InlineData("schema: 1\nstatements:\n  - section: scope\n    text: claim\n    source: charter.md\n    approved: yes")]
     public void Invalid_context_is_rejected(string yaml) =>
         Assert.Throws<ArgumentException>(() => ProjectContext.Parse(new StringReader(yaml)));
+
+    // A statement can't pose as the open-section marker, in the current or the earlier wording; the plain word is fine.
+    [Theory]
+    [InlineData("OPEN – needs a source and expert review.", false)]
+    [InlineData("Still OFFEN.", false)]
+    [InlineData("The service stays open during maintenance.", true)]
+    public void Statements_cannot_impersonate_the_open_marker(string text, bool accepted)
+    {
+        var yaml = ContextYaml.Replace("The scope is defined in the signed project charter.", text);
+        if (accepted) Assert.Single(ProjectContext.Parse(new StringReader(yaml)).Statements);
+        else Assert.Contains("impersonate", Assert.Throws<ArgumentException>(() => ProjectContext.Parse(new StringReader(yaml))).Message);
+    }
 }

@@ -199,9 +199,9 @@ public class ProductJourneyTests
         var made = Docwizz.Run("product", repo.Root, template, "--control", file);
         Assert.Equal(0, made.Exit);
         var doc = File.ReadAllText(Path.Join(repo.Root, "docs", "products", "sw-architecture.md"));
-        Assert.Contains("## Inhaltsverzeichnis", doc);
-        Assert.Contains("## Deckblatt", doc);
-        Assert.Contains("## Dokumentenlenkung", doc);
+        Assert.Contains("## Contents", doc);
+        Assert.Contains("## Cover", doc);
+        Assert.Contains("## Document control", doc);
         Assert.Equal(0, Docwizz.Run("product", "check", repo.Root, template, "--control", file).Exit);
         var withoutControl = Docwizz.Run("product", "check", repo.Root, template);
         Assert.Equal(1, withoutControl.Exit);

@@ -34,21 +34,21 @@ public class ProductDraftTests
             # sw-architecture
 
             V-Modell: V-Modell XT 2.4; Tailoring: project-specific
-            Produktabhängigkeiten: keine angegeben
+            Product dependencies: none declared
 
-            > Entwurf – keine V-Modell-XT-Konformitäts- oder Freigabeaussage.
+            > Draft – no statement of V-Modell XT conformity or approval.
 
             ## Geltungsbereich
 
-            OFFEN – Quelle und fachliche Prüfung erforderlich.
+            OPEN – needs a source and expert review.
 
             ## Bausteine
 
-            OFFEN – Quelle und fachliche Prüfung erforderlich.
+            OPEN – needs a source and expert review.
 
             ## Schnittstellen
 
-            Optional – keine belegten Angaben.
+            Optional – no evidenced content.
 
             """;
         Assert.Equal(expected.TrimEnd() + Environment.NewLine + Environment.NewLine, text.Replace("\r\n", "\n").Replace("\n", Environment.NewLine));
@@ -65,9 +65,9 @@ public class ProductDraftTests
              new("cs:M", "cs:A", "calls"), new("cs:Z", "missing", "calls"),
              new("cs:Z", "cs:A", "references")]);
         var text = ProductDraft.Render(Template(), model);
-        Assert.Contains("Code-Stand: abc123", text);
+        Assert.Contains("Code baseline: abc123", text);
         Assert.Contains("record: `R`", text);
-        Assert.Contains("Quelle: `A.cs:4`", text);
+        Assert.Contains("source: `A.cs:4`", text);
         Assert.DoesNotContain("method: `M`", text);
         Assert.DoesNotContain("(references;", text);
         Assert.DoesNotContain("`missing`", text);

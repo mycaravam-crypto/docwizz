@@ -6,10 +6,10 @@ public class OperatingConceptJourneyTests
     public void Cli_creates_a_repeatable_concept_with_gaps_without_exporting_secret_values()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !File.Exists(Path.Join(root.FullName, "templates/it-operations/betriebskonzept.yaml")))
+        while (root is not null && !File.Exists(Path.Join(root.FullName, "templates/it-operations/operations-concept.yaml")))
             root = root.Parent;
         Assert.NotNull(root);
-        var template = Path.Join(root!.FullName, "templates/it-operations/betriebskonzept.yaml");
+        var template = Path.Join(root!.FullName, "templates/it-operations/operations-concept.yaml");
 
         using var repo = new Sources(
             ("Example.cs", "public class Example {}"),
@@ -24,12 +24,12 @@ public class OperatingConceptJourneyTests
 
         var first = Docwizz.Run("product", repo.Root, template);
         Assert.Equal(0, first.Exit);
-        var markdownPath = Path.Join(repo.Root, "docs", "products", "it-betriebskonzept.md");
-        var evidencePath = Path.Join(repo.Root, "docs", "products", "it-betriebskonzept.evidence.json");
+        var markdownPath = Path.Join(repo.Root, "docs", "products", "it-operations-concept.md");
+        var evidencePath = Path.Join(repo.Root, "docs", "products", "it-operations-concept.evidence.json");
         var markdown = File.ReadAllText(markdownPath);
         var evidence = File.ReadAllText(evidencePath);
-        Assert.Contains("Konfigurationsschluessel: Db:Password", markdown);
-        Assert.Contains("OFFEN", markdown);
+        Assert.Contains("Configuration key: Db:Password", markdown);
+        Assert.Contains("OPEN", markdown);
         Assert.DoesNotContain("SECRET_DO_NOT_WRITE", markdown);
         Assert.DoesNotContain("SECRET_DO_NOT_WRITE", evidence);
 

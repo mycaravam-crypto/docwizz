@@ -23,7 +23,8 @@ Work products get their own small YAML contract, independent of profiles, genera
 - **Project evidence:** `statements: [{section, text, source}]` with a repository-relative Markdown source under
   `docs/`. Statements are maintained by people, not approved by them; the parser checks format, not truth. Multi-line
   and approval-like statements are rejected, and a statement must name a section that accepts project evidence.
-- **Open sections:** a section without evidence says `OFFEN`. Nothing is made up to fill it.
+- **Open sections:** a section without evidence says `OPEN` (`OFFEN` in drafts from before the templates were
+  translated). Nothing is made up to fill it.
 - **AI wording:** `--ai` sends each section's evidence, with document-wide ids (`E1`, …), through the existing
   provider interface and endpoint guard. A sentence is kept only when it cites an id of its own section and claims no
   status, approval, completeness or conformity. Without `--ai`, or when nothing survives, the output is byte-identical
@@ -37,6 +38,6 @@ Work products get their own small YAML contract, independent of profiles, genera
 
 - Profiles, generation and the AI drafts are unchanged by products.
 - V-Modell XT ids and versions are metadata, not a conformity or licensing claim. The bundled templates are original
-  illustrative German outlines; rights to reuse official template wording must be checked before adding any.
+  illustrative outlines; rights to reuse official template wording must be checked before adding any.
 - V-Modell states (*in Bearbeitung*, *vorgelegt*, *fertiggestellt*) are not modelled: they need a documented human
   review. Approval happens outside docwizz, or through signed [publication](../../reference/publication.md).
