@@ -63,7 +63,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         if (Journeys.Count > 0)
         {
             Directory.CreateDirectory(Path.Combine(outDir, "user-guides"));
-            Write("user-guides/index.md", JourneyEvidence.Index(Journeys));
+            Write("user-guides/index.md", JourneyEvidence.Index(Journeys) + GuideStaleness.Section(Journeys, Requirements));
             foreach (var guide in Journeys)
                 Write($"user-guides/{guide.Id}.md", JourneyEvidence.Markdown(guide));
         }
