@@ -7,7 +7,7 @@ static class GuideStaleness
         if (requirements is null) return [];
         var current = requirements.WorkItems.Where(w => !w.Id.IsGithub && w.Revision is not null)
             .GroupBy(w => w.Id.Number).ToDictionary(g => g.Key, g => g.Max(w => w.Revision!.Value));
-        return [.. guides.Where(g => current.TryGetValue(g.WorkItem, out var rev) && rev > g.WorkItemRevision)
+        return [.. guides.Where(g => g.JourneyFile is null && current.TryGetValue(g.WorkItem, out var rev) && rev > g.WorkItemRevision)
             .Select(g => (g, current[g.WorkItem]))];
     }
 
@@ -16,6 +16,6 @@ static class GuideStaleness
         var stale = Stale(guides, requirements);
         return stale.Count == 0 ? "" :
             "\n## Stale guides\n\nThe work item changed after capture; recapture before publishing.\n\n" +
-            string.Join("\n", stale.Select(s => $"- [{s.Guide.Title}]({s.Guide.Id}.md): WI-{s.Guide.WorkItem} captured at revision {s.Guide.WorkItemRevision}, now {s.Current}")) + "\n";
+            string.Join("\n", stale.Select(s => $"- [{JourneyEvidence.Escape(s.Guide.Title)}]({s.Guide.Id}.md): WI-{s.Guide.WorkItem} captured at revision {s.Guide.WorkItemRevision}, now {s.Current}")) + "\n";
     }
 }

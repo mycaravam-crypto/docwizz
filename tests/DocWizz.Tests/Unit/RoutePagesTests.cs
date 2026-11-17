@@ -51,6 +51,39 @@ public class RoutePagesTests
         Assert.Contains("Acceptance criteria: 2 in 1 work items, all **unverified**", quality);
     }
 
+    // #311: a guide, its route and its work item link to each other; a routed work item without a guide is a gap.
+    [Fact]
+    public void Guides_link_to_their_route_and_work_item_and_back()
+    {
+        using var repo = new Sources(("src/router.ts", "// routes"));
+        var outDir = Path.Combine(repo.Root, "docs");
+        var config = Config();
+        JourneyEvidence.Guide Guide(int workItem) => new($"wi-{workItem}-case-1-a1b2c3d4e5f6", "List [orders]", "/orders", workItem, 1, 1, 1, 1, "Shop",
+            ["Listed"], [new(1, "Open Orders", "", "images/x.png")]);
+        string Run(int workItem, string page, bool html = false)
+        {
+            new Generator(repo.Root, outDir, Shop, [], Architecture.Check(Shop, config), config, []) { Requirements = History(), Journeys = [Guide(workItem)], WriteHtml = html }.Run();
+            return File.ReadAllText(Path.Combine(outDir, page));
+        }
+        var guide = Run(7, "user-guides/wi-7-case-1-a1b2c3d4e5f6.md");
+        Assert.Contains($"[`/orders`](../{Generator.RoutePage("/orders")}) · [WI-7](../requirements/wi-7.md)", guide);
+        Assert.Contains("- [List \\[orders\\]](../user-guides/wi-7-case-1-a1b2c3d4e5f6.md)", File.ReadAllText(Path.Combine(outDir, Generator.RoutePage("/orders"))));
+        Assert.Contains("## User guides", File.ReadAllText(Path.Combine(outDir, Generator.RequirementPage(7))));
+        Assert.DoesNotContain("without a user guide", File.ReadAllText(Path.Combine(outDir, "quality.md")));
+        Assert.False(File.Exists(Path.Combine(outDir, "user-guides/manual.html")));   // HTML only
+
+        // A guide for a work item that was not imported stays unlinked, and WI-7 is now a gap.
+        Assert.Contains("· WI-8\n", Run(8, "user-guides/wi-8-case-1-a1b2c3d4e5f6.md", html: true));
+        Assert.Contains("Work items behind a route, without a user guide (1): [WI-7](requirements/wi-7.md)", File.ReadAllText(Path.Combine(outDir, "quality.md")));
+        var manual = File.ReadAllText(Path.Combine(outDir, "user-guides/manual.html"));
+        Assert.Contains("<a href=\"#list-orders\">", manual);
+        Assert.DoesNotContain("requirements/", manual);
+
+        // Without guides, the manual and the guide pages are removed.
+        new Generator(repo.Root, outDir, Shop, [], Architecture.Check(Shop, config), config, []) { WriteHtml = true }.Run();
+        Assert.Empty(Directory.GetFiles(Path.Combine(outDir, "user-guides")));
+    }
+
     [Fact]
     public void Without_an_index_route_pages_say_none_was_imported()
     {

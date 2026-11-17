@@ -23,7 +23,7 @@ static class Cli
         ["seed"] = "a symbol id, qualified method name or endpoint (POST /api/orders)", ["depth"] = "the traversal depth (0 to 8)",
         ["limit"] = "the maximum number of technical symbols (1 to 500)", ["base-url"] = "a running application URL (http or https)",
         ["ado-project"] = "an Azure DevOps project", ["ado-area"] = "an Azure DevOps area path", ["history-since"] = "a Git history ref for optional requirement links",
-        ["journeys"] = "directory of TestWizz journey evidence", ["storage-state"] = "a Playwright storageState JSON file", ["screenshot-delay"] = "a number of milliseconds, 0 to 60000",
+        ["journeys"] = "directory of journey files or TestWizz journey evidence", ["storage-state"] = "a Playwright storageState JSON file", ["screenshot-delay"] = "a number of milliseconds, 0 to 60000",
     };
 
     // Meaningful for every command.
@@ -133,12 +133,9 @@ static class Cli
                     error ??= "--history-since requires --ado-project and --ado-area";
                 if (opts.ContainsKey("screenshots") && !opts.ContainsKey("base-url"))
                     error ??= "--screenshots requires --base-url <url>";
-                if (!opts.ContainsKey("screenshots") && opts.ContainsKey("base-url"))
-                    error ??= "--base-url requires --screenshots";
-                if (!opts.ContainsKey("screenshots") && opts.ContainsKey("storage-state"))
-                    error ??= "--storage-state requires --screenshots";
-                if (!opts.ContainsKey("screenshots") && opts.ContainsKey("screenshot-delay"))
-                    error ??= "--screenshot-delay requires --screenshots";
+                var capture = opts.ContainsKey("screenshots") || opts.ContainsKey("journeys");
+                foreach (var option in new[] { "base-url", "storage-state", "screenshot-delay" })
+                    if (!capture && opts.ContainsKey(option)) error ??= $"--{option} requires --screenshots or --journeys";
                 if (opts.GetValueOrDefault("screenshot-delay") is { } delay && (!int.TryParse(delay, out var ms) || ms is < 0 or > 60000))
                     error ??= "--screenshot-delay must be a number of milliseconds, 0 to 60000";
                 if (opts.GetValueOrDefault("base-url") is { } url &&

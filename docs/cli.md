@@ -104,7 +104,7 @@ Run `docwizz discover .` to inventory solutions and projects. Configure `scope:`
 | `--screenshots --base-url <url>` | off | generate | captures detected static routes from a running frontend; anonymous isolated contexts by default; HTTP errors and redirects are skipped | opt-in |
 | `--storage-state <file>` | off | generate | with `--screenshots`, starts each route's context from a saved Playwright login state; path relative to the scanned directory; keep it out of Git | opt-in |
 | `--screenshot-delay <ms>` | 0 | generate | with `--screenshots`, extra wait (0 to 60000 ms) after the page settles, for slow pages | opt-in |
-| `--journeys <dir>` | off | generate | offline, opt-in import of passed TestWizz screenshot journey evidence; validates PNG hashes and renders review-required user guides | opt-in |
+| `--journeys <dir>` | off | generate | user guides: plays journey files (`*.yaml`, needs `--base-url`) in the running application and imports passed TestWizz evidence; with `--html` also a one-page `user-guides/manual.html`. [Guide](guides/screenshots.md#user-guides-from-journey-files) | opt-in |
 | `--ai` | off | generate, product, setup, domain | self-hosted model only (Ollama, or `ai:` in `docwizz.yaml`); cached drafts are used even without it; does not enable ratings. `domain`: only `domain explain`, whose statements are validated against the evidence package | opt-in |
 | `--ai-ratings` | off | generate, setup | independently rates written docs; cached ratings are used without it; combine with `--ai` for drafts too | opt-in |
 | `--since <ref>` | — | check, remediate | check: only problems introduced since `<ref>` fail; remediate: says whether each update touches only what changed since `<ref>` | CI |

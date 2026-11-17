@@ -30,6 +30,12 @@ partial class Generator
         var unlinked = index.WorkItems.Where(w => !linked.Contains(w.Id)).OrderBy(w => w.Id).ToList();
         if (unlinked.Count > 0)
             sb.AppendLine($"Work items linked to no current code ({unlinked.Count}): " + string.Join(", ", unlinked.Select(w => WorkItemLink(w.Id, ""))) + "\n");
+        // Only once guides are imported: before that, every work item would be listed.
+        var guided = Journeys.Select(g => (RequirementId)g.WorkItem).ToHashSet();
+        var unguided = Journeys.Count == 0 ? [] : RequirementLinks().Where(l => !guided.Contains(l.Requirement.Id)
+            && RouteUnits().Values.Any(units => units.Contains(flowGraph.Unit(l.Symbol.Id)))).Select(l => l.Requirement.Id).Distinct().Order().ToList();
+        if (unguided.Count > 0)
+            sb.AppendLine($"Work items behind a route, without a user guide ({unguided.Count}): " + string.Join(", ", unguided.Select(id => WorkItemLink(id, ""))) + "\n");
         var criteria = index.WorkItems.Sum(w => w.Criteria.Count);
         if (criteria > 0)
             sb.AppendLine($"Acceptance criteria: {criteria} in {index.WorkItems.Count(w => w.Criteria.Count > 0)} work items, all **unverified**: no test results are imported for them.");
@@ -75,14 +81,7 @@ partial class Generator
             gaps.Add($"Calls `{Esc(u[5..])}`, but no backend endpoint matches it.");
 
         sb.AppendLine(RouteRequirements(path, gaps));
-        var guides = Journeys.Where(g => g.Route == path).ToList();
-        if (guides.Count > 0)
-        {
-            sb.AppendLine("## User guides (review required)\n");
-            foreach (var guide in guides)
-                sb.AppendLine($"- [ADO case #{guide.TestCase}: {guide.Id}](../user-guides/{guide.Id}.md) — screenshot-backed draft");
-            sb.AppendLine();
-        }
+        sb.Append(GuideLinks(g => g.Route == path, "../"));
         routeGaps[path] = gaps;
         sb.AppendLine("## Gaps\n");
         sb.AppendLine(gaps.Count == 0 ? "None found.\n" : string.Join("\n", gaps.Select(g => $"- {g}")) + "\n");

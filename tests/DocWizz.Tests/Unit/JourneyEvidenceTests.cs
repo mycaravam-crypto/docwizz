@@ -61,10 +61,17 @@ public sealed class JourneyEvidenceTests
             Assert.Single(JourneyEvidence.Import(bundle + Path.DirectorySeparatorChar, output));
             Assert.Equal(4711, imported[0].WorkItem);
             var markdown = JourneyEvidence.Markdown(imported[0]);
-            Assert.Contains("Select New", markdown);
-            Assert.Contains("**2** — Save", markdown);
-            Assert.Contains("**1** — New (previous instruction)", markdown);
-            Assert.Contains("### Step 1", markdown);
+            // Instructions come first, each naming its own marker; the provenance follows them.
+            Assert.Contains("1. **Select New** → Form appears", markdown);
+            Assert.Contains("Marker **2**: Save", markdown);
+            Assert.DoesNotContain("Marker **1**: Save", markdown);
+            Assert.True(markdown.IndexOf("2. **Save order**", StringComparison.Ordinal) < markdown.IndexOf("## Source", StringComparison.Ordinal));
+            Assert.Contains("test case #512 (revision 3, steps #2, #3)", markdown);
+            // The manual is for the application's users: the steps, without ADO provenance.
+            var manual = JourneyEvidence.Manual(imported);
+            Assert.Contains("## Create order", manual);
+            Assert.Contains("1. **Select New** → Form appears", manual);
+            Assert.DoesNotContain("ADO", manual);
             Assert.Equal(2, imported[0].Steps[0].Callouts?.Count);
             Assert.Equal(2, imported[0].Steps[1].Callouts?.Count); // Earlier control remains visible.
             var mutations = new Action<JsonObject>[]

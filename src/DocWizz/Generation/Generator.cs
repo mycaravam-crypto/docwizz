@@ -63,9 +63,10 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         if (Journeys.Count > 0)
         {
             Directory.CreateDirectory(Path.Combine(outDir, "user-guides"));
-            Write("user-guides/index.md", JourneyEvidence.Index(Journeys) + GuideStaleness.Section(Journeys, Requirements));
+            Write("user-guides/index.md", JourneyEvidence.Index(Journeys, WriteHtml) + GuideStaleness.Section(Journeys, Requirements));
             foreach (var guide in Journeys)
-                Write($"user-guides/{guide.Id}.md", JourneyEvidence.Markdown(guide));
+                Write($"user-guides/{guide.Id}.md", JourneyEvidence.Markdown(guide,
+                    model.Nodes.Any(n => n.Kind == "route" && RoutePath(n) == guide.Route) ? RoutePage(guide.Route) : null, GuideRequirementPage(guide)));
         }
         if (versionHistory is not null) Write("versions.md", versionHistory.Markdown);
         if (AdoTests.Count > 0) Write("tests.md", AdoTestDocumentation.Render(AdoTests));
@@ -77,7 +78,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         if (Catalog is not null) Directory.CreateDirectory(Path.Combine(outDir, "requirements", "items"));
         foreach (var (page, body) in RequirementPages()) Write(page, body);
         if (Catalog is { } catalog)
-            foreach (var (page, body) in RequirementsCatalog.Pages(catalog, Requirements, Head, model, AdoTests)) Write(page, body);
+            foreach (var (page, body) in RequirementsCatalog.Pages(catalog, Requirements, Head, model, AdoTests))
+                Write(page, body + (page.StartsWith("requirements/items/") && int.TryParse(Path.GetFileNameWithoutExtension(page), out var id) ? GuideLinks(id, "../../") : ""));
         Write("quality.md", Quality());
         foreach (var (page, _, body) in Views()) Write($"views/{page}.md", body());
         Write("architecture-description.md", DescriptionPage());
@@ -87,6 +89,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             var markdown = pages.Where(p => p.Key.EndsWith(".md")).ToDictionary(p => p.Key, p => Html.Title(p.Key, p.Value));
             foreach (var rel in markdown.Keys) pages[Path.ChangeExtension(rel, ".html")] = Html.Page(rel, pages[rel], markdown, hierarchy);
             pages["search.js"] = $"window.docwizzSearch = {pages["search.json"]};\n";
+            if (Journeys.Count > 0) pages["user-guides/manual.html"] = Html.Manual(JourneyEvidence.Manual(Journeys));
         }
 
         // Only pages we generated earlier are removed, so renamed/deleted modules don't linger and hand-written ones stay.
@@ -125,7 +128,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             Entry(Naming.EndpointLabel(n), "endpoint", "api.md", WrittenSummary(n));
         foreach (var n in model.Nodes.Where(n => n.Kind == "route")) Entry(RoutePath(n), "route", RoutePage(RoutePath(n)), null);
         foreach (var guide in Journeys)
-            Entry(guide.Title, "user guide draft", $"user-guides/{guide.Id}.md", $"WI-{guide.WorkItem}, case #{guide.TestCase}; review required");
+            Entry(guide.Title, "user guide", $"user-guides/{guide.Id}.md", guide.Route + (guide.WorkItem == 0 ? "" : $", WI-{guide.WorkItem}") + "; draft");
         if (hierarchy is not null)
         {
             foreach (var solution in hierarchy.Solutions)
@@ -230,7 +233,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             "- [Frontend](frontend.md)\n" + (Requirements is null ? "" : "- [Requirements](requirements/index.md)\n") +
             (Catalog is null ? "" : "- [Area requirements catalog](requirements/area-catalog.md)\n") +
             (versionHistory is null ? "" : "- [Version history](versions.md)\n") +
-            (Journeys.Count == 0 ? "" : "- [User guide drafts](user-guides/index.md)\n") + "- [Quality](quality.md)\n");
+            (Journeys.Count == 0 ? "" : "- [User guides](user-guides/index.md)\n") + "- [Quality](quality.md)\n");
         if (hierarchy is not null) sb.Append(hierarchy.Index());
         if (Technology().ToList() is { Count: > 0 } tech)
             sb.AppendLine("## Technology\n\n" + string.Join("\n", tech.Select(t => $"- {t}")) + "\n");
