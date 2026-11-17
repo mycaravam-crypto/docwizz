@@ -63,10 +63,10 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         if (Journeys.Count > 0)
         {
             Directory.CreateDirectory(Path.Combine(outDir, "user-guides"));
-            Write("user-guides/index.md", JourneyEvidence.Index(Journeys, WriteHtml) + GuideStaleness.Section(Journeys, Requirements));
+            Write("user-guides/index.md", JourneyEvidence.Index(Journeys, WriteHtml) + GuideStaleness.Section(Journeys, Requirements, CodeChanged));
             foreach (var guide in Journeys)
                 Write($"user-guides/{guide.Id}.md", JourneyEvidence.Markdown(guide,
-                    model.Nodes.Any(n => n.Kind == "route" && RoutePath(n) == guide.Route) ? RoutePage(guide.Route) : null, GuideRequirementPage(guide)));
+                    model.Nodes.Any(n => n.Kind == "route" && RoutePath(n) == guide.Route) ? RoutePage(guide.Route) : null, GuideRequirementPage(guide), CodeChanged(guide)));
         }
         if (versionHistory is not null) Write("versions.md", versionHistory.Markdown);
         if (AdoTests.Count > 0) Write("tests.md", AdoTestDocumentation.Render(AdoTests));
@@ -116,6 +116,8 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
         JourneyEvidence.CleanupImages(outDir, Journeys);
         return ([.. pages.Keys], changed);
     }
+
+    bool CodeChanged(JourneyEvidence.Guide guide) => GuideStaleness.CodeChanged(guide, root, model, flowGraph);
 
     // Everything a reader might look up, with the page (and anchor) that documents it: for search boxes and tooling.
     string SearchIndex()

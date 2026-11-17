@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using YamlDotNet.Serialization;
@@ -132,9 +133,35 @@ static class JourneyCapture
                     throw new InvalidDataException($"{journey.File}: step {number} ({step.Kind} {step.Target}): {e.Message.Split('\n')[0]}");
                 }
             guides.Add(new(journey.Id, journey.Title, journey.Steps[0].Target, journey.WorkItem, 0, 0, 0, 0, "", [], steps,
-                journey.Intro, journey.Result, await Shot("result"), journey.File));
+                journey.Intro, journey.Result, await Shot("result"), journey.File, DateTime.UtcNow.ToString("yyyy-MM-dd")));
         }
         return guides;
+    }
+
+    static string Store(string outDir) => Path.Join(outDir, ".docwizz", "guides.json");
+
+    /// <summary>Remembers the captured guides, so a generation without the running application keeps them.</summary>
+    public static void Save(string outDir, IReadOnlyList<JourneyEvidence.Guide> guides)
+    {
+        var captured = guides.Where(g => g.JourneyFile is not null).ToList();
+        if (captured.Count == 0) File.Delete(Store(outDir));
+        else File.WriteAllText(Store(outDir), JsonSerializer.Serialize(captured, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    /// <summary>The guides of the last capture whose pictures are all still there; none when nothing usable was saved.</summary>
+    public static IReadOnlyList<JourneyEvidence.Guide> Retained(string outDir)
+    {
+        if (!File.Exists(Store(outDir))) return [];
+        try
+        {
+            // The pictures are checked by name, so an edited file cannot point a page outside user-guides/images.
+            bool Picture(string? image) => image is not null && image.StartsWith("images/", StringComparison.Ordinal)
+                && JourneyEvidence.GeneratedImage.IsMatch(image[7..]) && File.Exists(Path.Join(outDir, "user-guides", image));
+            return [.. (JsonSerializer.Deserialize<List<JourneyEvidence.Guide>>(File.ReadAllText(Store(outDir))) ?? [])
+                .Where(g => g is { JourneyFile: not null, Title: not null, Route: not null, Steps: not null } && Regex.IsMatch(g.Id ?? "", "^[a-z0-9-]+$") && g.Id is not ("index" or "manual")
+                    && g.Steps.All(s => s is { Action: not null } && Picture(s.Image)) && Picture(g.ResultImage))];
+        }
+        catch (JsonException) { return []; }
     }
 
     // Drawn in the page for the screenshot only, around the control's own rectangle: it cannot drift from the control.

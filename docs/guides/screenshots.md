@@ -143,6 +143,11 @@ docwizz generate . --html --journeys journeys --base-url http://localhost:5173
 - **Data:** values typed into visible fields appear in later pictures. Use a test account and synthetic data, and
   review every picture before publishing.
 
+- **Without the application:** a later `docwizz generate` without `--journeys` keeps the captured guides and their
+  capture date. To remove a guide, delete its journey file and capture again.
+- **Stale guides:** a kept guide is listed as stale on `user-guides/index.md` and on its own page once the source files
+  behind the route it opens first have changed since the capture.
+
 The same directory may also hold TestWizz evidence bundles (below).
 
 ## Screenshot-backed user-guide drafts from TestWizz
@@ -173,4 +178,4 @@ The evidence manifest stays at `testwizz.ui-evidence/v1` and adds optional `guid
 Each picture is captured for the currently visible state and can repeat controls from any reviewed step that remain visible. Numbers are guide positions (1, 2, 3), not ADO step IDs; the ADO IDs are printed separately for traceability. Each bubble number must equal the **one-based position of its referenced action in the reviewed journey**, regardless of which screenshot displays it. A two-action journey therefore cannot have a bubble numbered 3. Verify bubble placement, accessibility, contrast and image privacy before publication. The bubble renderer does not use a vision model or OCR.
 The generated guides retain ADO work-item and test-case revisions, actions, expected results and acceptance criteria. **Visibility assertions are not complete acceptance verification**; the selected work-item/test-case association is explicitly unverified until a separate ADO relationship is checked. Each guide is a draft requiring human editorial and privacy review. The first increment does not use local AI to invent or rewrite user instructions; TestWizz's existing local-AI UI proposal remains available to assist a human in preparing reviewed journey steps.
 
-Screenshot capture may modify the running application through same-origin clicks and form submission. Use disposable non-production accounts and synthetic test data. Keep ADO exports, browser credentials and raw evidence out of public repositories. `--journeys` copies selected images into generated documentation, which may itself be published: **review and redact every image before publication**, and restrict access to the generated site. The option is explicit: a subsequent generation without `--journeys` removes the generated user-guide pages and their TestWizz-named screenshots, without deleting manual images.
+Screenshot capture may modify the running application through same-origin clicks and form submission. Use disposable non-production accounts and synthetic test data. Keep ADO exports, browser credentials and raw evidence out of public repositories. `--journeys` copies selected images into generated documentation, which may itself be published: **review and redact every image before publication**, and restrict access to the generated site. The option is explicit: a subsequent generation without `--journeys` removes the TestWizz user-guide pages and their screenshots, without deleting manual images.
