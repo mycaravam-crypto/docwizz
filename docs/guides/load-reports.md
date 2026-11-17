@@ -2,8 +2,6 @@
 
 [Documentation home](../README.md) · [CLI reference](../cli.md)
 
-## Load-test results
-
 `docwizz load import . shop-bericht.json [more.json ...]` reads [powerwizz](https://github.com/mycaravam-crypto/powerwizz#json-report-for-docwizz)
 reports (`powerwizz.report/v1`) natively, offline and without an adapter, and keeps them in `docs/.docwizz/load.json`.
 The same run (start time and target) imported again replaces itself; unknown fields are ignored. A field v1 has that is

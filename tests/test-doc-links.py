@@ -55,6 +55,18 @@ class DocumentationLinkChecks(unittest.TestCase):
         self.assertIn("unsupported directory", result.stderr)
         self.assertIn("non-canonical filename", result.stderr)
 
+    def test_anchors_must_match_a_heading_as_github_renders_it(self):
+        result = self.run_check({
+            "docs/README.md": "# Index\n\n[ok](cli.md#exit-codes) [ok](cli.md#options-1) [ok](cli.md#the-ai-key-ai)\n"
+                              "[ok](#index) [bad](cli.md#5-old-section) [bad](#nowhere)\n",
+            "docs/cli.md": "# CLI\n\n## Exit codes\n\n## Options\n\n## Options\n\n## The `ai:` key (AI)\n\n"
+                           "\x60\x60\x60md\n## Not a heading\n\x60\x60\x60\n",
+        })
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing anchor: cli.md#5-old-section", result.stderr)
+        self.assertIn("missing anchor: #nowhere", result.stderr)
+        self.assertEqual(2, result.stderr.count("missing anchor"), result.stderr)
+
     def test_code_fences_and_external_links_are_ignored(self):
         result = self.run_check({
             "docs/README.md": "# Index\n\n\x60\x60\x60md\n[Not a link](no.md)\n\x60\x60\x60\n\n"

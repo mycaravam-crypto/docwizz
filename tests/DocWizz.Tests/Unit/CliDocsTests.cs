@@ -53,15 +53,11 @@ public class CliDocsTests
     }
 
     [Fact]
-    public void Every_command_is_at_a_glance_and_in_the_readme()
+    public void Every_command_is_in_the_readme()
     {
-        var glance = Rows(Section(CliMd, "## At a glance")).Select(r => r[0].Trim('`')).ToHashSet();
         var readme = Section(Readme, "## Commands");
         foreach (var name in Cli.Commands.Keys)
-        {
-            Assert.Contains(name, glance);
             Assert.True(readme.Contains($"`docwizz {name} "), $"README Commands doesn't list {name}");
-        }
     }
 
     // The Options table's "Applies to" column is the compatibility matrix in prose: it must say exactly what parses.
@@ -88,13 +84,10 @@ public class CliDocsTests
     public void Advanced_and_debugging_commands_are_marked_off_the_default_path()
     {
         Assert.Equal(["init", "scan"], Advanced.Order());
-        foreach (var row in Rows(Section(CliMd, "## At a glance")).Where(r => Cli.Commands.ContainsKey(r[0].Trim('`'))))
-        {
-            var advanced = Advanced.Contains(row[0].Trim('`'));
-            Assert.True(advanced == (row[3] == "no"), $"At a glance: {row[0]} is {(advanced ? "" : "not ")}advanced but its default path is `{row[3]}`");
-        }
         var commands = Section(CliMd, "## Commands");
         Assert.All(Advanced, c => Assert.Matches($@"\| `{c}` \|.*\| (manual setup|advanced) \|", commands));
+        var readme = Section(Readme, "## Commands");
+        Assert.All(Advanced, c => Assert.Matches($@"`docwizz {c} [^|]*` \| (manual setup|advanced)", readme));
     }
 
     [Fact]

@@ -1,4 +1,6 @@
-# Requirement context
+# Requirement formats
+
+[Documentation home](../README.md) · [Requirements guide](../guides/requirements.md)
 
 DocWizz can show which historical requirements (Azure DevOps work items or GitHub issues) a code symbol was changed for, with the exact
 commit, pull request, file and lines behind each link. It reads files that other tools exported; it never contacts
@@ -6,7 +8,7 @@ Azure DevOps, GitHub or a Git server itself.
 
 ```bash
 gitwizz history export --since <ref> --provider azure-devops -o history.json   # gitwizz.history/v2
-ado workitem context 101 > work-items/101.json                              # ado-devops#83, one per work item
+ado workitem context 101 > work-items/101.json                              # one file per work item
 docwizz requirements import . history.json work-items/                      # → docs/.docwizz/requirements.json
 docwizz requirements show . --for Shop.OrderService.Place --format json     # one symbol's requirements
 docwizz requirements show . --work-item 101                                 # one work item's symbols
@@ -98,7 +100,7 @@ and is not indexed. PR-number markers stripped by GitWizz are never recovered fr
 
 ### `ado.requirement-context/v1`
 
-One work item per file (or a JSON array of them), as `ado workitem context <id>` writes it (ado-devops#83). DocWizz
+One work item per file (or a JSON array of them), as `ado workitem context <id>` writes it. DocWizz
 keeps `id`, `revision`, `currentRevision`, `isCurrent`, `type`, `state`, `title`, `webUrl`/`url`, `changedDate`,
 `description.text` with its `sourceField`, and the acceptance-criteria `items` (or the non-empty lines of
 `acceptanceCriteria.text`) with their `sourceField`. Raw HTML is never read. When several files carry one id, the
@@ -123,8 +125,7 @@ docwizz domain discover . --work-item github#123 --format json
 ```
 
 An input file can contain one object or an array. The URL must identify an issue in the history's GitHub repository;
-pull-request URLs, mismatched numbers and other repositories are rejected. This first version supports one GitHub
-repository per index. GitHub CLI must support `gh pr view --json closingIssuesReferences` for history export
+pull-request URLs, mismatched numbers and other repositories are rejected. An index holds one GitHub repository. GitHub CLI must support `gh pr view --json closingIssuesReferences` for history export
 (validated with CLI 2.102.0); the issue-detail command is separate from that requirement.
 
 The issue's bounded body is stored as `description`, with source `body`; labels are sorted and bounded to 20 names.
@@ -169,7 +170,7 @@ enumeration value (with its path), a short SHA or a duplicate commit;
 `docwizz generate . --ai --requirements`, `docwizz context . --for <symbol> --requirements` and the MCP tools
 `requirements_for_symbol`, `symbols_for_requirement` and `context(requirements: true)` read this index; none of them
 fetches anything. The rules (bounded selection, untrusted data, `intent`/`deviation` sections, labels, cache keys) are
-in [CLI.md](../cli.md#requirements-in-drafts). Without `--requirements` the drafts and context don't change.
+in [Requirements in drafts](../guides/generation.md#requirements-in-drafts). Without `--requirements` the drafts and context don't change.
 
 ## In the generated docs
 
@@ -201,8 +202,12 @@ Only requested symbol ids are answered (at most 10 links each). A symbol whose i
 its `previousId` (a changed signature). The PR's own commits are usually not in the export yet: an answer never says
 they were indexed. A query that isn't valid JSON or `gitwizz.requirement-query/v1` exits 1 with the reason on stderr.
 
-## Historical scan performance (issue #232)
+## Import performance
 
-Historical requirement import already reads changed Git blobs instead of archiving a full tree when no project scope is configured. With a **single isolated selected project**, `references: exclude`, `test_links: false` and `unassigned_sources: exclude`, it now also materializes the changed source blobs plus the selected historical project manifest. More complex scoped projects continue to use the complete historical scan to preserve symbol ownership and project dependencies; missing/deleted blobs fall back to that scan as well. This deliberately prioritizes correct evidence over speed. When a changed file is C#, every `*.cs` file as of the commit is compiled too (one `git archive`), so types from other files resolve and symbol ids match a full scan (`Total(Shop.Order)`, not `Total(Order)`); only the changed files are walked for symbols.
-
-Set `DOCWIZZ_REQUIREMENTS_PROFILE=1` to inspect per-commit scan mode, changed file count and phase durations. This optimization does not change the stored index schema or the resume/checkpoint mechanism. The original 170-commit performance case still needs a controlled benchmark.
+Without a project scope, `import` reads only the changed files of each commit instead of the whole tree. When a changed
+file is C#, every `*.cs` file as of that commit is compiled too (one `git archive`), so types resolve and symbol ids
+match a full scan; only the changed files are walked for symbols. With a single selected project (`references:
+exclude`, `test_links: false`, `unassigned_sources: exclude`) the same applies, plus that project's manifest. Other
+scopes, and commits whose files can't be read, use the full historical scan, which keeps symbol ownership correct.
+`DOCWIZZ_REQUIREMENTS_PROFILE=1` prints the scan mode, changed-file count and phase durations per commit; how to compare
+the two modes is in [bench/requirements/selective-import.md](../../bench/requirements/selective-import.md).

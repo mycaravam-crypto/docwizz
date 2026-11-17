@@ -1,35 +1,40 @@
-# Praxisnahe V-Modell-XT-Produktvorlagen
+# V-Modell XT templates
 
-DocWizz liefert drei **illustrative, projektbezogen anzupassende** Produktvorlagen im kompatiblen `schema: 1`. Sie sind keine amtlichen V-Modell-XT-Vorlagen und keine Konformitäts- oder Freigabeaussage.
+[Documentation home](../README.md) · [Product documents](product-documents.md)
 
-| Produkt | YAML-Vorlage | Ausfüll- und Reviewhilfe | Abschnitte |
+docwizz ships three illustrative product templates for [`docwizz product`](product-documents.md), in German like the
+V-Modell XT itself. They are original outlines to tailor to your project: not official V-Modell XT templates, and no
+statement of conformity or approval.
+
+| Product | Template | Filling and review guide | Sections |
 |---|---|---|---:|
-| SW-Architektur | [sw-architecture.yaml](../../templates/vmodell-xt/sw-architecture.yaml) | [SW-Architektur](../reference/vmodell-xt/sw-architecture.md) | 17 |
-| SW-Spezifikation | [sw-specification.yaml](../../templates/vmodell-xt/sw-specification.yaml) | [SW-Spezifikation](../reference/vmodell-xt/sw-specification.md) | 17 |
-| Systemelement-Testspezifikation | [system-element-test-specification.yaml](../../templates/vmodell-xt/system-element-test-specification.yaml) | [Testspezifikation](../reference/vmodell-xt/system-element-test-specification.md) | 15 |
+| Software architecture (*SW-Architektur*) | [sw-architecture.yaml](../../templates/vmodell-xt/sw-architecture.yaml) | [guide](../reference/vmodell-xt/sw-architecture.md) | 17 |
+| Software specification (*SW-Spezifikation*) | [sw-specification.yaml](../../templates/vmodell-xt/sw-specification.yaml) | [guide](../reference/vmodell-xt/sw-specification.md) | 17 |
+| System-element test specification (*Prüfspezifikation Systemelement*) | [system-element-test-specification.yaml](../../templates/vmodell-xt/system-element-test-specification.yaml) | [guide](../reference/vmodell-xt/system-element-test-specification.md) | 15 |
 
-## Verwendung
+The YAML comments explain the evidence each section expects but don't appear in the drafts; the filling guides carry
+the same expectations with examples and review questions.
 
-Im zu dokumentierenden Software-Repository ausführen. Kopiere die benötigten Vorlagen zunächst aus dem DocWizz-Checkout in ein versioniertes Verzeichnis innerhalb des zu dokumentierenden Projekts (keine externen absoluten Template-Pfade); `docwizz` muss installiert beziehungsweise als CLI-Alias verfügbar sein. Vorher `DOCWIZZ_ROOT` auf den **absoluten Pfad** des lokalen DocWizz-Checkouts setzen (beispielsweise `export DOCWIZZ_ROOT="$HOME/src/docwizz"`, wenn DocWizz dort ausgecheckt ist). Die `--context`- und Evidenz-Dateien sind projektspezifisch anzulegen.
+## Usage
+
+Run in the repository you document. Copy the templates into it first, so they are versioned with the project (signed
+[publication](../reference/publication.md) accepts only files inside the repository):
 
 ```bash
-: "${DOCWIZZ_ROOT:?DOCWIZZ_ROOT auf den DocWizz-Checkout setzen}"
+: "${DOCWIZZ_ROOT:?set DOCWIZZ_ROOT to the absolute path of your docwizz checkout}"
 mkdir -p templates/vmodell-xt
 cp "$DOCWIZZ_ROOT"/templates/vmodell-xt/*.yaml templates/vmodell-xt/
 docwizz setup .
 
-docwizz product . "templates/vmodell-xt/sw-specification.yaml" --context sw-specification-context.yaml
-docwizz product . "templates/vmodell-xt/sw-architecture.yaml" --context sw-architecture-context.yaml
-docwizz product . "templates/vmodell-xt/system-element-test-specification.yaml" --context system-element-test-specification-context.yaml
+docwizz product . templates/vmodell-xt/sw-specification.yaml --context sw-specification-context.yaml
+docwizz product . templates/vmodell-xt/sw-architecture.yaml --context sw-architecture-context.yaml
+docwizz product . templates/vmodell-xt/system-element-test-specification.yaml --context system-element-test-specification-context.yaml
 
-docwizz product check . "templates/vmodell-xt/sw-specification.yaml" --context sw-specification-context.yaml
-docwizz product check . "templates/vmodell-xt/sw-architecture.yaml" --context sw-architecture-context.yaml
-docwizz product check . "templates/vmodell-xt/system-element-test-specification.yaml" --context system-element-test-specification-context.yaml
-
+docwizz product check . templates/vmodell-xt/sw-architecture.yaml --context sw-architecture-context.yaml
 docwizz trace . project-evidence.yaml
 ```
 
-Projektkontexte verwenden `schema: 1`, `statements` mit exakt passenden Abschnitts-IDs und belegten relativen `docs/*.md`-Quellen. Für jede Produktvorlage ist ein eigener Kontext sinnvoll. Beispiel für `sw-architecture-context.yaml`:
+Write one context file per template, with statements for its section ids and sources that exist in the repository:
 
 ```yaml
 schema: 1
@@ -38,27 +43,32 @@ statements:
     text: Die Softwareeinheit verarbeitet Auftragsdaten innerhalb der dokumentierten Systemgrenze.
     source: docs/project-charter.md
   - section: decisions
-    text: Die Entscheidung zur Trennung von Anwendungslogik und Infrastruktur ist im ADR dokumentiert.
-    source: docs/internals/decisions/architecture.md
+    text: Die Trennung von Anwendungslogik und Infrastruktur ist im ADR dokumentiert.
+    source: docs/architecture/decisions.md
 ```
 
-Die referenzierten Dateien müssen im Software-Repository existieren; der Inhalt oben ist nur beispielhaft und muss durch projektspezifische Nachweise ersetzt werden.
+## Limits
 
-## Grenzen und Review
+- Only the sections `structure` and `interfaces` are filled from code, with at most 40 entries each. Every other
+  section needs verifiable project statements.
+- `required: true` is the example template's working assumption, not an obligation for every project. Check the
+  V-Modell XT variant, version, roles, product dependencies and tailoring decisions that apply to you.
+- The templates declare `xt_version: "2.4"`. Check the public structure of V-Modell XT Bund 2.0 for differences before
+  binding use.
+- The test specification depends on `sw-specification` as an example; decide other product dependencies in your
+  tailoring. For requirement → test links, use [project evidence](project-evidence.md) and `docwizz trace`, not a
+  relationship assumed from a chapter title.
+- `product check` verifies file references and freshness, not correctness, completeness or authorized approval.
+  `trace` evaluates declared links only and runs no tests.
+- Quality goals can follow ISO/IEC 25010. Security requirements (confidentiality, integrity, availability) need
+  project evidence; ISO/IEC 27001 is no substitute for product verification.
+- Check your rights to reuse official template wording before adding it.
 
-- Aus Code werden derzeit **nur** die Abschnitts-IDs `structure` und `interfaces` automatisch befüllt, auf höchstens 40 erkannte Einträge je Abschnitt begrenzt. Die übrigen Kapitel benötigen verifizierbare Projektangaben.
-- Die YAML-Kommentare erläutern erwartete Belege, erscheinen aber **nicht** in den generierten Produktseiten. Deshalb liegen separate Ausfüllhilfen neben den Vorlagen.
-- `required: true` ist eine Arbeitserwartung der Beispielvorlage, keine für jedes Projekt verbindliche Produktpflicht. Vor Nutzung die gültige V-Modell-XT-Variante, Version, Rollen, Produktabhängigkeiten und Tailoring-Entscheidungen prüfen.
-- Die Vorlage verwendet `xt_version: "2.4"` als bestehende Metadatenangabe. Öffentliche Strukturreferenzen aus **V-Modell XT Bund 2.0** müssen vor einer verbindlichen Anwendung auf Abweichungen geprüft werden.
-- `product check` prüft Dateiverweise und Aktualität der Entwürfe, nicht die fachliche Richtigkeit, Vollständigkeit oder autorisierte Freigabe. `trace` wertet ausschließlich deklarierte Anforderung–Architektur–Test-Verknüpfungen aus; es führt keine Tests durch.
-- Bewertbare Qualitätsziele können sich an ISO/IEC 25010 orientieren. Sicherheitsanforderungen (Vertraulichkeit, Integrität, Verfügbarkeit) benötigen projektspezifische Nachweise; ISO/IEC 27001 ersetzt keine Produktprüfung.
-- Die Testspezifikation hat die beispielhafte direkte Abhängigkeit `sw-specification`; andere Produktbeziehungen müssen im Projekt-Tailoring explizit entschieden werden.
+The template format is defined in [the product template decision](../internals/decisions/product-template-contract.md).
 
-Weitere Details: [Product drafts](../cli.md#product-drafts), [Project evidence](project-evidence.md), [Template contract](../internals/decisions/product-template-contract.md).
+## References
 
-## Fachliche Referenzen
-
-- V-Modell XT Bund 2.0 – [SW-Architektur](https://download.gsb.bund.de/BundesCIO/V-Modell_XT_Bund/V-Modell%20XT%20Bund-2.0-HTML/13992f89ccc6aa1.html)
-- V-Modell XT Bund 2.0 – [SW-Spezifikation](https://download.gsb.bund.de/BundesCIO/V-Modell_XT_Bund/V-Modell%20XT%20Bund-2.0-HTML/10242fa1910292f.html)
-- V-Modell XT Bund 2.0 – [Prüfspezifikation Systemelement](https://download.gsb.bund.de/BundesCIO/V-Modell_XT_Bund/V-Modell%20XT%20Bund-2.0-HTML/af30f82600e73e.html)
-- [arc42 – Architektur-Praxisbeispiele](https://examples.arc42.org/)
+- V-Modell XT Bund 2.0: [SW-Architektur](https://download.gsb.bund.de/BundesCIO/V-Modell_XT_Bund/V-Modell%20XT%20Bund-2.0-HTML/13992f89ccc6aa1.html)
+- V-Modell XT Bund 2.0: [SW-Spezifikation](https://download.gsb.bund.de/BundesCIO/V-Modell_XT_Bund/V-Modell%20XT%20Bund-2.0-HTML/10242fa1910292f.html)
+- V-Modell XT Bund 2.0: [Prüfspezifikation Systemelement](https://download.gsb.bund.de/BundesCIO/V-Modell_XT_Bund/V-Modell%20XT%20Bund-2.0-HTML/af30f82600e73e.html)
+- [arc42 architecture examples](https://examples.arc42.org/)

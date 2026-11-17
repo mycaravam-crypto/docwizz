@@ -28,7 +28,7 @@ Everything in it is synthetic: no customer or real work-item text.
 - **Exports:** `gitwizz.history/v2` (the shape `gitwizz history export` writes) from the repository's own
   `git show -U0 -M` diffs, and one
   `ado.requirement-context/v1` file per work item. These are the formats in
-  [docs/requirement-context.md](../../docs/requirement-context.md).
+  [docs/reference/requirement-formats.md](../../docs/reference/requirement-formats.md).
 
 ## Ground truth
 

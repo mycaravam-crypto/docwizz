@@ -1,8 +1,10 @@
-# Domain discovery: recursive, evidence-led architecture exploration (MVP)
+# Domain discovery
 
-The **read-only domain crawler** starts at one code symbol / endpoint, or at one imported Azure DevOps work
-item, and walks the selected, directed relationships in DocWizz's existing code model. It optionally
-attaches requirements from the local historical index. The crawler **does not infer** business
+[Documentation home](../README.md) · [CLI reference](../cli.md)
+
+`docwizz domain discover` starts at one code symbol or endpoint, or at one imported work item, and follows the
+directed relationships of the code model from there. It optionally
+attaches requirements from the local historical index. It **does not infer** business
 capabilities or DDD bounded contexts from method names; it exposes candidate terms and the evidence
 required for human review.
 
@@ -96,7 +98,7 @@ An existing file that is not a DocWizz domain report is never overwritten.
 
 ## Explaining a flow: `domain explain`
 
-`docwizz domain explain` turns the same discovery report into a reviewable draft (#288). It runs the crawler exactly as
+`docwizz domain explain` turns the same discovery report into a reviewable draft. It runs the crawler exactly as
 `domain discover` does (same options, same bounds, same report) and adds no traversal of its own.
 
 ```bash
@@ -151,7 +153,7 @@ fact). The benchmark measures this gap ([bench/domain/README.md](../../bench/dom
 
 ## Candidate business areas
 
-`docwizz domain areas . [--format json]` is the first layer of a separate domain model over the unchanged code model
+`docwizz domain areas . [--format json]` groups production methods into candidate business areas
 (`docwizz.domain-areas/v1`). Production methods are grouped by folder; then two kinds of evidence move a method:
 
 - **Delegation:** a method in an outer folder (one no other folder calls into: controllers, jobs) that calls into exactly
@@ -171,15 +173,3 @@ is put with that service.
 - `--depth` is a maximum graph hop distance, not a count of LLM reasoning iterations.
 - There are no automatic DevOps calls, no edits and no architectural compliance claims. The only AI prompt is
   `domain explain --ai`, and its business statements are hypotheses for a reviewer, never confirmed findings.
-
-## Next iterations
-
-1. Extend the domain model beyond inferred areas (`domain areas` exists): business rules, actors and process steps;
-   stable human review/confirmation.
-2. Bidirectional code/history enrichment with incremental fingerprints.
-3. Mermaid domain/process views (As-is / As-intended / Unclear Markdown exists: `--format md`; local-only LLM wording
-   over cited facts exists: `domain explain --ai`). A verb check for explanation statements against relation kinds.
-4. Domain-level gold labels for semantic accuracy and reviewer corrections (the traversal benchmark exists:
-   [bench/domain/README.md](../../bench/domain/README.md)).
-
-See the parent implementation task in [GitHub issue #177](https://github.com/mycaravam-crypto/docwizz/issues/177).

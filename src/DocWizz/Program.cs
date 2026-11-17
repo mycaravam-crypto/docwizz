@@ -990,8 +990,8 @@ static string Reference() => $"""
       docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
         [--html]                        also write an HTML page next to every Markdown page
         [--screenshots --base-url <url>]  capture static routes from a running frontend (Playwright)
-        [--storage-state <file>]        reuse a saved Playwright login session (generate screenshots only)
-        [--screenshot-delay <ms>]       extra wait before each capture, for slow pages (screenshots only)
+        [--storage-state <file>]        reuse a saved Playwright login session (--screenshots, --journeys)
+        [--screenshot-delay <ms>]       extra wait before each capture, for slow pages (--screenshots, --journeys)
         [--journeys <dir>]              user guides: journey files (*.yaml, captured with --base-url) and TestWizz evidence
         [--refresh-html-on-version-change]  rewrite HTML when the docwizz version changes
         [--progress]                    print progress to stderr (including redirected output)

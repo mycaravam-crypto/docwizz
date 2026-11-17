@@ -1,63 +1,68 @@
-# Prüfspezifikation Systemelement – Ausfüll- und Reviewhilfe
+# System-element test specification: filling and review guide
 
-**Unabhängige Arbeitshilfe; nicht automatisch von DocWizz gerendert.** Die Abschnitts-IDs entsprechen `system-element-test-specification.yaml`.
+[V-Modell XT templates](../../guides/vmodell-xt-templates.md)
 
-## Sollinhalte pro Kapitel
+A working aid for [system-element-test-specification.yaml](../../../templates/vmodell-xt/system-element-test-specification.yaml);
+docwizz doesn't render it. The section ids are the template's.
 
-| YAML-Abschnitt | Mindestinhalt / Fachfrage |
+## Expected content per section
+
+| Section | Minimum content / question |
 |---|---|
-| `document-control` | Produkt-ID/Revision, autorisierte Prüferrolle, zu prüfende Baseline, Änderungsstand |
-| `test-object` | Eindeutig identifizierbarer Build/Commit, Version, Laufzeitkonfiguration, zugehörige SW-Einheit |
-| `test-basis` | REQ-IDs, Spezifikationsrevisionen, Prüfkonzept und Umfang |
-| `test-strategy` | Risiko- und anforderungsbasierte Testverfahren; Unit/Integration/API/System/Last/Security als passende Ebenen |
-| `risk-priorities` | Risikoauswirkung, Wahrscheinlichkeit, Prüftiefe und begründete Ausschlüsse |
-| `test-cases` | Eindeutige TC-ID, Vorbedingung, Testdaten, Schritte, erwartetes Ergebnis, Soll-Orakel, Traceability |
-| `test-data` | Synthetische/geschützte Daten, Grenzwerte, Version/Seed, Datenbereinigung |
-| `test-environment` | Versionsfestgelegte Systeme/Tools, Dienste, Schnittstellen, Berechtigungen und Reproduzierbarkeit |
-| `acceptance` | Eintritt, erwartete Ergebnisse, Pass/Fail, Abbruch- und Abschlusskriterien |
-| `coverage` | Matrix REQ -> TC, inklusive Lücken und risikobasierter Abdeckung |
-| `security-privacy` | Zugriffsschutz, Testdatenschutz, Isolation, Schadensvorsorge, Nachweise zu CIA |
-| `defect-handling` | Defect-ID, Kritikalität, Nachtest, Regression und Entscheidung bei Abweichung |
-| `automation` | Runner/Prozedur, Seed, Pipeline, Flaky-Test-Policy, Aufbewahrungsdauer und Ausführungsbeleg |
-| `review-criteria` | QS-Checkliste, Prüfer-Beteiligung, bekannte Lücken und menschlicher Freigabeprozess |
-| `references` | Prüfrichtlinien, Testkonzepte und validierte Quellstände |
+| `document-control` | product id and revision, authorized tester role, baseline under test, change state |
+| `test-object` | uniquely identified build or commit, version, runtime configuration, software unit |
+| `test-basis` | requirement ids, specification revisions, test concept and scope |
+| `test-strategy` | risk- and requirement-based test methods; unit, integration, API, system, load and security as fitting levels |
+| `risk-priorities` | risk impact, likelihood, test depth and justified exclusions |
+| `test-cases` | unique test-case id, precondition, test data, steps, expected result, oracle, traceability |
+| `test-data` | synthetic or protected data, boundary values, version or seed, clean-up |
+| `test-environment` | version-pinned systems and tools, services, interfaces, permissions, reproducibility |
+| `acceptance` | entry, expected results, pass/fail, abort and exit criteria |
+| `coverage` | requirement → test-case matrix, including gaps and risk-based coverage |
+| `security-privacy` | access protection, test data protection, isolation, damage prevention, confidentiality/integrity/availability evidence |
+| `defect-handling` | defect id, severity, retest, regression and the decision on a deviation |
+| `automation` | runner or procedure, seed, pipeline, flaky-test policy, retention and evidence of the run |
+| `review-criteria` | QA checklist, reviewer involvement, known gaps and the human approval process |
+| `references` | test guidelines, test concepts and validated source versions |
 
-## Muster eines vollständigen Prüffalls
+## Pattern: a complete test case
 
-| Attribut | Inhalt (fiktiv, kein ausgeführter Test) |
+| Attribute | Content (fictitious, not a run test) |
 |---|---|
-| Prüf-ID | TEST-004 |
-| Verknüpfte Anforderung | REQ-005 |
-| Zweck | Sicherstellen, dass eine wiederholte Anlage keine zweite Buchung auslöst |
-| Prüfobjekt | orders-api, festzulegender Build-Digest |
-| Testverfahren | API + Datenbankintegration |
-| Vorbedingung | Authentifizierter Testbenutzer; leere Auftragsmenge; neuer Key K |
-| Testdaten | Gültiger Auftrag O, identischer Key K für beide Aufrufe |
-| Schritt 1 | POST /orders mit O und K senden |
-| Erwartet nach Schritt 1 | Gültige Auftrags-ID A, genau eine persistierte Buchung |
-| Schritt 2 | Gleichen Request mit demselben Key K erneut senden |
-| Erwartet nach Schritt 2 | Logische Auftrags-ID bleibt A, weiterhin genau eine Buchung |
-| Bewertung | Bestanden nur wenn ID und DB-Zustand übereinstimmen |
-| Aufzeichnung | Ausführungs-ID, Timestamp, API/DB-Auszug ohne sensible Daten – in **separatem Prüfprotokoll** |
+| Test id | TEST-004 |
+| Linked requirement | REQ-005 |
+| Purpose | make sure a repeated creation causes no second booking |
+| Test object | orders-api, build digest to be defined |
+| Method | API and database integration |
+| Precondition | signed-in test user; no orders; a new key K |
+| Test data | a valid order O, the same key K for both calls |
+| Step 1 | send `POST /orders` with O and K |
+| Expected after step 1 | a valid order id A, exactly one stored booking |
+| Step 2 | send the same request with the same key K again |
+| Expected after step 2 | the logical order id is still A, still exactly one booking |
+| Verdict | passed only if the id and the database state match |
+| Record | run id, timestamp, API and database extract without sensitive data, in a **separate test log** |
 
-## Abdeckungsmatrix (Sollverknüpfung)
+## Coverage matrix (intended links)
 
-| REQ | TC | Prüfart | Status der Spezifikation | Status der Durchführung |
+| Requirement | Test case | Kind | Specification status | Run status |
 |---|---|---|---|---|
-| REQ-001 | TEST-001 | API/Integration | Entwurf | nicht ausgeführt |
-| REQ-002 | TEST-002 | Security/API | Entwurf | nicht ausgeführt |
-| REQ-003 | TEST-003 | Performance | Entwurf | nicht ausgeführt |
-| REQ-004 | TEST-002 | Security | Entwurf | nicht ausgeführt |
-| REQ-005 | TEST-004 | Integration | Entwurf | nicht ausgeführt |
+| REQ-001 | TEST-001 | API/integration | draft | not run |
+| REQ-002 | TEST-002 | security/API | draft | not run |
+| REQ-003 | TEST-003 | performance | draft | not run |
+| REQ-004 | TEST-002 | security | draft | not run |
+| REQ-005 | TEST-004 | integration | draft | not run |
 
-## Wichtige Trennung der Nachweise
+## Keep the evidence apart
 
-Die **Prüfspezifikation** definiert vorab Ziele, Bedingungen, Schritte und Bewertungskriterien. Die **Prüfprozedur** beschreibt die reproduzierbare Ausführung; das **Prüfprotokoll** dokumentiert die tatsächlich erzielten Ergebnisse für einen eindeutig identifizierten Build. Eine Zuordnung `REQ -> TEST` – auch eine von `docwizz trace` erfolgreiche – belegt **keine** erfolgreiche Testausführung.
+The **test specification** defines goals, conditions, steps and criteria in advance. The **test procedure** describes
+the reproducible execution; the **test log** records the results actually achieved for one identified build. A
+requirement → test link, even one `docwizz trace` reports as complete, is **no** evidence of a passed test.
 
-## Reviewfragen
+## Review questions
 
-- Eindeutiger Sollzustand und Entscheidung bei jeder Abweichung?
-- Reproduzierbare, datenschutzkonforme Testdaten und Testumgebung?
-- Vollständige Zuordnung der relevanten Anforderungen?
-- Risikobasierte negative und nichtfunktionale Fälle vorhanden?
-- Ist der Nachweis des Prüflaufs eindeutig vom Entwurf getrennt?
+- Is there a clear expected state, and a decision for every deviation?
+- Are test data and environment reproducible and privacy-compliant?
+- Are all relevant requirements covered?
+- Are risk-based negative and non-functional cases included?
+- Is the evidence of the test run clearly separated from the specification?
