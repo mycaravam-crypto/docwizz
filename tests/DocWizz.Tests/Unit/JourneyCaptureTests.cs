@@ -45,6 +45,7 @@ public class JourneyCaptureTests
     [InlineData("title: T\nsteps:\n  - open: /a\n  - click: Save\n    typo: x", "exactly one of open, click or fill")]
     [InlineData("title: T\nsteps:\n  - open: /a\n  - fill: Name", "fill needs it")]
     [InlineData("title: T\nsteps:\n  - open: /a\n  - click: Save\n    with: x", "'with' belongs to fill")]
+    [InlineData("title: T\nsteps:\n  - open: /a\n  -\n", "step 2 is empty")]
     [InlineData("title: T\nunknown: 1\nsteps:\n  - open: /a", "01 Sign in.yaml")]
     public void An_invalid_journey_file_names_its_problem(string yaml, string problem) =>
         Assert.Contains(problem, Assert.Throws<InvalidDataException>(() => Parse(yaml)).Message);

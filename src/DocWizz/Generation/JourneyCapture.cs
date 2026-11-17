@@ -49,6 +49,7 @@ static class JourneyCapture
         var steps = new List<Action>();
         foreach (var (step, number) in (source.Steps ?? []).Select((s, i) => (s, i + 1)))
         {
+            if (step is null) throw Invalid($"step {number} is empty");
             var kinds = step.Keys.Intersect(Kinds).ToList();
             if (kinds.Count != 1 || step.Keys.Except([.. Kinds, "with", "note"]).FirstOrDefault() is not null || string.IsNullOrWhiteSpace(step[kinds[0]]))
                 throw Invalid($"step {number} needs exactly one of open, click or fill, and otherwise only with and note");
