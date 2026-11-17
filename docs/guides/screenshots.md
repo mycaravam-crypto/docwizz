@@ -137,6 +137,7 @@ docwizz generate . --html --journeys journeys --base-url http://localhost:5173
   placeholder. `css=<selector>` addresses a control that has no usable name. `note` says what the reader sees and why.
 - **Order:** files run in file-name order in one browser session, so a sign-in journey signs the later ones in.
   `--storage-state` and `--screenshot-delay` work as for route screenshots.
+- **Values:** `${NAME}` types that environment variable into the page: use it only for the test account's credentials.
 - **Output:** `docs/user-guides/<file name>.md`, linked from its route and requirement page, and with `--html` all
   guides on one printable page, `docs/user-guides/manual.html`.
 - **Data:** values typed into visible fields appear in later pictures. Use a test account and synthetic data, and

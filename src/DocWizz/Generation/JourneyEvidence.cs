@@ -15,7 +15,7 @@ static class JourneyEvidence
         string Intro = "", string Result = "", string? ResultImage = null, string? JourneyFile = null);
 
     private static readonly Regex SafeId = new(@"^wi-[0-9]+-case-[0-9]+-[a-f0-9]{12}$", RegexOptions.CultureInvariant);
-    private static readonly Regex GeneratedImage = new(@"^wi-[0-9]+-case-[0-9]+-[a-f0-9]{12}-step-[0-9]{4}(-guide)?\.png$|^guide-[a-z0-9-]+-(step-[0-9]{2}|result)\.png$", RegexOptions.CultureInvariant);
+    private static readonly Regex GeneratedImage = new(@"^wi-[0-9]+-case-[0-9]+-[a-f0-9]{12}-step-[0-9]{4}(-guide)?\.png$|^guide-[a-z0-9-]+-(step-[0-9]+|result)\.png$", RegexOptions.CultureInvariant);
     private static readonly Regex GuideImage = new(@"^screenshots/step-[0-9]{4}-guide\.png$", RegexOptions.CultureInvariant);
     private static readonly Regex ImageName = new(@"^screenshots/step-[0-9]{4}\.png$", RegexOptions.CultureInvariant);
     private static readonly Regex Hash = new(@"^[a-f0-9]{64}$", RegexOptions.CultureInvariant);

@@ -24,8 +24,17 @@ static class JourneyCapture
 
     /// <summary>The journey files (*.yaml) of a directory, in file-name order: the order they are played in.</summary>
     /// <exception cref="InvalidDataException">A file is not a valid journey; the message names the file and the step.</exception>
-    public static IReadOnlyList<Journey> Load(string? directory) => directory is null || !Directory.Exists(directory) ? []
-        : [.. Directory.GetFiles(directory, "*.yaml").Order(StringComparer.Ordinal).Select(Parse)];
+    public static IReadOnlyList<Journey> Load(string? directory)
+    {
+        if (directory is null || !Directory.Exists(directory)) return [];
+        Journey[] journeys = [.. Directory.GetFiles(directory, "*.yaml").Order(StringComparer.Ordinal).Select(Parse)];
+        // The id names the guide's page and pictures: two files must not share one, nor take the index's or manual's.
+        if (journeys.GroupBy(j => j.Id).FirstOrDefault(g => g.Count() > 1) is { } same)
+            throw new InvalidDataException($"{string.Join(" and ", same.Select(j => j.File))} would write the same guide ({same.Key}): rename one");
+        if (journeys.FirstOrDefault(j => j.Id is "index" or "manual") is { } reserved)
+            throw new InvalidDataException($"{reserved.File}: '{reserved.Id}' is the name of a generated page: rename the file");
+        return journeys;
+    }
 
     public static Journey Parse(string file)
     {

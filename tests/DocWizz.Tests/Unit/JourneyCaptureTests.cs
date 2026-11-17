@@ -49,6 +49,15 @@ public class JourneyCaptureTests
     public void An_invalid_journey_file_names_its_problem(string yaml, string problem) =>
         Assert.Contains(problem, Assert.Throws<InvalidDataException>(() => Parse(yaml)).Message);
 
+    [Theory]
+    [InlineData("sign-in.yaml", "Sign_in.yaml", "would write the same guide (sign-in)")]
+    [InlineData("a.yaml", "index.yaml", "'index' is the name of a generated page")]
+    public void Journey_files_that_would_overwrite_a_page_are_rejected(string first, string second, string problem)
+    {
+        using var repo = new Sources((first, "title: A\nsteps:\n  - open: /a"), (second, "title: B\nsteps:\n  - open: /b"));
+        Assert.Contains(problem, Assert.Throws<InvalidDataException>(() => JourneyCapture.Load(repo.Root)).Message);
+    }
+
     [Fact]
     public void A_captured_guide_explains_before_during_and_after_and_names_its_journey_file()
     {
