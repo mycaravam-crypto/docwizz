@@ -1315,8 +1315,12 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
     {
         bar.Begin("user guides", journeyBaseUrl);
         guides = await JourneyCapture.Run(journeys, model, outDir, journeyBaseUrl, screenshotStorageState, screenshotDelayMs);
+        var flow = new FlowGraph(model);
+        guides = [.. guides.Select(g => g with { Code = GuideStaleness.Code(root, model, flow, g.Route) })];
         bar.Advance("user guides", Plural(guides.Count, "guide"));
     }
+    // Without --journeys the last capture stays: the application need not run for every generation.
+    else if (journeyDirectory is null) guides = JourneyCapture.Retained(outDir);
 
     // Requirement pages come from an imported index whenever there is one; --requirements only adds it to AI prompts.
     var pageRequirements = requirements ?? ImportedRequirements(root);
@@ -1327,7 +1331,7 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
         WriteHtml = html,
         RebuildHtml = rebuildHtml,
         Screenshots = screenshots,
-        Journeys = [.. guides, .. JourneyEvidence.Import(journeyDirectory, outDir, optional: guides.Count > 0)],
+        Journeys = guides = [.. guides, .. JourneyEvidence.Import(journeyDirectory, outDir, optional: guides.Count > 0)],
         Load = LoadAttached(root, model),
         AdoTests = GenerateEvidenceFeedback.ValidSnapshots(root),
         Requirements = pageRequirements,
@@ -1342,6 +1346,7 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
     // Fingerprint for `docwizz diff`: the model these docs were generated from.
     Directory.CreateDirectory(Path.Combine(outDir, ".docwizz"));
     WriteModel(model, Path.Combine(outDir, ".docwizz", "model.json"));
+    JourneyCapture.Save(outDir, guides);
     File.WriteAllText(Path.Combine(outDir, ".docwizz", "documentation.json"),
         JsonSerializer.Serialize(DocumentationJson(model, config, findings), JsonOptions()));
     bar.Advance("metadata");

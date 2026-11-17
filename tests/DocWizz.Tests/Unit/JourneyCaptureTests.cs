@@ -86,4 +86,48 @@ public class JourneyCaptureTests
         JourneyEvidence.CleanupImages(Path.Combine(repo.Root, "docs"), []);
         Assert.Equal(["team-photo.png"], Directory.GetFiles(Path.Combine(repo.Root, "docs/user-guides/images")).Select(Path.GetFileName));
     }
+
+    [Fact]
+    public void A_capture_is_kept_for_generations_without_the_running_application_while_its_pictures_exist()
+    {
+        using var repo = new Sources(("docs/.docwizz/x", ""), ("docs/user-guides/images/guide-sign-in-step-01.png", ""), ("docs/user-guides/images/guide-sign-in-result.png", ""));
+        var docs = Path.Combine(repo.Root, "docs");
+        var guide = new JourneyEvidence.Guide("sign-in", "Sign in", "/login", 7, 0, 0, 0, 0, "", [],
+            [new(1, "Open /login", "", "images/guide-sign-in-step-01.png", Note: "Why")], "Intro", "Done", "images/guide-sign-in-result.png", "01-sign-in.yaml", "2026-11-17", "abc");
+        var testwizz = guide with { Id = "wi-1-case-1-aaaaaaaaaaaa", JourneyFile = null };
+        JourneyCapture.Save(docs, [guide, testwizz]);
+
+        var kept = Assert.Single(JourneyCapture.Retained(docs));   // TestWizz guides come from their evidence, not from here
+        Assert.Equal((guide.Title, guide.WorkItem, guide.Captured, guide.Code, "Why"), (kept.Title, kept.WorkItem, kept.Captured, kept.Code, kept.Steps[0].Note));
+        Assert.Contains("from `01-sign-in.yaml` on 2026-11-17:", JourneyEvidence.Markdown(kept));
+
+        File.Delete(Path.Combine(docs, "user-guides/images/guide-sign-in-result.png"));
+        Assert.Empty(JourneyCapture.Retained(docs));
+        JourneyCapture.Save(docs, [testwizz]);
+        Assert.False(File.Exists(Path.Combine(docs, ".docwizz/guides.json")));
+    }
+
+    [Fact]
+    public void A_captured_guide_is_stale_once_the_code_behind_its_route_changes()
+    {
+        using var repo = new Sources(("src/Login.vue", "<template>\na</template>"), ("src/Other.vue", "x"));
+        var model = new CodeModel(null, [new("r", "route", "/login", "src/router.ts", 1, Route: "/login"), new("c", "component", "Login", "src/Login.vue", 1),
+            new("o", "component", "Other", "src/Other.vue", 1)], [new("r", "c", "routes-to")]);
+        var flow = new FlowGraph(model);
+        var guide = new JourneyEvidence.Guide("sign-in", "Sign in", "/login", 0, 0, 0, 0, 0, "", [], [], JourneyFile: "a.yaml", Captured: "2026-11-17",
+            Code: GuideStaleness.Code(repo.Root, model, flow, "/login"));
+        Assert.NotNull(guide.Code);
+        Assert.Null(GuideStaleness.Code(repo.Root, model, flow, "/unknown"));
+
+        File.WriteAllText(Path.Combine(repo.Root, "src/Other.vue"), "changed");   // not behind the route
+        File.WriteAllText(Path.Combine(repo.Root, "src/Login.vue"), "<template>\r\na</template>");   // other line endings only
+        Assert.False(GuideStaleness.CodeChanged(guide, repo.Root, model, flow));
+        Assert.Equal("", GuideStaleness.Section([guide], null, g => GuideStaleness.CodeChanged(g, repo.Root, model, flow)));
+
+        File.WriteAllText(Path.Combine(repo.Root, "src/Login.vue"), "<template>b</template>");
+        Assert.True(GuideStaleness.CodeChanged(guide, repo.Root, model, flow));
+        Assert.Contains("- [Sign in](sign-in.md): the code behind `/login` changed since the capture on 2026-11-17",
+            GuideStaleness.Section([guide], null, g => GuideStaleness.CodeChanged(g, repo.Root, model, flow)));
+        Assert.Contains("**Stale:** the code behind this route changed", JourneyEvidence.Markdown(guide, codeChanged: true));
+    }
 }
