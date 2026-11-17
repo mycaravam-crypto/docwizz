@@ -24,8 +24,9 @@ static class ProductSynthesis
         test results. No markdown, no ids in the text itself.
         """;
 
-    // Wording a draft must never contain: status, approval and conformity are human decisions (#93).
-    static readonly Regex Claims = new(@"\b(freigegeben|genehmigt|abgenommen|geprüft|vollständig|konform\w*|zertifiziert|approved|released|reviewed|complete|compliant|conform\w*|certified)\b|OFFEN|(?-i:\bOPEN\b)",
+    // Wording a draft must never contain: status, approval and conformity are human decisions (#93). The inline (?-i:)
+    // keeps the OPEN marker case-sensitive despite IgnoreCase, so a sentence may still say "open".
+    static readonly Regex Claims = new(@"\b(freigegeben|genehmigt|abgenommen|geprüft|vollständig|konform\w*|zertifiziert|approved|released|reviewed|complete|compliant|conform\w*|certified|OFFEN)\b|(?-i:\bOPEN\b)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     // Sections with evidence → validated sentences, from the cache and (with a provider) fresh calls. `tag` names the

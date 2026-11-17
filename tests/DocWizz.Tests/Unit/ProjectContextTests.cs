@@ -59,6 +59,7 @@ public class ProjectContextTests
     [InlineData("OPEN – needs a source and expert review.", false)]
     [InlineData("Still OFFEN.", false)]
     [InlineData("The service stays open during maintenance.", true)]
+    [InlineData("Der Dienst ist offenbar zustandslos.", true)]
     public void Statements_cannot_impersonate_the_open_marker(string text, bool accepted)
     {
         var yaml = ContextYaml.Replace("The scope is defined in the signed project charter.", text);

@@ -54,8 +54,9 @@ internal sealed record ProjectContext(IReadOnlyList<ProjectStatement> Statements
             if (!Slug.IsValid(section)) throw new ArgumentException($"{context}.section must be a lowercase slug");
             if (value.Contains('\n') || value.Contains('\r') || provenance.Contains('\n') || provenance.Contains('\r'))
                 throw new ArgumentException($"{context}: text and source must be single-line");
-            if (value.Contains("OFFEN", StringComparison.OrdinalIgnoreCase) || value.Contains("freigegeben", StringComparison.OrdinalIgnoreCase)
-                || System.Text.RegularExpressions.Regex.IsMatch(value, $@"\b{ProductDraft.Open}\b"))
+            // The open-section marker as a whole word: OPEN exactly (plain "open" is fine), or the earlier OFFEN in any case.
+            if (System.Text.RegularExpressions.Regex.IsMatch(value, $@"\b{ProductDraft.Open}\b|(?i:\bOFFEN\b)")
+                || value.Contains("freigegeben", StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException($"{context}.text must not impersonate status or approval");
             if (!provenance.StartsWith("docs/", StringComparison.Ordinal) || provenance.Contains("..", StringComparison.Ordinal)
                 || provenance.Contains(' ') || !provenance.EndsWith(".md", StringComparison.Ordinal))
