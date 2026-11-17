@@ -124,7 +124,7 @@ testwizz journey . --url http://127.0.0.1:5173/orders \
 docwizz generate . --html --journeys ../journey-evidence
 ```
 
-The new `--journeys` option accepts a single TestWizz evidence bundle directory or its parent containing multiple bundles. DocWizz accepts only `testwizz.ui-evidence/v1` manifests with passed per-step assertions, validates every PNG SHA-256 and restricts image paths before copying screenshots to `docs/user-guides/images/`. Guides appear under `docs/user-guides/`, are searchable, and are linked from matching route pages. If evidence is missing, altered or invalid, generation fails rather than claiming a verified guide.
+The new `--journeys` option accepts a single TestWizz evidence bundle directory or its parent containing multiple bundles. DocWizz accepts only `testwizz.ui-evidence/v1` manifests with passed per-step assertions, validates every PNG SHA-256 and restricts image paths before copying screenshots to `docs/user-guides/images/`. Each guide under `docs/user-guides/` lists its steps first and its evidence source below them. A guide links to its route and work-item page, and both link back; the quality page lists work items that sit behind a route but have no guide. With `--html`, `docs/user-guides/manual.html` holds every guide on one printable page for the application's users, without provenance or links into the code documentation. If evidence is missing, altered or invalid, generation fails rather than claiming a verified guide.
 
 ### Multiple numbered callouts
 

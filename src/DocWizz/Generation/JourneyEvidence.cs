@@ -224,57 +224,39 @@ static class JourneyEvidence
         return text;
     }
 
-    private static string Escape(string value) => value.Replace("\\", "\\\\").Replace("<", "&lt;")
+    internal static string Escape(string value) => value.Replace("\\", "\\\\").Replace("<", "&lt;")
         .Replace(">", "&gt;").Replace("[", "\\[").Replace("]", "\\]")
         .Replace("*", "\\*").Replace("_", "\\_")
         .Replace("\r", " ").Replace("\n", " ");
 
-    public static string Index(IReadOnlyList<Guide> guides) =>
-        "# User guides (review required)\n\nScreenshot-backed drafts from TestWizz evidence. Passing visibility assertions are not acceptance verification.\n\n" +
-        string.Join("\n", guides.Select(g => "- [" + Escape(g.Title) + "](" + g.Id + ".md) — WI-" +
-            g.WorkItem + ", ADO case #" + g.TestCase)) + "\n";
+    public static string Index(IReadOnlyList<Guide> guides, bool manual = false) =>
+        "# User guides\n\nStep by step, with screenshots. Drafts: review each before publishing.\n\n" +
+        (manual ? "[All guides on one page, for readers and print](manual.html)\n\n" : "") +
+        string.Join("\n", guides.Select(g => "- [" + Escape(g.Title) + "](" + g.Id + ".md)")) + "\n";
 
-    public static string Markdown(Guide guide)
-    {
-        var lines = new List<string> {
-            "# " + Escape(guide.Title), "",
-            "**Draft — human review required.** Screenshots were captured after Playwright visibility assertions; " +
-                "they do not establish full acceptance or usability.", "",
-            $"ADO project: {Escape(guide.Project)} · Work item #{guide.WorkItem} (revision {guide.WorkItemRevision}) · " +
-                $"Test case #{guide.TestCase} (revision {guide.TestCaseRevision}) · Plan #{guide.Plan}.", "",
-            "Requirement-to-test-case relation: **selected, not independently verified**.", "",
-            "Route: " + Escape(guide.Route), "",
-            "## Acceptance criteria (not individually verified)", "",
-        };
-        lines.AddRange(guide.Criteria.Select((c, i) => $"- AC{i + 1}: {Escape(c)}"));
-        lines.Add("");
-        lines.Add("## Instructions");
-        lines.Add("");
-        foreach (var (step, index) in guide.Steps.Select((step, index) => (step, index)))
-        {
-            lines.Add($"### Step {index + 1}");
-            lines.Add("");
-            lines.Add(Escape(step.Action) + $" (ADO test step #{step.Id})");
-            lines.Add("");
-            if (!string.IsNullOrWhiteSpace(step.Expected))
-            {
-                lines.Add("Expected result: " + Escape(step.Expected));
-                lines.Add("");
-            }
-            lines.Add(step.Callouts is { Count: > 0 }
-                ? $"![Controls numbered for instruction {index + 1}]({step.Image})"
-                : $"![Observed UI after step {step.Id}]({step.Image})");
-            lines.Add("");
-            if (step.Callouts is { Count: > 0 })
-            {
-                lines.Add("Numbered controls visible in this screenshot:");
-                lines.AddRange(step.Callouts.Select(c =>
-                    $"- **{c.Number}** — {Escape(c.Target)}" +
-                    (c.Number == index + 1 ? " (current instruction)" :
-                     c.Number < index + 1 ? " (previous instruction)" : " (upcoming instruction)")));
-                lines.Add("");
-            }
-        }
-        return string.Join("\n", lines) + "\n";
-    }
+    /// <summary>Every guide's instructions on one page, without provenance or links into the technical docs.</summary>
+    public static string Manual(IReadOnlyList<Guide> guides) =>
+        "# User manual\n\n" + string.Join("\n", guides.Select(g => "## " + Escape(g.Title) + "\n\n" + Steps(g)));
+
+    /// <summary>Instructions first; where the evidence comes from and what it does not prove stays below them.</summary>
+    /// <param name="routePage">The route's page, relative to the docs root; null when the route is not in the model.</param>
+    /// <param name="requirementPage">The work item's page, relative to the docs root; null when it was not imported.</param>
+    public static string Markdown(Guide guide, string? routePage = null, string? requirementPage = null) =>
+        "# " + Escape(guide.Title) + "\n\n" +
+        (routePage is null ? "`" + guide.Route.Replace("`", "") + "`" : $"[`{guide.Route.Replace("`", "")}`](../{routePage})") + " · " +
+        (requirementPage is null ? $"WI-{guide.WorkItem}" : $"[WI-{guide.WorkItem}](../{requirementPage})") + "\n\n" +
+        Steps(guide) +
+        "\n## Source\n\n**Draft — human review required.** From TestWizz evidence: ADO project " + Escape(guide.Project) +
+        $", work item #{guide.WorkItem} (revision {guide.WorkItemRevision}), test case #{guide.TestCase} (revision {guide.TestCaseRevision}, " +
+        "steps " + string.Join(", ", guide.Steps.Select(s => "#" + s.Id)) + $"), plan #{guide.Plan}. " +
+        "The work-item/test-case relation is selected, not independently verified. " +
+        "The screenshots show that the controls were visible; they do not verify these acceptance criteria:\n\n" +
+        string.Join("\n", guide.Criteria.Select((c, i) => $"- AC{i + 1}: {Escape(c)}")) + "\n";
+
+    // A numbered list: what to do, what happens, and the picture. A marker's number is its step's number, so only the
+    // current step's target is named.
+    private static string Steps(Guide guide) => string.Concat(guide.Steps.Select((step, index) =>
+        $"{index + 1}. **{Escape(step.Action)}**" + (step.Expected.Length > 0 ? " → " + Escape(step.Expected) : "") + "\n\n" +
+        $"   ![Step {index + 1}]({step.Image})\n" +
+        (step.Callouts?.FirstOrDefault(c => c.Number == index + 1) is { } marker ? $"\n   Marker **{marker.Number}**: {Escape(marker.Target)}\n" : "")));
 }

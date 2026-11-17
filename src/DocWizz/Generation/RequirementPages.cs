@@ -113,6 +113,8 @@ partial class Generator
         sb.AppendLine("## Routes\n");
         sb.AppendLine(routes.Count == 0 ? "None linked.\n" : string.Join("\n", routes.Select(r => $"- [`{r}`](../{RoutePage(r)})")) + "\n");
 
+        if (!id.IsGithub) sb.Append(GuideLinks(g => g.WorkItem == id.Number, "../"));
+
         sb.AppendLine("## Code\n");
         if (links.Count == 0) sb.AppendLine("None linked in the current code.\n");
         else
@@ -133,6 +135,18 @@ partial class Generator
             sb.AppendLine("\n## Pull requests\n\n" + string.Join("\n", prs.Select(p => $"- #{p}" + (titles.GetValueOrDefault(p) is { } t ? $" {Untrusted(t)}" : ""))) + "\n");
         return sb.ToString();
     }
+
+    // The guides of a route or work item, as a section of its page; nothing without one.
+    string GuideLinks(Func<JourneyEvidence.Guide, bool> of, string up) => Journeys.Where(of).ToList() is { Count: > 0 } guides
+        ? "## User guides\n\n" + string.Join("\n", guides.Select(g => $"- [{JourneyEvidence.Escape(g.Title)}]({up}user-guides/{g.Id}.md)")) + "\n\n" : "";
+    string GuideLinks(int workItem, string up) => GuideLinks(g => g.WorkItem == workItem, up);
+
+    // The page of a guide's work item: the area catalog's, else the imported history's; null when neither has it.
+    string? GuideRequirementPage(JourneyEvidence.Guide guide) =>
+        Catalog is { } catalog && catalog.GetProperty("items").EnumerateArray().Any(i => i.GetProperty("id").GetInt32() == guide.WorkItem)
+            ? $"requirements/items/{guide.WorkItem}.md"
+        : Requirements is { } index && (index.WorkItems.Any(w => w.Id == guide.WorkItem) || RequirementLinks().Any(l => l.Requirement.Id == guide.WorkItem))
+            ? RequirementPage(guide.WorkItem) : null;
 
     // The work items a top-level component (or a member) is linked to, for its module page.
     string? WorkItemBacklinks(Node t)
