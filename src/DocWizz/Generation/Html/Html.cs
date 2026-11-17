@@ -206,7 +206,7 @@ static class Html
             <title>User manual</title>
             <style>
             :root { color-scheme: light dark; }
-            body { font: 1rem/1.6 system-ui, sans-serif; max-width: 52rem; margin: 0 auto; padding: 1.5rem; }
+            body { font: 1rem/1.6 system-ui, sans-serif; max-width: 64rem; margin: 0 auto; padding: 1.5rem; }
             h2 { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent); }
             li { margin-bottom: 1.5rem; }
             img { max-width: 100%; height: auto; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 6px; }

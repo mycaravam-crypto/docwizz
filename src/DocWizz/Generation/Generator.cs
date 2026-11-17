@@ -128,7 +128,7 @@ partial class Generator(string root, string outDir, CodeModel model, List<Docume
             Entry(Naming.EndpointLabel(n), "endpoint", "api.md", WrittenSummary(n));
         foreach (var n in model.Nodes.Where(n => n.Kind == "route")) Entry(RoutePath(n), "route", RoutePage(RoutePath(n)), null);
         foreach (var guide in Journeys)
-            Entry(guide.Title, "user guide", $"user-guides/{guide.Id}.md", $"{guide.Route}, WI-{guide.WorkItem}; draft");
+            Entry(guide.Title, "user guide", $"user-guides/{guide.Id}.md", guide.Route + (guide.WorkItem == 0 ? "" : $", WI-{guide.WorkItem}") + "; draft");
         if (hierarchy is not null)
         {
             foreach (var solution in hierarchy.Solutions)

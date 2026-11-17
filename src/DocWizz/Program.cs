@@ -7,9 +7,10 @@ using System.Text.Json.Serialization;
 // An exception that escapes a command is a bug or an environment problem (disk, permissions), never a finding: one
 // line and exit 2, so CI can tell "docwizz broke" from "the gate failed" (1). DOCWIZZ_DEBUG=1 lets it through with the trace.
 try { return await Dispatch(args); }
-catch (ScopeException e)
+catch (Exception e) when (e is ScopeException or InvalidDataException)
 {
-    Console.Error.WriteLine(e.Message);
+    // Invalid journey files or evidence, or a control the application does not show: the user's to fix, like a bad scope.
+    Console.Error.WriteLine(e is InvalidDataException ? "docwizz: " + e.Message : e.Message);
     return 1;
 }
 catch (Exception e) when (Environment.GetEnvironmentVariable("DOCWIZZ_DEBUG") is not { Length: > 0 })
@@ -251,7 +252,7 @@ static async Task<int> Dispatch(string[] args)
             }
             var requirements = opts.ContainsKey("requirements") ? LoadRequirements(path) : null;
             if (opts.ContainsKey("requirements") && requirements is null) return 1;
-            var report = await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"), refreshHtmlOnVersionChange: opts.ContainsKey("refresh-html-on-version-change"), progress: opts.ContainsKey("progress"), screenshotBaseUrl: opts.GetValueOrDefault("base-url"), screenshotStorageState: stateFile, screenshotDelayMs: int.Parse(opts.GetValueOrDefault("screenshot-delay") ?? "0"), requirements: requirements, aiRatings: opts.ContainsKey("ai-ratings"), journeyDirectory: opts.GetValueOrDefault("journeys"));
+            var report = await Generate(path, pos.ElementAtOrDefault(2) ?? Path.Combine(path, "docs"), config, opts.ContainsKey("ai"), opts.ContainsKey("html") || opts.ContainsKey("refresh-html-on-version-change"), refreshHtmlOnVersionChange: opts.ContainsKey("refresh-html-on-version-change"), progress: opts.ContainsKey("progress"), screenshotBaseUrl: opts.ContainsKey("screenshots") ? opts["base-url"] : null, journeyBaseUrl: opts.GetValueOrDefault("base-url"), screenshotStorageState: stateFile, screenshotDelayMs: int.Parse(opts.GetValueOrDefault("screenshot-delay") ?? "0"), requirements: requirements, aiRatings: opts.ContainsKey("ai-ratings"), journeyDirectory: opts.GetValueOrDefault("journeys"));
             // The first line stays the stable one-line result scripts match; the report follows it.
             Console.WriteLine(report.Line);
             Console.WriteLine();
@@ -991,7 +992,7 @@ static string Reference() => $"""
         [--screenshots --base-url <url>]  capture static routes from a running frontend (Playwright)
         [--storage-state <file>]        reuse a saved Playwright login session (generate screenshots only)
         [--screenshot-delay <ms>]       extra wait before each capture, for slow pages (screenshots only)
-        [--journeys <dir>]              render validated TestWizz screenshot evidence as review-required user guides
+        [--journeys <dir>]              user guides: journey files (*.yaml, captured with --base-url) and TestWizz evidence
         [--refresh-html-on-version-change]  rewrite HTML when the docwizz version changes
         [--progress]                    print progress to stderr (including redirected output)
         [--ai]                          draft missing summaries with a self-hosted model (Ollama or OpenAI-compatible)
@@ -1231,8 +1232,12 @@ static object DocumentationJson(CodeModel model, Config config, List<Documentati
 
 // Writes the docs; returns the one-line result (setup shows it as the stage detail) and the full report `generate`
 // prints below it.
-static async Task<GenerateReport> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null, bool refreshHtmlOnVersionChange = false, bool progress = false, string? screenshotBaseUrl = null, string? screenshotStorageState = null, int screenshotDelayMs = 0, RequirementIndex.Index? requirements = null, bool aiRatings = false, string? journeyDirectory = null)
+static async Task<GenerateReport> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null, bool refreshHtmlOnVersionChange = false, bool progress = false, string? screenshotBaseUrl = null, string? screenshotStorageState = null, int screenshotDelayMs = 0, RequirementIndex.Index? requirements = null, bool aiRatings = false, string? journeyDirectory = null, string? journeyBaseUrl = null)
 {
+    // Read first: a broken journey file should not cost a scan.
+    var journeys = JourneyCapture.Load(journeyDirectory);
+    if (journeys.Count > 0 && journeyBaseUrl is null)
+        throw new InvalidDataException($"{journeys[0].File} is a journey file: add --base-url <url> of the running application to capture it");
     // Weights: each stage's usual share of the wall time (bench/baseline.json); the scan dominates, AI calls when on.
     List<CliProgress.Stage> stages =
     [
@@ -1243,6 +1248,7 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
         new("AI assessments", aiRatings ? 20 : 1, "AI assessments"),
     ];
     if (screenshotBaseUrl is not null) stages.Add(new("screenshots", 15, "Screenshots"));
+    if (journeys.Count > 0) stages.Add(new("user guides", 15, "User guides"));
     stages.AddRange([new("write pages", 12, "Writing pages"), new("metadata", 2, "Metadata")]);
     using var bar = CliProgress.ForConsole(stages, progress);
 
@@ -1303,6 +1309,15 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
     }
     else screenshots = ScreenshotCapture.Existing(model, outDir);
 
+    // Journey files are played against the running application; TestWizz bundles in the same directory are imported as they are.
+    IReadOnlyList<JourneyEvidence.Guide> guides = [];
+    if (journeys.Count > 0 && journeyBaseUrl is not null)
+    {
+        bar.Begin("user guides", journeyBaseUrl);
+        guides = await JourneyCapture.Run(journeys, model, outDir, journeyBaseUrl, screenshotStorageState, screenshotDelayMs);
+        bar.Advance("user guides", Plural(guides.Count, "guide"));
+    }
+
     // Requirement pages come from an imported index whenever there is one; --requirements only adds it to AI prompts.
     var pageRequirements = requirements ?? ImportedRequirements(root);
     bar.Begin("write pages", html ? "Markdown and HTML" : "Markdown");
@@ -1312,7 +1327,7 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
         WriteHtml = html,
         RebuildHtml = rebuildHtml,
         Screenshots = screenshots,
-        Journeys = JourneyEvidence.Import(journeyDirectory, outDir),
+        Journeys = [.. guides, .. JourneyEvidence.Import(journeyDirectory, outDir, optional: guides.Count > 0)],
         Load = LoadAttached(root, model),
         AdoTests = GenerateEvidenceFeedback.ValidSnapshots(root),
         Requirements = pageRequirements,

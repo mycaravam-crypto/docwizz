@@ -131,7 +131,7 @@ static class ScreenshotCapture
 
     // Lets the SPA finish auth checks, guards and data loading: network idle (bounded, as polling apps never go idle),
     // then a short pause plus any extra delay the user asked for.
-    static async Task Settle(IPage page, int delayMs)
+    internal static async Task Settle(IPage page, int delayMs)
     {
         try { await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = 5000 }); }
         catch (PlaywrightException) { }
