@@ -602,6 +602,9 @@ dotnet test --project tests/DocWizz.Tests   # unit, component and journey tests 
 ./test.sh                                   # end-to-end tests against fixture/
 ```
 
+Journey tests start the CLI as a process for each step; `DOCWIZZ_DLL=$(scripts/build-test-cli.sh) dotnet test …` runs them
+against a ReadyToRun build, as CI does, in about half the time.
+
 - How it works: [Architecture](docs/internals/architecture.md) · what's next: [GitHub Issues](https://github.com/mycaravam-crypto/docwizz/issues)
 - Benchmarks and advice for large repositories: [bench/](bench/README.md)
 - Every merge to `main` is released automatically; label a PR `release:minor` or `release:major` for bigger bumps

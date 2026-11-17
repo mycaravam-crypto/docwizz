@@ -63,7 +63,7 @@ public class McpJourneyTests
 
         public Server(string dir, params string[] options)
         {
-            var psi = new ProcessStartInfo(Docwizz.Dotnet, [typeof(Cli).Assembly.Location, "mcp", dir, .. options])
+            var psi = new ProcessStartInfo(Docwizz.Dotnet, [Docwizz.Dll, "mcp", dir, .. options])
             {
                 WorkingDirectory = dir, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
             };

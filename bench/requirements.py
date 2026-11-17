@@ -27,6 +27,7 @@ Nothing is sent anywhere but the endpoint you name (which DocWizz itself restric
 the proxy records every host a request went to.
 """
 import argparse
+import concurrent.futures
 import hashlib
 import http.client
 import http.server
@@ -62,6 +63,13 @@ def sh(cmd, cwd, env=None, check=True):
     return p
 
 
+def pmap(f, items):
+    """`map` across a thread per core, results in input order. Each docwizz call is its own process and the read-only
+    ones (show, discover) share nothing, so the benchmarks run them at once rather than one after another."""
+    with concurrent.futures.ThreadPoolExecutor(os.cpu_count() or 4) as pool:
+        return list(pool.map(f, items))
+
+
 def build(dll):
     if dll:
         return dll
@@ -89,21 +97,21 @@ def links(dll, repo, history, items, gold):
     dw("requirements", "import", ".", history, items)
     reproducible = first == open(index, "rb").read()
 
+    show = lambda *a: json.loads(dw("requirements", "show", ".", *a, "--format", "json").stdout)
+    answers = pmap(lambda target: show("--for", target), [*gold["methods"], *gold["historical"]])
     rows, predicted, true = [], set(), set()
-    for name, g in gold["methods"].items():
-        answer = json.loads(dw("requirements", "show", ".", "--for", name, "--format", "json").stdout)
+    for (name, g), answer in zip(gold["methods"].items(), answers):
         got = {(r["id"], r["status"]) for r in answer["requirements"]}
         predicted |= {(name, i, s) for i, s in got}
         true |= {(name, l["id"], l["status"]) for l in g["links"]}
         rows.append({"method": name, "outcome": answer["outcome"], "expected": g["outcome"], "got": sorted(got),
                      "gold": sorted((l["id"], l["status"]) for l in g["links"])})
-    for sid, g in gold["historical"].items():
-        answer = json.loads(dw("requirements", "show", ".", "--for", sid, "--format", "json").stdout)
+    for (sid, g), answer in zip(gold["historical"].items(), answers[len(gold["methods"]):]):
         rows.append({"method": sid, "outcome": answer["outcome"], "expected": g["outcome"],
                      "got": sorted((r["id"], r["status"]) for r in answer["requirements"]),
                      "gold": sorted((l["id"], l["status"]) for l in g["links"])})
-    file_level = [wi for wi in gold["fileLevelOnly"]
-                  if json.loads(dw("requirements", "show", ".", "--work-item", str(wi), "--format", "json").stdout)["symbols"]]
+    file_level = [wi for wi, answer in zip(gold["fileLevelOnly"], pmap(lambda wi: show("--work-item", str(wi)), gold["fileLevelOnly"]))
+                  if answer["symbols"]]
 
     pairs = lambda s: {(m, i) for m, i, _ in s}
     tp = pairs(predicted) & pairs(true)

@@ -17,9 +17,14 @@ section() {
   section_name=$1; section_start=$now
 }
 # Build once and run the built DLL: `dotnet run` re-evaluates and up-to-date-checks the project on every call, which
-# adds up across this script's ~70 calls. The DLL stays in the repository's bin/, where docwizz finds scanner-vue.
-dotnet build "$root/src/DocWizz" --nologo -v q
-dll=$(dotnet msbuild "$root/src/DocWizz" -getProperty:TargetPath)
+# adds up across this script's hundreds of calls. ReadyToRun (precompiled, Roslyn included) roughly halves what each call
+# spends in the JIT; DOCWIZZ_DLL reuses a DLL built earlier (CI builds it once per job). The output stays in the
+# repository's bin/, where docwizz finds scanner-vue.
+dll=${DOCWIZZ_DLL:-}
+if [ -z "$dll" ]; then
+  bash "$root/scripts/build-test-cli.sh" >/dev/null
+  dll=$root/src/DocWizz/bin/test-cli/DocWizz.dll
+fi
 dw() { dotnet "$dll" "$@"; }
 section ""
 
@@ -467,6 +472,10 @@ assert "<summary>Stacked notifications in the corner of the page.</summary>" in 
 PY
 rm -rf "$plain"
 
+# Requirement context (#166-#168): the scripted history in bench/requirements_fixture.py against the hand-written
+# gold, and --requirements drafting against a fake model on loopback (cache, hosts, injection, citations).
+section "requirement context benchmark"
+python3 "$root/bench/requirements.py" --dll "$dll" --model fake --modes B --expect >/dev/null
 }
 
 group_b() {
@@ -651,6 +660,9 @@ set +e; bad=$(dw architecture "$repo" 2>&1); code=$?; set -e
 [ "$code" -eq 1 ] && grep -q "architecture.rules\[0\] (ARCH-DOMAIN-001): unknown layer 'core'" <<<"$bad" || { echo "$bad"; exit 1; }
 rm -rf "$repo"
 
+# Domain explanation (#288): a scripted model's supported and unsupported statements against the evidence package.
+section "domain explanation benchmark"
+python3 "$root/bench/domain_explain.py" --dll "$dll" --expect >/dev/null
 }
 
 group_c() {
@@ -760,19 +772,9 @@ assert "cs:Fixture.Application.IMaterialService.GetAsync(int)" in i["sections"][
 PY
 rm -rf "$docs"
 
-# Requirement context (#166-#168): the scripted history in bench/requirements_fixture.py against the hand-written
-# gold, and --requirements drafting against a fake model on loopback (cache, hosts, injection, citations).
-section "requirement context benchmark"
-python3 "$root/bench/requirements.py" --dll "$dll" --model fake --modes B --expect >/dev/null
-
 # Domain discovery (#188): hand-labelled reach/avoid cases over the same history plus an API layer.
 section "domain discovery benchmark"
 python3 "$root/bench/domain.py" --dll "$dll" --expect >/dev/null
-
-# Domain explanation (#288): a scripted model's supported and unsupported statements against the evidence package.
-section "domain explanation benchmark"
-python3 "$root/bench/domain_explain.py" --dll "$dll" --expect >/dev/null
-
 }
 
 group_d() {
@@ -1027,8 +1029,7 @@ if grep -q "Ih.Clock.ToString()\|Ih.Clock.Elapsed()" <<<"$inh"; then echo "inher
 grep -q "^Doc quality    .* 50%  (4 with written docs)" <<<"$inh"
 rm -rf "$ih"
 
-# setup: first run detects the stack and writes docwizz.yaml from evidence; a re-run keeps it; --force regenerates
-# the same file (deterministic); a broken config fails its stage and the rest are skipped, not hidden.
+# setup on the full fixture: detects the mixed stack and writes docwizz.yaml from evidence (layers, test globs).
 section "setup"
 app=$(mktemp -d); cp -r "$root/fixture/." "$app"
 first=$(dw setup "$app" 2>/dev/null)
@@ -1040,18 +1041,8 @@ grep -q "^  docwizz check $app " <<<"$first"
 grep -q '^    api: .*# inferred: 3 files' "$app/docwizz.yaml"
 grep -q '^tests: \["\*.Tests/\*", "\*/__tests__/\*", "\*.test.ts", "\*/src/test/\*"\]' "$app/docwizz.yaml"
 test -f "$app/docs/README.md" && test -f "$app/docs/.docwizz/model.json"
-cp "$app/docwizz.yaml" "$app/first.yaml"
-grep -q "config       ok       kept" <<<"$(dw setup "$app" 2>/dev/null)"
-cmp -s "$app/docwizz.yaml" "$app/first.yaml"
-grep -q "config       ok       unchanged" <<<"$(dw setup "$app" --force 2>/dev/null)"
-printf 'check: [oops\n' > "$app/docwizz.yaml"
-set +e; broken=$(dw setup "$app" 2>/dev/null); code=$?; set -e
-[ "$code" = 1 ] && grep -q "^Status:         FAILED" <<<"$broken" && grep -q "\[1/7\] discover     failed" <<<"$broken" && grep -q "\[7/7\] check        skipped  needs discover" <<<"$broken" \
-  && grep -q "docwizz setup $app --force" <<<"$broken" || { echo "$broken"; exit 1; }
+# Re-runs, --force, a broken config and the bare-command usage are journey tests (SetupJourneyTests, CliContractTests).
 rm -rf "$app"
-set +e; none=$(dw 2>&1); code=$?; set -e
-[ "$code" = 1 ] && grep -q "docwizz setup \." <<<"$none"
-grep -q "^docwizz setup \[dir\]" <<<"$(dw setup --help)"
 
 # A console app with no layers or endpoints: no empty diagrams or tables, not called a web host
 section "console app"
