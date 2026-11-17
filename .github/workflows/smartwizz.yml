@@ -13,9 +13,9 @@ jobs:
     permissions:
       contents: read
       pull-requests: write # one review with inline comments; never approves or requests changes
-    uses: mycaravam-crypto/smartwizz/.github/workflows/review.yml@214540db146f3d53cbaa1f543518089a16cd44cb # main 2026-10-18
+    uses: mycaravam-crypto/smartwizz/.github/workflows/review.yml@67bbe6de0fb5a90df1589bd6d2acea97c9da2969 # main 2026-11-10
     with:
       fail-on: high
-      smartwizz-ref: 214540db146f3d53cbaa1f543518089a16cd44cb
+      smartwizz-ref: 67bbe6de0fb5a90df1589bd6d2acea97c9da2969
     secrets:
       SMARTWIZZ_API_KEY: ${{ secrets.SMARTWIZZ_API_KEY }}
