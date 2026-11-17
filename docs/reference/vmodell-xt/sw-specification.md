@@ -1,55 +1,61 @@
-# SW-Spezifikation – Ausfüll- und Reviewhilfe
+# Software specification: filling and review guide
 
-**Unabhängige Arbeitshilfe; nicht automatisch von DocWizz gerendert.** Die Abschnitts-IDs entsprechen `sw-specification.yaml`.
+[V-Modell XT templates](../../guides/vmodell-xt-templates.md)
 
-## Sollinhalte pro Kapitel
+A working aid for [sw-specification.yaml](../../../templates/vmodell-xt/sw-specification.yaml); docwizz doesn't render
+it. The section ids are the template's.
 
-| YAML-Abschnitt | Mindestinhalt / konkrete Qualitätssicherung |
+## Expected content per section
+
+| Section | Minimum content / quality assurance |
 |---|---|
-| `document-control` | Dokument-ID, SW-Element-ID, Elementebene, Referenz- und Versionsbaseline, Reviewverweise |
-| `element-overview` | Funktion, fachliche Verantwortung, Umgebung, Interaktion mit anderen SW-Elementen |
-| `scope` | Scope, Nutzer, Ausschlüsse, Annahmen, verfeinernde System-/SW-Spezifikation |
-| `derived-requirements` | Eindeutige, atomare IDs mit Eltern-IDs, Priorität, Quelle und Änderungsstand |
-| `functional-requirements` | Verbindliche Verhaltensaussage je ID, Eingabe, Vor-/Nachbedingung, Domänenregel, Negativfall |
-| `interfaces` | API/Port-ID, Operation, Eingabe- und Ausgabeformat, Schema, AuthZ, Fehlerstatus, Versionierung |
-| `behaviour` | Zustands- und Sequenzszenarien, Reihenfolge, Timeout, Nebenläufigkeit und Konsistenz |
-| `data-contracts` | DTO-/Schema-Definition, Feldtyp, Wertebereich, Eindeutigkeit, Invarianten, Lebensdauer |
-| `nonfunctional-requirements` | Qualitätsziele nach ISO/IEC 25010 als Messgrößen; keine reinen Schlagworte |
-| `security-privacy` | CIA-Ziele, Zugriffsmatrix, Schutzbedarf, Datenminimierung und Testkriterien |
-| `interface-realization` | Zuordnung spezifizierter Dienste zu untergeordneten SW-Elementen |
-| `quality-refinement` | Zerlegung von System-QoS in messbare Komponentenbudgets und Messregeln |
-| `error-semantics` | Statuscodes, Ausnahmen, Retry-/Kompensationsregeln, sichere Fehlermeldungen |
-| `acceptance-criteria` | Explizite messbare Schwellenwerte oder objektive Zustandsprüfungen je REQ |
-| `traceability` | Übergeordnete REQ <-> verfeinerte REQ <-> SW-Element <-> Prüffall |
-| `constraints` | Architekturregeln, Regulatorik, freigegebene Laufzeiten, Schnittstellenstandards |
-| `glossary` | Terminologie und versionierte Quelle |
+| `document-control` | document id, software element id, element level, reference and version baseline, review references |
+| `element-overview` | function, business responsibility, environment, interaction with other software elements |
+| `scope` | scope, users, exclusions, assumptions, the system or software specification it refines |
+| `derived-requirements` | unique, atomic ids with parent ids, priority, source and change state |
+| `functional-requirements` | one binding behaviour statement per id, input, pre- and postconditions, domain rule, negative case |
+| `interfaces` | API or port id, operation, input and output format, schema, authorization, error status, versioning |
+| `behaviour` | state and sequence scenarios, ordering, timeouts, concurrency and consistency |
+| `data-contracts` | DTO or schema definition, field type, value range, uniqueness, invariants, lifetime |
+| `nonfunctional-requirements` | quality goals per ISO/IEC 25010 as measures, not keywords |
+| `security-privacy` | confidentiality, integrity and availability goals, access matrix, protection needs, data minimization, test criteria |
+| `interface-realization` | which subordinate software elements provide the specified services |
+| `quality-refinement` | system quality-of-service goals broken down into measurable component budgets and measurement rules |
+| `error-semantics` | status codes, exceptions, retry and compensation rules, safe error messages |
+| `acceptance-criteria` | explicit measurable thresholds or objective state checks per requirement |
+| `traceability` | parent requirement ↔ refined requirement ↔ software element ↔ test case |
+| `constraints` | architecture rules, regulation, approved runtimes, interface standards |
+| `glossary` | terms and their versioned source |
 
-## Muster einer atomaren Anforderung
+## Pattern: an atomic requirement
 
-| Feld | Beispiel (fiktiv) |
+| Field | Example (fictitious) |
 |---|---|
-| Anforderungs-ID | REQ-005 |
-| Ursprung | Fachlicher Integritätsbedarf |
-| Sollverhalten | Das System muss gleiche Auftragsanlagen desselben Benutzers mit identischem Idempotency-Key als einen logischen Vorgang behandeln. |
-| Vorbedingungen | Authentifizierter Benutzer, gültige Auftragseingabe, noch nicht genutzter Key |
-| Trigger | Zweiter POST /orders mit identischem Key und Inhalt |
-| Erwarteter Zustand | Exakt ein Auftrag gespeichert, dieselbe logische Auftrags-ID wie beim ersten Aufruf |
-| Fehlerfall | Gleicher Key mit abweichendem Inhalt wird mit festzulegendem Konfliktstatus abgewiesen |
-| Verifikation | TEST-004 mit DB-Prüfung |
+| Requirement id | REQ-005 |
+| Origin | business integrity need |
+| Required behaviour | The system must treat identical order creations by the same user with the same idempotency key as one logical operation. |
+| Preconditions | signed-in user, valid order input, unused key |
+| Trigger | a second `POST /orders` with the same key and content |
+| Expected state | exactly one stored order, with the same logical order id as the first call |
+| Error case | the same key with different content is rejected with a conflict status still to be defined |
+| Verification | TEST-004 with a database check |
 
-## Muster einer überprüfbaren Qualitätsanforderung
+## Pattern: a verifiable quality requirement
 
-**Nicht ausreichend:** „Die Anwendung muss performant, wartbar und sicher sein.“
+**Not enough:** "The application must be fast, maintainable and secure."
 
-**Überprüfbar:** „Bei einer festgelegten Datenmenge und 50 parallelen virtuellen Benutzern muss `POST /orders` während eines 10-minütigen stabilen Lastfensters für mindestens 95 % der erfolgreich beantworteten Anfragen eine Antwortzeit von höchstens 400 ms erreichen.“ Ergänzend muss die erlaubte Fehlerrate und die Behandlung fehlgeschlagener Antworten definiert werden.
+**Verifiable:** "With a defined data volume and 50 concurrent virtual users, `POST /orders` must answer at least 95 % of
+successful requests within 400 ms during a stable 10-minute load window." Also define the allowed error rate and how
+failed responses are counted.
 
-Bei Anforderungen nach ISO/IEC 25010 ist die jeweils anzuwendende Ausgabe zu prüfen; bei Anwendung von ISO/IEC 27001 ist die konkrete Softwareanforderung aus Sicherheitszielen und relevanten ISMS-Kontrollen abzuleiten.
+For ISO/IEC 25010 requirements, check which edition applies; under ISO/IEC 27001, derive the concrete software
+requirement from the security goals and the relevant ISMS controls.
 
-## Reviewfragen
+## Review questions
 
-- Ist jede Anforderung eindeutig, testbar und mit genau einem erwarteten Verhalten formuliert?
-- Sind statischer Schnittstellenvertrag und dynamisches Verhalten separat beschrieben?
-- Sind Negativfälle und Autorisierungsgrenzen enthalten?
-- Sind Qualitätsziele einschließlich Lastprofil, Messmethode und Schwelle messbar?
-- Sind abgeleitete Anforderungen bidirektional zu ihrem Ursprung verfolgbar?
-- Hat sich die SW-Spezifikation nach einer relevanten Änderung vor der Testanpassung aktualisiert?
+- Is each requirement unambiguous, testable and phrased with exactly one expected behaviour?
+- Are the static interface contract and the dynamic behaviour described separately?
+- Are negative cases and authorization boundaries included?
+- Are quality goals measurable, including load profile, method and threshold?
+- Can derived requirements be traced to their origin in both directions?
+- After a relevant change, was the specification updated before the tests?

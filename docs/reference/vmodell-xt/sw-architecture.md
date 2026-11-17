@@ -1,46 +1,52 @@
-# SW-Architektur – Ausfüll- und Reviewhilfe
+# Software architecture: filling and review guide
 
-**Unabhängige Arbeitshilfe; nicht vom DocWizz-Schema automatisch gerendert.** Die Abschnitts-IDs entsprechen `sw-architecture.yaml`.
+[V-Modell XT templates](../../guides/vmodell-xt-templates.md)
 
-## Sollinhalte pro Kapitel
+A working aid for [sw-architecture.yaml](../../../templates/vmodell-xt/sw-architecture.yaml); docwizz doesn't render
+it. The section ids are the template's.
 
-| YAML-Abschnitt | Konkrete Mindestinformation / erwarteter Nachweis | Reviewfrage |
+## Expected content per section
+
+| Section | Minimum information / expected evidence | Review question |
 |---|---|---|
-| `document-control` | Identifikation der SW-Einheit, Dokumentrevision, Quellbaseline, Autor/Reviewer, verknüpfter Entscheidungsstand | Ist der Entwurf eindeutig einer Version zugeordnet? |
-| `scope` | Systemkontext, fachlicher Zweck, Nutzer, Nachbarsysteme, In/Out-Scope, Annahmen | Sind Verantwortlichkeiten und Systemgrenzen klar? |
-| `architecture-drivers` | REQ-IDs, priorisierte Qualitätsszenarien, Nutzungsprofile, technische/rechtliche Randbedingungen | Ist jede treibende Anforderung nachvollziehbar? |
-| `principles-alternatives` | Architekturprinzipien; mindestens zwei plausible Optionen, Bewertungsmaßstab, Vor-/Nachteile | Wurde eine Option nachvollziehbar begründet? |
-| `decisions` | ADR-ID, Kontext, Entscheidung, Alternativen, Konsequenzen, Risiken, menschlicher Reviewbeleg | Sind Trade-offs und Auswirkungen dokumentiert? |
-| `structure` | Komponentenhierarchie, Ownership, Ports, Verantwortungen, Abhängigkeiten, Soll-/Ist-Abgleich; C4/Komponentensicht optional | Stimmen erkannte Klassen mit der beabsichtigten SW-Struktur überein? |
-| `elements-to-specify` | Liste aller relevanten SW-Elemente, Ja/Nein zur separaten Spezifikation, begründete Entscheidung | Gibt es für zu prüfende Elemente Spezifikationen? |
-| `interfaces` | Schnittstellen-ID, Provider/Consumer, Protokoll, Schema, Auth, Version, Fehlervertrag, Verfügbarkeit | Reichen Code-Abhängigkeiten allein zur Interpretation? (Nein.) |
-| `runtime-scenarios` | Normal-/Negativ-/Fehlerabläufe, Timing, Timeout/Retry, Transaktionsgrenze, Zustände | Ist wenigstens ein risikorelevanter Ablauf dokumentiert? |
-| `data-catalog` | Datenobjekt, Typ, Wertebereiche, Identifikatoren, Schutzbedarf, Klassifikation, Lebenszyklus | Gibt es Widersprüche zu den Schnittstellenschemata? |
-| `crosscutting-concepts` | Logging/Tracing, Konfiguration, Persistenz, Fehlertoleranz, Konsistenz, Internationalisierung bei Bedarf | Werden Querschnittsregeln systemweit durchgesetzt? |
-| `security-evidence` | CIA-Schutzbedarf, Bedrohungen, Maßnahmen, verantwortliche Komponente, Prüfnachweise | Sind Schutzziele mit konkreten Prüfungen verbunden? |
-| `deployment-operations` | Deployment-Knoten, Datenflüsse, Secrets, Ressourcen, Backup/Recovery, Überwachung | Sind Betriebs- und Wiederanlauffragen abgedeckt? |
-| `design-assurance` | Architektur-Review-/Prototyp-Ergebnisse, Qualitätsszenarien, Kriterien, Befunde, Abhilfen | Sind Eignung und Restrisiken prüfbar bewertet? |
-| `traceability` | REQ -> Architekturbaustein / ADR -> Prüfartefakt (mit IDs und Quellen) | Fehlen Nachweisketten? |
-| `risks-debt` | Risiko-ID, Wahrscheinlichkeit, Auswirkung, Gegenmaßnahme, Eigentümer, Termin | Sind offene Risiken transparent? |
-| `references` | Quellenbasis, Glossar, versionierte Normen, Modelle | Sind Quellen reproduzierbar auffindbar? |
+| `document-control` | identity of the software unit, document revision, source baseline, author and reviewer, linked decision state | Is the draft clearly tied to one version? |
+| `scope` | system context, business purpose, users, neighbouring systems, in and out of scope, assumptions | Are responsibilities and system boundaries clear? |
+| `architecture-drivers` | requirement ids, prioritized quality scenarios, usage profiles, technical and legal constraints | Can every driving requirement be traced? |
+| `principles-alternatives` | architecture principles; at least two plausible options, evaluation criteria, pros and cons | Is the chosen option justified? |
+| `decisions` | ADR id, context, decision, alternatives, consequences, risks, evidence of human review | Are trade-offs and impacts documented? |
+| `structure` | component hierarchy, ownership, ports, responsibilities, dependencies, intended vs. actual; optional C4 or component view | Do the detected classes match the intended structure? |
+| `elements-to-specify` | all relevant software elements, whether each gets its own specification, and why | Is there a specification for every element to be tested? |
+| `interfaces` | interface id, provider and consumer, protocol, schema, authentication, version, error contract, availability | Are code dependencies alone enough to interpret it? (No.) |
+| `runtime-scenarios` | normal, negative and error flows, timing, timeouts and retries, transaction boundaries, states | Is at least one risk-relevant flow documented? |
+| `data-catalog` | data object, type, value ranges, identifiers, protection needs, classification, life cycle | Does it contradict the interface schemas? |
+| `crosscutting-concepts` | logging and tracing, configuration, persistence, fault tolerance, consistency, internationalization where needed | Are crosscutting rules enforced system-wide? |
+| `security-evidence` | confidentiality, integrity and availability needs, threats, measures, responsible component, test evidence | Are protection goals tied to concrete tests? |
+| `deployment-operations` | deployment nodes, data flows, secrets, resources, backup and recovery, monitoring | Are operation and restart questions covered? |
+| `design-assurance` | architecture review or prototype results, quality scenarios, criteria, findings, remedies | Are suitability and residual risks assessed verifiably? |
+| `traceability` | requirement → building block or ADR → test artifact, with ids and sources | Are any evidence chains missing? |
+| `risks-debt` | risk id, likelihood, impact, mitigation, owner, due date | Are open risks visible? |
+| `references` | sources, glossary, versioned standards, models | Can every source be found again? |
 
-## Beispiel: Architekturtreiber mit messbaren Qualitätsmerkmalen
+## Example: architecture drivers with measurable quality attributes
 
-| ID | Qualität | Stimulus / Rahmen | Systemreaktion / Messgröße | Nachweis |
+| Id | Quality | Stimulus / setting | System response / measure | Evidence |
 |---|---|---|---|---|
-| REQ-003 | Leistungseffizienz | 50 parallele Auftragsanlagen, 10-minütiger Lastlauf | 95. Perzentil Antwortzeit <= 400 ms | TEST-003, Messbericht noch ausstehend |
-| REQ-002 | Sicherheit / Vertraulichkeit | Authentifizierter Benutzer fragt fremden Auftrag ab | 403, keine sensiblen Details | TEST-002, Ausführung noch ausstehend |
-| REQ-005 | Zuverlässigkeit / Integrität | Doppelter Request mit gleichem Idempotency-Key | Nur eine Buchung | TEST-004, Ausführung noch ausstehend |
+| REQ-003 | performance efficiency | 50 concurrent order creations, 10-minute load run | 95th percentile response time ≤ 400 ms | TEST-003, measurement report pending |
+| REQ-002 | security / confidentiality | a signed-in user requests another user's order | 403, no sensitive details | TEST-002, run pending |
+| REQ-005 | reliability / integrity | a repeated request with the same idempotency key | exactly one booking | TEST-004, run pending |
 
-## Beispiel: Entscheidungsmatrix
+## Example: decision matrix
 
-| Kriterium | HTTP-Schicht mit direktem DB-Zugriff | Adapter + Anwendungsschicht |
+| Criterion | HTTP layer with direct database access | Adapter and application layer |
 |---|---|---|
-| Änderbarkeit | DB-Kopplung hoch | Adapter austauschbar |
-| Testbarkeit | Test mit DB oft erforderlich | Fachlogik isoliert prüfbar |
-| Komplexität | niedriger initial | zusätzliche Ports erforderlich |
-| Entscheidung | verworfen | begründet bevorzugt (kein Freigabestatus) |
+| Changeability | strong database coupling | adapters replaceable |
+| Testability | tests often need a database | business logic testable in isolation |
+| Complexity | lower at first | additional ports needed |
+| Decision | rejected | preferred, with reasons (no approval status) |
 
-## Fachliche Abnahmehinweise
+## Acceptance notes
 
-Eine erzeugte `structure`-Liste enthält maximal 40 automatisch erkannte Code-Bausteine und kann ohne manuelle Ergänzung weder Vollständigkeit noch die Zielarchitektur belegen. Analog bilden `interfaces` nur Code-Abhängigkeiten ab. Mermaid-/C4-Diagramme, API-Verträge, Qualitätsbudgets und Designentscheidungen müssen als projektbezogene Quellen gepflegt werden. Architekturdesign-Review und Entscheidungspunkt sind separat nachweisbar zu machen.
+A generated `structure` list holds at most 40 detected code building blocks and proves neither completeness nor the
+target architecture without manual additions. Likewise, `interfaces` shows code dependencies only. Mermaid or C4
+diagrams, API contracts, quality budgets and design decisions must be maintained as project sources. The architecture
+design review and the decision point need their own evidence.
