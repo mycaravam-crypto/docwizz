@@ -36,6 +36,7 @@ static class JourneyCapture
         return journeys;
     }
 
+    /// <summary>Reads one journey file into its steps, rejecting anything the capture could not play safely.</summary>
     public static Journey Parse(string file)
     {
         var name = Path.GetFileName(file);
