@@ -5,6 +5,10 @@ name: test
 on:
   pull_request:
   push: { branches: [main] }
+# A new push to a pull request supersedes the run for the previous one.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
 jobs:
@@ -41,7 +45,8 @@ jobs:
       - name: Windows test-helper exclusion
         run: dotnet test --project tests/DocWizz.Tests --no-build --filter-class "*WindowsTestSourcePathsJourneyTests"
 
-  # Journey and end-to-end each take about a minute and need nothing from each other: separate jobs run them at once.
+  # Journey and end-to-end need nothing from each other: separate jobs run them at once. Both run the CLI as a process
+  # hundreds of times, so both use the ReadyToRun build from scripts/build-test-cli.sh (test.sh builds it itself).
   journey:
     runs-on: ubuntu-latest
     steps:
@@ -51,6 +56,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: 22, cache: npm, cache-dependency-path: scanner-vue/package-lock.json }
       - run: npm ci --prefix scanner-vue --silent
+      - name: Build the CLI under test (ReadyToRun)
+        run: echo "DOCWIZZ_DLL=$(bash scripts/build-test-cli.sh)" >> "$GITHUB_ENV"
       - name: Journey tests
         run: dotnet test --project tests/DocWizz.Tests --filter-namespace DocWizz.Tests.Journey
   end-to-end:
