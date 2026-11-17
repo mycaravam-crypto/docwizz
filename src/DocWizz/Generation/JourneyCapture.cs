@@ -138,7 +138,7 @@ static class JourneyCapture
         return guides;
     }
 
-    static string Store(string outDir) => Path.Combine(outDir, ".docwizz", "guides.json");
+    static string Store(string outDir) => Path.Join(outDir, ".docwizz", "guides.json");
 
     /// <summary>Remembers the captured guides, so a generation without the running application keeps them.</summary>
     public static void Save(string outDir, IReadOnlyList<JourneyEvidence.Guide> guides)
@@ -156,7 +156,7 @@ static class JourneyCapture
         {
             // The pictures are checked by name, so an edited file cannot point a page outside user-guides/images.
             bool Picture(string? image) => image is not null && image.StartsWith("images/", StringComparison.Ordinal)
-                && JourneyEvidence.GeneratedImage.IsMatch(image[7..]) && File.Exists(Path.Combine(outDir, "user-guides", image));
+                && JourneyEvidence.GeneratedImage.IsMatch(image[7..]) && File.Exists(Path.Join(outDir, "user-guides", image));
             return [.. (JsonSerializer.Deserialize<List<JourneyEvidence.Guide>>(File.ReadAllText(Store(outDir))) ?? [])
                 .Where(g => g is { JourneyFile: not null, Title: not null, Route: not null, Steps: not null } && Regex.IsMatch(g.Id ?? "", "^[a-z0-9-]+$") && g.Id is not ("index" or "manual")
                     && g.Steps.All(s => s is { Action: not null } && Picture(s.Image)) && Picture(g.ResultImage))];

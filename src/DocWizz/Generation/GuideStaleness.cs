@@ -21,11 +21,11 @@ static class GuideStaleness
         var files = model.Nodes.Where(n => n.Kind == "route" && (n.Route ?? n.Name) == route)
             .SelectMany(r => model.Edges.Where(e => e.Kind == "routes-to" && e.From == r.Id).Select(e => e.To)
                 .Concat(flow.TraceOf(r.Id).Layers.SelectMany(l => l)).Select(id => nodes.GetValueOrDefault(id)?.File).Append(r.File))
-            .OfType<string>().Distinct().Order(StringComparer.Ordinal).Where(f => File.Exists(Path.Combine(root, f))).ToList();
+            .OfType<string>().Distinct().Order(StringComparer.Ordinal).Where(f => File.Exists(Path.Join(root, f))).ToList();
         if (files.Count == 0) return null;
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         // Without carriage returns: a checkout with other line endings is the same code.
-        foreach (var f in files) hash.AppendData(Encoding.UTF8.GetBytes(f + "\0" + File.ReadAllText(Path.Combine(root, f)).Replace("\r", "") + "\0"));
+        foreach (var f in files) hash.AppendData(Encoding.UTF8.GetBytes(f + "\0" + File.ReadAllText(Path.Join(root, f)).Replace("\r", "") + "\0"));
         return Convert.ToHexStringLower(hash.GetHashAndReset());
     }
 

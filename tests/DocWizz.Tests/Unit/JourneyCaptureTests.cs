@@ -91,7 +91,7 @@ public class JourneyCaptureTests
     public void A_capture_is_kept_for_generations_without_the_running_application_while_its_pictures_exist()
     {
         using var repo = new Sources(("docs/.docwizz/x", ""), ("docs/user-guides/images/guide-sign-in-step-01.png", ""), ("docs/user-guides/images/guide-sign-in-result.png", ""));
-        var docs = Path.Combine(repo.Root, "docs");
+        var docs = Path.Join(repo.Root, "docs");
         var guide = new JourneyEvidence.Guide("sign-in", "Sign in", "/login", 7, 0, 0, 0, 0, "", [],
             [new(1, "Open /login", "", "images/guide-sign-in-step-01.png", Note: "Why")], "Intro", "Done", "images/guide-sign-in-result.png", "01-sign-in.yaml", "2026-11-17", "abc");
         var testwizz = guide with { Id = "wi-1-case-1-aaaaaaaaaaaa", JourneyFile = null };
@@ -101,10 +101,10 @@ public class JourneyCaptureTests
         Assert.Equal((guide.Title, guide.WorkItem, guide.Captured, guide.Code, "Why"), (kept.Title, kept.WorkItem, kept.Captured, kept.Code, kept.Steps[0].Note));
         Assert.Contains("from `01-sign-in.yaml` on 2026-11-17:", JourneyEvidence.Markdown(kept));
 
-        File.Delete(Path.Combine(docs, "user-guides/images/guide-sign-in-result.png"));
+        File.Delete(Path.Join(docs, "user-guides/images/guide-sign-in-result.png"));
         Assert.Empty(JourneyCapture.Retained(docs));
         JourneyCapture.Save(docs, [testwizz]);
-        Assert.False(File.Exists(Path.Combine(docs, ".docwizz/guides.json")));
+        Assert.False(File.Exists(Path.Join(docs, ".docwizz/guides.json")));
     }
 
     [Fact]
@@ -119,12 +119,12 @@ public class JourneyCaptureTests
         Assert.NotNull(guide.Code);
         Assert.Null(GuideStaleness.Code(repo.Root, model, flow, "/unknown"));
 
-        File.WriteAllText(Path.Combine(repo.Root, "src/Other.vue"), "changed");   // not behind the route
-        File.WriteAllText(Path.Combine(repo.Root, "src/Login.vue"), "<template>\r\na</template>");   // other line endings only
+        File.WriteAllText(Path.Join(repo.Root, "src/Other.vue"), "changed");   // not behind the route
+        File.WriteAllText(Path.Join(repo.Root, "src/Login.vue"), "<template>\r\na</template>");   // other line endings only
         Assert.False(GuideStaleness.CodeChanged(guide, repo.Root, model, flow));
         Assert.Equal("", GuideStaleness.Section([guide], null, g => GuideStaleness.CodeChanged(g, repo.Root, model, flow)));
 
-        File.WriteAllText(Path.Combine(repo.Root, "src/Login.vue"), "<template>b</template>");
+        File.WriteAllText(Path.Join(repo.Root, "src/Login.vue"), "<template>b</template>");
         Assert.True(GuideStaleness.CodeChanged(guide, repo.Root, model, flow));
         Assert.Contains("- [Sign in](sign-in.md): the code behind `/login` changed since the capture on 2026-11-17",
             GuideStaleness.Section([guide], null, g => GuideStaleness.CodeChanged(g, repo.Root, model, flow)));
