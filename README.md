@@ -603,7 +603,7 @@ dotnet test --project tests/DocWizz.Tests   # unit, component and journey tests 
 ```
 
 Journey tests start the CLI as a process for each step; `DOCWIZZ_DLL=$(scripts/build-test-cli.sh) dotnet test …` runs them
-against a ReadyToRun build, as CI does, in about half the time.
+against a ReadyToRun build in about half the time, once that build exists (it is reused while the code is unchanged).
 
 - How it works: [Architecture](docs/internals/architecture.md) · what's next: [GitHub Issues](https://github.com/mycaravam-crypto/docwizz/issues)
 - Benchmarks and advice for large repositories: [bench/](bench/README.md)

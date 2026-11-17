@@ -339,9 +339,9 @@ own step.
 | End-to-end | [test.sh](../../test.sh) | repository → model → reports → generated pages, on the fixtures | `./test.sh` |
 
 Journey tests and `test.sh` start the CLI hundreds of times, and a cold .NET process spends about half of a small scan
-in the JIT (mostly Roslyn). Both therefore run a ReadyToRun build from
-[build-test-cli.sh](../../scripts/build-test-cli.sh): `test.sh` builds it itself, and journey tests use it when `DOCWIZZ_DLL`
-points at it (CI sets it). A check belongs to one layer: `test.sh` asserts what needs the full fixture, while re-runs,
+in the JIT (mostly Roslyn). `test.sh` therefore builds and runs a ReadyToRun build from
+[build-test-cli.sh](../../scripts/build-test-cli.sh). Journey tests can use it too when `DOCWIZZ_DLL` points at it (useful
+for repeated local runs); CI leaves it unset, since there the one-off publish costs more than the journeys save. A check belongs to one layer: `test.sh` asserts what needs the full fixture, while re-runs,
 error paths and CLI conventions on small repositories are journey tests.
 
 `test.sh` runs against [fixture/](../../fixture), a small ASP.NET + EF Core + Vue project with deliberate gaps,
