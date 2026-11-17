@@ -62,8 +62,8 @@ public class ProjectContextTests
     [InlineData("Der Dienst ist offenbar zustandslos.", true)]
     public void Statements_cannot_impersonate_the_open_marker(string text, bool accepted)
     {
-        var yaml = ContextYaml.Replace("The scope is defined in the signed project charter.", text);
-        if (accepted) Assert.Single(ProjectContext.Parse(new StringReader(yaml)).Statements);
-        else Assert.Contains("impersonate", Assert.Throws<ArgumentException>(() => ProjectContext.Parse(new StringReader(yaml))).Message);
+        using var reader = new StringReader(ContextYaml.Replace("The scope is defined in the signed project charter.", text));
+        if (accepted) Assert.Single(ProjectContext.Parse(reader).Statements);
+        else Assert.Contains("impersonate", Assert.Throws<ArgumentException>(() => ProjectContext.Parse(reader)).Message);
     }
 }
