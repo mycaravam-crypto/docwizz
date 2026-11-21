@@ -21,7 +21,7 @@ xt_version: "2.4"
 tailoring: test-only
 sections:
   - id: scope
-    title: Prüfgegenstand
+    title: Test subject
     required: true
     sources: [project]
 dependencies: []
@@ -30,34 +30,34 @@ cat > context.yaml <<'YAML'
 schema: 1
 statements:
   - section: scope
-    text: Fiktives Prüfobjekt mit belegter Quelle.
+    text: Fictitious test object with a documented source.
     source: docs/source.md
 YAML
 cat > control.yaml <<'YAML'
 schema: 1
 document_id: CI-RELEASE
-title: Fiktive SW-Spezifikation
+title: Fictitious software specification
 version: "0.1"
-author: CI-Autor
-owner: CI-Verantwortung
+author: CI author
+owner: CI owner
 created: 2026-10-19
-classification: Testdaten
-distribution: CI-intern
-retention: Nur für den Testlauf
+classification: Test data
+distribution: CI internal
+retention: Only for this test run
 changes:
   - version: "0.1"
     date: 2026-10-19
-    author: CI-Autor
-    description: Fiktive Erstausgabe
+    author: CI author
+    description: Fictitious first issue
 approvals:
   - kind: review
     role: quality
-    person: CI-Prüfer
+    person: CI reviewer
     date: 2026-10-19
     evidence: docs/review.md
   - kind: approval
     role: security
-    person: CI-Freigebender
+    person: CI approver
     date: 2026-10-19
     evidence: docs/approval.md
 YAML
@@ -173,10 +173,10 @@ pdfinfo output/CI-RELEASE-0.1.pdf | grep -E 'Pages:|Page size:'
 pdftotext -layout output/CI-RELEASE-0.1.pdf - | head -85
 pdfinfo output/CI-RELEASE-0.1.pdf | grep -q '^Pages:'
 pdfinfo output/CI-RELEASE-0.1.pdf | awk '/^Pages:/ { if ($2 < 2) exit 1; found=1 } END { if (!found) exit 1 }'
-pdftotext output/CI-RELEASE-0.1.pdf - | grep -q 'Inhaltsverzeichnis'
-pdftotext output/CI-RELEASE-0.1.pdf - | grep -q 'Seite 1'
+pdftotext output/CI-RELEASE-0.1.pdf - | grep -q 'Contents'
+pdftotext output/CI-RELEASE-0.1.pdf - | grep -q 'Page 1'
 
-pdftotext output/CI-RELEASE-0.1.pdf - | grep -q 'Fiktive'
+pdftotext output/CI-RELEASE-0.1.pdf - | grep -q 'Fictitious'
 pdftoppm -f 1 -l 1 -scale-to 1000 -png -singlefile output/CI-RELEASE-0.1.pdf first-page >/dev/null 2>&1
 test -s first-page.png
 python3 - <<'PY'
@@ -184,7 +184,7 @@ import json, zipfile
 with zipfile.ZipFile("output/CI-RELEASE-0.1.docx") as doc:
     assert "word/document.xml" in doc.namelist()
     xml = doc.read("word/document.xml")
-    assert b"TOC" in xml or b"Inhaltsverzeichnis" in xml
+    assert b"TOC" in xml or b"Contents" in xml
 manifest=json.load(open("output/CI-RELEASE-0.1.publication.json"))
 assert manifest["status"]=="published-from-signed-sources"
 assert set(manifest["independent_approvals"])=={"quality","security"}

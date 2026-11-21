@@ -5,7 +5,7 @@
 `docwizz product` drafts a work product, such as a software architecture or an IT operations concept, from a YAML
 template, the code model and statements you source yourself. The process has three separate states:
 
-1. **Draft:** `docwizz product` writes Markdown and an evidence report. Sections without evidence say `OFFEN` (open).
+1. **Draft:** `docwizz product` writes Markdown and an evidence report. Sections without evidence say `OPEN`.
 2. **Checked:** `docwizz product check` verifies the draft's references and freshness.
 3. **Published:** `docwizz product publish` renders signed DOCX and PDF after two independent approvals
    ([signed publication](../reference/publication.md)).
@@ -26,6 +26,10 @@ and `interfaces` (code dependencies), each limited to 40 entries, so neither pro
 from `--context`. Output defaults to `docs/products/<product_id>.md` next to `<product_id>.evidence.json`. Paths
 resolve from the current directory, then from `<dir>`. Unchanged output isn't rewritten, and a file docwizz didn't
 write is never replaced.
+
+The templates and the text docwizz adds to a draft were German before. A draft written then is replaced in English the
+next time you run `docwizz product`; `product check` doesn't ask for that, except for IT operations drafts, whose
+code evidence is now worded differently (PROD-004). A template you copied into your project keeps its own titles.
 
 **`--context project.yaml`** adds statements, each with a source document:
 
@@ -62,7 +66,7 @@ Exits 1 on an error; warnings never fail.
 
 | Rule | Severity | Finds |
 |---|---|---|
-| PROD-001 | warning | a required section without evidence (`OFFEN`) |
+| PROD-001 | warning | a required section without evidence (`OPEN`) |
 | PROD-002 | error | a project statement whose source file doesn't exist |
 | PROD-003 | error | a product in `dependencies` without a draft next to this one |
 | PROD-004 | error | the draft or its evidence report missing, not docwizz's, or stale |

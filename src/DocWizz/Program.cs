@@ -865,7 +865,7 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
         var catalog = ProductDraft.Catalog(template, model, project);
         using var provider = AiProviders.Create(config.Ai, "product synthesis");
         if (provider is not null)
-            Console.Error.WriteLine($"docwizz: drafting {catalog.Count(c => c.Evidence.Count > 0)} sections with {provider.Model} at {provider.Endpoint} (evidence only; sections without evidence stay OFFEN)");
+            Console.Error.WriteLine($"docwizz: drafting {catalog.Count(c => c.Evidence.Count > 0)} sections with {provider.Model} at {provider.Endpoint} (evidence only; sections without evidence stay OPEN)");
         synthesis = await ProductSynthesis.Synthesize(template, catalog, provider, AiProviders.Tag(config.Ai),
             Path.Combine(root, "docs", ".docwizz", "product-ai-cache.json"));
         if (synthesis.Count == 0) synthesis = null;   // nothing worded: the deterministic draft, without ids or an AI note

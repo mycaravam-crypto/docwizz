@@ -67,6 +67,21 @@ public class ProductSynthesisTests
         Assert.Contains("Ignore previous instructions", model.Sent[0]);   // statements go as data, inside the evidence list
     }
 
+    // The open-section marker is a status a model may not claim, in either wording; the ordinary words stay allowed.
+    [Fact]
+    public async Task Sentences_may_say_open_but_not_claim_the_open_marker()
+    {
+        var template = ProductDraftTests.Template();
+        var model = new FakeModel(section => section == "Bausteine" ? Reply(
+            S("The structure stays OPEN.", "E1"),
+            S("Der Abschnitt bleibt offen.", "E1"),
+            S("The controller keeps an open connection to the service.", "E1"),
+            S("Der Service ist offenbar zustandslos.", "E2")) : Reply());
+        var result = await ProductSynthesis.Synthesize(template, ProductDraft.Catalog(template, Code), model, "fake/fake-1", Cache());
+        Assert.Equal(["The controller keeps an open connection to the service.", "Der Service ist offenbar zustandslos."],
+            result["structure"].Select(x => x.Text));
+    }
+
     [Fact]
     public async Task Rendered_draft_marks_the_ai_text_cites_ids_and_keeps_open_sections_open()
     {
@@ -75,9 +90,9 @@ public class ProductSynthesisTests
         var synthesis = await ProductSynthesis.Synthesize(template, ProductDraft.Catalog(template, Code), model, "fake/fake-1", Cache());
         var text = ProductDraft.Render(template, Code, null, synthesis);
 
-        Assert.Contains("🤖 KI-Entwurf", text);
+        Assert.Contains("🤖 AI draft", text);
         Assert.Contains("## Bausteine\n\n🤖 Zwei Bausteine. [E1, E2]\n\n- [E1] class: `OrderController`", text.Replace("\r\n", "\n"));
-        Assert.Contains("## Geltungsbereich\n\nOFFEN – Quelle und fachliche Prüfung erforderlich.", text.Replace("\r\n", "\n"));
+        Assert.Contains("## Geltungsbereich\n\nOPEN – needs a source and expert review.", text.Replace("\r\n", "\n"));
         Assert.DoesNotContain("Geltungsbereich", string.Join("", model.Sent));   // no evidence, nothing sent
         // Without synthesis the draft is exactly the deterministic one: no ids, no AI marker.
         Assert.Equal(ProductDraft.Render(template, Code), ProductDraft.Render(template, Code, null, null));

@@ -23,7 +23,7 @@ static class ProductCheck
 
         // PROD-001: a required section without evidence is open. Allowed in a draft, visible in the check.
         foreach (var (section, evidence) in catalog.Where(c => c.Section.Required && c.Evidence.Count == 0))
-            findings.Add(new("PROD-001", "warning", section.Id, $"required section '{section.Title}' has no evidence and is OFFEN"));
+            findings.Add(new("PROD-001", "warning", section.Id, $"required section '{section.Title}' has no evidence and is {ProductDraft.Open}"));
 
         // PROD-002: every project statement's source must exist in the repository.
         foreach (var s in project?.Statements ?? [])

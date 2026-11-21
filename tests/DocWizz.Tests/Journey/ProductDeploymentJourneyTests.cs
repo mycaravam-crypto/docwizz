@@ -6,10 +6,10 @@ public class ProductDeploymentJourneyTests
     public void Product_and_check_share_scoped_descriptor_inventory_and_keep_rollout_open()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !File.Exists(Path.Join(root.FullName, "templates/it-operations/betriebskonzept.yaml")))
+        while (root is not null && !File.Exists(Path.Join(root.FullName, "templates/it-operations/operations-concept.yaml")))
             root = root.Parent;
         Assert.NotNull(root);
-        var template = Path.Join(root!.FullName, "templates/it-operations/betriebskonzept.yaml");
+        var template = Path.Join(root!.FullName, "templates/it-operations/operations-concept.yaml");
 
         using var repo = new Sources(
             ("compose.yml", "services:\n  api:\n    image: secret-registry.example/private\n"),
@@ -26,8 +26,8 @@ public class ProductDeploymentJourneyTests
 
         var first = Docwizz.Run("product", repo.Root, template);
         Assert.Equal(0, first.Exit);
-        var markdownPath = Path.Join(repo.Root, "docs", "products", "it-betriebskonzept.md");
-        var reportPath = Path.Join(repo.Root, "docs", "products", "it-betriebskonzept.evidence.json");
+        var markdownPath = Path.Join(repo.Root, "docs", "products", "it-operations-concept.md");
+        var reportPath = Path.Join(repo.Root, "docs", "products", "it-operations-concept.evidence.json");
         var markdown = File.ReadAllText(markdownPath);
         var report = File.ReadAllText(reportPath);
         Assert.Contains("Compose-Deskriptor", markdown);
