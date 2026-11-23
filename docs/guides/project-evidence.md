@@ -62,7 +62,7 @@ docwizz trace . project-evidence.yaml [--format json]
 
 A Markdown matrix or JSON on stdout. Each requirement is `linked`, `partial` (one of several architecture records has
 no test), `no-architecture` or `no-test`; architecture records without incoming or outgoing links and tests without an
-incoming link are listed separately. `OFFEN` marks missing declared evidence, not a failed test.
+incoming link are listed separately. `OPEN` marks missing declared evidence, not a failed test.
 
 Each source with a `source_hash` is reported as `current` (the file matches), `stale`, or `missing`; one without is
 `unverified`. Findings never fail the command; an invalid catalog exits 1. Paths resolve from the current directory,

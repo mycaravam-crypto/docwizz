@@ -1,97 +1,97 @@
-# Verbesserte ORIGINAL-Vorlage fuer DocWizz (Schema 1), nicht amtlich.
-# Fachlich orientiert an V-Modell XT Bund Produktreferenz und arc42-Praxisbeispielen.
-# Tailoring, Produktversion und inhaltliche Freigabe projektspezifisch festlegen.
-# HINWEIS: Kommentare dienen als Ausfuellhilfe und erscheinen NICHT im Markdown-Produkt.
-# In DocWizz werden nur die IDs "structure" und "interfaces" aus Code vorbelegt.
+# Original illustrative template for docwizz (schema 1), not an official V-Modell XT template.
+# Structured after the V-Modell XT Bund product reference and arc42 examples.
+# Decide tailoring, product version and content approval for your project.
+# NOTE: these comments are filling hints and do NOT appear in the generated product.
+# docwizz fills only the ids "structure" and "interfaces" from code.
 schema: 1
 product_id: sw-specification
 xt_variant: V-Modell XT
 xt_version: "2.4"
 tailoring: project-specific
 sections:
-  # Ziel/Nachweis: SW-Element-ID, Ebene (Einheit/Komponente/Modul), Produktbaseline und Revisionshistorie.
+  # Goal/evidence: software element id, level (unit, component, module), product baseline and revision history.
   - id: document-control
-    title: Dokumentenlenkung und Versionsbezug
+    title: Document control and version baseline
     required: true
     sources: [project]
-  # Ziel/Nachweis: Zweck, Rolle im System, Besitzer und fachliche Grenzen des SW-Elements.
+  # Goal/evidence: purpose, role in the system, owner and business boundaries of the software element.
   - id: element-overview
-    title: SW-Element-Überblick und Verantwortung
+    title: Software element overview and responsibility
     required: true
     sources: [project]
-  # Ziel/Nachweis: Ausgangssystem, übergeordnete Spezifikation und ausgenommene Verhaltensweisen.
+  # Goal/evidence: originating system, parent specification and excluded behaviour.
   - id: scope
-    title: Geltungsbereich, Annahmen und Kontext
+    title: Scope, assumptions and context
     required: true
     sources: [project]
-  # Ziel/Nachweis: Anforderungs-IDs, Elternanforderung, Priorität, Quelle, Annahme und Zuordnungsregel.
+  # Goal/evidence: requirement ids, parent requirement, priority, source, assumption and allocation rule.
   - id: derived-requirements
-    title: Abgeleitete und zugeordnete Anforderungen
+    title: Derived and allocated requirements
     required: true
     sources: [project]
-  # Ziel/Nachweis: Atomare prüfbare SHALL/MUSS-Aussagen, Vor-/Nachbedingungen, Varianten und Domänenregeln.
+  # Goal/evidence: atomic, testable SHALL/MUST statements, pre- and postconditions, variants and domain rules.
   - id: functional-requirements
-    title: Funktionale Anforderungen und Geschäftsregeln
+    title: Functional requirements and business rules
     required: true
     sources: [project]
-  # Ziel/Nachweis: Automatisch nur Abhängigkeitskanten, kein Vertrag; ergänze Operationen, Schemas, Protokolle, Version und Berechtigungen.
+  # Goal/evidence: automatically only dependency edges, no contract; add operations, schemas, protocols, version and permissions.
   - id: interfaces
-    title: Schnittstellenbeschreibung – statischer Vertrag
+    title: Interface description – static contract
     required: true
     sources: [code, project]
-  # Ziel/Nachweis: Ablauf- und Zustandsübergänge, Nebenläufigkeit, Zeitüberschreitungen, Wiederholungen und Negativfälle.
+  # Goal/evidence: flow and state transitions, concurrency, timeouts, retries and negative cases.
   - id: behaviour
-    title: Dynamisches Verhalten und Zustandsmodell
+    title: Dynamic behaviour and state model
     required: true
     sources: [project]
-  # Ziel/Nachweis: Datentypen, Einheiten, Grenzen, Pflichtfelder, Identifikatoren, Datenqualität und Lebensdauer.
+  # Goal/evidence: data types, units, limits, required fields, identifiers, data quality and lifetime.
   - id: data-contracts
-    title: Datenstrukturen, Invarianten und Validierung
+    title: Data structures, invariants and validation
     required: true
     sources: [project]
-  # Ziel/Nachweis: Messbare Ziele für Zuverlässigkeit, Performance, Wartbarkeit, Interaktionsfähigkeit, Sicherheit, Kompatibilität und ggf. Safety.
+  # Goal/evidence: measurable goals for reliability, performance, maintainability, interaction capability, security, compatibility and safety where relevant.
   - id: nonfunctional-requirements
-    title: Qualitätsanforderungen nach ISO/IEC 25010
+    title: Quality requirements per ISO/IEC 25010
     required: true
     sources: [project]
-  # Ziel/Nachweis: CIA-Schutzziele, Rollen/Rechte, Nachvollziehbarkeit, Datenminimierung, Bedrohung und verifizierbares Kriterium.
+  # Goal/evidence: CIA protection goals, roles and permissions, accountability, data minimization, threats and verifiable criteria.
   - id: security-privacy
-    title: Sicherheits-, Datenschutz- und Schutzbedarfsanforderungen
+    title: Security, privacy and protection requirements
     required: true
     sources: [project]
-  # Ziel/Nachweis: Verfeinerung der Schnittstellenfunktionen auf untergeordnete SW-Elemente, nicht mit Architekturdiagramm verwechseln.
+  # Goal/evidence: refinement of interface functions onto subordinate software elements; not to be confused with the architecture diagram.
   - id: interface-realization
-    title: Schnittstellenrealisierung und Zuordnung
+    title: Interface realization and allocation
     required: true
     sources: [project]
-  # Ziel/Nachweis: Budgets und Qualitätsziele auf Komponenten verteilen, inklusive Kombinations- und Messregel.
+  # Goal/evidence: budgets and quality goals distributed to components, including combination and measurement rules.
   - id: quality-refinement
-    title: Verfeinerung nichtfunktionaler Anforderungen
+    title: Refinement of non-functional requirements
     required: true
     sources: [project]
-  # Ziel/Nachweis: Fehlercodes, Kompensation, Rollback, Resilienzregeln, Rate Limits und Nutzerkommunikation.
+  # Goal/evidence: error codes, compensation, rollback, resilience rules, rate limits and user communication.
   - id: error-semantics
-    title: Fehlerfälle, Ausnahme- und Wiederanlaufverhalten
+    title: Error cases, exception and recovery behaviour
     required: true
     sources: [project]
-  # Ziel/Nachweis: Testbare Kriterien je Anforderung samt Testniveau, Messverfahren, Toleranzen und Sollwert.
+  # Goal/evidence: testable criteria per requirement with test level, measurement method, tolerances and target value.
   - id: acceptance-criteria
-    title: Verifikations- und Abnahmekriterien
+    title: Verification and acceptance criteria
     required: true
     sources: [project]
-  # Ziel/Nachweis: REQ nach übergeordnet/unten, SW-Element/Architektur und Test-IDs; docwizz trace zeigt deklarierte Lücken.
+  # Goal/evidence: requirements up and down, software element/architecture and test ids; docwizz trace shows declared gaps.
   - id: traceability
-    title: Bidirektionale Anforderungsverfolgung
+    title: Bidirectional requirement traceability
     required: true
     sources: [project]
-  # Ziel/Nachweis: Freigegebene Plattformen, IT-Sicherheitskonzept, Lifecycle, Technologieauflagen und Betriebsrestriktionen.
+  # Goal/evidence: approved platforms, IT security concept, life cycle, technology constraints and operating restrictions.
   - id: constraints
-    title: Normen, regulatorische und technische Randbedingungen
+    title: Standards, regulatory and technical constraints
     required: true
     sources: [project]
-  # Ziel/Nachweis: Einheitliche Domainbegriffe, Dokumentreferenzen und externe Standards mit Versionsbezug.
+  # Goal/evidence: consistent domain terms, document references and external standards with versions.
   - id: glossary
-    title: Glossar und Referenzen
+    title: Glossary and references
     required: false
     sources: [project]
 dependencies: []

@@ -26,7 +26,7 @@ public class ProductDeploymentFactsTests
             Assert.DoesNotContain("private.registry", n.Name);
         });
 
-        var template = new ProductTemplate("it-betriebskonzept", "", "", "",
+        var template = new ProductTemplate("it-operations-concept", "", "", "",
         [
             new ProductSection("deployment-descriptors", "Deskriptoren", true, ["code"]),
             new ProductSection("deployment", "Installationsverfahren und Rollback", true, ["project"])
@@ -37,7 +37,7 @@ public class ProductDeploymentFactsTests
         Assert.Contains("Compose-Deskriptor", draft);
         Assert.Contains("Dockerfile", draft);
         Assert.Contains("deploy/pod.yaml", draft);
-        Assert.Contains("OFFEN", draft); // No claim of rollout or rollback.
+        Assert.Contains("OPEN", draft); // No claim of rollout or rollback.
         Assert.DoesNotContain("private.registry.example", draft);
         Assert.DoesNotContain("internal-name", report);
         Assert.DoesNotContain("supersecret", report);

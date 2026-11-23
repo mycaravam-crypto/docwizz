@@ -2,23 +2,23 @@
 # Store one file per issued product and revision within the governed project repository.
 schema: 1
 document_id: SWA-001
-title: SW-Architektur Beispielprojekt
+title: Software architecture of the example project
 version: "0.1"
-author: Systemarchitektur
-owner: Technische Projektleitung
+author: System architecture
+owner: Technical project lead
 created: 2026-10-19
-classification: Intern
-distribution: Nur autorisierte Projektmitglieder; Umsetzung durch Repository-/DMS-Rechte
-retention: Gemäß festgelegter Aufbewahrungsregel QM-03 und Löschkonzept
+classification: Internal
+distribution: Authorized project members only; enforced by repository and DMS permissions
+retention: As defined by retention rule QM-03 and the deletion concept
 changes:
   - version: "0.1"
     date: 2026-10-19
-    author: Systemarchitektur
-    description: Erstentwurf
-# Externe Nachweise optional. Nur belegte Ereignisse eintragen; sie werden nicht authentifiziert.
+    author: System architecture
+    description: First draft
+# External evidence is optional. Record only events that happened; they are not authenticated.
 # - kind: review
-#   role: Qualitätsmanagement
-#   person: Beispielperson
+#   role: Quality management
+#   person: Example person
 #   date: 2026-10-19
 #   evidence: docs/reviews/swa-001-review.md
 approvals: []

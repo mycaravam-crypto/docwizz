@@ -29,13 +29,13 @@ public class ControlledDocumentTests
         var plain = ProductDraft.Render(template);
         var withControl = control.Render(template, ProductDraft.Render(template, controlled: true));
         Assert.Contains("# SW-Architektur Auftragsverwaltung", withControl);
-        Assert.Contains("## Deckblatt", withControl);
-        Assert.Contains("## Dokumentenlenkung", withControl);
-        Assert.Contains("## Inhaltsverzeichnis", withControl);
+        Assert.Contains("## Cover", withControl);
+        Assert.Contains("## Document control", withControl);
+        Assert.Contains("## Contents", withControl);
         Assert.Contains("[Bausteine](#structure)", withControl);
         Assert.Contains("<a id=\"structure\"></a>", withControl);
-        Assert.Contains("Genehmigung nicht verifiziert", withControl);
-        Assert.Contains("OFFEN – keine Prüf- oder Freigabenachweise", withControl);
+        Assert.Contains("approval not verified", withControl);
+        Assert.Contains("OPEN – no review or approval evidence", withControl);
         Assert.Equal(withControl, control.Render(template, ProductDraft.Render(template, controlled: true)));
         Assert.Equal(plain, ProductDraft.Render(template));
     }
@@ -223,7 +223,7 @@ public class ControlledDocumentTests
         Assert.Contains("| review | QS | Prüfer | 2026-10-18 | docs/reviews/review.md |", rendered);
         Assert.Contains("| approval | QM | Genehmiger | 2026-10-19 | docs/reviews/approval.md |", rendered);
         Assert.Contains(@"Review \`code\` \| \#draft", rendered);
-        Assert.Contains("keine Identitäts-, Signatur- oder Genehmigungsprüfung", rendered);
+        Assert.Contains("identity, signatures and approvals are not verified", rendered);
     }
 
     [Fact]

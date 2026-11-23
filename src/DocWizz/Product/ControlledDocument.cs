@@ -15,7 +15,14 @@ internal sealed record ControlledDocument(
     string Classification, string Distribution, string Retention,
     IReadOnlyList<DocumentChange> Changes, IReadOnlyList<DocumentApproval> Approvals, string Hash)
 {
-    internal const string DocumentControlHeading = "Dokumentenlenkung";
+    internal const string DocumentControlHeading = "Document control";
+    // Draft wording that `product publish` replaces in its render copy once the signatures are verified.
+    internal const string DraftBanner = "Controlled **draft**";
+    internal const string PublishedBanner = "Controlled **publication**";
+    internal const string DraftStatus = "Draft – approval not verified";
+    internal const string PublishedStatus = "Signed approval by quality and security management verified";
+    internal const string DraftDisclaimer = "docwizz confirms no approval or conformity with a standard.";
+    internal const string PublishedDisclaimer = "Signed quality and security approvals verified; no statement of ISO certification.";
     const int MaxMetadataFieldLength = 500; // bounded Markdown cover/table metadata, not full document prose
     static readonly HashSet<string> RootKeys =
         ["schema", "document_id", "title", "version", "author", "owner", "created",
@@ -141,58 +148,58 @@ internal sealed record ControlledDocument(
         var sb = new StringBuilder();
         sb.AppendLine("# " + Esc(Title));
         sb.AppendLine();
-        sb.AppendLine($"> Gelenkter **Entwurf** ({Esc(Id)}, Revision {Esc(Version)}). DocWizz bestätigt keine Freigabe oder Normkonformität.");
+        sb.AppendLine($"> {DraftBanner} ({Esc(Id)}, revision {Esc(Version)}). {DraftDisclaimer}");
         sb.AppendLine();
-        sb.AppendLine("## Deckblatt");
+        sb.AppendLine("## Cover");
         sb.AppendLine();
-        sb.AppendLine("| Merkmal | Wert |");
+        sb.AppendLine("| Field | Value |");
         sb.AppendLine("|---|---|");
         foreach (var (name, value) in new (string, string)[] {
-            ("Dokument-ID", Id), ("Produkt", template.ProductId), ("Titel", Title),
-            ("Revision", Version), ("Status", "Entwurf – Genehmigung nicht verifiziert"),
-            ("Verfasser", Author), ("Dokumentverantwortung", Owner),
-            ("Erstellungsdatum", Created), ("Klassifizierung (Deklaration)", Classification) })
+            ("Document id", Id), ("Product", template.ProductId), ("Title", Title),
+            ("Revision", Version), ("Status", DraftStatus),
+            ("Author", Author), ("Document owner", Owner),
+            ("Created", Created), ("Classification (declared)", Classification) })
             sb.AppendLine($"| {name} | {Esc(value)} |");
         sb.AppendLine();
         sb.AppendLine("## " + DocumentControlHeading);
         sb.AppendLine();
-        sb.AppendLine("### Änderungsstand");
+        sb.AppendLine("### Revision history");
         sb.AppendLine();
-        sb.AppendLine("| Revision | Datum | Autor | Beschreibung |");
+        sb.AppendLine("| Revision | Date | Author | Description |");
         sb.AppendLine("|---|---|---|---|");
         foreach (var c in Changes)
             sb.AppendLine($"| {Esc(c.Version)} | {c.Date} | {Esc(c.Author)} | {Esc(c.Description)} |");
         sb.AppendLine();
-        sb.AppendLine("### Prüf- und Freigabenachweise");
+        sb.AppendLine("### Review and approval evidence");
         sb.AppendLine();
-        sb.AppendLine("> Deklarierte Nachweisreferenzen, keine Identitäts-, Signatur- oder Genehmigungsprüfung.");
+        sb.AppendLine("> Declared evidence references; identity, signatures and approvals are not verified.");
         sb.AppendLine();
-        if (Approvals.Count == 0) sb.AppendLine("OFFEN – keine Prüf- oder Freigabenachweise hinterlegt.");
+        if (Approvals.Count == 0) sb.AppendLine($"{ProductDraft.Open} – no review or approval evidence recorded.");
         else
         {
-            sb.AppendLine("| Art | Rolle | Person | Datum | Quelle |");
+            sb.AppendLine("| Kind | Role | Person | Date | Source |");
             sb.AppendLine("|---|---|---|---|---|");
             foreach (var approval in Approvals)
                 sb.AppendLine($"| {approval.Kind} | {Esc(approval.Role)} | {Esc(approval.Person)} | {approval.Date} | {approval.Evidence} |");
         }
         sb.AppendLine();
-        sb.AppendLine("### Verteilung, Schutz und Aufbewahrung");
+        sb.AppendLine("### Distribution, protection and retention");
         sb.AppendLine();
-        sb.AppendLine($"- Verteilung und Zugriff (organisatorische Vorgabe): {Esc(Distribution)}");
-        sb.AppendLine($"- Schutzklasse (nicht technisch durchgesetzt): {Esc(Classification)}");
-        sb.AppendLine($"- Aufbewahrung und Aussonderung (organisatorische Vorgabe): {Esc(Retention)}");
+        sb.AppendLine($"- Distribution and access (organizational rule): {Esc(Distribution)}");
+        sb.AppendLine($"- Classification (not technically enforced): {Esc(Classification)}");
+        sb.AppendLine($"- Retention and disposal (organizational rule): {Esc(Retention)}");
         sb.AppendLine();
-        sb.AppendLine("## Inhaltsverzeichnis");
+        sb.AppendLine("## Contents");
         sb.AppendLine();
-        sb.AppendLine("- [Deckblatt](#deckblatt)");
-        sb.AppendLine("- [Dokumentenlenkung](#dokumentenlenkung)");
-        sb.AppendLine("- [Produktinformation](#produktinformation)");
+        sb.AppendLine("- [Cover](#cover)");
+        sb.AppendLine("- [Document control](#document-control)");
+        sb.AppendLine("- [Product information](#product-information)");
         foreach (var section in template.Sections)
             sb.AppendLine($"  - [{Esc(section.Title)}](#{section.Id})");
         sb.AppendLine();
         sb.AppendLine("---");
         sb.AppendLine();
-        sb.AppendLine("## Produktinformation");
+        sb.AppendLine("## Product information");
         sb.AppendLine();
         // ProductDraft emits anchored sections in controlled mode; avoid parsing prose/heading text.
         sb.Append(draft);

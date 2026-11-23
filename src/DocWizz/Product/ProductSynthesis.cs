@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 // `docwizz product --ai`: a self-hosted model words each section of a product draft from that section's evidence, and
 // every sentence must cite the evidence it rests on (`E3`). The reply is validated, never trusted: a sentence that cites
 // nothing, cites evidence from another section or that doesn't exist, or claims approval, conformity or completeness is
-// dropped; a section with no surviving sentence keeps only its evidence. Sections without evidence stay OFFEN and are
+// dropped; a section with no surviving sentence keeps only its evidence. Sections without evidence stay OPEN and are
 // never sent. Evidence text is data, not instructions: project statements are written by people and may contain
 // anything. Results are cached by template, section, evidence and model, so unchanged inputs are never sent twice.
 static class ProductSynthesis
@@ -24,8 +24,9 @@ static class ProductSynthesis
         test results. No markdown, no ids in the text itself.
         """;
 
-    // Wording a draft must never contain: status, approval and conformity are human decisions (#93).
-    static readonly Regex Claims = new(@"\b(freigegeben|genehmigt|abgenommen|geprüft|vollständig|konform\w*|zertifiziert|approved|released|reviewed|complete|compliant|conform\w*|certified)\b|OFFEN",
+    // Wording a draft must never contain: status, approval and conformity are human decisions (#93). The inline (?-i:)
+    // keeps the OPEN marker case-sensitive despite IgnoreCase, so a sentence may still say "open".
+    static readonly Regex Claims = new(@"\b(freigegeben|genehmigt|abgenommen|geprüft|vollständig|konform\w*|zertifiziert|approved|released|reviewed|complete|compliant|conform\w*|certified|OFFEN)\b|(?-i:\bOPEN\b)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     // Sections with evidence → validated sentences, from the cache and (with a provider) fresh calls. `tag` names the

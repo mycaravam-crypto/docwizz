@@ -5,6 +5,13 @@ internal static class ProductDraft
 {
     const int MaxFacts = 40;
 
+    // The marker of a required section without evidence. Earlier drafts said OFFEN; both are recognized where it matters.
+    public const string Open = "OPEN";
+    internal const string VModelDisclaimer = "Draft – no statement of V-Modell XT conformity or approval.";
+    internal const string OperationsDisclaimer = "Draft – no statement of operational readiness or approval.";
+    internal const string PublishedVModelDisclaimer = "Published after signature verification – no statement of V-Modell XT conformity.";
+    internal const string PublishedOperationsDisclaimer = "Published after signature verification – no statement of operational readiness.";
+
     // One piece of evidence for a section: a code fact (detected) or a project statement (human-maintained), where it is
     // from, and a document-wide id (`E1`, `E2`, ...) that synthesized sentences cite.
     // Line: how the deterministic draft shows it (unchanged by ids or synthesis).
@@ -22,7 +29,7 @@ internal static class ProductDraft
             var items = model is not null && section.Sources.Contains("code") ? Facts(section.Id, model) : [];
             if (project is not null && section.Sources.Contains("project"))
                 items.AddRange(project.Statements.Where(x => x.SectionId == section.Id)
-                    .Select(x => ("project", Escape(x.Text), x.Source, $"{Escape(x.Text)} (Quelle: `{x.Source}`)")));
+                    .Select(x => ("project", Escape(x.Text), x.Source, $"{Escape(x.Text)} (source: `{x.Source}`)")));
             result.Add((section, [.. items.Select(x => new Evidence($"E{++next}", x.Kind, x.Text, x.Source, x.Line))]));
         }
         return result;
@@ -42,15 +49,15 @@ internal static class ProductDraft
         }
         output.AppendLine(template.IsVModel
             ? $"V-Modell: {template.XtVariant} {template.XtVersion}; Tailoring: {template.Tailoring}"
-            : $"Dokumenttyp: {template.DocumentType}");
-        output.AppendLine($"Produktabhängigkeiten: {(template.Dependencies.Count == 0 ? "keine angegeben" : string.Join(", ", template.Dependencies))}");
-        if (model is not null) output.AppendLine($"Code-Stand: {model.Commit ?? "unbekannt"}");
+            : $"Document type: {template.DocumentType}");
+        output.AppendLine($"Product dependencies: {(template.Dependencies.Count == 0 ? "none declared" : string.Join(", ", template.Dependencies))}");
+        if (model is not null) output.AppendLine($"Code baseline: {model.Commit ?? "unknown"}");
         output.AppendLine();
         output.AppendLine(template.IsVModel
-            ? "> Entwurf – keine V-Modell-XT-Konformitäts- oder Freigabeaussage."
-            : "> Entwurf – keine Aussage zur betrieblichen Einsatzbereitschaft oder Freigabe.");
+            ? "> " + VModelDisclaimer
+            : "> " + OperationsDisclaimer);
         if (synthesis is not null)
-            output.AppendLine(">\n> 🤖 KI-Entwurf: Sätze mit [E…] sind von einem lokalen Modell aus den genannten Belegen formuliert und nicht geprüft. Maßgeblich sind die Belege.");
+            output.AppendLine(">\n> 🤖 AI draft: sentences marked [E…] were worded by a local model from the cited evidence and have not been reviewed. The evidence is authoritative.");
         output.AppendLine();
         foreach (var (section, evidence) in Catalog(template, model, project))
         {
@@ -59,7 +66,7 @@ internal static class ProductDraft
             output.AppendLine();
             if (evidence.Count == 0)
             {
-                output.AppendLine(section.Required ? "OFFEN – Quelle und fachliche Prüfung erforderlich." : "Optional – keine belegten Angaben.");
+                output.AppendLine(section.Required ? $"{Open} – needs a source and expert review." : "Optional – no evidenced content.");
                 output.AppendLine();
                 continue;
             }
@@ -137,9 +144,9 @@ internal static class ProductDraft
                     var role = (n.Tags ?? []).FirstOrDefault(t => t is "executable" or "library" or "test") ?? "unknown";
                     var targets = (n.Tags ?? []).Where(t => t.StartsWith("net", StringComparison.OrdinalIgnoreCase)
                         && t.Any(char.IsDigit)).Order(StringComparer.Ordinal).ToList();
-                    var label = $"Projekt: {Escape(n.Name)} (Rolle: {role}"
-                        + (targets.Count == 0 ? ")" : $"; Target Framework: {string.Join(", ", targets)})");
-                    return ("code", label, CodeModel.Location(n), $"{label} (Quelle: {CodeModel.Location(n)})");
+                    var label = $"Project: {Escape(n.Name)} (role: {role}"
+                        + (targets.Count == 0 ? ")" : $"; target framework: {string.Join(", ", targets)})");
+                    return ("code", label, CodeModel.Location(n), $"{label} (source: {CodeModel.Location(n)})");
                 }).ToList();
         }
         if (sectionId == "configuration")
@@ -147,8 +154,8 @@ internal static class ProductDraft
             // Configuration nodes contain only keys; never emit tags, which may contain URL hosts.
             return allowed.Values.Where(n => n.Kind == "config")
                 .OrderBy(n => n.Name, StringComparer.Ordinal).ThenBy(n => n.File, StringComparer.Ordinal)
-                .Take(MaxFacts).Select(n => ("code", $"Konfigurationsschluessel: {Escape(n.Name)}", CodeModel.Location(n),
-                    $"Konfigurationsschluessel: {Escape(n.Name)} (Quelle: {CodeModel.Location(n)})"))
+                .Take(MaxFacts).Select(n => ("code", $"Configuration key: {Escape(n.Name)}", CodeModel.Location(n),
+                    $"Configuration key: {Escape(n.Name)} (source: {CodeModel.Location(n)})"))
                 .ToList();
         }
         if (sectionId == "deployment-descriptors")
@@ -156,15 +163,15 @@ internal static class ProductDraft
             // Only manifest *presence* is detected; no claim that services were deployed or rollback was tested.
             return allowed.Values.Where(n => n.Kind == "deployment-descriptor")
                 .OrderBy(n => n.File, StringComparer.Ordinal)
-                .Take(MaxFacts).Select(n => ("code", $"Im Repository gefunden: {Escape(n.Name)} – `{Escape(n.File)}`",
-                    CodeModel.Location(n), $"Im Repository gefunden: {Escape(n.Name)} – `{Escape(n.File)}` (Quelle: `{CodeModel.Location(n)}`)"))
+                .Take(MaxFacts).Select(n => ("code", $"Found in the repository: {Escape(n.Name)} – `{Escape(n.File)}`",
+                    CodeModel.Location(n), $"Found in the repository: {Escape(n.Name)} – `{Escape(n.File)}` (source: `{CodeModel.Location(n)}`)"))
                 .ToList();
         }
         if (sectionId == "structure")
         {
             return allowed.Values.Where(n => Generator.TopKinds.Contains(n.Kind) && n.Kind != "module" && !childIds.Contains(n.Id))
                 .OrderBy(n => n.File, StringComparer.Ordinal).ThenBy(n => n.Id, StringComparer.Ordinal)
-                .Take(MaxFacts).Select(n => ("code", $"{n.Kind}: `{n.Name}`", CodeModel.Location(n), $"{n.Kind}: `{n.Name}` (Quelle: `{CodeModel.Location(n)}`)"))
+                .Take(MaxFacts).Select(n => ("code", $"{n.Kind}: `{n.Name}`", CodeModel.Location(n), $"{n.Kind}: `{n.Name}` (source: `{CodeModel.Location(n)}`)"))
                 .ToList();
         }
         if (sectionId == "interfaces")
@@ -173,7 +180,7 @@ internal static class ProductDraft
                 .OrderBy(e => e.From, StringComparer.Ordinal).ThenBy(e => e.To, StringComparer.Ordinal).ThenBy(e => e.Kind, StringComparer.Ordinal)
                 .Take(MaxFacts)
                 .Select(e => ("code", $"`{allowed[e.From].Name}` → `{allowed[e.To].Name}` ({e.Kind})", CodeModel.Location(allowed[e.From]),
-                    $"`{allowed[e.From].Name}` → `{allowed[e.To].Name}` ({e.Kind}; Quelle: `{CodeModel.Location(allowed[e.From])}`)"))
+                    $"`{allowed[e.From].Name}` → `{allowed[e.To].Name}` ({e.Kind}; source: `{CodeModel.Location(allowed[e.From])}`)"))
                 .ToList();
         }
         return [];

@@ -2,8 +2,8 @@
 
 [Documentation home](../README.md) · [Product documents](product-documents.md)
 
-docwizz ships three illustrative product templates for [`docwizz product`](product-documents.md), in German like the
-V-Modell XT itself. They are original outlines to tailor to your project: not official V-Modell XT templates, and no
+docwizz ships three illustrative product templates for [`docwizz product`](product-documents.md), with the
+V-Modell XT's German product names in italics. They are original outlines to tailor to your project: not official V-Modell XT templates, and no
 statement of conformity or approval.
 
 | Product | Template | Filling and review guide | Sections |
@@ -40,10 +40,10 @@ Write one context file per template, with statements for its section ids and sou
 schema: 1
 statements:
   - section: scope
-    text: Die Softwareeinheit verarbeitet Auftragsdaten innerhalb der dokumentierten Systemgrenze.
+    text: The software unit processes order data within the documented system boundary.
     source: docs/project-charter.md
   - section: decisions
-    text: Die Trennung von Anwendungslogik und Infrastruktur ist im ADR dokumentiert.
+    text: The separation of application logic and infrastructure is recorded in an ADR.
     source: docs/architecture/decisions.md
 ```
 

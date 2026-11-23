@@ -1,62 +1,62 @@
 # Evidence-based draft only; neither operational approval nor conformity claim.
 schema: 1
-product_id: it-betriebskonzept
+product_id: it-operations-concept
 document_type: it-operations
 sections:
   - id: scope
-    title: Zweck, Geltungsbereich und Systemverantwortung
+    title: Purpose, scope and system ownership
     required: true
     sources: [project]
   - id: structure
-    title: Systembausteine und Architektur
+    title: System building blocks and architecture
     required: true
     sources: [code, project]
   - id: runtime
-    title: Projekte, Laufzeitplattform und Voraussetzungen
+    title: Projects, runtime platform and prerequisites
     required: true
     sources: [code, project]
   - id: interfaces
-    title: Schnittstellen und Systemabhaengigkeiten
+    title: Interfaces and system dependencies
     required: true
     sources: [code, project]
   - id: configuration
-    title: Konfigurationsschluessel und Parametrisierung
+    title: Configuration keys and parameters
     required: true
     sources: [code, project]
   - id: environments
-    title: Betriebsumgebungen und Infrastruktur
+    title: Operating environments and infrastructure
     required: true
     sources: [project]
   - id: deployment-descriptors
-    title: Deployment- und CI-Deskriptoren im Repository
+    title: Deployment and CI descriptors in the repository
     required: true
     sources: [code]
   - id: deployment
-    title: Installation, Deployment und Rollback
+    title: Installation, deployment and rollback
     required: true
     sources: [project]
   - id: security
-    title: Zugriffsschutz und IT-Sicherheit
+    title: Access protection and IT security
     required: true
     sources: [project]
   - id: monitoring
-    title: Monitoring, Logging und Alarmierung
+    title: Monitoring, logging and alerting
     required: true
     sources: [project]
   - id: backup
-    title: Datensicherung und Wiederherstellung
+    title: Backup and restore
     required: true
     sources: [project]
   - id: incident
-    title: Stoerungsbehandlung und Eskalation
+    title: Incident handling and escalation
     required: true
     sources: [project]
   - id: responsibilities
-    title: Betriebsrollen und Verantwortlichkeiten
+    title: Operations roles and responsibilities
     required: true
     sources: [project]
   - id: service-targets
-    title: Servicezeiten, Verfuegbarkeit und RTO/RPO
+    title: Service hours, availability and RTO/RPO
     required: true
     sources: [project]
 dependencies: []
