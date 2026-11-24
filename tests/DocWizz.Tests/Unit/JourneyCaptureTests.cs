@@ -3,10 +3,10 @@ namespace DocWizz.Tests.Unit;
 // #311: a journey file is a guide's reviewed script; what it cannot express fails before a browser starts.
 public class JourneyCaptureTests
 {
-    static JourneyCapture.Journey Parse(string yaml)
+    static JourneyCapture.Journey Parse(string yaml, string? repository = null)
     {
         using var repo = new Sources(("journeys/01 Sign in.yaml", yaml));
-        return JourneyCapture.Parse(repo.Files[0]);
+        return JourneyCapture.Parse(repo.Files[0], repository);
     }
 
     const string SignIn = """
@@ -28,7 +28,7 @@ public class JourneyCaptureTests
     public void A_journey_file_becomes_steps_and_never_prints_what_is_filled_in()
     {
         var journey = Parse(SignIn);
-        Assert.Equal(("01-sign-in", "Sign in", 7), (journey.Id, journey.Title, journey.WorkItem));
+        Assert.Equal(("01-sign-in", "Sign in", (RequirementId?)new RequirementId(7)), (journey.Id, journey.Title, journey.Requirement));
         Assert.Equal(["Open /login", "Fill in “Password”", "Select “the highlighted control”"], journey.Steps.Select(JourneyCapture.Instruction));
         Assert.Equal("Ask your administrator when you have none.", journey.Steps[1].Note);
 
@@ -49,6 +49,28 @@ public class JourneyCaptureTests
     [InlineData("title: T\nunknown: 1\nsteps:\n  - open: /a", "01 Sign in.yaml")]
     public void An_invalid_journey_file_names_its_problem(string yaml, string problem) =>
         Assert.Contains(problem, Assert.Throws<InvalidDataException>(() => Parse(yaml)).Message);
+
+    [Theory]
+    [InlineData("4711", null, "WI-4711")]
+    [InlineData("AB#4711", null, "WI-4711")]
+    [InlineData("github#12", "https://github.com/Acme/Shop.git", "github#12")]
+    [InlineData("github:acme/shop#12", null, "github#12")]
+    public void A_requirement_is_an_azure_boards_item_or_a_github_issue(string requirement, string? origin, string display)
+    {
+        var id = Parse($"title: T\nrequirement: \"{requirement}\"\nsteps:\n  - open: /a", origin).Requirement!.Value;
+        Assert.Equal(display, id.Display);
+        if (id.IsGithub) Assert.Equal("acme/shop", id.Repository);
+        Assert.Null(Parse("title: T\nsteps:\n  - open: /a").Requirement);
+    }
+
+    [Theory]
+    [InlineData("\"#12\"", null, "ambiguous: write AB#12 for Azure Boards or github#12")]
+    [InlineData("github#12", null, "no github.com origin; write github:<owner>/<repo>#12")]
+    [InlineData("github#12", "https://gitlab.test/a/b.git", "no github.com origin")]
+    [InlineData("-3", null, "Azure Boards id (4711, AB#4711) or a GitHub issue (github#123)")]
+    [InlineData("0", null, "Azure Boards id")]
+    public void A_requirement_that_could_link_the_wrong_item_is_refused(string requirement, string? origin, string problem) =>
+        Assert.Contains(problem, Assert.Throws<InvalidDataException>(() => Parse($"title: T\nrequirement: {requirement}\nsteps:\n  - open: /a", origin)).Message);
 
     [Theory]
     [InlineData("sign-in.yaml", "Sign_in.yaml", "would write the same guide (sign-in)")]
@@ -85,5 +107,50 @@ public class JourneyCaptureTests
             ("docs/user-guides/images/team-photo.png", ""));
         JourneyEvidence.CleanupImages(Path.Combine(repo.Root, "docs"), []);
         Assert.Equal(["team-photo.png"], Directory.GetFiles(Path.Combine(repo.Root, "docs/user-guides/images")).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public void A_capture_is_kept_for_generations_without_the_running_application_while_its_pictures_exist()
+    {
+        using var repo = new Sources(("docs/.docwizz/x", ""), ("docs/user-guides/images/guide-sign-in-step-01.png", ""), ("docs/user-guides/images/guide-sign-in-result.png", ""));
+        var docs = Path.Join(repo.Root, "docs");
+        var guide = new JourneyEvidence.Guide("sign-in", "Sign in", "/login", 7, 0, 0, 0, 0, "", [],
+            [new(1, "Open /login", "", "images/guide-sign-in-step-01.png", Note: "Why")], "Intro", "Done", "images/guide-sign-in-result.png", "01-sign-in.yaml", "2026-11-17", "abc");
+        var testwizz = guide with { Id = "wi-1-case-1-aaaaaaaaaaaa", JourneyFile = null };
+        JourneyCapture.Save(docs, [guide, testwizz]);
+
+        var kept = Assert.Single(JourneyCapture.Retained(docs));   // TestWizz guides come from their evidence, not from here
+        Assert.Equal((guide.Title, guide.WorkItem, guide.Captured, guide.Code, "Why"), (kept.Title, kept.WorkItem, kept.Captured, kept.Code, kept.Steps[0].Note));
+        Assert.Contains("from `01-sign-in.yaml` on 2026-11-17:", JourneyEvidence.Markdown(kept));
+
+        File.Delete(Path.Join(docs, "user-guides/images/guide-sign-in-result.png"));
+        Assert.Empty(JourneyCapture.Retained(docs));
+        JourneyCapture.Save(docs, [testwizz]);
+        Assert.False(File.Exists(Path.Join(docs, ".docwizz/guides.json")));
+    }
+
+    [Fact]
+    public void A_captured_guide_is_stale_once_the_code_behind_its_route_changes()
+    {
+        using var repo = new Sources(("src/Login.vue", "<template>\na</template>"), ("src/Other.vue", "x"));
+        var model = new CodeModel(null, [new("r", "route", "/login", "src/router.ts", 1, Route: "/login"), new("c", "component", "Login", "src/Login.vue", 1),
+            new("o", "component", "Other", "src/Other.vue", 1)], [new("r", "c", "routes-to")]);
+        var flow = new FlowGraph(model);
+        var guide = new JourneyEvidence.Guide("sign-in", "Sign in", "/login", 0, 0, 0, 0, 0, "", [], [], JourneyFile: "a.yaml", Captured: "2026-11-17",
+            Code: GuideStaleness.Code(repo.Root, model, flow, "/login"));
+        Assert.NotNull(guide.Code);
+        Assert.Null(GuideStaleness.Code(repo.Root, model, flow, "/unknown"));
+
+        File.WriteAllText(Path.Join(repo.Root, "src/Other.vue"), "changed");   // not behind the route
+        File.WriteAllText(Path.Join(repo.Root, "src/Login.vue"), "<template>\r\na</template>");   // other line endings only
+        Assert.False(GuideStaleness.CodeChanged(guide, repo.Root, model, flow));
+        Assert.Equal("", GuideStaleness.Section([guide], null, g => GuideStaleness.CodeChanged(g, repo.Root, model, flow)));
+
+        File.WriteAllText(Path.Join(repo.Root, "src/Login.vue"), "<template>b</template>");
+        Assert.True(GuideStaleness.CodeChanged(guide, repo.Root, model, flow));
+        Assert.Contains("- [Sign in](sign-in.md): the code behind `/login` changed since the capture on 2026-11-17",
+            GuideStaleness.Section([guide], null, g => GuideStaleness.CodeChanged(g, repo.Root, model, flow)));
+        Assert.Contains("> **Stale:** the code behind `/login` changed since the capture. Recapture",
+            JourneyEvidence.Markdown(guide, stale: GuideStaleness.Reason(guide, null, codeChanged: true)));
     }
 }

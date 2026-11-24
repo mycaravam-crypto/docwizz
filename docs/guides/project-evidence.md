@@ -1,10 +1,16 @@
-# P2 project evidence (schema 1)
+# Project evidence and traceability
 
-This is a **data contract**, not a new CLI command and not a compliance or review claim.
-It complements the existing P1 `ProjectContext` statements; no existing template or
-`docwizz product` behavior changes in P2.1.
+[Documentation home](../README.md) · [CLI reference](../cli.md) · [Product documents](product-documents.md)
 
-An explicitly maintained YAML file lists typed, versioned evidence records:
+A project evidence catalog is a file you maintain that lists requirements, architecture elements and tests, and the
+links you declare between them. `docwizz trace` reports the gaps in those links and `docwizz evidence-diff` compares two
+versions of the catalog. Nothing is inferred: only declared records and links count. Neither command makes network or
+AI calls, writes files or claims compliance.
+
+This is separate from [requirement history](requirements.md), where links come from Git and are labeled by how they
+were found; nothing from the history index is ever written into a catalog.
+
+## The catalog
 
 ```yaml
 schema: 1
@@ -14,6 +20,7 @@ evidence:
     text: A user must authenticate.
     source: docs/requirements.md
     version: v1
+    source_hash: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef   # optional
   - id: ARC-004
     kind: architecture
     text: AuthService handles authentication.
@@ -24,80 +31,22 @@ evidence:
     text: A successful sign-in is tested.
     source: docs/tests.md
     version: v1
+links:                    # optional
+  - { from: REQ-017, to: ARC-004 }
+  - { from: ARC-004, to: TEST-032 }
 ```
 
-Required fields: unique uppercase ID `PREFIX-123`, kind (`requirement`,
-`architecture`, `test`), single-line text, repository-relative Markdown
-source under `docs/`, and non-empty source version. Unknown keys, duplicate
-IDs, malformed documents and invalid paths are rejected with indexed diagnostics.
-A SHA-256 hash of each record's canonical field values changes with the text,
-source path or version. **It is not a file-content hash**, and P2.1 does not
-check whether referenced files exist. Source-file checks and traceability reports follow in #120–#122.
+- **Records:** a unique uppercase id (`PREFIX-123`), a `kind` (`requirement`, `architecture`, `test`), single-line
+  `text`, a repository-relative Markdown `source` under `docs/`, and a non-empty `version`.
+- **Links:** only `requirement → architecture` and `architecture → test`, between existing ids. Duplicates, unknown ids
+  and other directions are rejected; cycles are impossible by construction.
+- **`source_hash`:** the SHA-256 of the source file's bytes (lowercase hex), to detect when the source changed.
+- Unknown keys, duplicate ids, malformed documents and invalid or symlinked paths are rejected with the record's
+  index.
 
-No inferred links, automated approval or LLM calls are made.
-
-## Explicit relationships (P2.2, #119)
-
-Schema 1 optionally accepts `links` after `evidence`. Each link has only
-`from` and `to`, both existing evidence IDs. The only permitted directions are
-`requirement → architecture` and `architecture → test`:
-
-```yaml
-links:
-  - from: REQ-017
-    to: ARC-004
-  - from: ARC-004
-    to: TEST-032
-```
-
-Duplicate links, unknown endpoints, wrong kind/direction, and unknown keys fail
-with indexed diagnostics. Only explicit links count. Because allowed kinds advance
-strictly from requirement through architecture to test, directed cycles are
-impossible by construction; no separate cycle solver is needed. Existing YAML
-files without `links` remain valid and yield an empty link list. This step
-introduces no CLI command or inferred traceability; the gap report follows in #120.
-
-## Traceability report (P2.3, #120)
-
-`docwizz trace <dir> <evidence.yaml> [--format json]` renders explicit links as a stable Markdown matrix or machine-readable JSON on stdout. Each requirement is classified as `linked`, `no-architecture`, or `no-test`. Separate lists identify architecture records without incoming requirement links or outgoing test links. Invalid link IDs are rejected by the schema parser before reporting. Missing source documents and stale versions are **not** verified in this report, so it makes no freshness or conformity claim. Report findings do not affect exit status; invalid YAML does.
-
-The report uses camelCase JSON keys. `partial` marks a requirement linked to multiple architecture records when at least one of those has no test; `orphanedTests` lists tests with no incoming architecture link. `OFFEN` in Markdown means missing explicit evidence, not a failed test. Source file names resolve from the current working directory first, then from `<dir>`, as for product templates.
-
-## Illustrative product templates (P2.4, #121)
-
-Three example structures live in `templates/vmodell-xt/`: `sw-architecture.yaml`,
-`sw-specification.yaml`, and `system-element-test-specification.yaml`.
-They use schema 1, describe V-Modell XT 2.4 as metadata, and deliberately
-require project-specific tailoring. **These are original illustrative outlines,
-not official licensed product templates or a conformity assertion.** Before
-using them for a governed project, review the applicable XT variant/version,
-the process tailoring, contents, and rights to reuse official text.
-
-The test specification demonstrates the existing direct product dependency
-contract with `dependencies: [sw-specification]`. That relationship is an
-illustration, not a statement that the chosen project's tailoring always
-requires it. The existing SW-architecture example deliberately keeps no dependency
-so its P0/P1 demonstration remains independently runnable; adapt dependencies
-to the project's actual tailored product chain. For requirement-to-test links,
-use the explicit evidence relationships and `docwizz trace` report, not an
-assumed relationship inferred from a chapter title. The existing `docwizz product check` verifies that the dependent
-draft exists, not its professional approval or correctness. Chapters backed
-only by project sources remain **OFFEN** until evidence is explicitly provided.
-
-## Evidence import formats (P2.5, #122)
-
-`docwizz trace <dir> <evidence.csv|evidence.md|evidence.yaml> [--format json]`
-accepts CSV and Markdown **evidence records** in addition to YAML. All formats
-pass through the same strict schema-v1 validator; only YAML currently supports
-explicit `links`. Imported CSV/Markdown records have no implicit links.
-
-CSV requires the exact header `id,kind,text,source,version` and comma separators (for German Excel exports choose comma-separated CSV, not semicolon-separated CSV); UTF-8 quoted
-CSV fields may contain commas, but all evidence values must remain single-line.
-Markdown accepts surrounding whitespace/indentation and requires only a five-column pipe table with the same field names
-and a separator row; no headings, inline pipe characters or multiline cells.
-This deliberately narrow format avoids guessing semantics from arbitrary prose.
-
-Example Markdown:
+**CSV and Markdown** catalogs hold records only, without links or `source_hash`. CSV needs the exact header
+`id,kind,text,source,version` with comma separators (choose comma-separated, not semicolon-separated, when exporting
+from Excel). Markdown needs one five-column pipe table with the same header:
 
 ```markdown
 | id | kind | text | source | version |
@@ -105,57 +54,27 @@ Example Markdown:
 | REQ-017 | requirement | Authenticate users | docs/requirements.md | v1 |
 ```
 
-The existing canonical SHA-256 field hash includes the explicit record
-version and source path, **not the contents of the referenced source file**.
-Consequently this change does not detect stale source files or changed link
-impact: those remain tracked as a separate part of #122. Importers perform
-no network access, LLM inference, filesystem write or silent approval.
+## Traceability report
 
-## Snapshot change impact (P2.5, #122)
-
-`ProjectEvidenceImpact.Compare(before, after)` computes stable, ordinal-sorted
-changes between two validated evidence catalogs. It reports added, removed or
-modified declarations (based on the canonical evidence hash); for each changed
-ID it lists direct neighbors from **explicit** links in either snapshot.
-Added and removed links are also reported independently, even if no declaration
-changed; the links of a removed record therefore appear both in its related IDs
-and under removed links. For a `changed` record, `fields` names what differs
-(`kind`, `text`, `source`, `version`), so a version bump can be told apart from a
-changed kind, which makes the record's old links questionable.
-
-`affectedTests` lists the test records reachable from a changed record along
-**explicit** links in either snapshot (requirement → architecture → test). This
-follows declared, typed links only; no semantic or inferred dependency is added.
-
-The `evidence-diff` CLI exposes this snapshot comparison. Importantly it
-**does not read the source Markdown files**: identical catalog entries with
-modified referenced files are invisible to this comparison. File-content
-hashing / freshness checks remain open in #122.
-
-## Evidence-diff command (P2.5)
-
-`docwizz evidence-diff <dir> <before.yaml> <after.yaml> [--format json]` compares two validated evidence snapshots. It reports changed fields, direct linked evidence IDs, and tests reachable through explicit relations, together with link additions or removals. YAML, CSV and Markdown catalogs are supported, but only YAML supplies relations. It does not read source Markdown contents or establish source freshness. Exit 1 indicates invalid input; output is read-only.
-
-## File content freshness (P2.5)
-
-YAML schema 1 evidence records may carry an optional `source_hash`: a lowercase
-64-character SHA-256 digest of the **actual UTF-8 Markdown file bytes**, not
-the evidence record hash. For example:
-
-```yaml
-  - id: REQ-017
-    kind: requirement
-    text: Users authenticate.
-    source: docs/requirements.md
-    version: v1
-    source_hash: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+```bash
+docwizz trace . project-evidence.yaml [--format json]
 ```
 
-`docwizz trace . evidence.yaml --format json` reads only declared repository-relative
-`docs/*.md` paths and reports `sources[]` entries with status `current`
-(expected digest matches), `stale` (mismatch), `missing` or `unverified`
-(no explicit digest). Symlink sources are rejected. A missing file is never
-presented as current, and no version is inferred from filesystem timestamps.
-The CLI remains report-only: findings do not fail the command and do not imply
-human approval. CSV/Markdown adapters cannot encode a source hash; use YAML
-when a pinned source-content baseline is required.
+A Markdown matrix or JSON on stdout. Each requirement is `linked`, `partial` (one of several architecture records has
+no test), `no-architecture` or `no-test`; architecture records without incoming or outgoing links and tests without an
+incoming link are listed separately. `OPEN` marks missing declared evidence, not a failed test.
+
+Each source with a `source_hash` is reported as `current` (the file matches), `stale`, or `missing`; one without is
+`unverified`. Findings never fail the command; an invalid catalog exits 1. Paths resolve from the current directory,
+then from `<dir>`.
+
+## Comparing two catalogs
+
+```bash
+docwizz evidence-diff . before.yaml after.yaml [--format json]
+```
+
+Lists added, removed and changed records (with the fields that changed: `kind`, `text`, `source`, `version`), their
+directly linked ids, added and removed links, and `affectedTests`: the tests reachable from a changed record along
+declared links in either version. It compares the catalogs only, not the source files they point to: use
+`source_hash` and `trace` for that.

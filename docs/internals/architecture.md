@@ -116,8 +116,7 @@ Discovery runs before any language scanner, so a project selection limits what i
   atomically replacing the top-level `scope:` block, leaving the rest of the YAML byte-identical. Without a selection
   stage, `setup` keeps its seven stages; config still follows scan so inferred layers come from evidence.
 
-Without `scope:`, everything is scanned as before. Limits and the acceptance criteria are in
-[MULTI_PROJECT_ACCEPTANCE.md](../archive/multi-project-acceptance.md).
+Without `scope:`, everything is scanned as before. Limits: [multi-project repositories](../guides/multi-project.md#limits).
 
 ## Scanners
 
@@ -297,10 +296,10 @@ items without a summary, plus an overview for each module (folder) of three or m
   declared `docs/*.md` paths and never following symlinks.
 - **`evidence-diff`** ([ProjectEvidenceImpact](../../src/DocWizz/Product/ProjectEvidenceImpact.cs)) compares declaration
   hashes between two snapshots and follows declared links to affected tests.
-- **Product drafts.** [ADR-0001](decisions/product-template-contract.md) defines the template contract,
+- **Product drafts.** [The product template decision](decisions/product-template-contract.md) defines the template contract,
   independent of coverage profiles. [ProductDraft](../../src/DocWizz/Product/ProductDraft.cs) builds an evidence catalog per
   section (code facts and sourced statements from [ProjectContext](../../src/DocWizz/Discovery/ProjectContext.cs)) with
-  document-wide ids; sections without evidence say `OFFEN`. With `--ai`,
+  document-wide ids; sections without evidence say `OPEN`. With `--ai`,
   [ProductSynthesis](../../src/DocWizz/Product/ProductSynthesis.cs) sends each section's evidence through `IAiProvider` and
   keeps only sentences that cite that section's ids and claim no status or conformity.
   [ProductCheck](../../src/DocWizz/Product/ProductCheck.cs) checks references and freshness, never content.
@@ -333,20 +332,27 @@ own step.
 
 | Layer | Where | What it covers | Run |
 |---|---|---|---|
-| Unit | [tests/DocWizz.Tests/Unit](../../tests/DocWizz.Tests/Unit) | `Analyzer`, `Architecture`, `Diff`, `CodeModel`, `Versions` on small in-memory models; `Cli` parsing and the command/option matrix; CLI.md and README checked against the command table, so the docs can't drift | `dotnet test --project tests/DocWizz.Tests --filter-namespace DocWizz.Tests.Unit` |
+| Unit | [tests/DocWizz.Tests/Unit](../../tests/DocWizz.Tests/Unit) | `Analyzer`, `Architecture`, `Diff`, `CodeModel`, `Versions` on small in-memory models; `Cli` parsing and the command/option matrix; `docs/cli.md` and the README checked against the command table, so the docs can't drift | `dotnet test --project tests/DocWizz.Tests --filter-namespace DocWizz.Tests.Unit` |
 | Component | [tests/DocWizz.Tests/Component](../../tests/DocWizz.Tests/Component) | one scanner on a few source snippets → nodes and edges, incl. past regressions; project files → remediation suggestions and validation | `… --filter-namespace DocWizz.Tests.Component` (Java needs `npm ci --prefix scanner-vue`) |
 | Journey | [tests/DocWizz.Tests/Journey](../../tests/DocWizz.Tests/Journey) | the CLI as a process: `setup` on small C#, Java, Vue, mixed, console, partial and empty repositories; idempotent re-runs; findings vs failures; exit codes, stdout vs stderr, no stack traces; no AI without `--ai`, no secrets in `docwizz.yaml`, no repository code run | `… --filter-namespace DocWizz.Tests.Journey` (needs `npm ci --prefix scanner-vue`) |
 | End-to-end | [test.sh](../../test.sh) | repository → model → reports → generated pages, on the fixtures | `./test.sh` |
+
+Journey tests and `test.sh` start the CLI hundreds of times, and a cold .NET process spends about half of a small scan
+in the JIT (mostly Roslyn). `test.sh` therefore builds and runs a ReadyToRun build from
+[build-test-cli.sh](../../scripts/build-test-cli.sh). Journey tests can use it too when `DOCWIZZ_DLL` points at it (useful
+for repeated local runs); CI leaves it unset, since there the one-off publish costs more than the journeys save. A check belongs to one layer: `test.sh` asserts what needs the full fixture, while re-runs,
+error paths and CLI conventions on small repositories are journey tests.
 
 `test.sh` runs against [fixture/](../../fixture), a small ASP.NET + EF Core + Vue project with deliberate gaps,
 violations, external systems, configuration and deployment descriptors. It asserts facts in the model JSON and lines in
 the generated pages. When adding a feature, extend the fixture with the smallest case that exercises it and assert both
 model and page. Rules and analysis logic also get a unit test; a scanner fix gets a component test with the snippet
 that broke it. Multi-project boundaries (golden multi-solution repositories, symlink and root escapes, an
-80-project indexing test) are covered too; see [MULTI_PROJECT_ACCEPTANCE.md](../archive/multi-project-acceptance.md).
+80-project indexing test) are covered by `MultiProjectAcceptanceJourneyTests`, `ProjectScopeJourneyTests` and
+`ProjectNavigationJourneyTests`.
 
-The release version rule ([next-version.sh](../../.github/scripts/next-version.sh)) has its own table of cases in
-[next-version.test.sh](../../.github/scripts/next-version.test.sh), run as the first step of CI.
+The release version rule ([semver-next.sh](../../.github/scripts/semver-next.sh)) has its own table of cases in
+[semver-next.test.sh](../../.github/scripts/semver-next.test.sh), run in CI and before every release.
 
 Performance is measured separately: [bench/](../../bench/README.md) generates synthetic repositories of three sizes and times
 every stage (`--timings`, [Timings.cs](../../src/DocWizz/Timings.cs)) against a committed baseline, on demand and weekly;

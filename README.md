@@ -3,9 +3,10 @@
 **Point it at a repository and find out what's undocumented, what breaks the architecture, and how a request travels
 through the code. Then generate the docs that can be derived from the code itself.**
 
-docwizz reads C#, Java/Spring, PHP, Vue, React, Angular, TypeScript, SQL and deployment files and builds a model of the code:
-symbols, endpoints, calls, dependencies and external systems. Everything it reports comes from that model. It never
-guesses intent, and it labels every item as *detected*, *inferred* or *AI-drafted*.
+docwizz reads C#, Java/Spring, PHP, Vue, React, Angular, TypeScript, SQL and deployment files and builds a model of the
+code: symbols, endpoints, calls, dependencies and external systems. Everything it reports comes from that model and is
+labeled *detected*, *inferred* or *AI-drafted*. It never runs your build or tests (unless you ask
+`remediate --validate` to) and never sends code anywhere: AI drafting is opt-in and local only.
 
 | You get | |
 |---|---|
@@ -13,26 +14,12 @@ guesses intent, and it labels every item as *detected*, *inferred* or *AI-drafte
 | **Architecture** | layer violations, cycles, risky patterns, optional custom and security rules |
 | **Docs** | Markdown or HTML pages with Mermaid diagrams: API, request flows, system context, data, deployment |
 | **CI gate** | fails a pull request only on problems *that change introduces* |
-| **Extras** | context for coding agents, CycloneDX SBOM, package-update suggestions, requirement traceability |
-
-It never runs your build, tests or package tools (unless you ask `remediate --validate` to) and never sends code
-anywhere: AI drafting is opt-in and local only.
-
-## Contents
-
-1. [Quick start](#quick-start)
-2. [Workflow](#workflow): [gaps](#find-the-gaps) · [architecture](#check-the-architecture) ·
-   [docs](#generate-the-docs) · [AI drafts](#draft-missing-docs-with-a-local-ai) ·
-   [change impact](#see-what-a-change-affects) · [CI](#gate-pull-requests)
-3. [Beyond docs](#beyond-docs): coding agents, dependencies, traceability
-4. [Configuration](#configuration)
-5. [What it reads](#what-it-reads)
-6. [Commands](#commands)
-7. [Development](#development)
+| **Extras** | context for coding agents, SBOM, package updates, requirement traceability, user guides with screenshots |
 
 ## Quick start
 
-Needs the [.NET 10 SDK](https://dotnet.microsoft.com/download), plus Node for Java, Vue, React, Angular or TypeScript.
+Needs the [.NET 10 SDK](https://dotnet.microsoft.com/download), plus Node.js 22 for Java, Vue, React, Angular or
+TypeScript.
 
 ```bash
 git clone https://github.com/mycaravam-crypto/docwizz && cd docwizz
@@ -41,14 +28,14 @@ npm ci --prefix scanner-vue        # only for Java/Vue/React/Angular/TypeScript
 alias docwizz="dotnet $PWD/src/DocWizz/bin/Release/net10.0/DocWizz.dll"
 ```
 
-Then, in your repository:
+To install it as a .NET tool instead, see [Getting started](docs/getting-started.md). Then, in your repository:
 
 ```bash
 docwizz setup .
 ```
 
-`setup` inventories projects and solutions, detects the stack, writes a `docwizz.yaml` from what it finds, analyzes the
-code and architecture, generates `docs/` and runs the quality gate:
+`setup` inventories the projects, detects the stack, writes a `docwizz.yaml` from what it finds, analyzes code and
+architecture, generates `docs/` and runs the quality gate:
 
 ```console
 Setup complete, with findings: they are about the repository; docwizz itself ran without errors.
@@ -67,29 +54,19 @@ Follow-up:
   …
 ```
 
-- `SUCCESS_WITH_FINDINGS` (exit 0) is the normal first result: the findings are your starting point.
-- `FAILED` (exit 1) means a stage could not run, for example an invalid `docwizz.yaml`.
-- An existing `docwizz.yaml` is only overwritten with `--force`.
-- In a repository with several solutions, `setup` offers to pick the projects to document (see
-  [Multi-project repositories](#multi-project-repositories)).
+`SUCCESS_WITH_FINDINGS` (exit 0) is the normal first result: the findings are your starting point. `FAILED` (exit 1)
+means docwizz could not run a stage, for example because `docwizz.yaml` is invalid.
 
-To try it without your own code, run the steps below on the bundled sample in [fixture/](fixture): an ASP.NET API
-with Vue and React frontends and some deliberate mistakes. All output in this README comes from it.
+All output below comes from [fixture/](fixture), a small ASP.NET API with Vue and React frontends and some deliberate
+mistakes: run the commands on it to try docwizz without your own code.
 
 ## Workflow
-
-`setup` runs these steps once. Afterwards, run each on its own, in this order: find gaps, check the architecture,
-generate the docs, optionally draft with AI, then review and gate every change.
 
 ### Find the gaps
 
 ```console
 $ docwizz analyze fixture
 Documentation  ███████░░░░░░░░░░░░░ 37%
-
-  controller         33%  (3)
-  endpoint           35%  (10)
-  service            50%  (2)
 
 Critical (10)
 ────────────────────────────────────────
@@ -98,9 +75,8 @@ Critical (10)
   ...
 ```
 
-Each item says where it is, what is missing and *why* it needs docs. Trivial code such as a two-line getter is never
-flagged. What counts as documented depends on the [profile](#profiles); written docs are also checked for
-[quality](#doc-quality).
+Each item says where it is, what is missing and *why* it needs docs; trivial code is never flagged. What counts as
+documented depends on the [profile](docs/configuration.md#profiles).
 
 ### Check the architecture
 
@@ -115,8 +91,7 @@ Architecture (3 violations, 1 cycles)
   ARCH-003  cycle: backend/Domain ↔ backend/Infrastructure
 ```
 
-`setup` guesses layers and allowed dependencies; review them in [`docwizz.yaml`](#architecture-rules) so they reflect
-your intent.
+Layers, allowed dependencies and your own rules live in `docwizz.yaml`: [architecture rules](docs/configuration.md#architecture-rules).
 
 ### Generate the docs
 
@@ -137,131 +112,25 @@ $ docwizz generate fixture docs --html
                 docwizz check fixture   gates coverage in CI
 ```
 
-The first line is the stable one-line result for scripts; the report below it says what was found and where to look.
-
-You get `index`, `architecture`, `api`, `frontend` and `quality` pages, one page per module, one page per frontend route
-(`routes/`), and `views/` for context, containers, components, data and deployment. With an imported requirement index,
-also one page per work item (`requirements/`), linked both ways with the routes and code. `api.md` traces every endpoint to where it ends up:
+You get an index, architecture, API, frontend and quality pages, a page per module and per frontend route, and views
+for context, containers, components, data and deployment. `api.md` traces every endpoint to where it ends up:
 
 ```markdown
-- `GET /api/stock/{sku}`: StockController → ErpClient → erp.example.com
 - `PUT /api/materials/{id}`: MaterialController → MaterialService → SqlMaterialRepository → AppDbContext → SQL Server (inferred)
 ```
 
-- **HTML** (`--html`): an offline site with sidebar, search (`/`), outline and dark mode. Open `docs/index.html`.
-  Mermaid diagrams load from a pinned CDN.
-- **Incremental**: only changed pages are rewritten. Pages you write yourself (e.g. `docs/architecture/`) are linked,
-  never overwritten. After upgrading docwizz, `--refresh-html-on-version-change` rewrites all HTML pages.
-- **Machine-readable**: `docs/.docwizz/documentation.json` lists every item's required sections, where each comes from
-  (`written`, `fact`, `inferred`, `ai`) and its evidence (`file:line`). `search.json` indexes components, endpoints,
-  routes, keys and modules.
-
-**Route screenshots (optional, no AI).** With a running frontend and Playwright Chromium installed
-(`npx playwright@1.63.0 install chromium`):
-
-```bash
-# once: sign in interactively and save the browser session (docwizz never sees a password)
-npx playwright codegen --save-storage=.auth/docwizz-state.json http://localhost:5173
-
-docwizz generate . --html --screenshots --base-url http://localhost:5173 --storage-state .auth/docwizz-state.json
-```
-
-Screenshots land in `docs/screenshots/` and are linked from the frontend page and from each route's page (`docs/routes/`), which also shows the route's components, its flow down to the backend endpoints and what could not be resolved. Without `--storage-state` routes are
-captured anonymously; with it, each route continues the previous route's session, so rotating refresh tokens keep
-working. Slow pages: add `--screenshot-delay <ms>`. Hash routers are opened as `/#/route`. Dynamic routes, `/logout`, HTTP
-errors, redirects, expired sessions and pages whose API calls answer 401/403 are skipped with a warning.
-**The state file holds session tokens:** keep it out of Git, and use a low-privilege test account with sanitized data.
-Limits are listed in [CLI.md](docs/cli.md#options); for Windows installation errors, authenticated capture and diagnostics,
-see [Playwright screenshot troubleshooting](docs/guides/screenshots.md).
-
-### Screenshot-based user guides from reviewed ADO test journeys
-
-DocWizz writes **user guides** from [journey files](docs/guides/screenshots.md#user-guides-from-journey-files): it plays each one in the running application and outlines the control to use in every picture (`docwizz generate . --html --journeys journeys --base-url <url>`).
-
-DocWizz can also render step-by-step **draft user guides** from TestWizz's `testwizz.ui-evidence/v1` screenshot bundles. Annotated before-action screenshots can show **multiple numbered bubbles** for the reviewed controls visible together (e.g. Customer, Description and Save); raw after-action evidence remains separate and hash-validated. TestWizz reuses ADO work-item criteria and exported test-case steps, executes only reviewed declarative Playwright interactions, and captures an image after each assertion. DocWizz validates the screenshot hashes, links guides to routes and retains ADO revision provenance:
-
-```bash
-docwizz generate . --html --journeys ../journey-evidence
-```
-
-Generated guides require human review and must not be presented as acceptance verification. The import is offline and opt-in; normal route screenshots and documentation generation remain unchanged. See [screenshot-backed user guides](docs/guides/screenshots.md#screenshot-backed-user-guide-drafts-from-testwizz).
-### Draft missing docs with a local AI
-
-Before drafting, test the current Ollama or OpenAI-compatible configuration with `docwizz ai check .` (or `--format json`). The check performs one synthetic inference request, sends no repository code and exits 0 if the model responds, 1 otherwise.
-
-
-```bash
-ollama pull qwen2.5-coder:7b
-docwizz generate . --ai
-```
-
-A self-hosted model ([Ollama](https://ollama.com) or any OpenAI-compatible server) drafts summaries, behaviour, side
-effects, errors and usage for undocumented items, plus an overview for each module (folder) of three or more members.
-
-- **Local only.** The server must resolve to a loopback or private address; proxies are bypassed and Ollama `…-cloud`
-  models are refused.
-- **Grounded.** Every sentence cites the facts it rests on; sentences that cite nothing are dropped.
-- **Never authoritative.** Drafts are marked 🤖, fill only empty sections and never close a gap.
-- **Sent once.** Drafts are cached in `docs/.docwizz/ai-cache.json` by code hash, answers the model got wrong too,
-  so a later `--ai` run sends only changed code. Without `--ai`, cached drafts are reused and no new drafts are requested.
-- **Optional ratings.** `docwizz generate . --ai-ratings` rates written docs with advisory 1–5 usefulness scores in
-  `quality.md`; `check` ignores them. `--ai` drafts only; combine the flags to do both. `setup` accepts them too.
-  Ratings can dominate a cold run with a local model, so they are off unless requested. Existing ratings are reused
-  without either flag. The cache (`docs/.docwizz/ai-assessments.json`) is keyed by symbol, documentation/code hash,
-  provider and model; unchanged items are not rated again. Each result is saved as it arrives, so interrupted runs
-  retain completed work. `--progress` shows the item count and estimates remaining time from measured throughput.
-
-Configure the server under [AI](#ai).
-
-### Include GitWizz release history (optional)
-
-Export the offline GitWizz v2 history into `docs/architecture/versions.json`, then regenerate:
-
-```bash
-gitwizz version-history export --target main -o docs/architecture/versions.json
-docwizz generate . --html
-```
-
-If present, DocWizz adds a version history page to Markdown, HTML navigation and search. Without the file, generated documentation is unchanged. The release history is separate from document-control revisions.
-
-### See what a change affects
-
-```console
-$ docwizz diff . HEAD~2 HEAD
-Documentation impact (vs HEAD~2, at HEAD)
-
-Changed (11)
-  ~ CSharpScanner.Doc(Microsoft.CodeAnalysis.ISymbol)
-  ...
-Added (3)
-  + Generator.HostKind(System.Collections.Generic.List<string>)
-...
-Test traceability (2 of 14 changed symbols linked) — a link means test code uses the symbol; it is not code coverage
-  ~ Orders.Place(int)  ← OrdersTests.Places
-  No linked test (12)
-    + Orders.Refund(int)  [high]
-```
-
-`diff` lists changed symbols, affected pages, updated package versions and the test code linked to each symbol
-(directly or through an interface or implementation; calling it or constructing it with `new` both count). Only test code
-inside the scanned directory is seen: scan the repository root when the tests live next to `src/`. Without refs it compares against the last `generate`.
+Only changed pages are rewritten, and pages you write yourself are linked, never overwritten. A local model can draft
+the missing summaries (`--ai`). See [Generating documentation](docs/guides/generation.md).
 
 ### Gate pull requests
 
 ```console
-$ docwizz check fixture
-check: FAIL — coverage 37% < 80%; 10 critical > 0; 3 violations > 0; 1 cycles > 0
-
 $ docwizz check . --since origin/main
 check: FAIL — introduced 0 critical gaps, 1 violations
 ```
 
-`check` exits 1 when a [threshold](#configuration) fails. With `--since`, only what the change *introduces* counts —
-critical gaps, violations and docs that now contradict the code — so an existing codebase can adopt it without fixing
-everything first. *Possibly stale* docs (signature changed, comment didn't) are listed but don't fail.
-
-As a GitHub Action it posts one pull request comment, updated on every push, including ADR candidates such as a new
-external system or layer dependency:
+With `--since`, only what the change *introduces* fails, so an existing codebase can adopt the gate without fixing
+everything first. As a GitHub Action, it posts one pull request comment and updates it on every push:
 
 ```yaml
 on: pull_request
@@ -271,274 +140,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with: { fetch-depth: 0 }          # the base commit must be in the checkout
-      - uses: mycaravam-crypto/docwizz@main
-        with:
-          path: .                         # directory to scan
-          # base: origin/main             # default: the pull request's base commit
-          # comment: 'false'              # only the job summary
-          # fail: 'false'                 # report, never fail
+        with: { fetch-depth: 0 }                # the base commit must be in the checkout
+      - uses: mycaravam-crypto/docwizz@vX.Y.Z   # a release tag or its commit SHA; branches are refused
 ```
 
-## Beyond docs
+Inputs, other CI systems and `docwizz diff`: [Quality checks and change review](docs/guides/quality.md).
 
-### Context for coding agents
+## More
 
-- `docwizz context . --for <symbol|file|folder|endpoint> --budget 4000` prints token-budgeted facts with provenance.
-- `docwizz mcp .` runs a read-only MCP server so agents query symbols, flows, impact and the gate instead of searching
-  files.
+- [Coding agents](docs/guides/agent-context.md): token-budgeted context per symbol, and a read-only MCP server.
+- [Requirements and traceability](docs/guides/requirements.md): Azure DevOps work items and GitHub issues linked to
+  code through exported history, and ADO test cases linked to requirements.
+- [Screenshots and user guides](docs/guides/screenshots.md): route screenshots and step-by-step guides captured from
+  the running application.
+- [Domain discovery](docs/guides/domain-discovery.md): follow one endpoint or work item through the code.
+- [Dependencies](docs/guides/dependencies.md): CycloneDX SBOM and evidence-backed package updates.
+- [Load-test results](docs/guides/load-reports.md): measured latency per endpoint from powerwizz reports.
+- [Product documents](docs/guides/product-documents.md): V-Modell XT and IT operations drafts from code and evidence,
+  with document control and signed DOCX/PDF publication.
+- [Multi-project repositories](docs/guides/multi-project.md): choose which projects to document.
 
-See [CLI.md](docs/cli.md#8-context-for-coding-agents) and the [AGENTS.md template](templates/AGENTS.md).
-
-### Load-test results
-
-`docwizz load import . shop-bericht.json` reads [powerwizz](https://github.com/mycaravam-crypto/powerwizz) load-test
-reports; `api.md` then shows the measured requests, error rate and p50/p95/p99 latency per endpoint, with the run as
-evidence ([details](docs/cli.md#load-test-results)).
-
-### Dependencies
-
-- `docwizz sbom . sbom.json` exports a CycloneDX 1.6 inventory of the direct dependencies declared in NuGet, npm, Maven
-  and Gradle manifests. Nothing is installed or resolved ([details](docs/cli.md#sbom-inventory)).
-- `docwizz remediate` suggests package updates with evidence. It never touches your working tree:
-
-```console
-$ docwizz remediate . --package Newtonsoft.Json --to 13.0.3 --validate
-DEP-001  Newtonsoft.Json 12.0.3, 13.0.1 → 13.0.3  [major]  (nuget; requested)
-
-Suggested patch (versions are managed centrally; apply with git apply):
-  -    <PackageVersion Include="Newtonsoft.Json" Version="12.0.3" />
-  +    <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />
-
-Impact (static):
-  - projects: src/Api/Api.csproj, src/Worker/Worker.csproj; through project references: tests/Api.Tests/Api.Tests.csproj  [detected]
-  - 1 symbols import the package's namespaces (1 public): Api.Codec (src/Api/Codec.cs:3)  [inferred]
-  - not assessed: APIs removed or changed between 12.0.3/13.0.1 and 13.0.3
-
-Validation (executed in a temporary copy; passing restore, build and tests is evidence, not proof of behavioral compatibility):
-  - restore: pass  `dotnet restore Demo.slnx`  3.2s
-  - build: pass  `dotnet build Demo.slnx --no-restore`  5.5s
-  - test: pass, 1 passed, 0 failed  `dotnet test Demo.slnx --no-build`  2.2s
-Status: validated   Confidence: high
-```
-
-Each suggestion gives a copy-paste `dotnet add` command, or a patch when versions are managed centrally; npm, Maven and
-Gradle are reported without one for now. Impact covers referencing projects, importing types, affected endpoints and
-linked tests. `--validate` copies the repository to a temporary folder, applies the change and runs restore, build and
-test there; this executes repository code. Status is `unvalidated`, `validated`, `potentially-breaking` or
-`not-actionable`. Without `--package`, it proposes `remediation.targets` and aligns NuGet versions that differ across
-projects.
-
-### Recursive domain discovery (MVP)
-
-The new read-only `docwizz domain discover` command explores code dependencies from one method,
-type, endpoint or previously imported work item. Its versioned JSON contains traversed symbols,
-technical relations, historical Work Item links and their provenance. It **does not** claim that
-Work Item titles define confirmed domain boundaries.
-
-```bash
-docwizz domain discover . --seed "POST /api/orders" --depth 3 --limit 100 --format json
-docwizz domain discover . --work-item 4711 --depth 3 --limit 100 --format json
-```
-
-The second form requires `docwizz requirements import`. Without an index, the first form still
-works with technical evidence only. Both are offline; no LLM and no repository changes.
-
-`docwizz domain explain` turns the same report into a reviewable draft: deterministic flow chains, open questions and
-an evidence table with stable ids. With `--ai`, a self-hosted model adds statements and *unverified* business hypotheses;
-each is checked against the evidence, and a technical statement its evidence doesn't carry becomes a hypothesis.
-
-```bash
-docwizz domain explain . docs/orders-flow.md --seed "POST /api/orders" --ai
-```
-See [domain discovery](docs/guides/domain-discovery.md) for the evidence contract and limitations.
-
-For GitHub issue context, import a GitWizz `--provider github` history plus issue JSON exported with
-`gh issue view --json number,url,title,body,labels,state,updatedAt`, then use `--work-item github#123`.
-Issue links remain historical candidates; the importer and queries make no network calls.
-See the [GitHub export/import workflow](docs/reference/requirement-formats.md#github-issue-exports).
-
-### Requirements and traceability
-
-**Area-path inventories:** Import the entire Azure DevOps work-item structure, including requirements without code links, using `ado workitem export --area <path> --output workitems.json` followed by `docwizz requirements catalog-import . workitems.json`. The generated area table, individual requirement pages, HTML navigation and search can then show *independent* historical code and imported ADO test-case links. Absence of a link does not establish absence of an implementation or test. See [area-path requirements](docs/guides/requirements.md).
-
-
-For projects that keep requirements as YAML evidence:
-
-- `docwizz trace` reports requirement → architecture → test gaps.
-- `docwizz evidence-diff` compares two evidence snapshots and the tests they affect.
-- `docwizz requirements` shows which Azure DevOps work items a symbol was changed for, from exported commit/PR history:
-  `confirmed` (a commit the provider links to it changed it) or `candidate` (only a PR link or a commit-message
-  mention), with commit, file and lines. It reads `gitwizz history export` (`gitwizz.history/v2`) directly.
-  `generate --ai --requirements` and `context --requirements` hand that bounded, cited context to a local model or
-  agent. See [requirement context](docs/reference/requirement-formats.md).
-- Once that history is imported, a plain `generate` adds `requirements/` pages (criteria, linked routes and code, commits,
-  PRs), a Requirements section on each route page, work-item backlinks on module pages, and a "Traceability gaps"
-  section in `quality.md`: routes without work items or endpoints, work items without current code, and acceptance
-  criteria, which stay **unverified** because no test results are imported.
-- `docwizz product` drafts a work product from a template, code and evidence; `product check` verifies references and
-  freshness. Illustrative V-Modell XT 2.4 templates are in [templates/vmodell-xt/](templates/vmodell-xt) (not
-  official templates or a conformity claim).
-  The [IT operations concept](docs/guides/it-operations.md) template documents code facts, discovered deployment/CI descriptor files and explicit operational gaps (not deployed-state evidence).
-
-See [project evidence](docs/guides/project-evidence.md) and [CLI.md](docs/cli.md#product-drafts).
-
-For ISO-oriented document control (cover, contents, revisions and declared review evidence), see [document control](docs/guides/document-control.md). Signed DOCX/PDF release gates are explained in [publication guide](docs/reference/publication.md).
-[Browse the documentation](docs/README.md) for CLI, architecture, guides and acceptance records.
-
-For expanded V-Modell XT example product structures (SW architecture, SW specification and system-element test specification), see [the template guide](docs/guides/vmodell-xt-templates.md) and its section-level review aids.
-
-## Configuration
-
-`setup` writes `docwizz.yaml` from what the repository shows; `docwizz init` writes plain defaults. docwizz looks for it
-in the scanned directory, then the current one. This repository's own [docwizz.yaml](docwizz.yaml) is a working example.
-
-```yaml
-profile: aspnet                     # what needs docs; see Profiles
-check:
-  min_coverage: 80                  # % of items that need docs and have them
-  min_quality: 90                   # optional: % of written docs with no quality flags
-  max_critical: 0
-  fail_on: medium                   # lowest violation severity that fails check
-  max_complexity: 20                # optional: fail on any symbol above this
-  require_tests: high               # optional: with --since, fail on new high-level symbols no test links to
-architecture:
-  layers:                           # path globs, first match wins
-    api: ["*/Api/*.cs", "*/Controllers/*.cs"]
-    domain: ["*/Domain/*.cs"]
-  allow:                            # who may depend on whom; `http` = calling HTTP directly
-    api: [application, domain, infrastructure]
-    domain: []
-tests: ["tests/*", "*.Tests/*"]     # only used to link tests to the code they exercise
-exclude: ["legacy/*"]               # left out entirely
-comment_docs: true                  # count a // comment above a C# member as its summary
-```
-
-Every option, its default and precedence: [CLI.md](docs/cli.md#options).
-
-### Profiles
-
-A profile decides which items need docs and which sections (`summary`, `param`, `returns`, … or derived ones such as
-`endpoint`, `authorization`, `side_effects`).
-
-| Profile | For |
-|---|---|
-| `default` | general code: endpoints, controllers, services and components by role, a summary for everything else |
-| `software` | developer reference: full signatures, returns, exceptions, effects |
-| `aspnet` | ASP.NET Core backends: endpoints and the building blocks around them |
-| `vue` | Vue frontends: component contracts (props, emits, state), stores, composables |
-| `api` | consumers of the HTTP API: every endpoint's contract |
-| `architecture` | building blocks and how they connect, rather than every member |
-| `technical-publication` | task-oriented docs for readers outside the code; examples required |
-| `iso-42010`, `iso-15289` | also require hand-written pages in `docs/architecture/` (stakeholders, concerns, decisions, …) |
-
-Use your own with `--profile team.yaml` or `profile: team.yaml`, in the shape of [Profiles.cs](src/DocWizz/Model/Profiles.cs).
-Coverage is measured against the profile; docwizz never claims compliance with a standard.
-
-Besides XML doc and JSDoc, plain comments count above a minimal-API `Map*` call, before a Vue component's first block
-or function, and above a Vue prop in `defineProps`.
-
-### Doc quality
-
-Coverage says a section exists; quality says whether it can be trusted.
-
-| Flag | Basis | Fires when |
-|---|---|---|
-| `param-drift` | fact | a `<param name>` that isn't one of the parameters |
-| `returns-on-void` | fact | `<returns>` on a method that returns nothing (`void`, `Task`) |
-| `empty-inheritdoc` | fact | `<inheritdoc/>` with nothing to inherit; counts as no docs |
-| `placeholder` | inferred | TODO/FIXME/TBD, template boilerplate, or under three words |
-| `echo` | inferred | the summary only repeats the name, types or parameters ("Gets the stock level" on `GetStockLevel`) |
-
-### Architecture rules
-
-| Rule | Fires when | Default severity |
-|---|---|---|
-| ARCH-001 | a layer depends on one it may not (`allow`) | high |
-| ARCH-002 | UI code calls HTTP directly instead of through a client | medium |
-| ARCH-003 | two modules depend on each other (cycle) | — |
-| ARCH-004 | a forbidden dependency that skips an allowed layer | low |
-
-Override severities with `architecture.severity`. Pages also list *risks* that break no rule: entities returned from the
-API, business logic in controllers, domain code bound to external packages.
-
-**Custom rules** say what code (`from`) must not reach (`forbid`), with optional exceptions:
-
-```yaml
-architecture:
-  rules:
-    - id: ARCH-DOMAIN-001
-      severity: high                                   # default medium
-      description: The domain stays persistence-ignorant.
-      from: { layer: domain }
-      forbid: { package: [Microsoft.EntityFrameworkCore, org.springframework.data] }   # by namespace prefix
-    - id: ARCH-API-001
-      from: { tag: controller }
-      forbid: { to: { tag: dbcontext }, edge: [injects, accesses] }
-    - id: BC-ORDERING-001
-      from: { path: "src/Ordering/*" }
-      forbid: { to: { path: "src/Billing/*" } }
-      except: { path: "src/Billing/Contracts/*" }
-```
-
-Selectors match `layer`, `path`, `kind`, `tag` and `name` (globs where it makes sense); `kind`, `tag` and `name` also
-match through the containing type. `edge` takes edge kinds from [the code model](docs/internals/architecture.md#the-code-model).
-Custom findings count for `architecture` and `check` like built-in ones; an invalid rule stops docwizz with a message.
-
-### Security rules
-
-Opt in with `security: { enabled: true }`. Findings support a security review; they are not an ISO/IEC 27001
-assessment.
-
-| Rule | Fires when | Default severity |
-|---|---|---|
-| SEC-001 | a read endpoint declares neither authorization nor anonymous access | medium |
-| SEC-002 | a mutating endpoint doesn't require authorization | high |
-| SEC-003 | API-layer code uses a DbContext | medium |
-| SEC-004 | domain code imports a security or web framework | medium |
-| SEC-005 | an unauthenticated endpoint can reach a sensitive external system (`security.sensitive`) | high |
-
-Authorization is read from ASP.NET (`[Authorize]`, `RequireAuthorization()`, …) and Spring (`@PreAuthorize`,
-`@Secured`, …) endpoint metadata. Policies configured elsewhere, such as a fallback policy or a filter chain, are
-invisible, so each finding says "unless".
-
-### Multi-project repositories
-
-- `docwizz discover .` inventories projects, solutions and references without a full scan.
-- `docwizz setup . --select-projects` picks projects interactively and writes a `scope:` block; `--all-projects`
-  clears it; `--yes` skips prompts in CI.
-- Generated docs then navigate index → solutions → projects → modules → components.
-
-The `scope:` schema is in [CLI.md](docs/cli.md#scope); limits and the acceptance baseline in
-[MULTI_PROJECT_ACCEPTANCE.md](docs/archive/multi-project-acceptance.md). Classic non-SDK ASP.NET MVC projects are inventoried, but
-conventional MVC routing is not fully modelled as endpoints.
-
-### Remediation
-
-```yaml
-remediation:
-  targets: { Newtonsoft.Json: 13.0.3 }   # versions to propose
-  validate:                              # default: restore, build, test with dotnet
-    - { name: restore, run: "dotnet restore {target}" }   # {target}: the solution, else each affected project
-    - { name: build, run: "dotnet build {target} --no-restore -warnaserror" }
-    - { name: test, run: "dotnet test {tests} --no-build" }   # {tests}: the solution, else each affected test project
-  timeout_minutes: 20                    # per step
-```
-
-### AI
-
-`OLLAMA_HOST` (default `localhost:11434`) and `DOCWIZZ_MODEL` (default `qwen2.5-coder:7b`) select the Ollama server and
-model. docwizz sends four requests at once; set `OLLAMA_NUM_PARALLEL=4` on the Ollama server so it runs them together,
-which roughly doubles drafting speed on one GPU (by default Ollama may run them one at a time). Each request asks for a
-16,384-token context (`num_ctx`), so long prompts aren't silently cut at Ollama's default; with four in parallel the
-server reserves room for four such contexts, so a small GPU may need a lower `OLLAMA_NUM_PARALLEL`. For an
-OpenAI-compatible server (vLLM, NVIDIA NIM, LiteLLM):
-
-```yaml
-ai: { provider: openai-compatible, endpoint: http://10.0.0.5:8000/v1, model: <name>, api_key_env: DOCWIZZ_AI_KEY }
-```
-
-The key is read only from that environment variable. More in [CLI.md](docs/cli.md#5-ai-assisted-documentation).
+All guides: [documentation index](docs/README.md).
 
 ## What it reads
 
@@ -552,6 +174,7 @@ The key is read only from that environment variable. More in [CLI.md](docs/cli.m
 | Projects | `.csproj`/`.sln`, `package.json`, `pom.xml`, Gradle: packages, frameworks, what is executable |
 | Configuration | `appsettings*.json`, `.env`, Kubernetes ConfigMaps, Helm values: key *names* and who reads them, never values |
 | Deployment | compose, Kubernetes, Dockerfiles, Terraform/Bicep, Helm, CI pipelines |
+| EF6 EDMX | conceptual entities, associations and their links to C# code ([EDMX](docs/reference/edmx.md)) |
 
 External systems (databases, caches, brokers, HTTP APIs, identity, storage, e-mail) are *detected* when a call shows
 them (`UseNpgsql`, `fetch('https://…')`), *inferred* when only a package points to them, and *unknown* otherwise.
@@ -561,39 +184,30 @@ them (`UseNpgsql`, `fetch('https://…')`), *inferred* when only a package point
 | Command | Does |
 |---|---|
 | `docwizz setup [dir]` | first run: discover, configure, analyze, generate, check |
-| `docwizz ai check [dir]` | probe the current local AI configuration with a synthetic inference request (`--format json`); exit 0 when usable, 1 otherwise |
-| `docwizz discover [dir]` | read-only project and solution inventory |
-| `docwizz edmx <dir> <file.edmx>` | EF6 EDMX facts, `--graph` technical metrics or `--links` evidence-backed C# ↔ EF6/DbContext/MVC links (`--format json`); see [EDMX](docs/reference/edmx.md) |
 | `docwizz analyze <dir>` | documentation gaps and quality |
 | `docwizz architecture <dir>` | layers, violations, cycles, security findings |
-| `docwizz generate <dir> [out]` | write the docs (`--html`, `--screenshots`, `--ai`) |
-| `docwizz diff <dir> [ref]`, `docwizz diff [dir] <base> <head>` | changed symbols, affected pages, linked tests |
-| `docwizz check <dir> [--since <ref>]` | quality gate; exit 1 on failure |
+| `docwizz generate <dir> [out]` | write the docs |
+| `docwizz check <dir>` | quality gate; exit 1 on failure |
+| `docwizz diff <dir> [ref]` | changed symbols, affected pages, linked tests |
+| `docwizz discover [dir]` | project and solution inventory |
 | `docwizz context <dir> --for <target>` | token-budgeted facts for coding agents |
-| `docwizz domain discover <dir> --seed <symbol>` | bounded, read-only code and requirement graph traversal |
-| `docwizz domain explain <dir> --seed <symbol>` | reviewable flow draft: cited facts, unverified hypotheses (`--ai`), open questions |
-| `docwizz domain areas <dir>` | candidate business areas, inferred from folders and delegation |
 | `docwizz mcp <dir>` | read-only MCP server for coding agents |
-| `docwizz sbom [dir] [out]` | CycloneDX 1.6 from direct manifest dependencies |
-| `docwizz remediate <dir>` | package update suggestions, optionally validated |
+| `docwizz domain discover\|explain\|areas <dir>` | follow code and requirements from one start point |
+| `docwizz requirements import\|show\|query <dir>` | work items behind a symbol, from exported history |
+| `docwizz tests import <dir> <snapshot.json>` | ADO test-case traceability |
 | `docwizz trace <dir> <evidence.yaml>` | requirement → architecture → test gaps |
-| `docwizz tests import <dir> <snapshot.json>` | import offline ADO test-case traceability (v1/v2) |
-| `docwizz evidence-diff <dir> <before.yaml> <after.yaml>` | changed evidence and affected tests |
-| `docwizz requirements import\|show\|query <dir> ...` | work items behind a symbol, from exported history; `query` answers gitwizz's PR context |
-| `docwizz load import <dir> <report.json>...` | powerwizz load-test results, shown per endpoint in `api.md` |
-| `docwizz product [check] <dir> <template.yaml> [out.md]` | work-product draft from code and evidence |
-| `docwizz init [dir]` | manual setup: starter `docwizz.yaml` with every default |
-| `docwizz scan <dir> [model.json]` | advanced: dump the raw code model, for debugging |
+| `docwizz evidence-diff <dir> <before> <after>` | changed evidence and affected tests |
+| `docwizz product [check\|publish] <dir> <template.yaml>` | work-product draft from code and evidence |
+| `docwizz load import <dir> <report.json>` | powerwizz load-test results per endpoint |
+| `docwizz sbom [dir] [out]` | CycloneDX 1.6 from manifest dependencies |
+| `docwizz remediate <dir>` | package update suggestions |
+| `docwizz edmx <dir> <file.edmx>` | EF6 EDMX facts, graph or code links |
+| `docwizz ai check [dir]` | test the local AI configuration |
+| `docwizz init [dir]` | manual setup: a `docwizz.yaml` with every default |
+| `docwizz scan <dir> [model.json]` | advanced: dump the raw code model |
 
-Common options: `--profile <name|file.yaml>`, `--format json` (for `analyze`, `check`, `architecture`, `diff`,
-`remediate`, …), `--timings`. `docwizz help <command>` explains one command; `docwizz --version` prints version and
-commit. [CLI.md](docs/cli.md) is the full reference: every flag, default, precedence rule and exit code.
-
-**Evidence status during generation:** `docwizz generate .` reports whether the local Requirements index and ADO test snapshots are present and valid. Imported ADO data is explicit test-case traceability, not proof of executed tests; missing imports are reported but do not fail generation.
-
-### Evidence-driven documentation
-
-`generate` aims to combine code, architecture, historical requirements and explicit test evidence into a navigable, provenance-aware system description. With an imported ADO test snapshot, it now generates `tests.md` and links it from the project index. Test case links are not execution or coverage proof. See [evidence-driven generation](docs/reference/evidence-levels.md) for the intended behavior and evidence boundaries.
+`docwizz help <command>` explains one command. Every flag, default, precedence rule and exit code:
+[CLI reference](docs/cli.md). Settings: [Configuration](docs/configuration.md).
 
 ## Development
 
@@ -602,7 +216,7 @@ dotnet test --project tests/DocWizz.Tests   # unit, component and journey tests 
 ./test.sh                                   # end-to-end tests against fixture/
 ```
 
-- How it works: [Architecture](docs/internals/architecture.md) · what's next: [GitHub Issues](https://github.com/mycaravam-crypto/docwizz/issues)
-- Benchmarks and advice for large repositories: [bench/](bench/README.md)
-- Every merge to `main` is released automatically; label a PR `release:minor` or `release:major` for bigger bumps
-  ([versioning](docs/cli.md#versioning)).
+`DOCWIZZ_DLL=$(scripts/build-test-cli.sh) dotnet test …` runs the journey tests against a ReadyToRun build in about half
+the time. How it works: [architecture](docs/internals/architecture.md). Benchmarks: [bench/](bench/README.md). Every
+merge to `main` is released; label a PR `release:minor` or `release:major` for bigger bumps
+([versioning](docs/cli.md#versioning)).

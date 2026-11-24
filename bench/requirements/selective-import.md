@@ -1,4 +1,4 @@
-# Requirements history import: performance verification (#232)
+# Selective history import: verification procedure
 
 The import normally attempts a changed-file scan and retains the full historical scan as a safe fallback. The C# scanner still materializes historical C# context for semantic binding, so a selective-mode label alone **does not** prove that only changed files were materialized.
 

@@ -50,7 +50,7 @@ public class TraceabilityReportTests
         Assert.Equal(["ARC-002"], report.UntestedArchitectures);
         Assert.Equal(TraceabilityReport.Json(report), TraceabilityReport.Json(TraceabilityReport.Build(ProjectEvidenceCatalog.Parse(new StringReader(Yaml)))));
         Assert.Contains("\"requirements\"", TraceabilityReport.Json(report));
-        Assert.Contains("OFFEN", TraceabilityReport.Markdown(report));
+        Assert.Contains("OPEN", TraceabilityReport.Markdown(report));
     }
 
     [Fact]

@@ -40,8 +40,8 @@ internal static class TraceabilityReport
         b.AppendLine("| Requirement | Source | Architecture | Test | Status |").AppendLine("|---|---|---|---|---|");
         foreach (var x in report.Requirements)
             b.Append("| `").Append(x.Requirement).Append("` | `").Append(Code(x.Source)).Append("@").Append(Code(x.Version))
-                .Append("` | ").Append(x.Architectures.Length == 0 ? "OFFEN" : string.Join(", ", x.Architectures.Select(y => "`" + y + "`")))
-                .Append(" | ").Append(x.Tests.Length == 0 ? "OFFEN" : string.Join(", ", x.Tests.Select(y => "`" + y + "`")))
+                .Append("` | ").Append(x.Architectures.Length == 0 ? ProductDraft.Open : string.Join(", ", x.Architectures.Select(y => "`" + y + "`")))
+                .Append(" | ").Append(x.Tests.Length == 0 ? ProductDraft.Open : string.Join(", ", x.Tests.Select(y => "`" + y + "`")))
                 .Append(" | ").Append(x.Status).AppendLine(" |");
         b.AppendLine().AppendLine("Unlinked architectures: " + (report.UnlinkedArchitectures.Length == 0 ? "none" : string.Join(", ", report.UnlinkedArchitectures)));
         b.AppendLine("Architectures without tests: " + (report.UntestedArchitectures.Length == 0 ? "none" : string.Join(", ", report.UntestedArchitectures)));

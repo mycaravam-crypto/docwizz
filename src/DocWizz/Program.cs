@@ -865,7 +865,7 @@ static async Task<int> ProductCommand(string root, string? templateName, string?
         var catalog = ProductDraft.Catalog(template, model, project);
         using var provider = AiProviders.Create(config.Ai, "product synthesis");
         if (provider is not null)
-            Console.Error.WriteLine($"docwizz: drafting {catalog.Count(c => c.Evidence.Count > 0)} sections with {provider.Model} at {provider.Endpoint} (evidence only; sections without evidence stay OFFEN)");
+            Console.Error.WriteLine($"docwizz: drafting {catalog.Count(c => c.Evidence.Count > 0)} sections with {provider.Model} at {provider.Endpoint} (evidence only; sections without evidence stay OPEN)");
         synthesis = await ProductSynthesis.Synthesize(template, catalog, provider, AiProviders.Tag(config.Ai),
             Path.Combine(root, "docs", ".docwizz", "product-ai-cache.json"));
         if (synthesis.Count == 0) synthesis = null;   // nothing worded: the deterministic draft, without ids or an AI note
@@ -990,8 +990,8 @@ static string Reference() => $"""
       docwizz generate <dir> [out]      write Markdown docs (default <dir>/docs)
         [--html]                        also write an HTML page next to every Markdown page
         [--screenshots --base-url <url>]  capture static routes from a running frontend (Playwright)
-        [--storage-state <file>]        reuse a saved Playwright login session (generate screenshots only)
-        [--screenshot-delay <ms>]       extra wait before each capture, for slow pages (screenshots only)
+        [--storage-state <file>]        reuse a saved Playwright login session (--screenshots, --journeys)
+        [--screenshot-delay <ms>]       extra wait before each capture, for slow pages (--screenshots, --journeys)
         [--journeys <dir>]              user guides: journey files (*.yaml, captured with --base-url) and TestWizz evidence
         [--refresh-html-on-version-change]  rewrite HTML when the docwizz version changes
         [--progress]                    print progress to stderr (including redirected output)
@@ -1234,8 +1234,11 @@ static object DocumentationJson(CodeModel model, Config config, List<Documentati
 // prints below it.
 static async Task<GenerateReport> Generate(string root, string outDir, Config config, bool ai, bool html = false, CodeModel? model = null, bool refreshHtmlOnVersionChange = false, bool progress = false, string? screenshotBaseUrl = null, string? screenshotStorageState = null, int screenshotDelayMs = 0, RequirementIndex.Index? requirements = null, bool aiRatings = false, string? journeyDirectory = null, string? journeyBaseUrl = null)
 {
-    // Read first: a broken journey file should not cost a scan.
-    var journeys = JourneyCapture.Load(journeyDirectory);
+    // Requirement pages come from an imported index whenever there is one; --requirements only adds it to AI prompts.
+    var pageRequirements = requirements ?? ImportedRequirements(root);
+    // Read first: a broken journey file should not cost a scan. A short github#123 belongs to this repository's origin.
+    var journeys = JourneyCapture.Load(journeyDirectory, pageRequirements?.Inputs.Repository
+        ?? (journeyDirectory is null ? null : Git(root, "remote", "get-url", "origin")?.Trim()));
     if (journeys.Count > 0 && journeyBaseUrl is null)
         throw new InvalidDataException($"{journeys[0].File} is a journey file: add --base-url <url> of the running application to capture it");
     // Weights: each stage's usual share of the wall time (bench/baseline.json); the scan dominates, AI calls when on.
@@ -1315,11 +1318,13 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
     {
         bar.Begin("user guides", journeyBaseUrl);
         guides = await JourneyCapture.Run(journeys, model, outDir, journeyBaseUrl, screenshotStorageState, screenshotDelayMs);
+        var flow = new FlowGraph(model);
+        guides = [.. guides.Select(g => GuideStaleness.Versioned(g, pageRequirements) with { Code = GuideStaleness.Code(root, model, flow, g.Route) })];
         bar.Advance("user guides", Plural(guides.Count, "guide"));
     }
+    // Without --journeys the last capture stays: the application need not run for every generation.
+    else if (journeyDirectory is null) guides = JourneyCapture.Retained(outDir);
 
-    // Requirement pages come from an imported index whenever there is one; --requirements only adds it to AI prompts.
-    var pageRequirements = requirements ?? ImportedRequirements(root);
     bar.Begin("write pages", html ? "Markdown and HTML" : "Markdown");
     var rebuildHtml = html && refreshHtmlOnVersionChange && HtmlVersion.NeedsRefresh(outDir, AppVersion.Number);
     var (pages, changed) = Timings.Measure("generate", () => new Generator(root, outDir, model, findings, arch, config, summaries, overviews, assessments)
@@ -1327,7 +1332,7 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
         WriteHtml = html,
         RebuildHtml = rebuildHtml,
         Screenshots = screenshots,
-        Journeys = [.. guides, .. JourneyEvidence.Import(journeyDirectory, outDir, optional: guides.Count > 0)],
+        Journeys = guides = [.. guides, .. JourneyEvidence.Import(journeyDirectory, outDir, optional: guides.Count > 0)],
         Load = LoadAttached(root, model),
         AdoTests = GenerateEvidenceFeedback.ValidSnapshots(root),
         Requirements = pageRequirements,
@@ -1342,6 +1347,7 @@ static async Task<GenerateReport> Generate(string root, string outDir, Config co
     // Fingerprint for `docwizz diff`: the model these docs were generated from.
     Directory.CreateDirectory(Path.Combine(outDir, ".docwizz"));
     WriteModel(model, Path.Combine(outDir, ".docwizz", "model.json"));
+    JourneyCapture.Save(outDir, guides);
     File.WriteAllText(Path.Combine(outDir, ".docwizz", "documentation.json"),
         JsonSerializer.Serialize(DocumentationJson(model, config, findings), JsonOptions()));
     bar.Advance("metadata");

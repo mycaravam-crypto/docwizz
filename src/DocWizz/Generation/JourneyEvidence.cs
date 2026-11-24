@@ -9,13 +9,21 @@ static class JourneyEvidence
     public sealed record Step(int Id, string Action, string Expected, string Image,
         IReadOnlyList<Callout>? Callouts = null, string Note = "");
     // `JourneyFile`: set for a guide docwizz captured itself (JourneyCapture); it has no ADO test case, and no work item when 0.
+    // `Repository` makes `WorkItem` a GitHub issue of that owner/repo instead of an Azure Boards id.
+    // `Captured` is its capture date, `Code` the hash of its route's source files then, and `WorkItemRevision` (ADO) or
+    // `Changed` (GitHub updatedAt) the requirement's version then; 0/null when it was not imported (GuideStaleness).
     public sealed record Guide(string Id, string Title, string Route, int WorkItem, int WorkItemRevision,
         int TestCase, int TestCaseRevision, int Plan, string Project,
         IReadOnlyList<string> Criteria, IReadOnlyList<Step> Steps,
-        string Intro = "", string Result = "", string? ResultImage = null, string? JourneyFile = null);
+        string Intro = "", string Result = "", string? ResultImage = null, string? JourneyFile = null,
+        string? Captured = null, string? Code = null, string? Repository = null, string? Changed = null)
+    {
+        [System.Text.Json.Serialization.JsonIgnore]
+        public RequirementId? Requirement => WorkItem > 0 ? new(WorkItem, Repository) : null;
+    }
 
     private static readonly Regex SafeId = new(@"^wi-[0-9]+-case-[0-9]+-[a-f0-9]{12}$", RegexOptions.CultureInvariant);
-    private static readonly Regex GeneratedImage = new(@"^wi-[0-9]+-case-[0-9]+-[a-f0-9]{12}-step-[0-9]{4}(-guide)?\.png$|^guide-[a-z0-9-]+-(step-[0-9]+|result)\.png$", RegexOptions.CultureInvariant);
+    internal static readonly Regex GeneratedImage = new(@"^wi-[0-9]+-case-[0-9]+-[a-f0-9]{12}-step-[0-9]{4}(-guide)?\.png$|^guide-[a-z0-9-]+-(step-[0-9]+|result)\.png$", RegexOptions.CultureInvariant);
     private static readonly Regex GuideImage = new(@"^screenshots/step-[0-9]{4}-guide\.png$", RegexOptions.CultureInvariant);
     private static readonly Regex ImageName = new(@"^screenshots/step-[0-9]{4}\.png$", RegexOptions.CultureInvariant);
     private static readonly Regex Hash = new(@"^[a-f0-9]{64}$", RegexOptions.CultureInvariant);
@@ -244,13 +252,15 @@ static class JourneyEvidence
     /// <summary>Instructions first; where the evidence comes from and what it does not prove stays below them.</summary>
     /// <param name="routePage">The route's page, relative to the docs root; null when the route is not in the model.</param>
     /// <param name="requirementPage">The work item's page, relative to the docs root; null when it was not imported.</param>
-    public static string Markdown(Guide guide, string? routePage = null, string? requirementPage = null) =>
+    /// <param name="stale">Why the guide no longer matches the application or its requirement (GuideStaleness); null when current.</param>
+    public static string Markdown(Guide guide, string? routePage = null, string? requirementPage = null, string? stale = null) =>
         "# " + Escape(guide.Title) + "\n\n" +
+        (stale is null ? "" : $"> **Stale:** {stale}. Recapture before publishing; the manual leaves this guide out until then.\n\n") +
         (routePage is null ? "`" + guide.Route.Replace("`", "") + "`" : $"[`{guide.Route.Replace("`", "")}`](../{routePage})") +
-        (guide.WorkItem == 0 ? "" : " · " + (requirementPage is null ? $"WI-{guide.WorkItem}" : $"[WI-{guide.WorkItem}](../{requirementPage})")) + "\n\n" +
+        (guide.Requirement is not { } r ? "" : " · " + (requirementPage is null ? r.Display : $"[{r.Display}](../{requirementPage})")) + "\n\n" +
         Steps(guide) + "\n## Source\n\n**Draft — human review required.** " +
         (guide.JourneyFile is { } file
-            ? $"Captured by docwizz from `{file.Replace("`", "")}`: every control was found and used in the running application. The explanations are the author's and are not verified.\n"
+            ? $"Captured by docwizz from `{file.Replace("`", "")}`{(guide.Captured is { } date ? " on " + Escape(date) : "")}: every control was found and used in the running application. The explanations are the author's and are not verified.\n"
             : "From TestWizz evidence: ADO project " + Escape(guide.Project) +
               $", work item #{guide.WorkItem} (revision {guide.WorkItemRevision}), test case #{guide.TestCase} (revision {guide.TestCaseRevision}, " +
               "steps " + string.Join(", ", guide.Steps.Select(s => "#" + s.Id)) + $"), plan #{guide.Plan}. " +

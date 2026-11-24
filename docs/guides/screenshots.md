@@ -1,43 +1,64 @@
-# Playwright screenshots: authenticated capture and troubleshooting
+# Screenshots and user guides
 
-DocWizz captures **detected static frontend routes** from an application that is already running. Screenshots are optional and do not require AI. It uses Microsoft.Playwright (currently **1.63.0** in `src/DocWizz/DocWizz.csproj`). Install a matching Chromium revision for the DocWizz binary you run; installing an unrelated/latest Playwright browser is not a reliable substitute.
+[Documentation home](../README.md) · [CLI reference](../cli.md)
+
+docwizz can capture the frontend routes it detected from an application that is already running, and write
+step-by-step user guides with a picture per step. Both are optional, use Playwright Chromium and need no AI. docwizz
+never automates a login or handles passwords other than the test-account values you pass in a journey file.
 
 ## Prerequisites
 
-- Your web application is reachable at a base URL (for example, `http://localhost:5173` or an HTTPS test environment).
-- Playwright Chromium is installed **on the same machine and for the same OS user** running DocWizz.
-- For authenticated routes, use a dedicated, least-privilege test account with sanitized data.
+- The application is reachable at a base URL, for example `http://localhost:5173` or a test environment.
+- Playwright Chromium matching docwizz's Playwright version (1.63.0, in `src/DocWizz/DocWizz.csproj`) is installed for
+  the same OS user that runs docwizz:
 
-With a matching Node.js Playwright version, install Chromium:
+  ```bash
+  npx playwright@1.63.0 install chromium
+  # or, after building docwizz from source:
+  pwsh ./src/DocWizz/bin/Release/net10.0/playwright.ps1 install chromium
+  ```
 
-```powershell
-npx playwright@1.63.0 install chromium
+- For signed-in pages: a dedicated, least-privilege test account with sanitized data.
+
+Capture from a production build where you can: a dev server adds overlays (Vite's Vue Devtools button, error overlays)
+to every page. For a Vite app, `vite build` and then `vite preview` serves the build and keeps the dev server's `/api`
+proxy.
+
+## Route screenshots
+
+```bash
+docwizz generate . --html --screenshots --base-url http://localhost:5173
 ```
 
-If you built DocWizz from source, prefer the browser installer bundled with its .NET build. From the DocWizz repository root:
+Pictures go to `docs/screenshots/` and are linked from `frontend.md` and each route's page under `routes/`. A later
+`generate` without `--screenshots` keeps the last captures linked; only `--screenshots` replaces them.
 
-```powershell
-dotnet build src/DocWizz -c Release
-pwsh ./src/DocWizz/bin/Release/net10.0/playwright.ps1 install chromium
+- Each route opens in a fresh browser context: anonymous by default, or signed in with `--storage-state` (below).
+- Before each capture docwizz waits for the network to go idle (up to 5 s) plus 400 ms; `--screenshot-delay <ms>`
+  adds more for slow pages.
+- Routes of a hash-history router (`createWebHashHistory`, `createHashRouter`, `<HashRouter>`, Angular `useHash: true`
+  or `withHashLocation()` in the routes file) are opened as `<base-url>/#/route`.
+- Skipped with a warning: dynamic routes, `/logout` and similar routes that would end the session, router aliases that
+  redirect to another route (the target is captured on its own), HTTP errors, other redirects, and signed-in pages that
+  show a password field or whose API calls are answered 401 or 403.
+
+### Signed in
+
+Record a login once, from the application's repository (the directory you pass to `docwizz generate`):
+
+```bash
+npx playwright@1.63.0 codegen --save-storage=.auth/docwizz-state.json http://localhost:5173
+docwizz generate . --html --screenshots --base-url http://localhost:5173 --storage-state .auth/docwizz-state.json
 ```
 
-Use the `Debug` path instead of `Release` if that is the configuration you actually built. For a packaged .NET tool, use the script distributed with that tool/build if available. The `bin/Debug/netX/playwright.ps1` path in Playwright's generic error message is a placeholder, not necessarily your DocWizz installation path.
+Sign in in the browser that opens, wait for a signed-in page, then close it. The state file is per origin, so record
+it against the URL you capture from; its path is relative to the scanned directory. With a session, each route starts
+from the previous route's cookies and storage (in memory; the file is never written), so apps that rotate refresh
+tokens stay signed in.
 
-## Save an interactive login
-
-From the **web application repository** (the directory that you will pass to `docwizz generate`):
-
-```powershell
-New-Item -ItemType Directory -Force .auth | Out-Null
-npx playwright@1.63.0 codegen --save-storage=.auth/docwizz-state.json https://example.test
-```
-
-Sign in using the opened browser, wait for an authenticated page to load, then close the browser to finish recording the state. The file stores cookies and localStorage data; **Playwright does not save sessionStorage**. DocWizz does not collect credentials or perform the login itself.
-
-**Apps that keep their token in sessionStorage:** add a `sessionStorage` list next to `localStorage` in the origin's entry
-(same `{ "name", "value" }` shape). DocWizz seeds every page of that origin with it before the app's scripts run, never
-overwriting what the page already holds, and carries what the page leaves to the next route. A small Playwright script
-can record it after signing in:
+Playwright saves cookies and localStorage but **not sessionStorage**. For an app that keeps its token there, add a
+`sessionStorage` list next to `localStorage` in the origin's entry (same `{ "name", "value" }` shape); docwizz seeds
+every page of that origin with it before the app's scripts run. A Playwright script can record it after signing in:
 
 ```js
 const state = await context.storageState();
@@ -49,76 +70,28 @@ entry.sessionStorage = sessionStorage;
 require('fs').writeFileSync('.auth/docwizz-state.json', JSON.stringify(state), { mode: 0o600 });
 ```
 
-Add `.auth/` to your application's `.gitignore`. Treat the state file as a credential: restrict filesystem access, never upload it to issues or CI artifacts, rotate/revoke sessions if exposed, and refresh it when the session expires.
+**The state file holds session tokens.** Add `.auth/` to `.gitignore`, restrict access to it, never upload it to
+issues or CI artifacts, and revoke the session if it leaks.
 
-## Generate screenshots
+## User guides
 
-Capture from a production build where you can: a dev server adds its own overlays (Vite's Vue Devtools button, error
-overlays) to every page. For a Vite app, `vite build` and then `vite preview` serves the build and reuses the dev
-server's `/api` proxy. A state file is per origin, so record it against the URL you capture from.
+`--journeys <dir>` writes user guides to `docs/user-guides/`, each linked from its route and its work-item page and
+back. With `--html`, `docs/user-guides/manual.html` holds every guide on one printable page for the application's
+users, without links into the code documentation. The quality page lists work items behind a route that have no guide.
+The directory can hold two kinds of input.
 
-```powershell
-docwizz generate . --html --screenshots --base-url https://example.test --storage-state .auth/docwizz-state.json
-```
+### From journey files
 
-The storage-state path is resolved relative to the scanned directory (`.` above), not relative to the DocWizz executable. Captured images go to `docs/screenshots/` and are linked from the generated frontend documentation.
-
-## Windows: "Executable doesn't exist" / `chromium_headless_shell-...`
-
-Typical output:
-
-```text
-docwizz: screenshots unavailable: Executable doesn't exist at
-C:\Users\<user>\AppData\Local\ms-playwright\chromium_headless_shell-...\chrome-headless-shell-win64\chrome-headless-shell.exe
-```
-
-This means DocWizz could not launch the browser revision expected by **its .NET Playwright runtime**. Documentation generation may still finish; it does **not** mean the screenshot step succeeded.
-
-1. Install Chromium with the matching Playwright version, or run the built .NET `playwright.ps1 install chromium` script shown above.
-2. Re-run `generate`; ensure the browser was installed under the account executing DocWizz. If running in CI, install Chromium in that CI job.
-3. If the error persists, check the precise executable path in the error message:
-
-   ```powershell
-   Test-Path "$env:LOCALAPPDATA\ms-playwright\chromium_headless_shell-1243\chrome-headless-shell-win64\chrome-headless-shell.exe"
-   ```
-
-   Replace `1243` with the revision from **your own error message**; the revision number can change with Playwright versions. A `False` result confirms that the executable is absent at that location.
-4. Confirm that `PLAYWRIGHT_BROWSERS_PATH` (if set) points to the same browser cache used for installation and execution. Do not copy arbitrary browser binaries into the expected path.
-
-## Diagnosing other messages
-
-| Output | Meaning / next step |
-| --- | --- |
-| `screenshots: skipped N dynamic/unsupported route(s)` | DocWizz intentionally excludes parameterized or unsupported routes (for example `/customers/:id`). This is separate from browser installation. |
-| `screenshot skipped: ... redirected to ... (needs authentication?)` | Check the stored login, target origin, authorization and expiry; recreate the state if necessary. |
-| `screenshot skipped: ... shows a login form (session not accepted?)` | The page rendered a password field without redirecting: the session was rejected. Recreate the state file. |
-| `screenshot skipped: ... API answered 401/403 for /api/... (session not accepted?)` | The page loaded, but its data calls were rejected: the session expired or the test account lacks the role. Recreate the state or use an account with access. |
-| Every route shows the home page | The app uses hash routing (`/#/orders`) but the router was not detected as such; docwizz recognizes `createWebHashHistory`, `createHashRouter`, `<HashRouter>`, `useHash: true` and `withHashLocation()` in the file that declares the routes. |
-| `screenshot skipped: ... would end the session` | Logout routes are never opened, so later routes stay signed in. |
-| Only `/` is signed in, later routes are not | Fixed by carrying the session from route to route; if it persists, check whether the app keeps its token in sessionStorage: Playwright doesn't save it, add it to the file as above. |
-| Pages captured half-loaded (spinners, empty tables) | Add `--screenshot-delay 1500` (milliseconds, up to 60000). |
-| `screenshot skipped: ... HTTP 4xx/5xx` | The target route returned an HTTP error; verify application and permissions. |
-| `N items lack docs; pass --ai` | A documentation-coverage notice, unrelated to screenshots; AI drafting is optional. |
-| `N pages ... 0 changed` | Previously generated documentation pages did not change; it is **not** confirmation that screenshots were captured. |
-
-### Known limitations
-
-DocWizz uses a **fresh browser context per route**: the first is seeded with the saved storage state, each later one with the previous route's cookies and storage (in memory only; the state file is never modified), so refresh-token rotation does not sign later routes out. Each screenshot is taken once the network is idle (up to 5 s), after 400 ms plus `--screenshot-delay`, but does not execute application-specific navigation or data setup. Dynamic routes, HTTP errors and URL redirects are skipped. Login forms with a password field are detected; other login overlays that do not change the URL may not be; manually inspect the resulting images. sessionStorage listed in the state file is seeded into every page and carried the same way.
-
-For reproducible documentation in CI, provision test data, use a non-production environment, refresh the login state securely and review screenshots before publishing.
-
-## User guides from journey files
-
-A journey file describes one guide. DocWizz plays it in the running application, takes a picture before each step with
-the control outlined, and writes the guide. No AI, and nothing is guessed: a control that is missing or ambiguous fails
-the generation.
+A journey file describes one guide. docwizz plays it in the running application, takes a picture before each step
+with the control outlined, and writes the guide. Nothing is guessed: a control that is missing or ambiguous fails the
+generation.
 
 ```yaml
 # journeys/01-sign-in.yaml
 title: Sign in
 intro: You need the account your administrator created for you.
 result: The start page opens. You stay signed in until you close the browser.
-requirement: 4711          # optional work item; links the guide and its requirement page
+requirement: 4711          # optional: AB#4711, or github#123 for a GitHub issue; links the guide and its requirement page
 steps:
   - open: /login
   - fill: Email
@@ -137,40 +110,81 @@ docwizz generate . --html --journeys journeys --base-url http://localhost:5173
   placeholder. `css=<selector>` addresses a control that has no usable name. `note` says what the reader sees and why.
 - **Order:** files run in file-name order in one browser session, so a sign-in journey signs the later ones in.
   `--storage-state` and `--screenshot-delay` work as for route screenshots.
-- **Values:** `${NAME}` types that environment variable into the page: use it only for the test account's credentials.
-- **Output:** `docs/user-guides/<file name>.md`, linked from its route and requirement page, and with `--html` all
-  guides on one printable page, `docs/user-guides/manual.html`.
-- **Data:** values typed into visible fields appear in later pictures. Use a test account and synthetic data, and
-  review every picture before publishing.
+- **Values:** `${NAME}` types that environment variable into the page; use it only for the test account's credentials.
+- **Requirement:** an Azure Boards id (`4711`, `AB#4711`) or a GitHub issue (`github#123`, of the repository's
+  github.com origin, or `github:owner/repo#123`). A bare `#123` is refused because it could mean either. Import the
+  requirements ([Requirements](requirements.md)) before capturing: the guide then records the item's revision (ADO) or
+  last update (GitHub) and is marked stale when the item changes. A guide captured without that is listed under
+  **Requirement not tracked** on the user-guide index.
+- **Without the application:** a later `generate` without `--journeys` keeps the captured guides with their capture
+  date. A kept guide is marked stale once the source files behind the route it opens first have changed, or its
+  requirement changed. A stale guide carries a banner, is listed under **Stale guides** on the user-guide index, and
+  is left out of `manual.html` until it is captured again. To remove a
+  guide, delete its journey file and capture again.
 
-The same directory may also hold TestWizz evidence bundles (below).
+### From TestWizz evidence
 
-## Screenshot-backed user-guide drafts from TestWizz
-
-DocWizz also consumes **reviewed multi-step browser evidence** generated by TestWizz. This is separate from the existing `--screenshots` route capture. The import is offline, requires no AI, and never executes tests.
+docwizz also imports reviewed browser evidence that TestWizz recorded
+from Azure DevOps test cases. The import is offline and never runs tests.
 
 ```bash
-# Obtain the test-case steps from ado-devops, outside the application repository.
 ado testplan export 12 --output ../ado-plan.json
-
-# Review a small journey.json, with explicit step IDs, locators and assertions.
 testwizz journey . --url http://127.0.0.1:5173/orders \
   --workitem 4711 --plan ../ado-plan.json --case 512 \
   --steps journey.json --out ../journey-evidence
-
-# Generate user-guide draft pages and hashed PNG assets.
 docwizz generate . --html --journeys ../journey-evidence
 ```
 
-The new `--journeys` option accepts a single TestWizz evidence bundle directory or its parent containing multiple bundles. DocWizz accepts only `testwizz.ui-evidence/v1` manifests with passed per-step assertions, validates every PNG SHA-256 and restricts image paths before copying screenshots to `docs/user-guides/images/`. Each guide under `docs/user-guides/` lists its steps first and its evidence source below them. A guide links to its route and work-item page, and both link back; the quality page lists work items that sit behind a route but have no guide. With `--html`, `docs/user-guides/manual.html` holds every guide on one printable page for the application's users, without provenance or links into the code documentation. If evidence is missing, altered or invalid, generation fails rather than claiming a verified guide.
+`--journeys` takes one evidence bundle or a directory of them. Only `testwizz.ui-evidence/v1` manifests whose steps all
+passed are accepted; every PNG's SHA-256 is checked and image paths are confined before the pictures are copied to
+`docs/user-guides/images/`. Missing, altered or invalid evidence fails the generation. Unlike guides from journey files,
+these pages are removed by a later `generate` without `--journeys`.
 
-### Multiple numbered callouts
+A step's before-action picture can number several controls that are visible together (**1** Customer, **2**
+Description, **3** Save). A number is the control's position in the reviewed journey, not an ADO step id, which is
+printed separately. Each guide keeps the ADO work-item and test-case revisions, expected results and acceptance
+criteria. Passed visibility checks are not acceptance verification: a guide is a draft for editorial and privacy review.
 
-When several reviewed Playwright action locators are visible in the same UI state, TestWizz captures a **before-action** image with all uniquely resolved, visible targets numbered in journey order (up to the existing six-step limit). For example, a form may show **1 Customer**, **2 Description**, **3 Save** on one screenshot. TestWizz determines positions from Playwright locator bounding boxes and draws temporary, non-interactive bubbles. Controls from earlier and later reviewed steps remain numbered whenever they are uniquely identifiable and visible. Hidden or ambiguous controls are omitted until they become available. It does not annotate every selectable DOM element; only reviewed action locators belong to the documentation task.
+### Data safety
 
-The evidence manifest stays at `testwizz.ui-evidence/v1` and adds optional `guideScreenshot`, `guideSha256`, and `callouts[]` to each step. The original `screenshot` and `sha256` remain the *after-action* assertion evidence. DocWizz validates **both** PNG hashes, the callout number-to-ADO-step mapping, bounded coordinates and paths, then publishes the annotated before-action images with numbered explanations. Existing evidence bundles without annotations continue to work.
+Capturing clicks and submits forms in the running application, and values typed into fields appear in later
+pictures. Use a non-production environment, a disposable test account and synthetic data. Review and redact every
+picture before publishing, and restrict access to the generated site.
 
-Each picture is captured for the currently visible state and can repeat controls from any reviewed step that remain visible. Numbers are guide positions (1, 2, 3), not ADO step IDs; the ADO IDs are printed separately for traceability. Each bubble number must equal the **one-based position of its referenced action in the reviewed journey**, regardless of which screenshot displays it. A two-action journey therefore cannot have a bubble numbered 3. Verify bubble placement, accessibility, contrast and image privacy before publication. The bubble renderer does not use a vision model or OCR.
-The generated guides retain ADO work-item and test-case revisions, actions, expected results and acceptance criteria. **Visibility assertions are not complete acceptance verification**; the selected work-item/test-case association is explicitly unverified until a separate ADO relationship is checked. Each guide is a draft requiring human editorial and privacy review. The first increment does not use local AI to invent or rewrite user instructions; TestWizz's existing local-AI UI proposal remains available to assist a human in preparing reviewed journey steps.
+## Troubleshooting
 
-Screenshot capture may modify the running application through same-origin clicks and form submission. Use disposable non-production accounts and synthetic test data. Keep ADO exports, browser credentials and raw evidence out of public repositories. `--journeys` copies selected images into generated documentation, which may itself be published: **review and redact every image before publication**, and restrict access to the generated site. The option is explicit: a subsequent generation without `--journeys` removes the generated user-guide pages and their TestWizz-named screenshots, without deleting manual images.
+### "Executable doesn't exist" / `chromium_headless_shell-…`
+
+```text
+docwizz: screenshots unavailable: Executable doesn't exist at
+C:\Users\<user>\AppData\Local\ms-playwright\chromium_headless_shell-...\chrome-headless-shell-win64\chrome-headless-shell.exe
+```
+
+docwizz could not launch the browser revision its .NET Playwright runtime expects. The rest of `generate` may still
+finish, but no screenshots were taken.
+
+1. Install Chromium with the matching Playwright version (see [Prerequisites](#prerequisites)), as the user that runs
+   docwizz; in CI, in the same job. A different or latest Playwright browser is not a substitute.
+2. Check the exact path from **your** error message, for example
+   `Test-Path "$env:LOCALAPPDATA\ms-playwright\chromium_headless_shell-1243\chrome-headless-shell-win64\chrome-headless-shell.exe"`.
+   The revision number changes with Playwright versions.
+3. If `PLAYWRIGHT_BROWSERS_PATH` is set, it must point to the same browser cache for installation and capture.
+
+The `bin/Debug/netX/playwright.ps1` path in Playwright's own error message is a placeholder, not your docwizz install.
+
+### Messages
+
+| Output | Meaning / next step |
+| --- | --- |
+| `screenshots: skipped N dynamic/unsupported route(s)` | parameterized routes such as `/customers/:id` are never captured |
+| `screenshot skipped: ... redirected to ... (needs authentication?)` | check the stored login, origin and expiry; record the state again |
+| `screenshot skipped: ... shows a login form (session not accepted?)` | the session was rejected; record the state again |
+| `screenshot skipped: ... API answered 401/403 for /api/... (session not accepted?)` | the session expired or the account lacks the role |
+| `screenshot skipped: ... would end the session` | logout routes are never opened, so later routes stay signed in |
+| `screenshot skipped: ... HTTP 4xx/5xx` | the route returned an HTTP error |
+| Every route shows the home page | the app uses hash routing but the router wasn't recognized (see [Route screenshots](#route-screenshots)) |
+| Only `/` is signed in | the app probably keeps its token in sessionStorage: add it to the state file (see [Signed in](#signed-in)) |
+| Pages captured half-loaded | add `--screenshot-delay 1500` |
+| `N pages ... 0 changed` | no page text changed; it does not confirm that screenshots were taken |
+
+A login overlay that has no password field and doesn't change the URL can't be recognized: check the pictures.

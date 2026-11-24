@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using YamlDotNet.Serialization;
@@ -8,14 +9,14 @@ using YamlDotNet.Serialization;
 static class JourneyCapture
 {
     public sealed record Action(string Kind, string Target, string? Value, string Note);
-    public sealed record Journey(string Id, string File, string Title, string Intro, string Result, int WorkItem, IReadOnlyList<Action> Steps);
+    public sealed record Journey(string Id, string File, string Title, string Intro, string Result, RequirementId? Requirement, IReadOnlyList<Action> Steps);
 
     sealed class Source
     {
         public string? Title { get; set; }
         public string? Intro { get; set; }
         public string? Result { get; set; }
-        public int Requirement { get; set; }
+        public string? Requirement { get; set; }
         public List<Dictionary<string, string>>? Steps { get; set; }
     }
 
@@ -23,11 +24,12 @@ static class JourneyCapture
     static readonly Regex Variable = new(@"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$", RegexOptions.CultureInvariant);
 
     /// <summary>The journey files (*.yaml) of a directory, in file-name order: the order they are played in.</summary>
+    /// <param name="repository">The repository's GitHub origin, which a short `requirement: github#123` belongs to.</param>
     /// <exception cref="InvalidDataException">A file is not a valid journey; the message names the file and the step.</exception>
-    public static IReadOnlyList<Journey> Load(string? directory)
+    public static IReadOnlyList<Journey> Load(string? directory, string? repository = null)
     {
         if (directory is null || !Directory.Exists(directory)) return [];
-        Journey[] journeys = [.. Directory.GetFiles(directory, "*.yaml").Order(StringComparer.Ordinal).Select(Parse)];
+        Journey[] journeys = [.. Directory.GetFiles(directory, "*.yaml").Order(StringComparer.Ordinal).Select(f => Parse(f, repository))];
         // The id names the guide's page and pictures: two files must not share one, nor take the index's or manual's.
         if (journeys.GroupBy(j => j.Id).FirstOrDefault(g => g.Count() > 1) is { } same)
             throw new InvalidDataException($"{string.Join(" and ", same.Select(j => j.File))} would write the same guide ({same.Key}): rename one");
@@ -37,7 +39,10 @@ static class JourneyCapture
     }
 
     /// <summary>Reads one journey file into its steps, rejecting anything the capture could not play safely.</summary>
-    public static Journey Parse(string file)
+    /// <param name="file">The journey file (*.yaml).</param>
+    /// <param name="repository">The repository's GitHub origin, which a short `requirement: github#123` belongs to.</param>
+    /// <exception cref="InvalidDataException">The file is not a valid journey; the message names the file and the step.</exception>
+    public static Journey Parse(string file, string? repository = null)
     {
         var name = Path.GetFileName(file);
         InvalidDataException Invalid(string problem) => new($"{name}: {problem}");
@@ -45,7 +50,7 @@ static class JourneyCapture
         try { source = new DeserializerBuilder().WithNamingConvention(YamlDotNet.Serialization.NamingConventions.CamelCaseNamingConvention.Instance).Build().Deserialize<Source>(File.ReadAllText(file)) ?? new(); }
         catch (YamlDotNet.Core.YamlException e) { throw Invalid(e.InnerException?.Message ?? e.Message); }
         if (string.IsNullOrWhiteSpace(source.Title)) throw Invalid("needs a title");
-        if (source.Requirement < 0) throw Invalid("requirement must be a work item number");
+        var requirement = Requirement(source.Requirement, repository, Invalid);
         var steps = new List<Action>();
         foreach (var (step, number) in (source.Steps ?? []).Select((s, i) => (s, i + 1)))
         {
@@ -61,7 +66,20 @@ static class JourneyCapture
         if (steps.FirstOrDefault()?.Kind != "open") throw Invalid("the first step must open a page, e.g. open: /login");
         var id = Regex.Replace(Naming.Ascii(Path.GetFileNameWithoutExtension(file)).ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-');
         if (id.Length == 0) throw Invalid("the file name needs letters or digits");
-        return new(id, name, OneLine(source.Title), OneLine(source.Intro), OneLine(source.Result), source.Requirement, steps);
+        return new(id, name, OneLine(source.Title), OneLine(source.Intro), OneLine(source.Result), requirement, steps);
+    }
+
+    // An Azure Boards id (4711, AB#4711) or a GitHub issue (github#123, github:owner/repo#123). A bare #123 is refused:
+    // on GitHub it names an issue, in RequirementId.Parse an Azure Boards item, and a guide must not link the wrong one.
+    static RequirementId? Requirement(string? text, string? repository, Func<string, InvalidDataException> invalid)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        text = text.Trim();
+        if (text.StartsWith('#')) throw invalid($"requirement {text} is ambiguous: write AB{text} for Azure Boards or github{text} for a GitHub issue");
+        if (text.StartsWith("github#", StringComparison.OrdinalIgnoreCase) && RequirementId.GithubRepository(repository) is null)
+            throw invalid($"requirement {text}: the repository has no github.com origin; write github:<owner>/<repo>#{text[7..]}");
+        try { return RequirementId.Parse(text, repository); }
+        catch (ArgumentException) { throw invalid($"requirement must be an Azure Boards id (4711, AB#4711) or a GitHub issue (github#123), not '{text}'"); }
     }
 
     static string OneLine(string? text) => Regex.Replace(text ?? "", @"\s+", " ").Trim();
@@ -131,10 +149,37 @@ static class JourneyCapture
                 {
                     throw new InvalidDataException($"{journey.File}: step {number} ({step.Kind} {step.Target}): {e.Message.Split('\n')[0]}");
                 }
-            guides.Add(new(journey.Id, journey.Title, journey.Steps[0].Target, journey.WorkItem, 0, 0, 0, 0, "", [], steps,
-                journey.Intro, journey.Result, await Shot("result"), journey.File));
+            guides.Add(new(journey.Id, journey.Title, journey.Steps[0].Target, journey.Requirement?.Number ?? 0, 0, 0, 0, 0, "", [], steps,
+                journey.Intro, journey.Result, await Shot("result"), journey.File, DateTime.UtcNow.ToString("yyyy-MM-dd"),
+                Repository: journey.Requirement?.Repository));
         }
         return guides;
+    }
+
+    static string Store(string outDir) => Path.Join(outDir, ".docwizz", "guides.json");
+
+    /// <summary>Remembers the captured guides, so a generation without the running application keeps them.</summary>
+    public static void Save(string outDir, IReadOnlyList<JourneyEvidence.Guide> guides)
+    {
+        var captured = guides.Where(g => g.JourneyFile is not null).ToList();
+        if (captured.Count == 0) File.Delete(Store(outDir));
+        else File.WriteAllText(Store(outDir), JsonSerializer.Serialize(captured, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    /// <summary>The guides of the last capture whose pictures are all still there; none when nothing usable was saved.</summary>
+    public static IReadOnlyList<JourneyEvidence.Guide> Retained(string outDir)
+    {
+        if (!File.Exists(Store(outDir))) return [];
+        try
+        {
+            // The pictures are checked by name, so an edited file cannot point a page outside user-guides/images.
+            bool Picture(string? image) => image is not null && image.StartsWith("images/", StringComparison.Ordinal)
+                && JourneyEvidence.GeneratedImage.IsMatch(image[7..]) && File.Exists(Path.Join(outDir, "user-guides", image));
+            return [.. (JsonSerializer.Deserialize<List<JourneyEvidence.Guide>>(File.ReadAllText(Store(outDir))) ?? [])
+                .Where(g => g is { JourneyFile: not null, Title: not null, Route: not null, Steps: not null } && Regex.IsMatch(g.Id ?? "", "^[a-z0-9-]+$") && g.Id is not ("index" or "manual")
+                    && g.Steps.All(s => s is { Action: not null } && Picture(s.Image)) && Picture(g.ResultImage))];
+        }
+        catch (JsonException) { return []; }
     }
 
     // Drawn in the page for the screenshot only, around the control's own rectangle: it cannot drift from the control.

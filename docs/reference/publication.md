@@ -1,18 +1,21 @@
-# Signierte DOCX-/PDF-Publikation
+# Signed DOCX/PDF publication
 
-DocWizz erzeugt **Entwürfe**. Die getrennte Operation `docwizz product publish` erfordert zwei
-unabhängige, kryptografisch überprüfte Freigaben und eine unveränderte Git-Baseline.
-Sie unterstützt die Lenkung dokumentierter Information nach ISO 9001 und ISO/IEC 27001
-(7.5.2 / 7.5.3), aber bestätigt keine Zertifizierung oder organisationsweite Konformität.
+[Documentation home](../README.md) · [Product documents](../guides/product-documents.md)
 
-## Vorbedingungen
+docwizz writes **drafts**. The separate `docwizz product publish` renders a draft as DOCX and PDF only with two
+independent, cryptographically verified approvals and an unchanged Git baseline. It supports the control of documented
+information under ISO 9001 and ISO/IEC 27001 (7.5.2, 7.5.3), but confirms no certification or organization-wide
+conformity.
 
-Ein aus `docwizz product --control ... --context ...` erzeugter Markdown-Entwurf und sein
-`.evidence.json`-Bericht müssen vorhanden sein. `product check` muss erfolgreich sein;
-kein Pflichtkapitel darf unbelegt sein. Das Control-YAML enthält mindestens einen belegten
-Review- und einen Freigabeeintrag. Dies ist **nicht** die kryptografische Freigabe.
+## Preconditions
 
-Die getrennte Trust-Policy (geschützter Branch) speichert nur öffentliche Schlüssel:
+- A Markdown draft written by `docwizz product --control … --context …` and its `.evidence.json` report.
+- `product check` passes, with no required section left without evidence.
+- The control YAML declares at least one review and one approval with evidence. This is **not** the cryptographic
+  approval.
+- Git, Pandoc (for the DOCX) and LibreOffice (`libreoffice`, for the PDF) are installed.
+
+A separate trust policy, kept on a protected branch, holds only public keys:
 
 ```json
 {"schema":1,"keys":[
@@ -21,36 +24,36 @@ Die getrennte Trust-Policy (geschützter Branch) speichert nur öffentliche Schl
 ]}
 ```
 
-Zwei verschiedene Schlüsselinaber signieren *dieselben Payload-Bytes* mittels
-`openssl dgst -sha256 -sign private.pem -out signature.bin payload.json`.
-**Private Schlüssel niemals in Git oder CI-Artefakten speichern.** Signierte Freigabe:
-
-```json
-{
-  "schema":1,
-  "payload_base64":"<Base64 der JSON-Payload>",
-  "signatures":[
-    {"role":"quality","key_id":"qm-2026","signature_base64":"<Base64-Signatur>"},
-    {"role":"security","key_id":"isms-2026","signature_base64":"<Base64-Signatur>"}
-  ]
-}
-```
-
-Die originale UTF-8-JSON-Payload (die Signatur bindet ihre **exakten Bytes**) enthält:
+Two different key holders sign *the same payload bytes*, for example with
+`openssl dgst -sha256 -sign private.pem -out signature.bin payload.json`. **Never store private keys in Git or CI
+artifacts.** The payload is UTF-8 JSON, and the signatures bind its exact bytes:
 
 ```json
 {
   "status":"approved",
   "document_id":"SWA-001",
   "version":"1.0",
-  "draft_sha256":"<SHA-256 der Markdown-Datei>",
-  "evidence_sha256":"<SHA-256 des evidence.json>",
-  "control_sha256":"<SHA-256 des control.yaml>",
-  "source_commit":"<40-stellige Git-Commit-SHA>"
+  "draft_sha256":"<SHA-256 of the Markdown draft>",
+  "evidence_sha256":"<SHA-256 of the evidence.json>",
+  "control_sha256":"<SHA-256 of the control YAML>",
+  "source_commit":"<40-character Git commit SHA>"
 }
 ```
 
-## Aufruf
+The signed approval wraps it:
+
+```json
+{
+  "schema":1,
+  "payload_base64":"<Base64 of the payload>",
+  "signatures":[
+    {"role":"quality","key_id":"qm-2026","signature_base64":"<Base64 signature>"},
+    {"role":"security","key_id":"isms-2026","signature_base64":"<Base64 signature>"}
+  ]
+}
+```
+
+## Running it
 
 ```bash
 docwizz product check . templates/vmodell-xt/sw-architecture.yaml --control control.yaml --context architecture.yaml
@@ -59,59 +62,37 @@ docwizz product publish . templates/vmodell-xt/sw-architecture.yaml docs/publish
   --approval signed-approval.json --trust .github/document-release-policy.json
 ```
 
-Ergebnis: `<ID>-<VERSION>.docx`, `<ID>-<VERSION>.pdf` und
-`<ID>-<VERSION>.publication.json` mit Input-/Output-Hashes. Bereits bestehende
-Zielverzeichnisse werden nicht überschrieben. Das aus dem Projekt stammende verlinkte Inhaltsverzeichnis bleibt im DOCX/PDF erhalten,
-während die DOCX-Verarbeitung einen Seitenumbruch nach dem Deckblatt und dynamische Seitenzahlen (PAGE/NUMPAGES) ergänzt. LibreOffice erstellt das PDF; beide Renderer und Git müssen installiert sein.
-Das PDF wird auf Dateisignatur geprüft, nicht auf PDF/A oder Barrierefreiheit.
+The result is `<ID>-<VERSION>.docx`, `<ID>-<VERSION>.pdf` and `<ID>-<VERSION>.publication.json` with the input and
+output hashes. An existing output directory is never overwritten. The draft's linked table of contents is kept; the
+DOCX gets a page break after the cover and page numbers (PAGE/NUMPAGES). The PDF is checked for its file signature, not
+for PDF/A or accessibility.
 
-## Workflow und tatsächliche Schutzgrenzen
+By default `publish` takes the generated draft `docs/products/<product_id>.md` and the evidence report next to it. For a
+draft written elsewhere, select it with `--draft docs/custom/my-product.md`; the signed payload must then contain the
+hashes of **that** file and its `.evidence.json`. `--draft` doesn't change where the DOCX and PDF go.
 
-- `.github/workflows/test.yml`: echte DOCX-/PDF-Erzeugung mit synthetischen, flüchtigen
-  Schlüsseln sowie Negativtests für Manipulation, Doppelveröffentlichung und falsche Signatur.
-- `.github/workflows/document-publication.yml`: manueller Ablauf nur auf `main`,
-  nur in einem **privaten** Repository und nur über `document-release` mit Required Reviewers.
-  Die Umgebung benötigt das geschützte Secret `DOCWIZZ_RELEASE_AUDIT_TOKEN` mit ausschließlich
-  `Administration: Read` für die Abfrage der Environment-Schutzregeln; das normale `GITHUB_TOKEN`
-  verfügt nicht über diese Berechtigung. Ohne diesen Audit-Token oder ohne Required Reviewers
-  schlägt die Veröffentlichung bewusst fehl. Ein Administrator muss diese Umgebung einrichten;
-  ohne nachweisbare Schutzregeln
-  wird die Veröffentlichung verweigert.
-- Trust-Policy und zugehörige Schlüssel dürfen nicht durch Antragsteller ohne Review
-  ausgetauscht werden (Branch Protection, CODEOWNERS, getrennte Rollen).
-- GitHub-Artefakte sind kein Ersatz für ein revisionssicheres DMS.
+## Safety rules
 
-Nicht enthalten: Hardware-Schlüsselschutz, Widerrufsdienst, qualifizierte eIDAS-Signatur,
-PDF/A-Validierung, DMS-Aufbewahrung, PDF-Layoutfreigabe oder ISO-Zertifizierung.
+- Every input (template, context, control, approval, trust policy, draft and evidence report) and the output directory
+  must be inside the repository. Paths are checked after normalization, and symbolic links in a path are refused.
+  Plain `product` and `product check` may still use shared files from elsewhere; they approve nothing.
+- The version used in the file names must be 1–80 characters of letters, digits, `.`, `_` and `-`, starting with a
+  letter or digit.
+- Bad or tampered signatures, a missing draft or any missing precondition is a normal CLI error with exit code 1,
+  never a publication.
 
-### Eigener Entwurfspfad
+## CI and its real protection
 
-Standardmäßig veröffentlicht `product publish` den erzeugten Entwurf
-`docs/products/<product_id>.md` und den benachbarten Evidenzbericht.
-Wurde der Entwurf mit einem individuellen Ausgabeort erzeugt, muss die
-Publikation diesen mit `--draft docs/custom/my-product.md` explizit
-auswählen. Der Pfad muss innerhalb des Repositories liegen; der signierte
-Payload muss die SHA-256-Werte **dieser** Markdown-Datei und ihrer
-`*.evidence.json` enthalten. `--draft` verändert nicht das Verzeichnis,
-in dem DOCX/PDF ausgegeben werden.
+- `.github/workflows/test.yml` renders real DOCX and PDF with throwaway keys, and tests tampering, double publication
+  and wrong signatures.
+- `.github/workflows/document-publication.yml` is a manual workflow that runs only on `main`, only in a **private**
+  repository, and only through the `document-release` environment with required reviewers. That environment needs the
+  protected secret `DOCWIZZ_RELEASE_AUDIT_TOKEN` with only `Administration: Read`, to read the environment's protection
+  rules (the normal `GITHUB_TOKEN` can't). Without the token or without required reviewers, publication fails on
+  purpose. An administrator has to set the environment up.
+- The trust policy and its keys must not be replaceable by the person requesting publication without review (branch
+  protection, CODEOWNERS, separate roles).
+- GitHub artifacts are no substitute for a tamper-proof document management system.
 
-## Datei- und Versionssicherheit
-
-Die signierte Veröffentlichung (`product publish`) akzeptiert **nur** Dateien und Zielverzeichnisse
-innerhalb des ausgewählten Repositorys: Template, Kontext, Dokumentenlenkung, signierte
-Freigabe, Trust-Policy, Markdown-Entwurf und Evidenzbericht. Pfade werden
-nach Normalisierung geprüft; vorhandene symbolische Links im Pfad werden abgelehnt.
-Die Revisionskennung wird vor der Bildung der DOCX-/PDF-Dateinamen auf 1–80
-dateinamenverträgliche Zeichen (Buchstaben, Ziffern, Punkt, Unterstrich, Bindestrich;
-beginnend mit Buchstabe oder Ziffer) beschränkt.
-
-**Rückwärtskompatibilität:** `product` und `product check` (ohne `publish`)
-dürfen weiterhin geteilte Templates, Projektkontexte und Dokumentenlenkungsdateien
-außerhalb des zu dokumentierenden Repositories referenzieren. Diese gewöhnlichen
-Entwurfs-/Prüfoperationen sind **keine** Freigaben. Ein veröffentlichtes Dokument
-benötigt dagegen eine überprüfte, im Repository liegende Quellenkopie.
-
-Fehlerhafte oder manipulierte Signaturen, fehlende Entwürfe und nicht vorhandene
-Veröffentlichungsvoraussetzungen führen zu einem regulären CLI-Fehler und
-Exit-Code 1 statt einer Freigabe. Quell-, Rollen- und Schlüsselhoheit bleiben
-organisatorische Aufgaben; das Tool kann sie nicht ersetzen.
+Not included: hardware key protection, revocation, qualified eIDAS signatures, PDF/A validation, archival retention,
+PDF layout approval or ISO certification. Ownership of sources, roles and keys stays an organizational task.

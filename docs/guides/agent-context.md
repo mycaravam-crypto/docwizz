@@ -2,7 +2,7 @@
 
 [Documentation home](../README.md) · [CLI reference](../cli.md)
 
-## Context for coding agents
+## Point the agent at the docs
 
 ```bash
 docwizz generate .                                    # once, and after every change
@@ -26,7 +26,7 @@ read; `api.md` maps a route to its handler's `file:line` and frontend callers; *
 Generated pages are written for people, though: a large page can crowd out an agent's context. For a budgeted slice,
 use `docwizz context` or the MCP server.
 
-#### A context package per target
+## A context package per target
 
 ```bash
 docwizz context . --for Fixture.Application.MaterialService.CreateAsync   # a symbol (id or qualified name)
@@ -57,7 +57,7 @@ characters / 4). Sections in priority order, cut from the end when the budget ru
   (`docwizz requirements import` first), each line `[history]`: what was asked for then, not proof of what the code
   does. Per symbol only; without the flag the package is unchanged.
 
-#### A read-only MCP server
+## A read-only MCP server
 
 ```bash
 docwizz mcp .                  # stdio; the agent's harness starts it
