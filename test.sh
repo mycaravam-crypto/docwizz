@@ -880,7 +880,7 @@ class H(http.server.BaseHTTPRequestHandler):
 s = http.server.HTTPServer(("127.0.0.1", 0), H)
 open(sys.argv[1], "w").write(str(s.server_port)); s.serve_forever()
 PY
-fake=$!; trap 'kill $fake 2>/dev/null || true; rm -rf "$sandbox"' EXIT
+fake=$!; trap 'kill $fake 2>/dev/null || true' EXIT  # this group's subshell only: the sandbox belongs to the top-level trap, and removing it here pulled the cwd out from under groups still running (#133)
 until [ -s "$port_file" ]; do sleep 0.1; done
 dw init "$own" >/dev/null
 printf '\nai:\n  provider: openai-compatible\n  endpoint: http://127.0.0.1:%s/v1\n  model: coder-next\n  api_key_env: DOCWIZZ_AI_KEY\n' "$(cat "$port_file")" >> "$own/docwizz.yaml"
