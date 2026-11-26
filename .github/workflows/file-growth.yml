@@ -1,0 +1,26 @@
+name: file-growth
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  file-growth:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Exercise growth policy
+        run: python3 tests/test-file-growth.py
+      - name: Check file budgets
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: |
+          if [[ "$BASE" =~ ^0+$ ]]; then
+            BASE=$(git hash-object -t tree -w /dev/null)
+          fi
+          python3 scripts/check-file-growth.py "$BASE" HEAD
