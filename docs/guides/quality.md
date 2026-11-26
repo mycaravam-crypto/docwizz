@@ -68,6 +68,26 @@ docwizz check . --since "$BASE_SHA" --format json > docwizz.json
 
 To bootstrap a repository from a script, run `docwizz setup . --yes` and commit the `docwizz.yaml` it writes.
 
+### Quality over quantity
+
+`check` rejects oversized authored Markdown (DOC-001, 2,500 words) and dense paragraphs (DOC-002,
+120 words). Fenced code, pipe-prefixed table rows and generated pages do not count. Wrapped lines
+within a paragraph count together. Findings identify the file, line, measured size and a short
+rewrite instruction. `--since` rejects increased excess per file and rule, not unchanged debt.
+
+Tune the defaults in `docwizz.yaml`:
+
+```yaml
+check:
+  doc_concision: true
+  max_document_words: 2500
+  max_paragraph_words: 120
+```
+
+Rewrite existing sections before adding new ones; remove duplication, retain evidence and decisions,
+and split only at meaningful topic boundaries. These are readability heuristics, not proof of
+semantic quality. Existing `exclude` globs apply to authored Markdown as well.
+
 ## Change impact
 
 ```bash
