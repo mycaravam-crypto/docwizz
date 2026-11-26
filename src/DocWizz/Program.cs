@@ -1454,7 +1454,7 @@ static int DiffCommand(string root, string? gitRef, Config config, bool enforce,
     }
 
     var (ok, summary) = Gate(result, config);
-    (ok, summary) = ConcisionGate(root, config, gitRef!, ok, summary);
+    (ok, summary) = ConcisionGate(root, config, gitRef, ok, summary);
     if (json) Console.WriteLine(JsonSerializer.Serialize(DiffJson(result, against, new { pass = ok, summary }), JsonOptions()));
     else
     {
@@ -1759,7 +1759,7 @@ static List<string> ConcisionFailures(string root, Config config, string? since 
     return failures;
 }
 
-static (bool Ok, string Summary) ConcisionGate(string root, Config config, string since, bool ok, string summary)
+static (bool Ok, string Summary) ConcisionGate(string root, Config config, string? since, bool ok, string summary)
 {
     var failures = ConcisionFailures(root, config, since);
     return failures.Count == 0 ? (ok, summary) :
