@@ -28,6 +28,37 @@ public class DocConcisionTests
             string.Join(" ", Enumerable.Repeat("word", 100)), Limits()));
     }
 
+    [Theory]
+    [InlineData("# heading has six separate words")]
+    [InlineData("| one two three four five six |")]
+    [InlineData("<!-- one two three four five six -->")]
+    [InlineData("- one two three")]
+    [InlineData("+ one two three")]
+    [InlineData("* one two three")]
+    [InlineData("1. one two three")]
+    [InlineData("1) one two three")]
+    public void Markdown_boundaries_separate_paragraphs(string boundary)
+    {
+        Assert.Empty(DocConcision.Inspect("one two three\n" + boundary + "\nfour", Limits()));
+    }
+
+    [Fact]
+    public void Table_and_comment_words_do_not_count_toward_document_limit()
+    {
+        var ignored = string.Join("\n", Enumerable.Repeat("word", 25));
+        var table = "| " + ignored.Replace("\n", " ") + " |";
+        var comment = "<!-- " + ignored.Replace("\n", " ") + " -->";
+        Assert.Empty(DocConcision.Inspect(table + "\n" + comment + "\nShort prose.", Limits()));
+    }
+
+    [Fact]
+    public void Wrapped_list_item_can_exceed_paragraph_limit()
+    {
+        var finding = Assert.Single(DocConcision.Inspect("- one two three\n  four five six", Limits()));
+        Assert.Equal("DOC-002", finding.Rule);
+        Assert.Equal(1, finding.Line);
+    }
+
     [Fact]
     public void Existing_debt_must_not_increase()
     {
