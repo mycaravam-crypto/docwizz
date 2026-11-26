@@ -68,6 +68,22 @@ docwizz check . --since "$BASE_SHA" --format json > docwizz.json
 
 To bootstrap a repository from a script, run `docwizz setup . --yes` and commit the `docwizz.yaml` it writes.
 
+### Repository file-growth gate
+
+DocWizz's own CI checks changed documentation (400 lines / 24,000 bytes) and source or configuration
+files (600 lines / 40,000 bytes). A file may not exceed either budget unless it was already larger;
+in that case neither oversized metric may grow further. Synthetic fixture directories and unlisted
+file types (including JSON lockfiles) are excluded.
+
+Before adding content, revise existing sections, remove duplication and extract cohesive modules only
+when necessary. Do not increase budgets merely to pass CI. Run the same check locally on committed changes:
+
+```bash
+python3 scripts/check-file-growth.py origin/main HEAD
+```
+
+The `file-growth / file-growth` check should be required in the main branch ruleset.
+
 ## Change impact
 
 ```bash
