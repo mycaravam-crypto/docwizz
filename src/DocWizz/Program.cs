@@ -726,6 +726,7 @@ static async Task<int> McpCommand(string root, Config config, bool autoRescan)
             if (RefModel(since) is not { } before) return null;
             var result = Diff.Compare(before, model, config);
             var (ok, summary) = Gate(result, config);
+            (ok, summary) = ConcisionGate(root, config, since, ok, summary);
             return DiffJson(result, since, new { pass = ok, summary });
         });
     return await new McpServer(host).Run(Console.In, Console.Out);
@@ -1453,6 +1454,7 @@ static int DiffCommand(string root, string? gitRef, Config config, bool enforce,
     }
 
     var (ok, summary) = Gate(result, config);
+    (ok, summary) = ConcisionGate(root, config, gitRef, ok, summary);
     if (json) Console.WriteLine(JsonSerializer.Serialize(DiffJson(result, against, new { pass = ok, summary }), JsonOptions()));
     else
     {
@@ -1718,6 +1720,52 @@ static int Analyze(string root, Config config, bool enforce, bool json)
     return enforce && failures.Count > 0 ? 1 : 0;
 }
 
+// Scan authored Markdown independently of source project scope; generated pages are ignored by the rule.
+static List<string> ConcisionFailures(string root, Config config, string? since = null)
+{
+    if (!config.Check.DocConcision) return [];
+    var failures = new List<string>();
+    string? commit = null;
+    if (since is not null)
+    {
+        var resolved = ResolveCommit(root, since);
+        if (resolved.Exit != 0) return ["DOC: cannot resolve documentation baseline"];
+        commit = resolved.Out.Trim();
+    }
+    var prefix = commit is null ? "" : Git(root, "rev-parse", "--show-prefix")?.Trim() ?? "";
+    // Reuse tracked/nonignored discovery, but do not suppress authored guides in a generated output directory.
+    var files = Git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard");
+    var paths = files is null
+        ? Directory.EnumerateFiles(root, "*", new EnumerationOptions { RecurseSubdirectories = true,
+            AttributesToSkip = FileAttributes.ReparsePoint | FileAttributes.Hidden }).Select(f => Path.GetRelativePath(root, f))
+        : files.Split('\0', StringSplitOptions.RemoveEmptyEntries).AsEnumerable();
+    foreach (var path in paths.Distinct().Order(StringComparer.Ordinal))
+    {
+        var rel = path.Replace('\\', '/');
+        if (!rel.EndsWith(".md", StringComparison.OrdinalIgnoreCase) &&
+            !rel.EndsWith(".mdx", StringComparison.OrdinalIgnoreCase)) continue;
+        if (rel.Split('/').SkipLast(1).Any(d => d.StartsWith('.') || d is "node_modules" or "bin" or "obj" or "dist")) continue;
+        if (config.Exclude.Any(g => FileSystemName.MatchesSimpleExpression(g, rel))) continue;
+        var file = Path.Combine(root, path);
+        if (!File.Exists(file) || (File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0) continue;
+        var current = DocConcision.Inspect(File.ReadAllText(file), config.Check);
+        if (commit is not null && current.Count > 0)
+        {
+            var old = Git(root, "show", $"{commit}:{prefix}{rel}");
+            current = DocConcision.Regressions(current, old is null ? [] : DocConcision.Inspect(old, config.Check));
+        }
+        failures.AddRange(current.Select(f => f.Message(rel)));
+    }
+    return failures;
+}
+
+static (bool Ok, string Summary) ConcisionGate(string root, Config config, string? since, bool ok, string summary)
+{
+    var failures = ConcisionFailures(root, config, since);
+    return failures.Count == 0 ? (ok, summary) :
+        (false, (ok ? "check: FAIL" : summary) + " — " + string.Join("; ", failures));
+}
+
 // The `check` thresholds against one analysis: what fails, and the profile's architecture sections that are missing.
 static (List<string> Failures, List<string> MissingSections) CheckFailures(string root, CodeModel model, Config config,
     List<DocumentationItem> findings, ArchitectureResult arch)
@@ -1726,7 +1774,7 @@ static (List<string> Failures, List<string> MissingSections) CheckFailures(strin
     var complex = TooComplex(model.Nodes, config.Check);
     var coverage = Analyzer.Coverage(findings);
     var critical = findings.Count(Analyzer.IsCritical);
-    var failures = new List<string>();
+    var failures = ConcisionFailures(root, config);
     if (coverage < config.Check.MinCoverage) failures.Add($"coverage {coverage:0}% < {config.Check.MinCoverage}%");
     if (config.Check.MinQuality is { } minQuality && Analyzer.Quality(findings) is var quality && quality < minQuality)
         failures.Add($"doc quality {quality:0}% < {minQuality}%");

@@ -104,6 +104,8 @@ class Config
         global::Architecture.Validate(config.Architecture);
         if (config.Check.RequireTests is { } rt && rt.ToLowerInvariant() is not ("high" or "medium"))
             throw new ArgumentException($"check.require_tests: '{rt}' (high or medium; lower levels need no docs and aren't tracked)");
+        if (config.Check.MaxDocumentWords <= 0 || config.Check.MaxParagraphWords <= 0)
+            throw new ArgumentException("check: documentation word limits must be positive");
         ProjectScope.Validate(config.Scope);
         global::Security.Validate(config.Security);
         config.Ai.Validate();
@@ -184,6 +186,9 @@ class Match
 
 class CheckConfig
 {
+    public bool DocConcision { get; set; } = true;
+    public int MaxDocumentWords { get; set; } = 2500;
+    public int MaxParagraphWords { get; set; } = 120;
     public double MinCoverage { get; set; } = 80;
     public int MaxCritical { get; set; }
     public int MaxViolations { get; set; }
